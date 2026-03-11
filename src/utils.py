@@ -174,10 +174,10 @@ class StatusAgent:
         # DebugArrat - LocalLinks
         dglines, dgid, dgarray = self.dglines, self._dgid, self.dgarray
         # - - -
-        dgid = dgid if ((dglines - 2) != dgid) else 0
         dgarray[dgid, id_m] = time.time_ns()
         dgarray[-1, id_m] = (code << 32) | dgid  # Set last index + status
-        self._dgid += 1
+        dgid += 1
+        self._dgid = dgid = dgid if ((dglines - 2) != dgid) else 0
 
     @staticmethod
     def save_array(
