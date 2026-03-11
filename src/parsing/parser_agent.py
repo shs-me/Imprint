@@ -20,6 +20,7 @@ class ParserAgent:
         self,
         sa: StatusAgent,
         cfg: dict,
+        decoder: msgspec.json.Decoder,
         sem_sleep_parsing: Semaphore,
         sem_sleep_logic: Semaphore,
         general_event: Event,
@@ -33,27 +34,23 @@ class ParserAgent:
         )
 
         self.cfg = cfg
-        self.sem_sleep_parsing = sem_sleep_parsing
-        self.sem_sleep_logic = sem_sleep_logic
-        self.general_event = general_event
+        self.acquire_wss = sem_sleep_parsing
+        self.release_logic = sem_sleep_logic
+        self.wait_main = general_event
 
         # variables init
-        self._engine_id = 2
-        self._tick_size = 0.01
-        self._decoder = msgspec.json.Decoder(AggTrade)
+        self.tick_size = 0.01
+        self.decoder: msgspec.json.Decoder = decoder
 
         # RawSHM.buf
-        self._raw_buf = self._sa.shms["raw"]["buf"]
+        self.raw_buf = self._sa.shms["raw"]["buf"]
         # SignSHM.buf
-        self._sign_buf = self._sa.shms["sign"]["buf"]
+        self.sign_buf = self._sa.shms["sign"]["buf"]
         # InitGetRawData
         self.ac: int = self.cfg["raw"]["ac"]  # Amount Cells
         self.dsib: int = self.cfg["raw"]["dsib"]  # Data size in bytes
         self.hsib: int = self.cfg["raw"]["hsib"]  # Headers size in bytes
-        self._ir: int = self._sa.shms["raw"]["shm"].size - 2  # Index, Read _current_id
-        self._irn: int = 0  # Index, Read Now
-        self._iro: int = 0  # Index, Read Old
-        self._lrd: int = 0  # Len raw data
+        self.ir: int = self._sa.shms["raw"]["shm"].size - 2  # Index, Read _current_id
 
     @staticmethod
     def create(
@@ -70,9 +67,13 @@ class ParserAgent:
                 config=cfg,
                 warn_error_status=warn_error_status,
             )
+
+            decoder = msgspec.json.Decoder(AggTrade)
+
             return ParserAgent(
                 sa=sa,
                 cfg=cfg,
+                decoder=decoder,
                 sem_sleep_logic=sem_sleep_logic,
                 sem_sleep_parsing=sem_sleep_parsing,
                 general_event=general_event,
@@ -84,87 +85,116 @@ class ParserAgent:
 
     def _get_raw_data(
         self,
-    ):  # Get Bytes from RawSHM: RING BUFFER
+        ir: int,
+        ac: int,
+        hsib: int,
+        id_m: int,
+        set_status,
+        raw_buf: memoryview,
+    ):
         try:
-            self._iro = self._raw_buf[self._ir]
+            iro = raw_buf[ir]
 
-            if self._iro >= (self.ac * self.hsib):
-                self._irn = self._raw_buf[self._ir] = self.hsib
-                self._iro = 0
+            if iro >= (ac * hsib):
+                irn = raw_buf[ir] = hsib
+                iro = 0
             else:
-                self._irn = self._raw_buf[self._ir] = self.hsib + self._iro
+                irn = raw_buf[ir] = hsib + iro
 
-            self._lrd = int.from_bytes(
-                self._raw_buf[self._iro : self._irn], byteorder="little"
-            )
-            raw_data = self._raw_buf[
-                (self._irn * self.ac) : ((self._irn * self.ac) + self._lrd)
-            ]
+            lrd = int.from_bytes(raw_buf[iro:irn], byteorder="little")
+            raw_data = raw_buf[(irn * ac) : ((irn * ac) + lrd)]
             return raw_data
 
         except Exception:
-            self._set(self._id_m_, 154)
+            set_status(id_m, 154)
             return False
 
-    def _decoder_raw_data(
+    def _decode_raw_data(
         self,
+        id_m: int,
+        decoder,
+        set_status,
         raw_data: memoryview,
     ):
         try:
-            trade = self._decoder.decode(raw_data)
+            trade = decoder(raw_data)
             return trade
 
         except Exception:
-            self._set(self._id_m_, 153)
+            set_status(id_m, 153)
             return False
 
     def _set_raw_signal(
         self,
+        id_m: int,
+        set_status,
+        sign_buf,
         state: None | bytes,
     ):
         try:
             if isinstance(state, bytes):
-                self._sign_buf[:4] = len(state).to_bytes(4, byteorder="little")
-                self._sign_buf[4 : 4 + len(state)] = state
+                sign_buf[:4] = len(state).to_bytes(4, byteorder="little")
+                sign_buf[4 : 4 + len(state)] = state
             else:
                 return False
 
         except Exception:
-            self._set(self._id_m_, 152)  # Error in this func
+            set_status(id_m, 152)  # Error in this func
             return False
 
     def run_parsing_engine(
         self,
         _warn_error_status,
     ):
+        # JSON Decoder, SHM.Buf - LocalLink
+        _raw_buf, _sign_buf, _decoder = self.raw_buf, self.sign_buf, self.decoder.decode
+        # StatusAgents - LocalLink
+        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
+        # GetRawData - LocalLink
+        _ac, _dsib, _hsib, _ir = self.ac, self.dsib, self.hsib, self.ir
+        # Semaphore, Event - LocalLink
+        _wait_main, _release_logic, _acquire_wss = (
+            self.wait_main,
+            self.release_logic,
+            self.acquire_wss,
+        )
+        # Methods - LocalLinks
+        _get_raw_data, _decode_raw_data, _set_raw_signal = (
+            self._get_raw_data,
+            self._decode_raw_data,
+            self._set_raw_signal,
+        )
         while True:
             try:
                 gc.collect()
-                self.general_event.wait()
-
-                self._set(self._id_m_, 10)  # Started
+                _wait_main.wait()
+                _set_status(_id_m_, 10)  # Started
                 engine = FootprintEngine.create(
                     _sa_=self._sa,
                     cfg=self.cfg,
-                    id_m=self._engine_id,
-                    tick_size=self._tick_size,
+                    tick_size=self.tick_size,
                 )
                 if isinstance(engine, FootprintEngine):
                     while True:
-                        if self._get(self._id_m_) is not True:
-                            self._set(self._id_m_, 4)  # IDLE
-                            self.sem_sleep_parsing.acquire()
-                            if self._get(self._id_m_, proc=True):
-                                self._set(self._id_m_, 2)  # Stoping
-                                self.sem_sleep_logic.release()
+                        if _get_status(_id_m_) is not True:
+                            _set_status(_id_m_, 4)  # IDLE # TIME START
+                            _acquire_wss.acquire()
+                            if _get_status(_id_m_, proc=True):
+                                _set_status(_id_m_, 2)  # Stoping
+                                _release_logic.release()
                                 break
 
-                            self._set(self._id_m_, 1)  # Running
-                            self._set(self._id_m_)  # TIME START
+                            _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
 
-                            if (raw_data := self._get_raw_data()) is not False:
+                            if (
+                                raw_data := _get_raw_data(
+                                    _ir, _ac, _hsib, _id_m_, _set_status, _raw_buf
+                                )
+                            ) is not False:
                                 if (
-                                    trade := self._decoder_raw_data(raw_data)
+                                    trade := _decode_raw_data(
+                                        _id_m_, _decoder, _set_status, raw_data
+                                    )
                                 ) is not False:
                                     state = engine.update(
                                         price=float(trade.p),
@@ -172,19 +202,24 @@ class ParserAgent:
                                         is_sell=trade.m,
                                         timestamp=trade.E,
                                     )
-                                    if self._set_raw_signal(state) is not False:
-                                        self.sem_sleep_logic.release()
+                                    if (
+                                        _set_raw_signal(
+                                            _id_m_, _set_status, _sign_buf, state
+                                        )
+                                        is not False
+                                    ):
+                                        _release_logic.release()
 
-                            self._set(self._id_m_)  # TIME END
+                            _set_status(_id_m_, 6)  # Running # TIME END
 
                         else:
                             sys.exit()
                 else:
-                    self._set(self._id_m_, 151)  # Error in engine
+                    _set_status(_id_m_, 151)  # Error in engine
                     break
 
             except Exception:
-                self._set(self._id_m_, 150)  # Error in this func
+                _set_status(_id_m_, 150)  # Error in this func
                 break
 
 

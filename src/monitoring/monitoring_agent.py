@@ -97,7 +97,7 @@ class HealthCheck:
             _status_for_all_procs = 1
 
         _procs = self._proc_name
-        for _id_p in _procs.values():
+        for _id_p in _procs.keys():
             self._status["buf"][int(_id_p)] = _status_for_all_procs
             logger.warning(
                 f"{_procs[_id_p]} | {self.sc['GENERAL'][str(_status_for_all_procs)]}"

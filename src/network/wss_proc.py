@@ -25,23 +25,20 @@ class WSSAgent:
             self._sa._status(daughter=False),
         )
         self.cfg = cfg
-        self.general_event = general_event
-        self.sem_sleep_parsing = sem_sleep_parsing
+        self.release_parser = sem_sleep_parsing
+        self.wait_main = general_event
 
         # variables
         self.url = f"{self.cfg['urls']['wsagg']}{self.cfg['argg']['symbol']}@aggTrade"
 
         # RawSHM.buf
-        self._raw_buf = self._sa.shms["raw"]["buf"]
+        self.raw_buf = self._sa.shms["raw"]["buf"]
 
         # InitSetRawData
         self.ac: int = self.cfg["argg"]["raw"]["ac"]  # Amount Cells
         self.dsib: int = self.cfg["argg"]["raw"]["dsib"]  # Data size in bytes
         self.hsib: int = self.cfg["argg"]["raw"]["hsib"]  # Headers size in bytes
-        self._iw: int = self._sa.shms["raw"]["shm"].size - 1  # Index, Write counter
-        self._iwn: int = 0  # Index write new
-        self._iwo: int = 0  # Index write old
-        self._lrd: int = 0  # Len raw data
+        self.iw: int = self._sa.shms["raw"]["shm"].size - 1  # Index, Write counter
 
     @staticmethod
     def create(
@@ -70,62 +67,89 @@ class WSSAgent:
 
     def _set_raw_data(
         self,
+        iw: int,
+        ac: int,
+        dsib: int,
+        hsib: int,
+        id_m: int,
+        set_status,
+        raw_buf: memoryview,
         raw_data: bytes,
     ):  # Set Bytes to RawSHM: RING BUFFER
         try:
-            self._lrd = len(raw_data)
-            if self._lrd >= self.dsib:
-                self._set(self._id_m_, 100)  # Warn in this IF
+            lrd = len(raw_data)
+            if lrd >= dsib:
+                set_status(id_m, 100)  # Warn in this IF
                 return False
 
-            self._iwo = self._raw_buf[self._iw]
+            iwo = raw_buf[iw]
 
-            if self._iwo >= (self.ac * self.hsib):
-                self._iwn = self._raw_buf[self._iw] = self.hsib
-                self._iwo = 0
+            if iwo >= (ac * hsib):
+                iwn = raw_buf[iw] = hsib
+                iwo = 0
             else:
-                self._iwn = self._raw_buf[self._iw] = self.hsib + self._iwo
+                iwn = raw_buf[iw] = hsib + iwo
 
-            self._raw_buf[self._iwo : self._iwn] = self._lrd.to_bytes(
-                4, byteorder="little"
-            )
-            self._raw_buf[
-                (self._iwn * self.ac) : ((self._iwn * self.ac) + self._lrd)
-            ] = raw_data
+            raw_buf[iwo:iwn] = lrd.to_bytes(4, byteorder="little")
+            raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
 
         except Exception:
-            self._set(self._id_m_, 151)  # Error in this func
+            set_status(id_m, 151)  # Error in this func
             return False
 
     async def run_wss_engine(
         self,
     ):
+        # JSON Decoder, SHM.Buf - LocalLink
+        _raw_buf = self.raw_buf
+        # StatusAgents - LocalLink
+        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
+        # GetRawData - LocalLink
+        _ac, _dsib, _hsib, _iw = self.ac, self.dsib, self.hsib, self.iw
+        # Semaphore, Event - LocalLink
+        _wait_main, _release_parser = self.wait_main, self.release_parser
+        # Methods - LocalLinks
+        _set_raw_data = self._set_raw_data
+        # Other - LocalLink
+        uri = self.url
+        # - - -
         while True:
             try:
                 gc.collect()
 
-                self.general_event.wait()
+                _wait_main.wait()
 
-                self._set(self._id_m_, 10)  # Started. Conecting
+                _set_status(_id_m_, 10)  # Started. Conecting...
                 try:
-                    async with connect(self.url, ping_interval=20) as ws:
-                        self._set(self._id_m_, 11)  # Connected
+                    async with connect(uri, ping_interval=20) as ws:
+                        _set_status(_id_m_, 11)  # Connected
                         while True:
-                            if self._get(self._id_m_) is not True:
-                                if self._get(self._id_m_, proc=True):
-                                    self._set(self._id_m_, 2)  # Stoping
-                                    self.sem_sleep_parsing.release()
+                            if _get_status(_id_m_) is not True:
+                                if _get_status(_id_m_, proc=True):
+                                    _set_status(_id_m_, 2)  # Stoping
+                                    _release_parser.release()
                                     break
 
-                                self._set(self._id_m_, 4)  # IDLE
-                                self._set(self._id_m_)  # TIME START
+                                _set_status(_id_m_, 4)  # IDLE # TIME START
                                 raw_data = await ws.recv(decode=False)
-                                self._set(self._id_m_, 1)  # Running
+                                self._set(_id_m_, 5)  # Running
 
-                                if self._set_raw_data(raw_data) is not False:
-                                    self.sem_sleep_parsing.release()
+                                if (
+                                    _set_raw_data(
+                                        _iw,
+                                        _ac,
+                                        _dsib,
+                                        _hsib,
+                                        _id_m_,
+                                        _set_status,
+                                        _raw_buf,
+                                        raw_data,
+                                    )
+                                    is not False
+                                ):
+                                    _release_parser.release()
 
-                                self._set(self._id_m_)  # TIME END
+                                _set_status(_id_m_, 6)  # END # TIME END
 
                             else:
                                 sys.exit()
@@ -134,7 +158,7 @@ class WSSAgent:
                     break
 
             except Exception:
-                self._set(self._id_m_, 150)  # Error in this func
+                _set_status(_id_m_, 150)  # Error in this func
                 break
 
 

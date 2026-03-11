@@ -13,6 +13,7 @@ class WSSAgent:
         self,
         sa: StatusAgent,
         cfg: dict,
+        encoder: msgspec.json.Encoder,
         sem_sleep_parsing: Semaphore,
         general_event: Event,
         file_path: str,
@@ -25,23 +26,20 @@ class WSSAgent:
             self._sa._status(daughter=False),
         )
         self.cfg: dict = cfg
-        self.file_path: str = file_path
-        self.general_event: Event = general_event
-        self.sem_sleep_parsing: Semaphore = sem_sleep_parsing
+        self.file_path = file_path
+        self.encoder = encoder.encode
 
-        self.encoder = msgspec.json.Encoder()
+        self.release_parser = sem_sleep_parsing
+        self.wait_main = general_event
 
         # RawSHM.buf
-        self._raw_buf = self._sa.shms["raw"]["buf"]
+        self.raw_buf = self._sa.shms["raw"]["buf"]
 
-        # InitGetRawData
-        self.ac = self.cfg["argg"]["raw"]["ac"]  # Amount Cells
-        self.dsib = self.cfg["argg"]["raw"]["dsib"]  # Data size in bytes
-        self.hsib = self.cfg["argg"]["raw"]["hsib"]  # Headers size in bytes
-        self._iw = self._sa.shms["raw"]["shm"].size - 1  # Index, Write counter
-        self._iwn = 0  # Index Write Now
-        self._iwo = 0  # Index Write Old
-        self._lrd = 0  # Len raw data
+        # InitSetRawData
+        self.ac: int = self.cfg["argg"]["raw"]["ac"]  # Amount Cells
+        self.dsib: int = self.cfg["argg"]["raw"]["dsib"]  # Data size in bytes
+        self.hsib: int = self.cfg["argg"]["raw"]["hsib"]  # Headers size in bytes
+        self.iw: int = self._sa.shms["raw"]["shm"].size - 1  # Index, Write counter
 
     @staticmethod
     def create(
@@ -52,6 +50,7 @@ class WSSAgent:
         file_path: str,
     ):
         try:
+            encoder = msgspec.json.Encoder()
             # Init SHM, DebugArray, StatusSHM
             sa = StatusAgent(
                 proc_name="network_sim",
@@ -61,6 +60,7 @@ class WSSAgent:
             return WSSAgent(
                 sa=sa,
                 cfg=cfg,
+                encoder=encoder,
                 general_event=general_event,
                 sem_sleep_parsing=sem_sleep_parsing,
                 file_path=file_path,
@@ -70,13 +70,16 @@ class WSSAgent:
             warn_error_status.set()
             return None
 
-    def _line_to_raw_data(
+    def _encode_data(
         self,
+        id_m,
+        encoder,
+        set_status,
         line: str,
     ):  # Line from file convert to raw_data for simulation:
         try:
             data = line.strip().split(",")
-            raw_data = self.encoder.encode(
+            raw_data = encoder(
                 {
                     "E": int(data[5]),  # transact_time
                     "p": data[1],  # price
@@ -87,85 +90,108 @@ class WSSAgent:
             return raw_data
 
         except Exception:
-            self._set(self._id_m_, 153)  # Error in this func
+            set_status(id_m, 153)  # Error in this func
             return False
 
     def _set_raw_data(
         self,
+        iw: int,
+        ac: int,
+        dsib: int,
+        hsib: int,
+        id_m: int,
+        set_status,
+        raw_buf: memoryview,
         raw_data: bytes,
     ):  # Set Bytes to RawSHM: RING BUFFER
         try:
-            self._lrd = len(raw_data)
-            if self._lrd >= self.dsib:
-                self._set(self._id_m_, 100)  # Warn in this IF
+            lrd = len(raw_data)
+            if lrd >= dsib:
+                set_status(id_m, 100)  # Warn in this IF
                 return False
 
-            self._iwo = self._raw_buf[self._iw]
+            iwo = raw_buf[iw]
 
-            if self._iwo >= (self.ac * self.hsib):
-                self._iwn = self._raw_buf[self._iw] = self.hsib
-                self._iwo = 0
+            if iwo >= (ac * hsib):
+                iwn = raw_buf[iw] = hsib
+                iwo = 0
             else:
-                self._iwn = self._raw_buf[self._iw] = self.hsib + self._iwo
+                iwn = raw_buf[iw] = hsib + iwo
 
-            self._raw_buf[self._iwo : self._iwn] = self._lrd.to_bytes(
-                4, byteorder="little"
-            )
-            self._raw_buf[
-                (self._iwn * self.ac) : ((self._iwn * self.ac) + self._lrd)
-            ] = raw_data
+            raw_buf[iwo:iwn] = lrd.to_bytes(4, byteorder="little")
+            raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
 
         except Exception:
-            self._set(self._id_m_, 152)  # Error in this func
+            set_status(id_m, 151)  # Error in this func
             return False
 
     def run_wss_sim_engine(
         self,
     ):
+        # JSON Encoder, SHM.Buf - LocalLink
+        _raw_buf, _encoder = self.raw_buf, self.encoder
+        # StatusAgents - LocalLink
+        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
+        # GetRawData - LocalLink
+        _ac, _dsib, _hsib, _iw = self.ac, self.dsib, self.hsib, self.iw
+        # Semaphore, Event - LocalLink
+        _wait_main, _release_parser = self.wait_main, self.release_parser
+        # Methods - LocalLinks
+        _set_raw_data, _encode_data = self._set_raw_data, self._encode_data
+        # Other - LocalLink
+        _file_path = self.file_path
+        # - - -
         while True:
             try:
                 gc.collect()
-                self.general_event.wait()
-
-                self._set(self._id_m_, 10)  # Starting
+                _wait_main.wait()
+                _set_status(_id_m_, 10)  # Starting
                 try:
-                    with open(self.file_path, "r") as self.f:
-                        self._set(self._id_m_, 11)  # Connected
+                    with open(_file_path, "r") as self.f:
+                        _set_status(_id_m_, 11)  # Connected
                         next(self.f)
                         for line in self.f:
-                            if (
-                                self._get(
-                                    self._id_m_,
-                                )
-                                is not True
-                            ):
-                                if self._get(self._id_m_, proc=True):
-                                    self._set(self._id_m_, 2)  # Stoping
-                                    self.sem_sleep_parsing.release()
+                            if _get_status(_id_m_) is not True:
+                                _set_status(_id_m_, 4)  # IDLE
+                                time.sleep(0.005)
+                                if _get_status(_id_m_, proc=True):
+                                    _set_status(_id_m_, 2)  # Stoping
+                                    _release_parser.release()
                                     break
 
-                                self._set(self._id_m_, 1)  # Running
-                                self._set(self._id_m_)  # TIME START
+                                self._set(_id_m_, 5)  # Running # TIME START
 
                                 if (
-                                    raw_data := self._line_to_raw_data(line)
+                                    raw_data := _encode_data(
+                                        _id_m_, _encoder, _set_status, line
+                                    )
                                 ) is not False:
-                                    if self._set_raw_data(raw_data) is not False:
-                                        self.sem_sleep_parsing.release()
+                                    if (
+                                        _set_raw_data(
+                                            _iw,
+                                            _ac,
+                                            _dsib,
+                                            _hsib,
+                                            _id_m_,
+                                            _set_status,
+                                            _raw_buf,
+                                            raw_data,
+                                        )
+                                        is not False
+                                    ):
+                                        _release_parser.release()
 
-                                self._set(self._id_m_)  # TIME END
-                                self._set(self._id_m_, 4)  # IDLE
-                                time.sleep(0.005)
+                                _set_status(_id_m_, 5)  # END # TIME END
 
                             else:
                                 sys.exit()
 
                 except FileNotFoundError:
-                    self._set(self._id_m_, 151)
+                    _set_status(_id_m_, 151)
                     break
 
             except Exception:
-                self._set(self._id_m_, 150)
+                _set_status(_id_m_, 150)
                 break
 
 

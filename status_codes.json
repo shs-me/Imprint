@@ -1327,7 +1327,7 @@
     "101": {
       "1": "",
       "11": "",
-      "2": "InitSession: IDX > ArrayCols or IDX < 0",
+      "2": "Update: IDX > ArrayCols or IDX < 0",
       "4": "",
       "5": "",
       "7": "",

@@ -78,7 +78,7 @@ class StatusAgent:
             # DebugArray
             self.dglines: int = self.cfg["debug"]["lines"]
             self.dgcols: int = self.cfg["debug"]["cols"]
-            self._current_id = 0
+            self._dgid = 0
             self._debug_array_init()
 
         except Exception:
@@ -120,13 +120,11 @@ class StatusAgent:
     def set_(
         self,
         id_m: int,
-        code: int | None = None,
+        code: int,
     ):
         """
         IF code SET: IF code > 49 write on SHM_STATUS.BUF: index ID_M.\n
-        Else, called "_debug_array" that write code on SHM_DEBUG.BUF.\n
-        IF code NOT SET: called "_debug_array",\n
-        that write current "time_ns" on SHM_DEBUG.BUF.\n
+        Else, called "_debug_array" that write code+time_ns on SHM_DEBUG.BUF.\n
         """
         try:
             if code:
@@ -138,7 +136,7 @@ class StatusAgent:
                     self._debug_array(id_m, code)
 
             else:
-                self._debug_array(id_m)
+                self._debug_array(id_m, code)
 
         except Exception:
             raise Exception
@@ -171,22 +169,15 @@ class StatusAgent:
     def _debug_array(
         self,
         id_m: int,
-        code: None | int = None,
+        code: int,
     ):
-        try:
-            if (self.dglines - 2) == self._current_id:
-                self._current_id = 0
-
-            if code:
-                self.dgarray[self._current_id, id_m] = code
-            else:
-                self.dgarray[self._current_id, id_m] = time.time_ns()
-
-            self._current_id += 1
-            self.dgarray[self.dglines - 1, id_m] = self._current_id
-
-        except Exception:
-            raise Exception
+        # DebugArrat - LocalLinks
+        dglines, dgid, dgarray = self.dglines, self._dgid, self.dgarray
+        # - - -
+        dgid = dgid if ((dglines - 2) != dgid) else 0
+        dgarray[dgid, id_m] = time.time_ns()
+        dgarray[-1, id_m] = (code << 32) | dgid  # Set last index + status
+        self._dgid += 1
 
     @staticmethod
     def save_array(
