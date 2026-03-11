@@ -1,5 +1,4 @@
 import struct
-from multiprocessing.synchronize import Event
 
 import numpy as np
 
@@ -9,7 +8,7 @@ from src.utils import StatusAgent
 class FootprintEngine:
     def __init__(
         self,
-        sa: StatusAgent,
+        _sa_: StatusAgent,
         id_m: int,
         grid: np.ndarray,
         lines: int,
@@ -18,10 +17,11 @@ class FootprintEngine:
         tick_size: float,
     ):
         # Initialization
-        self._sa = sa
-        self._set_status_, self._get_status_ = (
-            self._sa._set_status,
-            self._sa._get_status,
+        self._sa_ = _sa_
+        self._get, self._set, self._id_m_ = (
+            self._sa_.get_,
+            self._sa_.set_,
+            self._sa_._status(daughter=True),
         )
 
         # grid init
@@ -51,40 +51,29 @@ class FootprintEngine:
         id_m: int,
         cfg: dict,
         tick_size: float,
-        warn_error_status: Event,
+        _sa_: StatusAgent,
     ):
         try:
-            sa = StatusAgent(
-                proc_name="parsing",
-                config=cfg,
-                warn_error_status=warn_error_status,
-                daughter=True,
+            grid = np.ndarray(
+                ((cfg["grid"]["lines"] + 8), cfg["grid"]["cols"]),
+                dtype=np.float64,
+                buffer=_sa_.shms["grid"]["buf"],
+            )
+            grid[:] = 0.0
+
+            _sa_.set_(_sa_._status(daughter=True), 10)
+            return FootprintEngine(
+                _sa_=_sa_,
+                id_m=id_m,
+                grid=grid,
+                lines=cfg["grid"]["lines"],
+                columns=cfg["grid"]["cols"],
+                interval_min=cfg["grid"]["interval_min"],
+                tick_size=tick_size,
             )
 
-            if isinstance(sa, StatusAgent):
-                try:
-                    grid = np.ndarray(
-                        ((cfg["grid"]["lines"] + 8), cfg["grid"]["cols"]),
-                        dtype=np.float64,
-                        buffer=sa.shms["grid"]["buf"],
-                    )
-                    grid[:] = 0.0
-                    sa._set_status(10)
-                    return FootprintEngine(
-                        sa=sa,
-                        id_m=id_m,
-                        grid=grid,
-                        lines=cfg["grid"]["lines"],
-                        columns=cfg["grid"]["cols"],
-                        interval_min=cfg["grid"]["interval_min"],
-                        tick_size=tick_size,
-                    )
-
-                except Exception:
-                    sa._set_status(150)  # Error in this func
-                    return None
-
         except Exception:
+            _sa_.set_(_sa_._status(daughter=True), 150)  # Error in this func
             return None
 
     def _init_session(
@@ -94,7 +83,7 @@ class FootprintEngine:
     ):  # Init Center, BasePrice, BaseTimestamp
         self.atip = int(price / self.ts)  # amount_ticks_in_price
         if self.atip > int(self.lines * 0.8):
-            self._set_status_(100)  # Warn in this IF
+            self._set(self._id_m_, 100)  # Warn in this IF
             return
 
         self.center = (
@@ -105,7 +94,7 @@ class FootprintEngine:
 
         self.grid[self.O, 0] = price
         self.grid[self.T, 0] = (timestamp // self.ivl_ms) * self.ivl_ms
-        self._set_status_(11)  # Completed
+        self._set(self._id_m_, 11)  # Completed
 
     def update_headers(
         self,
@@ -147,10 +136,11 @@ class FootprintEngine:
         if self.grid[self.O, 0] == 0.0:
             self._init_session(price, timestamp)
 
-        if self._get_status_():
+        if self._get(self._id_m_):
             return
 
-        self._set_status_(1)  # Running
+        self._set(self._id_m_, 1)  # Running
+        self._set(self._id_m_)  # TIME START
 
         idy = int((self.grid[self.O, 0] - price) / self.ts) + self.center
         idx = ((timestamp - int(self.grid[self.T, 0])) // self.ivl_ms * 2) + (
@@ -162,12 +152,13 @@ class FootprintEngine:
                 self.grid[idy, idx] += qty  # update cluster
                 self.update_headers(idx, price, timestamp, qty, is_sell)
 
-                self._set_status_(4)  # IDLE
+                self._set(self._id_m_)  # TIME END
+                self._set(self._id_m_, 4)  # IDLE
                 return struct.pack("<II", idy, idx)
 
             else:
-                self._set_status_(102)  # Warn in this IF
+                self._set(self._id_m_, 102)  # Warn in this IF
                 return
         else:
-            self._set_status_(101)  # Warn in this IF
+            self._set(self._id_m_, 101)  # Warn in this IF
             return

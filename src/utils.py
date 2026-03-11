@@ -65,11 +65,8 @@ class StatusAgent:
             self.shms: dict[str, ShmType] = IDX_NAMES[proc_name]["shm_names"]
             # StatusSHM init, _id_m: Index parent module, _id_p: Index parent proc
             self._id_p: int = int(IDX_NAMES[proc_name]["cols"]["p"])
-            self._id_m: int = (
-                int(IDX_NAMES[proc_name]["cols"]["d"])
-                if daughter
-                else int(IDX_NAMES[proc_name]["cols"]["m"])
-            )
+            self._id_d = int(IDX_NAMES[proc_name]["cols"]["d"])
+            self._id_m = int(IDX_NAMES[proc_name]["cols"]["m"])
             # LoadShm-s
             self._shm_init()
 
@@ -84,8 +81,8 @@ class StatusAgent:
             self._current_id = 0
             self._debug_array_init()
 
-        except Exception as e:
-            raise Exception(e)
+        except Exception:
+            raise Exception
 
     def _shm_init(
         self,
@@ -107,27 +104,22 @@ class StatusAgent:
             buffer=self._debug_buf,
         )
 
-    def _debug_array(
+    def _status(
         self,
-        code: None | int = None,
+        daughter: bool = False,
     ):
-        try:
-            if (self.dglines - 2) == self._current_id:
-                self._current_id = 0
+        """
+        Return ID_Dauhter, IF dauhter True \n
+        Else, Return ID_Module "Parent".\n
+        """
+        if daughter:
+            return self._id_d
+        else:
+            return self._id_m
 
-            if code:
-                self.dgarray[self._current_id, self._id_m] = code
-            else:
-                self.dgarray[self._current_id, self._id_m] = time.time_ns()
-
-            self._current_id += 1
-            self.dgarray[self.dglines - 1, self._id_m] = self._current_id
-
-        except Exception:
-            raise Exception
-
-    def _set_status(
+    def set_(
         self,
+        id_m: int,
         code: int | None = None,
     ):
         """
@@ -139,22 +131,21 @@ class StatusAgent:
         try:
             if code:
                 if code > 49:
-                    self._status_buf[self._id_m] = code
+                    self._status_buf[id_m] = code
                     self._warn_error_status.set()
 
-                    print(self._id_m, code, "set", self._status_buf[self._id_m])
-
                 else:
-                    self._debug_array(code)
+                    self._debug_array(id_m, code)
 
             else:
-                self._debug_array()
+                self._debug_array(id_m)
 
         except Exception:
             raise Exception
 
-    def _get_status(
+    def get_(
         self,
+        id_m: int,
         proc=False,
     ):  # Get Status Module or Proc if True
         """
@@ -163,29 +154,52 @@ class StatusAgent:
         """
         try:
             if proc:
-                self._status_buf[self._id_m] = 2
-                print(self.shms["status"]["shm"].size, self._status_buf[self._id_m])
                 if self._status_buf[self._id_p] == 2:
                     return True
 
                 return
 
             else:
-                if self._status_buf[self._id_m] > 49:
+                if self._status_buf[id_m] > 49:
                     return True
 
                 return
 
-        except Exception as e:
-            print(e)
+        except Exception:
+            raise Exception
+
+    def _debug_array(
+        self,
+        id_m: int,
+        code: None | int = None,
+    ):
+        try:
+            if (self.dglines - 2) == self._current_id:
+                self._current_id = 0
+
+            if code:
+                self.dgarray[self._current_id, id_m] = code
+            else:
+                self.dgarray[self._current_id, id_m] = time.time_ns()
+
+            self._current_id += 1
+            self.dgarray[self.dglines - 1, id_m] = self._current_id
+
+        except Exception:
             raise Exception
 
     @staticmethod
-    def save_array(buf: memoryview, file_path: str):
+    def save_array(
+        buf: memoryview,
+        file_path: str,
+    ):
+        """
+        DUMP shm buf to File.bin. \n
+        Shape config[DebugLines, DebugCols], dtype: np.int64.
+        """
         try:
             with open(file_path, "wb") as f:
                 f.write(buf[:])
 
         except Exception as e:
-            print(e)
             raise Exception(e)

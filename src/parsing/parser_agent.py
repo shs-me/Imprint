@@ -26,11 +26,12 @@ class ParserAgent:
     ):
         # initializarion
         self._sa = sa
-
-        self._set_status_, self._get_status_ = (
-            self._sa._set_status,
-            self._sa._get_status,
+        self._get, self._set, self._id_m_ = (
+            self._sa.get_,
+            self._sa.set_,
+            self._sa._status(daughter=False),
         )
+
         self.cfg = cfg
         self.sem_sleep_parsing = sem_sleep_parsing
         self.sem_sleep_logic = sem_sleep_logic
@@ -102,7 +103,7 @@ class ParserAgent:
             return raw_data
 
         except Exception:
-            self._set_status_(154)
+            self._set(self._id_m_, 154)
             return False
 
     def _decoder_raw_data(
@@ -114,7 +115,7 @@ class ParserAgent:
             return trade
 
         except Exception:
-            self._set_status_(153)
+            self._set(self._id_m_, 153)
             return False
 
     def _set_raw_signal(
@@ -129,7 +130,7 @@ class ParserAgent:
                 return False
 
         except Exception:
-            self._set_status_(152)  # Error in this func
+            self._set(self._id_m_, 152)  # Error in this func
             return False
 
     def run_parsing_engine(
@@ -141,24 +142,25 @@ class ParserAgent:
                 gc.collect()
                 self.general_event.wait()
 
-                self._set_status_(10)  # Started
+                self._set(self._id_m_, 10)  # Started
                 engine = FootprintEngine.create(
+                    _sa_=self._sa,
                     cfg=self.cfg,
                     id_m=self._engine_id,
                     tick_size=self._tick_size,
-                    warn_error_status=_warn_error_status,
                 )
                 if isinstance(engine, FootprintEngine):
                     while True:
-                        if self._get_status_() is not True:
-                            self._set_status_(4)  # IDLE
+                        if self._get(self._id_m_) is not True:
+                            self._set(self._id_m_, 4)  # IDLE
                             self.sem_sleep_parsing.acquire()
-                            if self._get_status_(proc=True):
-                                self._set_status_(2)  # Stoping
+                            if self._get(self._id_m_, proc=True):
+                                self._set(self._id_m_, 2)  # Stoping
                                 self.sem_sleep_logic.release()
                                 break
 
-                            self._set_status_(1)  # Running
+                            self._set(self._id_m_, 1)  # Running
+                            self._set(self._id_m_)  # TIME START
 
                             if (raw_data := self._get_raw_data()) is not False:
                                 if (
@@ -172,14 +174,17 @@ class ParserAgent:
                                     )
                                     if self._set_raw_signal(state) is not False:
                                         self.sem_sleep_logic.release()
+
+                            self._set(self._id_m_)  # TIME END
+
                         else:
                             sys.exit()
                 else:
-                    self._set_status_(151)  # Error in engine
+                    self._set(self._id_m_, 151)  # Error in engine
                     break
 
             except Exception:
-                self._set_status_(150)  # Error in this func
+                self._set(self._id_m_, 150)  # Error in this func
                 break
 
 

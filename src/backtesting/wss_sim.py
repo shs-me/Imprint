@@ -19,9 +19,10 @@ class WSSAgent:
     ):
         # Initialization
         self._sa = sa
-        self._set_status_, self._get_status_ = (
-            self._sa._set_status,
-            self._sa._get_status,
+        self._get, self._set, self._id_m_ = (
+            self._sa.get_,
+            self._sa.set_,
+            self._sa._status(daughter=False),
         )
         self.cfg: dict = cfg
         self.file_path: str = file_path
@@ -86,7 +87,7 @@ class WSSAgent:
             return raw_data
 
         except Exception:
-            self._set_status_(153)  # Error in this func
+            self._set(self._id_m_, 153)  # Error in this func
             return False
 
     def _set_raw_data(
@@ -96,7 +97,7 @@ class WSSAgent:
         try:
             self._lrd = len(raw_data)
             if self._lrd >= self.dsib:
-                self._set_status_(100)  # Warn in this IF
+                self._set(self._id_m_, 100)  # Warn in this IF
                 return False
 
             self._iwo = self._raw_buf[self._iw]
@@ -115,7 +116,7 @@ class WSSAgent:
             ] = raw_data
 
         except Exception:
-            self._set_status_(152)  # Error in this func
+            self._set(self._id_m_, 152)  # Error in this func
             return False
 
     def run_wss_sim_engine(
@@ -126,37 +127,45 @@ class WSSAgent:
                 gc.collect()
                 self.general_event.wait()
 
-                self._set_status_(10)  # Starting
+                self._set(self._id_m_, 10)  # Starting
                 try:
                     with open(self.file_path, "r") as self.f:
-                        self._set_status_(11)  # Connected
+                        self._set(self._id_m_, 11)  # Connected
                         next(self.f)
                         for line in self.f:
-                            if self._get_status_() is not True:
-                                if self._get_status_(proc=True):
-                                    self._set_status_(2)  # Stoping
+                            if (
+                                self._get(
+                                    self._id_m_,
+                                )
+                                is not True
+                            ):
+                                if self._get(self._id_m_, proc=True):
+                                    self._set(self._id_m_, 2)  # Stoping
                                     self.sem_sleep_parsing.release()
                                     break
 
-                                self._set_status_(1)  # Running
+                                self._set(self._id_m_, 1)  # Running
+                                self._set(self._id_m_)  # TIME START
+
                                 if (
                                     raw_data := self._line_to_raw_data(line)
                                 ) is not False:
                                     if self._set_raw_data(raw_data) is not False:
                                         self.sem_sleep_parsing.release()
 
-                                self._set_status_(4)  # IDLE
+                                self._set(self._id_m_)  # TIME END
+                                self._set(self._id_m_, 4)  # IDLE
                                 time.sleep(0.005)
 
                             else:
                                 sys.exit()
 
                 except FileNotFoundError:
-                    self._set_status_(151)
+                    self._set(self._id_m_, 151)
                     break
 
             except Exception:
-                self._set_status_(150)
+                self._set(self._id_m_, 150)
                 break
 
 

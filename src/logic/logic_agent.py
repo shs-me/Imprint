@@ -18,9 +18,10 @@ class LogicAgent:
     ):
         # Initialization
         self._sa = sa
-        self._set_status_, self._get_status_ = (
-            self._sa._set_status,
-            self._sa._get_status,
+        self._get, self._set, self._id_m_ = (
+            self._sa.get_,
+            self._sa.set_,
+            self._sa._status(daughter=False),
         )
         self.cfg = cfg
         self.general_event = general_event
@@ -69,7 +70,7 @@ class LogicAgent:
             return idy, idx
 
         except Exception:
-            self._set_status_(152)
+            self._set(self._id_m_, 152)
             return False
 
     def run_logic_engine(
@@ -82,33 +83,37 @@ class LogicAgent:
 
                 self.general_event.wait()
 
-                self._set_status_(10)  # Started
+                self._set(self._id_m_, 10)  # Started
 
                 # if isinstance(reading, FootprintReading):
                 while True:
-                    if self._get_status_() is not True:
-                        self._set_status_(4)  # IDLE
+                    if self._get(self._id_m_) is not True:
+                        self._set(self._id_m_, 4)  # IDLE
 
                         self.sem_sleep_logic.acquire()
-                        if self._get_status_(proc=True):
-                            self._set_status_(2)  # Stoping
+                        if self._get(self._id_m_, proc=True):
+                            self._set(self._id_m_, 2)  # Stoping
                             break
 
-                        self._set_status_(1)  # Running
+                        self._set(self._id_m_, 1)  # Running
+                        self._set(self._id_m_)  # TIME START
+
                         while self.sem_sleep_logic.acquire(block=False):
                             pass
 
                         if (ids := self._get_raw_signal()) is not False:
                             # reading.check_patterns(idy, idx)
-                            print(type(ids[0]))
+                            idy, idx = ids
                             pass
+
+                        self._set(self._id_m_)  # TIME END
 
                     else:
                         sys.exit()
-                # self._set_status_(151)  # Error in reading
+                # self._set(self._id_m_, 151)  # Error in reading
                 #
             except Exception:
-                self._set_status_(150)  # Error in this func
+                self._set(self._id_m_, 150)  # Error in this func
                 break
 
 

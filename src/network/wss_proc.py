@@ -19,9 +19,10 @@ class WSSAgent:
     ):
         # Initialization
         self._sa = sa
-        self._set_status_, self._get_status_ = (
-            self._sa._set_status,
-            self._sa._get_status,
+        self._get, self._set, self._id_m_ = (
+            self._sa.get_,
+            self._sa.set_,
+            self._sa._status(daughter=False),
         )
         self.cfg = cfg
         self.general_event = general_event
@@ -74,7 +75,7 @@ class WSSAgent:
         try:
             self._lrd = len(raw_data)
             if self._lrd >= self.dsib:
-                self._set_status_(100)  # Warn in this IF
+                self._set(self._id_m_, 100)  # Warn in this IF
                 return False
 
             self._iwo = self._raw_buf[self._iw]
@@ -93,7 +94,7 @@ class WSSAgent:
             ] = raw_data
 
         except Exception:
-            self._set_status_(151)  # Error in this func
+            self._set(self._id_m_, 151)  # Error in this func
             return False
 
     async def run_wss_engine(
@@ -105,23 +106,26 @@ class WSSAgent:
 
                 self.general_event.wait()
 
-                self._set_status_(10)  # Started. Conecting
+                self._set(self._id_m_, 10)  # Started. Conecting
                 try:
                     async with connect(self.url, ping_interval=20) as ws:
-                        self._set_status_(11)  # Connected
+                        self._set(self._id_m_, 11)  # Connected
                         while True:
-                            if self._get_status_() is not True:
-                                if self._get_status_(proc=True):
-                                    self._set_status_(2)  # Stoping
+                            if self._get(self._id_m_) is not True:
+                                if self._get(self._id_m_, proc=True):
+                                    self._set(self._id_m_, 2)  # Stoping
                                     self.sem_sleep_parsing.release()
                                     break
 
-                                self._set_status_(4)  # IDLE
+                                self._set(self._id_m_, 4)  # IDLE
+                                self._set(self._id_m_)  # TIME START
                                 raw_data = await ws.recv(decode=False)
-                                self._set_status_(1)  # Running
+                                self._set(self._id_m_, 1)  # Running
 
                                 if self._set_raw_data(raw_data) is not False:
                                     self.sem_sleep_parsing.release()
+
+                                self._set(self._id_m_)  # TIME END
 
                             else:
                                 sys.exit()
@@ -130,7 +134,7 @@ class WSSAgent:
                     break
 
             except Exception:
-                self._set_status_(150)  # Error in this func
+                self._set(self._id_m_, 150)  # Error in this func
                 break
 
 
