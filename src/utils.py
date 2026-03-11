@@ -176,8 +176,7 @@ class StatusAgent:
         # - - -
         dgarray[dgid, id_m] = time.time_ns()
         dgarray[-1, id_m] = (code << 32) | dgid  # Set last index + status
-        dgid += 1
-        self._dgid = dgid = dgid if ((dglines - 2) != dgid) else 0
+        self._dgid = (dgid + 1) % (dglines - 1)
 
     @staticmethod
     def save_array(
