@@ -39,7 +39,6 @@ class ParserAgent:
         # variables init
         self._engine_id = 2
         self._tick_size = 0.01
-        self.state: bytes | None = None
         self._decoder = msgspec.json.Decoder(AggTrade)
 
         # RawSHM.buf
@@ -120,11 +119,12 @@ class ParserAgent:
 
     def _set_raw_signal(
         self,
+        state: None | bytes,
     ):
         try:
-            if isinstance(self.state, bytes):
-                self._sign_buf[:4] = len(self.state).to_bytes(4, byteorder="little")
-                self._sign_buf[4 : 4 + len(self.state)] = self.state
+            if isinstance(state, bytes):
+                self._sign_buf[:4] = len(state).to_bytes(4, byteorder="little")
+                self._sign_buf[4 : 4 + len(state)] = state
             else:
                 return False
 
@@ -164,23 +164,21 @@ class ParserAgent:
                                 if (
                                     trade := self._decoder_raw_data(raw_data)
                                 ) is not False:
-                                    self.state = engine.update(
+                                    state = engine.update(
                                         price=float(trade.p),
                                         qty=float(trade.q),
                                         is_sell=trade.m,
                                         timestamp=trade.E,
                                     )
-                                    if self._set_raw_signal() is not False:
+                                    if self._set_raw_signal(state) is not False:
                                         self.sem_sleep_logic.release()
                         else:
-                            print(22)
                             sys.exit()
                 else:
                     self._set_status_(151)  # Error in engine
                     break
 
-            except Exception as e:
-                print(e, 78)
+            except Exception:
                 self._set_status_(150)  # Error in this func
                 break
 

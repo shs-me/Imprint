@@ -26,7 +26,7 @@ IDX_NAMES = {
         },
     },
     "network": {
-        "cols": {"p": "6", "m": "7"},
+        "cols": {"p": "6", "m": "7", "d": "8"},
         "shm_names": {
             "raw": {"shm": None, "buf": None},
             "status": {"shm": None, "buf": None},
@@ -34,7 +34,7 @@ IDX_NAMES = {
         },
     },
     "network_sim": {
-        "cols": {"p": "6", "m": "11"},
+        "cols": {"p": "6", "m": "11", "d": "12"},
         "shm_names": {
             "raw": {"shm": None, "buf": None},
             "status": {"shm": None, "buf": None},
@@ -68,7 +68,7 @@ class StatusAgent:
             self._id_m: int = (
                 int(IDX_NAMES[proc_name]["cols"]["d"])
                 if daughter
-                else int(IDX_NAMES[proc_name]["cols"]["d"])
+                else int(IDX_NAMES[proc_name]["cols"]["m"])
             )
             # LoadShm-s
             self._shm_init()
@@ -83,6 +83,7 @@ class StatusAgent:
             self.dgcols: int = self.cfg["debug"]["cols"]
             self._current_id = 0
             self._debug_array_init()
+
         except Exception as e:
             raise Exception(e)
 
@@ -115,7 +116,6 @@ class StatusAgent:
                 self._current_id = 0
 
             if code:
-                print(self._id_m, code)
                 self.dgarray[self._current_id, self._id_m] = code
             else:
                 self.dgarray[self._current_id, self._id_m] = time.time_ns()
@@ -139,9 +139,11 @@ class StatusAgent:
         try:
             if code:
                 if code > 49:
-                    print(self._id_m, code, "set")
                     self._status_buf[self._id_m] = code
                     self._warn_error_status.set()
+
+                    print(self._id_m, code, "set", self._status_buf[self._id_m])
+
                 else:
                     self._debug_array(code)
 
@@ -149,7 +151,7 @@ class StatusAgent:
                 self._debug_array()
 
         except Exception:
-            return
+            raise Exception
 
     def _get_status(
         self,
@@ -161,16 +163,29 @@ class StatusAgent:
         """
         try:
             if proc:
+                self._status_buf[self._id_m] = 2
+                print(self.shms["status"]["shm"].size, self._status_buf[self._id_m])
                 if self._status_buf[self._id_p] == 2:
                     return True
 
                 return
 
             else:
-                if self._status_buf[self._id_m] > 49 == 2:
+                if self._status_buf[self._id_m] > 49:
                     return True
 
                 return
 
-        except (ValueError, BufferError):
-            return
+        except Exception as e:
+            print(e)
+            raise Exception
+
+    @staticmethod
+    def save_array(buf: memoryview, file_path: str):
+        try:
+            with open(file_path, "wb") as f:
+                f.write(buf[:])
+
+        except Exception as e:
+            print(e)
+            raise Exception(e)

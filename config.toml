@@ -45,4 +45,4 @@
     main = 10
 
     bsize = 4096
-    shm = "status_code_table"
+    shm = "_status_table_"

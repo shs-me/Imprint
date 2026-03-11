@@ -1,6 +1,7 @@
 # archive | data for backtest
 archive
 data
+debug_array.bin
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

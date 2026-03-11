@@ -19,7 +19,6 @@ class WSSAgent:
     ):
         # Initialization
         self._sa = sa
-
         self._set_status_, self._get_status_ = (
             self._sa._set_status,
             self._sa._get_status,

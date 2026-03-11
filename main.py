@@ -13,6 +13,7 @@ from src.logic.logic_agent import run_logic
 from src.monitoring.monitoring_agent import run_monitoring
 from src.network.wss_proc import run_wss
 from src.parsing.parser_agent import run_parsing
+from src.utils import StatusAgent
 
 AGENTS = {
     9: {"name": "MONITOR", "func": run_monitoring, "proc": None},
@@ -42,7 +43,7 @@ class StartMain:
         cfg: dict,
     ):
         self.cfg: dict = cfg
-
+        self.file_path = "debug_array.bin"
         # Event, Semaphores init
         self.sem_sleep_main = Semaphore(0)
         self.sem_sleep_parsing = Semaphore(0)
@@ -115,6 +116,8 @@ class StartMain:
         self,
     ):
         try:
+            logger.warning("Closing Processes, SaveDebugArray, Clean SHM-s, Exit...")
+            StatusAgent.save_array(self.shms["debug"]["buf"], self.file_path)
             for id, data in AGENTS.items():
                 if data["proc"] is not None and data["proc"].is_alive():
                     data["proc"].terminate()
@@ -122,7 +125,6 @@ class StartMain:
                     logger.warning(f"Process {AGENTS[id]['name']} closed")
 
             self._shm_clean()
-            logger.warning("Clean SHM-s, Exit...")
             sys.exit()
 
         except Exception as e:

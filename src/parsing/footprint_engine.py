@@ -45,7 +45,6 @@ class FootprintEngine:
         self.T = self.lines + 5  # Timestamp
         self.D = self.lines + 6  # Delta
         self.CT = self.lines + 7  # Count Trade
-        print("ok")
 
     @staticmethod
     def create(
