@@ -1,0 +1,48 @@
+[urls]
+  wsagg = "wss://fstream.binance.com/ws/"
+  rest = "https://fapi.binance.com/"
+
+[argg]
+  symbol = "dashusdt"
+  backtesting = 1 # for backtesting 0 false 1 true
+
+  [argg.grid] # array aggTrades
+    lines = 10000 #10000 # + 8 lines headers
+    cols = 4
+    interval_min = 1
+
+    bsize = 320000 #480432 # (lines + headers) * cols * bytesize (float64==8bytes)
+    shm = "algo_bot_grid"
+
+  [argg.raw]
+    ac = 41  # Amount Cells
+    dsib = 164  # Data size in bytes
+    hsib = 4
+
+    bsize = 6890    # (4 * 31 = 124) headers +
+    # (31*124=3844) data + 2 counter status write/read
+    shm = "raw_data_memory"
+
+  [argg.sign]
+    bsize = 4096
+    shm = "signal_to_logic"
+
+  [argg.debug]
+    lines = 5001
+    cols = 12
+
+    bsize = 480096
+    shm = "debug_array"
+
+  [argg.status] # Module Status
+    parsing = [0, 1, 2]
+    logic = [3, 4, 5]
+    network = [6, 7, 8]
+
+    backtesting = 11
+
+    monitoring = 9
+    main = 10
+
+    bsize = 4096
+    shm = "status_code_table"
