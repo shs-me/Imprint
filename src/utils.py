@@ -7,8 +7,7 @@ import numpy as np
 
 IDX_NAMES = {
     "parsing": {
-        "cols": {"p": "0", "m": "1", "d": "2"},
-        "shm_names": {
+        "shms": {
             "grid": {"shm": None, "buf": None},
             "raw": {"shm": None, "buf": None},
             "status": {"shm": None, "buf": None},
@@ -17,8 +16,7 @@ IDX_NAMES = {
         },
     },
     "logic": {
-        "cols": {"p": "3", "m": "4", "d": "5"},
-        "shm_names": {
+        "shms": {
             "grid": {"shm": None, "buf": None},
             "status": {"shm": None, "buf": None},
             "sign": {"shm": None, "buf": None},
@@ -26,16 +24,14 @@ IDX_NAMES = {
         },
     },
     "network": {
-        "cols": {"p": "6", "m": "7", "d": "8"},
-        "shm_names": {
+        "shms": {
             "raw": {"shm": None, "buf": None},
             "status": {"shm": None, "buf": None},
             "debug": {"shm": None, "buf": None},
         },
     },
     "network_sim": {
-        "cols": {"p": "6", "m": "11", "d": "12"},
-        "shm_names": {
+        "shms": {
             "raw": {"shm": None, "buf": None},
             "status": {"shm": None, "buf": None},
             "debug": {"shm": None, "buf": None},
@@ -62,11 +58,11 @@ class StatusAgent:
         self._warn_error_status: Semaphore = warn_error_status
         try:
             # SharedMemory-s
-            self.shms: dict[str, ShmType] = IDX_NAMES[proc_name]["shm_names"]
+            self.shms: dict[str, ShmType] = IDX_NAMES[proc_name]["shms"]  # type: ignore
             # StatusSHM init, _id_m: Index parent module, _id_p: Index parent proc
-            self._id_p: int = int(IDX_NAMES[proc_name]["cols"]["p"])
-            self._id_d = int(IDX_NAMES[proc_name]["cols"]["d"])
-            self._id_m = int(IDX_NAMES[proc_name]["cols"]["m"])
+            self._id_p: int = self.cfg["status"][proc_name][0]
+            self._id_m: int = self.cfg["status"][proc_name][1]
+            self._id_d: int = self.cfg["status"][proc_name][2]
             # LoadShm-s
             self._shm_init()
 

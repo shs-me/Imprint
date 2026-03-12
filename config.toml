@@ -40,8 +40,7 @@
     parsing = [0, 1, 2]
     logic = [3, 4, 5]
     network = [6, 7, 8]
-
-    backtesting = 11
+    network_sim = [6, 11, 12]
 
     health = 9
     main = 10

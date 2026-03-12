@@ -917,36 +917,29 @@
   "ID_INFO": {
     "0": {
       "1": {
-        "name": "ParsingAgent",
-        "set_code": "0"
+        "name": "ParsingAgent"
       },
       "2": {
-        "name": "FootprintEngine",
-        "set_code": "0"
+        "name": "FootprintEngine"
       }
     },
     "3": {
       "4": {
-        "name": "LogicAgent",
-        "set_code": "0"
+        "name": "LogicAgent"
       },
       "5": {
-        "name": "FootprintReading",
-        "set_code": "0"
+        "name": "FootprintReading"
       }
     },
     "6": {
       "11": {
-        "name": "WSSAgent Backtest",
-        "set_code": "0"
+        "name": "WSSAgent Backtest"
       },
       "7": {
-        "name": "WSSAgent",
-        "set_code": "0"
+        "name": "WSSAgent"
       },
       "8": {
-        "name": "RESTAgent",
-        "set_code": "0"
+        "name": "RESTAgent"
       }
     }
   },

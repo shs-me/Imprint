@@ -180,7 +180,6 @@ class ParserAgent:
                 _wait_main.wait()
                 _set_status(_id_m_, _dgid_m, 10)  # Started
                 _raw_buf[_ir] = _raw_buf[_ir + 1]
-                print(_raw_buf[_ir + 1])
                 engine = FootprintEngine.create(
                     _sa_=self._sa,
                     cfg=self.cfg,

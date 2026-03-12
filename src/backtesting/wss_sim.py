@@ -154,7 +154,6 @@ class WssSimAgent:
             try:
                 gc.collect()
                 _wait_main.wait()
-                print(_raw_buf[_iw])
                 _set_status(_id_m_, _dgid_m, 10)  # Starting
                 try:
                     with open(_file_path, "r") as self.f:
