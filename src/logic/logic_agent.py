@@ -17,11 +17,12 @@ class LogicAgent:
     ):
         # Initialization
         self._sa = sa
-        self._get, self._set, self._id_m_ = (
+        self._get, self._set, self._ids_ = (
             self._sa.get_,
             self._sa.set_,
             self._sa._status(daughter=False),
         )
+        self._id_m_, self._dgid_m_ = self._ids_
 
         self.cfg = cfg
         self.acquire_parser = sem_sleep_logic
@@ -35,7 +36,7 @@ class LogicAgent:
         cfg: dict,
         sem_sleep_logic: Semaphore,
         general_event: Event,
-        warn_error_status: Event,
+        warn_error_status: Semaphore,
     ):
         try:
             # Init SHM, DebugArray, StatusSHM
@@ -52,14 +53,15 @@ class LogicAgent:
             )
 
         except Exception:
-            warn_error_status.set()
+            warn_error_status.release()
             return None
 
     def _get_raw_signal(
         self,
         sign_buf,
-        set_status,
-        id_m: int,
+        _set_status,
+        _id_m_,
+        _dgid_m,
     ):
         try:
             raw_sign = sign_buf[
@@ -71,7 +73,7 @@ class LogicAgent:
             return idy, idx
 
         except Exception:
-            set_status(id_m, 152)
+            _set_status(_id_m_, _dgid_m, 152)
             return False
 
     def run_logic_engine(
@@ -80,7 +82,12 @@ class LogicAgent:
         # JSON Decoder, SHM.Buf - LocalLink
         _sign_buf = self.sign_buf
         # StatusAgents - LocalLink
-        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
+        _id_m_, _dgid_m, _set_status, _get_status = (
+            self._id_m_,
+            self._dgid_m_,
+            self._set,
+            self._get,
+        )
         # Semaphore, Event - LocalLink
         _wait_main, _acquire_parser = self.wait_main, self.acquire_parser
         # Methods - LocalLinks
@@ -92,38 +99,43 @@ class LogicAgent:
 
                 _wait_main.wait()
 
-                _set_status(_id_m_, 10)  # Started
+                _set_status(_id_m_, _dgid_m, 10)  # Started
                 reader = FootprintReader()
                 if isinstance(reader, FootprintReader):
                     while True:
                         if _get_status(_id_m_) is not True:
-                            _set_status(_id_m_, 4)  # IDLE # TIME START
+                            _set_status(_id_m_, _dgid_m, 4)  # IDLE # TIME START
 
                             _acquire_parser.acquire()
                             if _get_status(_id_m_, proc=True):
-                                _set_status(_id_m_, 2)  # Stoping
+                                _set_status(_id_m_, _dgid_m, 2)  # Stoping
                                 break
 
-                            _set_status(_id_m_, 5)  # Running # TIME WACK_UP
+                            _set_status(_id_m_, _dgid_m, 5)  # Running # TIME WACK_UP
 
                             while _acquire_parser.acquire(block=False):
                                 pass
 
                             if (
-                                ids := _get_raw_signal(_sign_buf, _set_status, _id_m_)
+                                ids := _get_raw_signal(
+                                    _sign_buf,
+                                    _set_status,
+                                    _id_m_,
+                                    _dgid_m,
+                                )
                             ) is not False:
                                 reader.check_patterns(ids[0], ids[1])
 
-                            _set_status(_id_m_, 6)  # END # TIME END
+                            _set_status(_id_m_, _dgid_m, 6)  # END # TIME END
 
                         else:
                             sys.exit()
                 else:
-                    _set_status(_id_m_, 151)  # Error in reading
+                    _set_status(_id_m_, _dgid_m, 151)  # Error in reading
                     break
 
             except Exception:
-                _set_status(_id_m_, 150)  # Error in this func
+                _set_status(_id_m_, _dgid_m, 150)  # Error in this func
                 break
 
 
@@ -131,7 +143,7 @@ def run_logic(
     config: dict,
     sem_sleep_logic: Semaphore,
     general_event: Event,
-    warn_error_status: Event,
+    warn_error_status: Semaphore,
 ):
 
     gc.disable()

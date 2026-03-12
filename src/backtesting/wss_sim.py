@@ -8,7 +8,7 @@ import msgspec
 from src.utils import StatusAgent
 
 
-class WSSAgent:
+class WssSimAgent:
     def __init__(
         self,
         sa: StatusAgent,
@@ -20,11 +20,13 @@ class WSSAgent:
     ):
         # Initialization
         self._sa = sa
-        self._get, self._set, self._id_m_ = (
+        self._get, self._set, self._ids_ = (
             self._sa.get_,
             self._sa.set_,
             self._sa._status(daughter=False),
         )
+        self._id_m_, self._dgid_m_ = self._ids_
+
         self.cfg: dict = cfg
         self.file_path = file_path
         self.encoder = encoder.encode
@@ -46,7 +48,7 @@ class WSSAgent:
         cfg: dict,
         sem_sleep_parsing: Semaphore,
         general_event: Event,
-        warn_error_status: Event,
+        warn_error_status: Semaphore,
         file_path: str,
     ):
         try:
@@ -57,7 +59,7 @@ class WSSAgent:
                 config=cfg["argg"],
                 warn_error_status=warn_error_status,
             )
-            return WSSAgent(
+            return WssSimAgent(
                 sa=sa,
                 cfg=cfg,
                 encoder=encoder,
@@ -67,14 +69,15 @@ class WSSAgent:
             )
 
         except Exception:
-            warn_error_status.set()
+            warn_error_status.release()
             return None
 
     def _encode_data(
         self,
-        id_m,
+        _id_m_,
+        _dgid_m,
         encoder,
-        set_status,
+        _set_status,
         line: str,
     ):  # Line from file convert to raw_data for simulation:
         try:
@@ -90,7 +93,7 @@ class WSSAgent:
             return raw_data
 
         except Exception:
-            set_status(id_m, 153)  # Error in this func
+            _set_status(_id_m_, _dgid_m, 153)  # Error in this func
             return False
 
     def _set_raw_data(
@@ -99,15 +102,16 @@ class WSSAgent:
         ac: int,
         dsib: int,
         hsib: int,
-        id_m: int,
-        set_status,
+        _id_m_,
+        _dgid_m,
+        _set_status,
         raw_buf: memoryview,
         raw_data: bytes,
     ):  # Set Bytes to RawSHM: RING BUFFER
         try:
             lrd = len(raw_data)
             if lrd >= dsib:
-                set_status(id_m, 100)  # Warn in this IF
+                _set_status(_id_m_, _dgid_m, 100)  # Warn in this IF
                 return False
 
             iwo = raw_buf[iw]
@@ -122,7 +126,7 @@ class WSSAgent:
             raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
 
         except Exception:
-            set_status(id_m, 151)  # Error in this func
+            _set_status(_id_m_, _dgid_m, 152)  # Error in this func
             return False
 
     def run_wss_sim_engine(
@@ -131,7 +135,12 @@ class WSSAgent:
         # JSON Encoder, SHM.Buf - LocalLink
         _raw_buf, _encoder = self.raw_buf, self.encoder
         # StatusAgents - LocalLink
-        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
+        _id_m_, _dgid_m, _set_status, _get_status = (
+            self._id_m_,
+            self._dgid_m_,
+            self._set,
+            self._get,
+        )
         # GetRawData - LocalLink
         _ac, _dsib, _hsib, _iw = self.ac, self.dsib, self.hsib, self.iw
         # Semaphore, Event - LocalLink
@@ -145,25 +154,30 @@ class WSSAgent:
             try:
                 gc.collect()
                 _wait_main.wait()
-                _set_status(_id_m_, 10)  # Starting
+                print(_raw_buf[_iw])
+                _set_status(_id_m_, _dgid_m, 10)  # Starting
                 try:
                     with open(_file_path, "r") as self.f:
-                        _set_status(_id_m_, 11)  # Connected
+                        _set_status(_id_m_, _dgid_m, 11)  # Connected
                         next(self.f)
                         for line in self.f:
                             if _get_status(_id_m_) is not True:
-                                _set_status(_id_m_, 4)  # IDLE
+                                _set_status(_id_m_, _dgid_m, 4)  # IDLE
                                 time.sleep(0.005)
                                 if _get_status(_id_m_, proc=True):
-                                    _set_status(_id_m_, 2)  # Stoping
+                                    _set_status(_id_m_, _dgid_m, 2)  # Stoping
                                     _release_parser.release()
                                     break
 
-                                self._set(_id_m_, 5)  # Running # TIME START
+                                _set_status(_id_m_, _dgid_m, 5)  # Running # TIME START
 
                                 if (
                                     raw_data := _encode_data(
-                                        _id_m_, _encoder, _set_status, line
+                                        _id_m_,
+                                        _dgid_m,
+                                        _encoder,
+                                        _set_status,
+                                        line,
                                     )
                                 ) is not False:
                                     if (
@@ -173,6 +187,7 @@ class WSSAgent:
                                             _dsib,
                                             _hsib,
                                             _id_m_,
+                                            _dgid_m,
                                             _set_status,
                                             _raw_buf,
                                             raw_data,
@@ -181,17 +196,17 @@ class WSSAgent:
                                     ):
                                         _release_parser.release()
 
-                                _set_status(_id_m_, 5)  # END # TIME END
+                                _set_status(_id_m_, _dgid_m, 5)  # END # TIME END
 
                             else:
                                 sys.exit()
 
                 except FileNotFoundError:
-                    _set_status(_id_m_, 151)
+                    _set_status(_id_m_, _dgid_m, 151)
                     break
 
             except Exception:
-                _set_status(_id_m_, 150)
+                _set_status(_id_m_, _dgid_m, 150)
                 break
 
 
@@ -199,11 +214,11 @@ def run_wss_sim(
     config: dict,
     sem_sleep_parsing: Semaphore,
     general_event: Event,
-    warn_error_status: Event,
+    warn_error_status: Semaphore,
 ):
     gc.disable()
 
-    wss = WSSAgent.create(
+    wss = WssSimAgent.create(
         cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
         general_event=general_event,
@@ -211,5 +226,5 @@ def run_wss_sim(
         file_path="data/aggtrades.csv",
     )
 
-    if isinstance(wss, WSSAgent):
+    if isinstance(wss, WssSimAgent):
         wss.run_wss_sim_engine()

@@ -5,6 +5,8 @@
 [argg]
   symbol = "dashusdt"
   backtesting = 1 # for backtesting 0 false 1 true
+  dgarray_file = "dgarray.bin"
+  status_file = "status_code.json"
 
   [argg.grid] # array aggTrades
     lines = 10000 #10000 # + 8 lines headers
@@ -19,8 +21,8 @@
     dsib = 164  # Data size in bytes
     hsib = 4
 
-    bsize = 6890    # (4 * 31 = 124) headers +
-    # (31*124=3844) data + 2 counter status write/read
+    bsize = 8192  # 6890 (4 * 41 = 164) headers +
+    # (41*164=6724) data + 2 counter status write/read
     shm = "raw_data_memory"
 
   [argg.sign]
@@ -41,7 +43,7 @@
 
     backtesting = 11
 
-    monitoring = 9
+    health = 9
     main = 10
 
     bsize = 4096

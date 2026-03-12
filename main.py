@@ -10,13 +10,12 @@ from loguru import logger
 
 from src.backtesting.wss_sim import run_wss_sim
 from src.logic.logic_agent import run_logic
-from src.monitoring.monitoring_agent import run_monitoring
 from src.network.wss_proc import run_wss
 from src.parsing.parser_agent import run_parsing
-from src.utils import StatusAgent
+from src.utils import StatusAgent as sa
+from src.watchdog import WatchDog
 
-AGENTS = {
-    9: {"name": "MONITOR", "func": run_monitoring, "proc": None},
+PROCS = {
     0: {"name": "PARSING", "func": run_parsing, "proc": None},
     3: {"name": "LOGIC", "func": run_logic, "proc": None},
     # BACKTESTING False | 6: {"name": "NETWORK", "func": run_wss, "proc": None},
@@ -43,36 +42,38 @@ class StartMain:
         cfg: dict,
     ):
         self.cfg: dict = cfg
-        self.file_path = "debug_array.bin"
+        self.dgarray_file = cfg["argg"]["dgarray_file"]
+        self.status_file = cfg["argg"]["status_file"]
         # Event, Semaphores init
-        self.sem_sleep_main = Semaphore(0)
         self.sem_sleep_parsing = Semaphore(0)
         self.sem_sleep_logic = Semaphore(0)
 
-        self.warn_error_status = Event()
+        self.warn_error_status = Semaphore()
         self.general_event = Event()
 
         self.general_event.set()
 
-        # SharedMemory configuration
+        # SharedMemory init
         self.shms: dict[str, ShmType] = SHM_S  # type: ignore
         if (
             self._shm_control(create=True) is False
         ):  # if true: shms get Memory objects | else: SysExit
             sys.exit()
 
-        # StatusSHM init
-        self.id_pm = self.cfg["argg"]["status"][
-            "monitoring"
-        ]  # Index Process Monitoring on StatusSHM
-        self.id_main = self.cfg["argg"]["status"]["main"]
+        self._status_buf = self.shms["status"]["buf"]
 
-        self.smt = 0  # Status Monitoring Task
+        # self._procs init
+        self._procs = PROCS
+        real = {"name": "NETWORK", "func": run_wss, "proc": None}
+        simulator = {"name": "NETWORK", "func": run_wss_sim, "proc": None}
+        self._procs[6] = simulator if self.cfg["argg"]["backtesting"] else real
 
     @staticmethod
-    def create(**argg):
+    def create(
+        cfg_file: str,
+    ):
         try:
-            with open(argg["config_file"], "rb") as f:
+            with open(cfg_file, "rb") as f:
                 config = tomllib.load(f)
 
             return StartMain(
@@ -80,7 +81,7 @@ class StartMain:
             )
 
         except Exception as e:
-            logger.error(e)
+            logger.error(f"-- MAIN -- | Create | {e}")
             return None
 
     def _get_sem(
@@ -109,26 +110,41 @@ class StartMain:
                 self.general_event,
                 self.warn_error_status,
             )
-        elif id == "MONITOR":
-            return (self.cfg["argg"], self.sem_sleep_main, self.warn_error_status)
+
+    def _sem_clean(
+        self,
+    ):
+        try:
+            for sem in [self.sem_sleep_parsing, self.sem_sleep_logic]:
+                while sem.acquire(block=False):
+                    pass
+            return True
+
+        except Exception as e:
+            logger.error(f"-- MAIN -- | SemClean | {e}")
+            return False
 
     def _exit(
         self,
     ):
         try:
-            logger.warning("Closing Processes, SaveDebugArray, Clean SHM-s, Exit...")
-            StatusAgent.save_array(self.shms["debug"]["buf"], self.file_path)
-            for id, data in AGENTS.items():
+            logger.warning(
+                "-- MAIN -- | _Exit | Closing Processes, SaveDebugArray, Clean SHM-s, Exit..."
+            )
+            sa.save_array(self.shms["debug"]["buf"], self.dgarray_file)
+            for id, data in self._procs.items():
                 if data["proc"] is not None and data["proc"].is_alive():
                     data["proc"].terminate()
                     data["proc"].join()
-                    logger.warning(f"Process {AGENTS[id]['name']} closed")
+                    logger.warning(
+                        f"-- Main -- | _Exit | Process {self._procs[id]['name']} closed"
+                    )
 
             self._shm_clean()
             sys.exit()
 
         except Exception as e:
-            logger.error(e)
+            logger.error(f"-- MAIN -- | _Exit | {e}")
             sys.exit()
 
     def _shm_clean(
@@ -162,7 +178,7 @@ class StartMain:
                 self.shms[name]["buf"][:] = b"\x00" * self.shms[name]["shm"].size
 
         except Exception as e:
-            logger.error(e)
+            logger.error(f"-- MAIN -- | ShmControl | {e}")
             return False
 
     def _run_proc(
@@ -171,121 +187,117 @@ class StartMain:
     ):
         try:
             p = Process(
-                target=AGENTS[id]["func"],
-                args=self._get_sem(AGENTS[id]["name"]),  # type: ignore
-                name=AGENTS[id]["name"],
+                target=self._procs[id]["func"],
+                args=self._get_sem(self._procs[id]["name"]),  # type: ignore
+                name=self._procs[id]["name"],
                 daemon=True,
             )
             p.start()
-            AGENTS[id]["proc"] = p
+            self._procs[id]["proc"] = p
 
         except Exception as e:
-            logger.error(e)
+            logger.error(f"-- MAIN -- | RunProc | {e}")
             return False
 
     def _check_proc(
         self,
         id,
-        attempt=2,
     ):
         try:
-            for _ in range(attempt):
-                if AGENTS[id]["proc"].is_alive() is not True:
-                    logger.warning(
-                        f"Process {AGENTS[id]['name']} is dead. Restarting..."
-                    )
-                    self._run_proc(id)
-                    if AGENTS[id]["proc"].is_alive() is not True:
-                        time.sleep(0.5)
-                    else:
-                        return True
-
+            if self._procs[id]["proc"].is_alive() is not True:
+                logger.warning(
+                    f"-- MAIN -- | CheckProc | Process {self._procs[id]['name']} is dead. Restarting..."
+                )
+                self._run_proc(id)
+                if self._procs[id]["proc"].is_alive() is not True:
+                    time.sleep(0.5)
                 else:
                     return True
 
-            logger.warning(f"Failed to run {AGENTS[id]['name']} Process.")
+            else:
+                return True
+
+            logger.warning(
+                f"-- MAIN -- | CheckProc | Failed to run {self._procs[id]['name']} Process."
+            )
             return False
 
         except Exception as e:
-            logger.error(e)
+            logger.error(f"-- MAIN -- | CheckProc | {e}")
             return False
 
     def _exc_m_tasks(
         self,
-    ):  # Execution Monitoring _exc_m_tasks
+        task: int,
+    ):
         while True:
             try:
-                self.smt = self.shms["status"]["buf"][self.id_pm]
-                if self.smt == 3:
-                    logger.warning(
-                        f"Process {AGENTS[self.id_pm]['name']} Fell because of Unidentified Error. Closing Bot"
-                    )
-                    return False
+                if task == 0:
+                    for id_proc in self._procs:
+                        if self._check_proc(id=id_proc) is False:
+                            return False
 
-                elif self.smt == 1 or self.smt == 200:
-                    break
+                elif 100 <= task <= 106:
+                    if self._check_proc(id=(task - 100)):
+                        break
+                    else:
+                        return False
 
-                elif self._check_proc(id=self.id_pm):
-                    if self.smt == 0:
-                        for id_proc in AGENTS:
-                            if self._check_proc(id=id_proc, attempt=1) is False:
-                                return False
-
-                    elif self.smt >= 100 and 106 >= self.smt:
-                        if self._check_proc(id=(self.smt - 100)):
-                            break
+                elif task == 201:
+                    if self._shm_control() is not False:
+                        if self._sem_clean() is not False:
+                            self.general_event.set()
+                            for id_proc in self._procs:
+                                if self._check_proc(id=id_proc) is False:
+                                    return False
                         else:
                             return False
-
-                    elif self.smt == 201:
-                        if self._shm_control() is False:
-                            return False
-
-                        self.general_event.set()
-                        for id_proc in AGENTS:
-                            if self._check_proc(id=id_proc, attempt=1) is False:
-                                return False
-
+                    else:
+                        return False
                 else:
                     return False
 
                 break
 
             except Exception as e:
-                logger.error(e)
+                logger.error(f"-- MAIN -- | ExcWTasks | {e}")
                 return False
 
     def run_main(
         self,
     ):
         logger.info("--- MAIN --- Started. Init...")
-        # AGENTS init
-        NETWORK = {"name": "NETWORK", "func": run_wss, "proc": None}
-        NETWORK_SIM = {"name": "NETWORK", "func": run_wss_sim, "proc": None}
-
-        AGENTS[5] = NETWORK_SIM if self.cfg["argg"]["backtesting"] else NETWORK
-        for id_proc in AGENTS:
-            if self._run_proc(id=id_proc) is False:
-                self.shms["status"]["buf"][self.id_main] = 150  # Error
-                break
-
-            time.sleep(1)
-
-        logger.info("--- MAIN --- Init Completed.")
-        try:
-            while True:
-                gc.collect()
-                self.general_event.clear()
-                self.sem_sleep_main.acquire(timeout=60)
-
-                if self._exc_m_tasks() is False:
+        _watchdog = WatchDog.create(
+            self._status_buf,
+            self.warn_error_status,
+            self.status_file,
+        )
+        if isinstance(_watchdog, WatchDog):
+            _run_watchdog_engine = _watchdog.run_watchdog_engine
+            for id_proc in self._procs:
+                if self._run_proc(id=id_proc) is False:
                     break
 
-        except KeyboardInterrupt:
-            logger.warning("Shutting down bot")
-        except Exception as e:
-            logger.error(e)
-        finally:
+                time.sleep(1)
+
+            logger.info("--- MAIN --- Init Completed.")
+            try:
+                while True:
+                    gc.collect()
+                    self.general_event.clear()
+
+                    if (task := _run_watchdog_engine()) is not False:
+                        if self._exc_m_tasks(task) is not False:
+                            continue
+                    break
+
+            except KeyboardInterrupt:
+                logger.warning("-- MAIN -- | RunMain | Shutting down bot")
+            except Exception as e:
+                logger.error(f"-- MAIN -- | RunMain | {e}")
+            finally:
+                self._exit()
+        else:
             self._exit()
 
 
@@ -295,13 +307,13 @@ if __name__ == "__main__":
         f"logs/{__name__}.log",
         rotation="100 MB",
         enqueue=True,
-        format="{time:HH:mm:ss.SSS} | {level} | {name}:{function}:{line} - {message}",
+        format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
     gc.disable()
 
     state = StartMain.create(
-        config_file="config.toml",
+        cfg_file="config.toml",
     )
     if isinstance(state, StartMain):
         state.run_main()

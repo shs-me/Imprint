@@ -1,6 +1,6 @@
 import time
 from multiprocessing.shared_memory import SharedMemory
-from multiprocessing.synchronize import Event
+from multiprocessing.synchronize import Semaphore
 from typing import TypedDict
 
 import numpy as np
@@ -54,12 +54,12 @@ class StatusAgent:
         self,
         proc_name: str,
         config: dict,
-        warn_error_status: Event,
+        warn_error_status: Semaphore,
         daughter: bool = False,
     ):
         # initializarion
         self.cfg: dict = config
-        self._warn_error_status: Event = warn_error_status
+        self._warn_error_status: Semaphore = warn_error_status
         try:
             # SharedMemory-s
             self.shms: dict[str, ShmType] = IDX_NAMES[proc_name]["shm_names"]
@@ -78,7 +78,6 @@ class StatusAgent:
             # DebugArray
             self.dglines: int = self.cfg["debug"]["lines"]
             self.dgcols: int = self.cfg["debug"]["cols"]
-            self._dgid = 0
             self._debug_array_init()
 
         except Exception:
@@ -113,13 +112,20 @@ class StatusAgent:
         Else, Return ID_Module "Parent".\n
         """
         if daughter:
-            return self._id_d
+            _id_m_ = self._id_d
         else:
-            return self._id_m
+            _id_m_ = self._id_m
+
+        _dgarray = self.dgarray[-1, _id_m_]
+        _dgid_m = (
+            0 if _dgarray == 0 else (_dgarray % (1_000_000 * (_dgarray // 1_000_000)))
+        )
+        return _id_m_, _dgid_m
 
     def set_(
         self,
         id_m: int,
+        dgid_m: int,
         code: int,
     ):
         """
@@ -130,16 +136,16 @@ class StatusAgent:
             if code:
                 if code > 49:
                     self._status_buf[id_m] = code
-                    self._warn_error_status.set()
+                    self._warn_error_status.release()
 
                 else:
-                    self._debug_array(id_m, code)
+                    self._debug_array(id_m, dgid_m, code)
 
             else:
-                self._debug_array(id_m, code)
+                self._debug_array(id_m, dgid_m, code)
 
-        except Exception:
-            raise Exception
+        except Exception as e:
+            raise Exception(e)
 
     def get_(
         self,
@@ -163,20 +169,23 @@ class StatusAgent:
 
                 return
 
-        except Exception:
-            raise Exception
+        except Exception as e:
+            raise Exception(e)
 
     def _debug_array(
         self,
         id_m: int,
+        dgid_m: int,
         code: int,
     ):
         # DebugArrat - LocalLinks
-        dglines, dgid, dgarray = self.dglines, self._dgid, self.dgarray
+        dglines, dgarray = self.dglines, self.dgarray
         # - - -
-        dgarray[dgid, id_m] = time.time_ns()
-        dgarray[-1, id_m] = (code << 32) | dgid  # Set last index + status
-        self._dgid = (dgid + 1) % (dglines - 1)
+        dgarray[dgid_m, id_m] = time.time_ns()
+        dgarray[-1, id_m] = (
+            code * 1_000_000 + dgid_m
+        )  # (code << 32) | dgid  # Set last index + status
+        self._dgid = (dgid_m + 1) % (dglines - 1)
 
     @staticmethod
     def save_array(

@@ -902,7 +902,9 @@
     }
   },
   "GENERAL": {
-    "4": "IDLE",
+    "4": "START",
+    "5": "WACK_UP",
+    "6": "END",
     "1": "RUNNING",
     "2": "STOPING",
     "3": "SYSEXIT"
