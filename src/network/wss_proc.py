@@ -46,7 +46,7 @@ class WSSAgent:
     def create(
         cfg: dict,
         sem_sleep_parsing: Semaphore,
-        sem_sleep_monitoring: Semaphore,
+        network_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
     ):
@@ -55,7 +55,7 @@ class WSSAgent:
             sa = StatusAgent(
                 proc_name="network_sim",
                 config=cfg["argg"],
-                sem_sleep_monitoring=sem_sleep_monitoring,
+                _monitor=network_monitor,
                 warn_error_status=warn_error_status,
             )
             return WSSAgent(
@@ -173,7 +173,7 @@ class WSSAgent:
 def run_wss(
     config: dict,
     sem_sleep_parsing: Semaphore,
-    sem_sleep_monitoring: Semaphore,
+    network_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -184,7 +184,7 @@ def run_wss(
     wss = WSSAgent.create(
         cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
-        sem_sleep_monitoring=sem_sleep_monitoring,
+        network_monitor=network_monitor,
         general_event=general_event,
         warn_error_status=warn_error_status,
     )

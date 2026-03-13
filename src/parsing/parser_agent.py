@@ -58,7 +58,7 @@ class ParserAgent:
         cfg: dict,
         sem_sleep_parsing: Semaphore,
         sem_sleep_logic: Semaphore,
-        sem_sleep_monitoring: Semaphore,
+        parser_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
     ):
@@ -68,7 +68,7 @@ class ParserAgent:
                 proc_name="parsing",
                 config=cfg,
                 warn_error_status=warn_error_status,
-                sem_sleep_monitoring=sem_sleep_monitoring,
+                _monitor=parser_monitor,
             )
 
             decoder = msgspec.json.Decoder(AggTrade)
@@ -250,7 +250,7 @@ def run_parsing(
     config: dict,
     sem_sleep_parsing: Semaphore,
     sem_sleep_logic: Semaphore,
-    sem_sleep_monitoring: Semaphore,
+    parser_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -259,7 +259,7 @@ def run_parsing(
         cfg=config,
         sem_sleep_logic=sem_sleep_logic,
         sem_sleep_parsing=sem_sleep_parsing,
-        sem_sleep_monitoring=sem_sleep_monitoring,
+        parser_monitor=parser_monitor,
         general_event=general_event,
         warn_error_status=warn_error_status,
     )

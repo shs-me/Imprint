@@ -1,12 +1,15 @@
 import gc
 import struct
 import sys
+import time
 import traceback
 from multiprocessing.shared_memory import SharedMemory
 from multiprocessing.synchronize import Event, Semaphore
 
 import numpy as np
 from loguru import logger
+
+from src.utils import StatusAgent as _sa
 
 
 class MonitoringAgent:
@@ -16,13 +19,23 @@ class MonitoringAgent:
         id_info: dict,
         general: dict,
         general_event: Event,
-        sem_sleep_monitoring: Semaphore,
+        parser_monitor: Semaphore,
+        logic_monitor: Semaphore,
+        network_monitor: Semaphore,
     ):
         try:
             self.cfg = cfg
 
-            self.wait_main = general_event
-            self.wait_update = sem_sleep_monitoring
+            self.wait_main: Event = general_event
+
+            self.parser_monitor: Semaphore = parser_monitor
+            self.logic_monitor: Semaphore = logic_monitor
+            self.network_monitor: Semaphore = network_monitor
+            self.sems = {
+                parser_monitor: 0,
+                logic_monitor: 2,
+                network_monitor: 6,
+            }
             # Status Codes
             self._general = general
             self._id_info = id_info
@@ -69,65 +82,61 @@ class MonitoringAgent:
     def _init_session(
         self,
         _shm_buf: memoryview,
-        _wait_update: Semaphore,
     ):
         # DebugArrayVariables - LocalLinks
-        _id_info, _general, _dgcols, _dgids, _minfo = (
+        _id_info, _general, _dgcols, _sems, _minfo = (
             self._id_info,
             self._general,
             self.dgcols,
-            self.dgids,
+            self.sems,
             self.minfo,
         )
         # - - -
-        _counter, _value = 0, 1
+        _value = 1
         _ids_scs = struct.unpack_from(
             f"!{'i' * (_dgcols * 2)}", _shm_buf[: (_dgcols * 8)]
         )  # index's and status code's
-        _value = 1
         for col in range(_dgcols):
             _m_id = int(_shm_buf[(64 + col)])
-            _minfo[col] = {_m_id: _ids_scs[_value]}  # status code
-            _dgids[col] = _ids_scs[_value - 1]  # line
+            _minfo[_m_id] = {
+                col: {
+                    _ids_scs[_value - 1]: _ids_scs[_value]
+                    if _ids_scs[_value] != 0
+                    else 4
+                }
+            }  # status code
 
-            _counter += 1 if _dgids[col] == 0 else 0
             _value += 2
 
-        self.dgids, self.minfo = _dgids, _minfo
-
-        if _counter >= _dgcols:
-            _wait_update.acquire()
+        self.minfo = _minfo
 
     def _check_debug_array(
         self,
+        _id,
         _dgarray: np.ndarray,
         _wait_update: Semaphore,
     ):
         # DebugArrayVariables - LocalLinks
-        _id_info, _general, _dgids, _dglines, _minfo = (
-            self._id_info,
+        _general, _dglines, _minfo = (
             self._general,
-            self.dgids,
             self.dglines,
             self.minfo,
         )
         # - - -
-        _idy, _idx = list(_dgids.values()), list(_dgids.keys())
-        _raw = _dgarray[_idy, _idx]
-        _diff = np.diff(_raw)
+        for _idx, _value in _minfo[_id].items():
+            for _idy, _scode in _value.items():
+                _ns = _dgarray[_idy:_idx]
+                _minfo[_id][_idx] = {
+                    (_idy + 1) % _dglines: _scode + 1 if _scode + 1 != 7 else 4
+                }
 
-        #  . . .
-        for _ in range(len(_idx)):
-            _dgids[_] = (_idy[_] + 1) % _dglines
-
-        print(_dgids[0])
-        self.dgids = _dgids
+        self.minfo = _minfo
 
     def run_monitoring_engine(
         self,
     ):
         # Semaphore, Event - LocalLink
-        _wait_update, _wait_main = self.wait_update, self.wait_main
+        _sems, _wait_main = self.sems, self.wait_main
         # DebugArray - LocalLinks
         _dgarray, _shm, _shm_buf = self.dgarray, self._shm, self._shm_buf
         # Methods - LocalLinks
@@ -136,16 +145,24 @@ class MonitoringAgent:
         while True:
             try:
                 gc.collect()
-                np.savetxt("test.csv", _dgarray, delimiter=",")
-                _init_session(_shm_buf, _wait_update)
+                _wait_main.wait()
+                _init_session(_shm_buf)
+                _counter = 0
                 while True:
-                    _check_dga(_dgarray, _wait_update)
+                    if any(_sem.get_value() > 0 for _sem in _sems.keys()):
+                        _counter = 0
+                        for _sem, _id_m in _sems.items():
+                            if _count := _sem.get_value() > 0:
+                                for _ in range(_count):
+                                    _sem.acquire(block=False)
+                                    # - - -
+                    else:
+                        if _counter >= 60:
+                            _sa.save_array(_shm_buf, "test.bin")
+                            break
 
-                    for _ in range(9):
-                        _wait_update.acquire(block=False)
-
-                    np.savetxt("test.csv", _dgarray, delimiter=",")
-                    _wait_update.acquire()
+                        _counter += 1
+                        time.sleep(1)
 
             except Exception as e:
                 traceback.print_exc()
@@ -158,7 +175,9 @@ def run_monitoring(
     id_info: dict,
     general: dict,
     general_event: Event,
-    sem_sleep_monitoring: Semaphore,
+    parser_monitor: Semaphore,
+    logic_monitor: Semaphore,
+    network_monitor: Semaphore,
 ):
     logger.remove()
     logger.add(
@@ -174,7 +193,9 @@ def run_monitoring(
         id_info=id_info,
         general=general,
         general_event=general_event,
-        sem_sleep_monitoring=sem_sleep_monitoring,
+        parser_monitor=parser_monitor,
+        logic_monitor=logic_monitor,
+        network_monitor=network_monitor,
     )
     if isinstance(agent, MonitoringAgent):
         agent.run_monitoring_engine()

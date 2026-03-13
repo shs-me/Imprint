@@ -37,7 +37,7 @@ class LogicAgent:
         sem_sleep_logic: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
-        sem_sleep_monitoring: Semaphore,
+        logic_monitor: Semaphore,
     ):
         try:
             # Init SHM, DebugArray, StatusSHM
@@ -45,7 +45,7 @@ class LogicAgent:
                 proc_name="logic",
                 config=cfg,
                 warn_error_status=warn_error_status,
-                sem_sleep_monitoring=sem_sleep_monitoring,
+                _monitor=logic_monitor,
             )
             return LogicAgent(
                 sa=sa,
@@ -143,7 +143,7 @@ class LogicAgent:
 def run_logic(
     config: dict,
     sem_sleep_logic: Semaphore,
-    sem_sleep_monitoring: Semaphore,
+    logic_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -152,7 +152,7 @@ def run_logic(
     agent = LogicAgent.create(
         cfg=config,
         sem_sleep_logic=sem_sleep_logic,
-        sem_sleep_monitoring=sem_sleep_monitoring,
+        logic_monitor=logic_monitor,
         general_event=general_event,
         warn_error_status=warn_error_status,
     )

@@ -47,7 +47,7 @@ class WssSimAgent:
     def create(
         cfg: dict,
         sem_sleep_parsing: Semaphore,
-        sem_sleep_monitoring: Semaphore,
+        network_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
         file_path: str,
@@ -59,7 +59,7 @@ class WssSimAgent:
                 proc_name="network_sim",
                 config=cfg["argg"],
                 warn_error_status=warn_error_status,
-                sem_sleep_monitoring=sem_sleep_monitoring,
+                _monitor=network_monitor,
             )
             return WssSimAgent(
                 sa=sa,
@@ -211,7 +211,7 @@ class WssSimAgent:
 def run_wss_sim(
     config: dict,
     sem_sleep_parsing: Semaphore,
-    sem_sleep_monitoring: Semaphore,
+    network_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -221,7 +221,7 @@ def run_wss_sim(
         cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
         general_event=general_event,
-        sem_sleep_monitoring=sem_sleep_monitoring,
+        network_monitor=network_monitor,
         warn_error_status=warn_error_status,
         file_path="data/aggtrades.csv",
     )

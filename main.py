@@ -52,7 +52,10 @@ class StartMain:
         # Event, Semaphores init
         self.sem_sleep_parsing = Semaphore(0)
         self.sem_sleep_logic = Semaphore(0)
-        self.sem_sleep_monitoring = Semaphore(0)
+
+        self._parser_monitor = Semaphore(0)
+        self._logic_monitor = Semaphore(0)
+        self._network_monitor = Semaphore(0)
 
         self.warn_error_status = Semaphore()
         self.general_event = Event()
@@ -100,7 +103,7 @@ class StartMain:
                 self.cfg["argg"],
                 self.sem_sleep_parsing,
                 self.sem_sleep_logic,
-                self.sem_sleep_monitoring,
+                self._parser_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
@@ -108,7 +111,7 @@ class StartMain:
             return (
                 self.cfg["argg"],
                 self.sem_sleep_logic,
-                self.sem_sleep_monitoring,
+                self._logic_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
@@ -116,7 +119,7 @@ class StartMain:
             return (
                 self.cfg,
                 self.sem_sleep_parsing,
-                self.sem_sleep_monitoring,
+                self._network_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
@@ -126,7 +129,9 @@ class StartMain:
                 self._sc["ID_INFO"],
                 self._sc["GENERAL"],
                 self.general_event,
-                self.sem_sleep_monitoring,
+                self._parser_monitor,
+                self._logic_monitor,
+                self._network_monitor,
             )
 
     def _sem_clean(

@@ -53,12 +53,12 @@ class StatusAgent:
         proc_name: str,
         config: dict,
         warn_error_status: Semaphore,
-        sem_sleep_monitoring: Semaphore,
+        _monitor: Semaphore,
         daughter: bool = False,
     ):
         # initializarion
         self.cfg: dict = config
-        self.sem_sleep_monitoring = sem_sleep_monitoring
+        self._monitor = _monitor
         self._warn_error_status: Semaphore = warn_error_status
         try:
             # SharedMemory-s
@@ -121,9 +121,9 @@ class StatusAgent:
         else:
             _id_m_, _dgc, _dg_buf = self._id_m, self._dgc, self._debug_buf
             _dg_buf[(64 + _dgc)] = _id_m_
-            self.dgid = struct.unpack_from(
-                "!i", _dg_buf[(_dgc * 8 + 8 - 8) : (_dgc * 8 + 4)]
-            )[0]
+            self.dgid = struct.unpack_from("!i", _dg_buf[(_dgc * 8) : (_dgc * 8 + 4)])[
+                0
+            ]
 
         return _id_m_
 
@@ -192,13 +192,13 @@ class StatusAgent:
         )
         # - - -
         dgarray[dgid_m, dgc] = time.time_ns()
-        buf[(dgc * 8 + 8 - 8) : (dgc * 8 + 8)] = struct.pack(
+        buf[(dgc * 8) : (dgc * 8 + 8)] = struct.pack(
             "!ii",
             dgid_m,
             code,
         )
         self.dgid = (dgid_m + 1) % dglines
-        self.sem_sleep_monitoring.release()
+        self._monitor.release()
 
     @staticmethod
     def save_array(
