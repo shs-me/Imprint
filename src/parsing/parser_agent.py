@@ -28,12 +28,11 @@ class ParserAgent:
     ):
         # initializarion
         self._sa = sa
-        self._get, self._set, self._ids_ = (
+        self._get, self._set, self._id_m_ = (
             self._sa.get_,
             self._sa.set_,
             self._sa._status(daughter=False),
         )
-        self._id_m_, self._dgid_m_ = self._ids_
 
         self.cfg = cfg
         self.acquire_wss = sem_sleep_parsing
@@ -59,6 +58,7 @@ class ParserAgent:
         cfg: dict,
         sem_sleep_parsing: Semaphore,
         sem_sleep_logic: Semaphore,
+        sem_sleep_monitoring: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
     ):
@@ -68,6 +68,7 @@ class ParserAgent:
                 proc_name="parsing",
                 config=cfg,
                 warn_error_status=warn_error_status,
+                sem_sleep_monitoring=sem_sleep_monitoring,
             )
 
             decoder = msgspec.json.Decoder(AggTrade)
@@ -82,6 +83,7 @@ class ParserAgent:
             )
 
         except Exception:
+            traceback.print_exc()
             warn_error_status.release()
             return None
 
@@ -91,7 +93,6 @@ class ParserAgent:
         ac: int,
         hsib: int,
         _id_m_,
-        _dgid_m,
         _set_status,
         raw_buf: memoryview,
     ):
@@ -108,13 +109,13 @@ class ParserAgent:
             return raw_data
 
         except Exception:
-            _set_status(_id_m_, _dgid_m, 154)
+            traceback.print_exc()
+            _set_status(_id_m_, 154)
             return False
 
     def _decode_raw_data(
         self,
         _id_m_,
-        _dgid_m,
         decoder,
         _set_status,
         raw_data: memoryview,
@@ -124,13 +125,13 @@ class ParserAgent:
             return trade
 
         except Exception:
-            _set_status(_id_m_, _dgid_m, 153)
+            traceback.print_exc()
+            _set_status(_id_m_, 153)
             return False
 
     def _set_raw_signal(
         self,
         _id_m_,
-        _dgid_m,
         _set_status,
         sign_buf,
         state: None | bytes,
@@ -143,19 +144,18 @@ class ParserAgent:
                 return False
 
         except Exception:
-            _set_status(_id_m_, _dgid_m, 152)  # Error in this func
+            traceback.print_exc()
+            _set_status(_id_m_, 152)  # Error in this func
             return False
 
     def run_parsing_engine(
         self,
-        _warn_error_status,
     ):
         # JSON Decoder, SHM.Buf - LocalLink
         _raw_buf, _sign_buf, _decoder = self.raw_buf, self.sign_buf, self.decoder.decode
         # StatusAgents - LocalLink
-        _id_m_, _dgid_m, _set_status, _get_status = (
+        _id_m_, _set_status, _get_status = (
             self._id_m_,
-            self._dgid_m_,
             self._set,
             self._get,
         )
@@ -178,7 +178,7 @@ class ParserAgent:
             try:
                 gc.collect()
                 _wait_main.wait()
-                _set_status(_id_m_, _dgid_m, 10)  # Started
+
                 _raw_buf[_ir] = _raw_buf[_ir + 1]
                 engine = FootprintEngine.create(
                     _sa_=self._sa,
@@ -188,14 +188,14 @@ class ParserAgent:
                 if isinstance(engine, FootprintEngine):
                     while True:
                         if _get_status(_id_m_) is not True:
-                            _set_status(_id_m_, _dgid_m, 4)  # IDLE # TIME START
+                            _set_status(_id_m_, 4)  # IDLE # TIME START
                             _acquire_wss.acquire()
                             if _get_status(_id_m_, proc=True):
-                                _set_status(_id_m_, _dgid_m, 2)  # Stoping
+                                _set_status(_id_m_, 2)  # Stoping
                                 _release_logic.release()
                                 break
 
-                            _set_status(_id_m_, _dgid_m, 5)  # Running # TIME WAKE_UP
+                            _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
 
                             if (
                                 raw_data := _get_raw_data(
@@ -203,7 +203,6 @@ class ParserAgent:
                                     _ac,
                                     _hsib,
                                     _id_m_,
-                                    _dgid_m,
                                     _set_status,
                                     _raw_buf,
                                 )
@@ -211,7 +210,6 @@ class ParserAgent:
                                 if (
                                     trade := _decode_raw_data(
                                         _id_m_,
-                                        _dgid_m,
                                         _decoder,
                                         _set_status,
                                         raw_data,
@@ -226,7 +224,6 @@ class ParserAgent:
                                     if (
                                         _set_raw_signal(
                                             _id_m_,
-                                            _dgid_m,
                                             _set_status,
                                             _sign_buf,
                                             state,
@@ -235,17 +232,17 @@ class ParserAgent:
                                     ):
                                         _release_logic.release()
 
-                            _set_status(_id_m_, _dgid_m, 6)  # Running # TIME END
+                            _set_status(_id_m_, 6)  # Running # TIME END
 
                         else:
                             sys.exit()
                 else:
-                    _set_status(_id_m_, _dgid_m, 151)  # Error in engine
+                    _set_status(_id_m_, 151)  # Error in engine
                     break
 
             except Exception:
                 traceback.print_exc()
-                _set_status(_id_m_, _dgid_m, 150)  # Error in this func
+                _set_status(_id_m_, 150)  # Error in this func
                 break
 
 
@@ -253,6 +250,7 @@ def run_parsing(
     config: dict,
     sem_sleep_parsing: Semaphore,
     sem_sleep_logic: Semaphore,
+    sem_sleep_monitoring: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -261,8 +259,9 @@ def run_parsing(
         cfg=config,
         sem_sleep_logic=sem_sleep_logic,
         sem_sleep_parsing=sem_sleep_parsing,
+        sem_sleep_monitoring=sem_sleep_monitoring,
         general_event=general_event,
         warn_error_status=warn_error_status,
     )
     if isinstance(agent, ParserAgent):
-        agent.run_parsing_engine(warn_error_status)
+        agent.run_parsing_engine()

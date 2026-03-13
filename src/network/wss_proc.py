@@ -1,6 +1,7 @@
 import asyncio
 import gc
 import sys
+import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 import winloop
@@ -19,12 +20,11 @@ class WSSAgent:
     ):
         # Initialization
         self._sa = sa
-        self._get, self._set, self._ids_ = (
+        self._get, self._set, self._id_m_ = (
             self._sa.get_,
             self._sa.set_,
             self._sa._status(daughter=False),
         )
-        self._id_m_, self._dgid_m_ = self._ids_
 
         self.cfg = cfg
         self.release_parser = sem_sleep_parsing
@@ -46,6 +46,7 @@ class WSSAgent:
     def create(
         cfg: dict,
         sem_sleep_parsing: Semaphore,
+        sem_sleep_monitoring: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
     ):
@@ -54,6 +55,7 @@ class WSSAgent:
             sa = StatusAgent(
                 proc_name="network_sim",
                 config=cfg["argg"],
+                sem_sleep_monitoring=sem_sleep_monitoring,
                 warn_error_status=warn_error_status,
             )
             return WSSAgent(
@@ -64,6 +66,7 @@ class WSSAgent:
             )
 
         except Exception:
+            traceback.print_exc()
             warn_error_status.release()
             return None
 
@@ -74,7 +77,6 @@ class WSSAgent:
         dsib: int,
         hsib: int,
         _id_m_,
-        _dgid_m,
         _set_status,
         raw_buf: memoryview,
         raw_data: bytes,
@@ -82,7 +84,7 @@ class WSSAgent:
         try:
             lrd = len(raw_data)
             if lrd >= dsib:
-                _set_status(_id_m_, _dgid_m, 100)  # Warn in this IF
+                _set_status(_id_m_, 100)  # Warn in this IF
                 return False
 
             iwo = raw_buf[iw]
@@ -97,7 +99,8 @@ class WSSAgent:
             raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
 
         except Exception:
-            _set_status(_id_m_, _dgid_m, 151)  # Error in this func
+            traceback.print_exc()
+            _set_status(_id_m_, 151)  # Error in this func
             return False
 
     async def run_wss_engine(
@@ -106,9 +109,8 @@ class WSSAgent:
         # JSON Decoder, SHM.Buf - LocalLink
         _raw_buf = self.raw_buf
         # StatusAgents - LocalLink
-        _id_m_, _dgid_m, _set_status, _get_status = (
+        _id_m_, _set_status, _get_status = (
             self._id_m_,
-            self._dgid_m_,
             self._set,
             self._get,
         )
@@ -126,21 +128,18 @@ class WSSAgent:
                 gc.collect()
 
                 _wait_main.wait()
-
-                _set_status(_id_m_, _dgid_m, 10)  # Started. Conecting...
                 try:
                     async with connect(uri, ping_interval=20) as ws:
-                        _set_status(_id_m_, _dgid_m, 11)  # Connected
                         while True:
                             if _get_status(_id_m_) is not True:
                                 if _get_status(_id_m_, proc=True):
-                                    _set_status(_id_m_, _dgid_m, 2)  # Stoping
+                                    _set_status(_id_m_, 2)  # Stoping
                                     _release_parser.release()
                                     break
 
-                                _set_status(_id_m_, _dgid_m, 4)  # IDLE # TIME START
+                                _set_status(_id_m_, 4)  # IDLE # TIME START
                                 raw_data = await ws.recv(decode=False)
-                                _set_status(_id_m_, _dgid_m, 5)  # Running
+                                _set_status(_id_m_, 5)  # Running
 
                                 if (
                                     _set_raw_data(
@@ -149,7 +148,6 @@ class WSSAgent:
                                         _dsib,
                                         _hsib,
                                         _id_m_,
-                                        _dgid_m,
                                         _set_status,
                                         _raw_buf,
                                         raw_data,
@@ -158,7 +156,7 @@ class WSSAgent:
                                 ):
                                     _release_parser.release()
 
-                                _set_status(_id_m_, _dgid_m, 6)  # END # TIME END
+                                _set_status(_id_m_, 6)  # END # TIME END
 
                             else:
                                 sys.exit()
@@ -167,13 +165,15 @@ class WSSAgent:
                     break
 
             except Exception:
-                _set_status(_id_m_, _dgid_m, 150)  # Error in this func
+                traceback.print_exc()
+                _set_status(_id_m_, 150)  # Error in this func
                 break
 
 
 def run_wss(
     config: dict,
     sem_sleep_parsing: Semaphore,
+    sem_sleep_monitoring: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -184,6 +184,7 @@ def run_wss(
     wss = WSSAgent.create(
         cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
+        sem_sleep_monitoring=sem_sleep_monitoring,
         general_event=general_event,
         warn_error_status=warn_error_status,
     )

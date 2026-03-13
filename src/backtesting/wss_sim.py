@@ -1,6 +1,7 @@
 import gc
 import sys
 import time
+import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
@@ -20,12 +21,11 @@ class WssSimAgent:
     ):
         # Initialization
         self._sa = sa
-        self._get, self._set, self._ids_ = (
+        self._get, self._set, self._id_m_ = (
             self._sa.get_,
             self._sa.set_,
             self._sa._status(daughter=False),
         )
-        self._id_m_, self._dgid_m_ = self._ids_
 
         self.cfg: dict = cfg
         self.file_path = file_path
@@ -47,6 +47,7 @@ class WssSimAgent:
     def create(
         cfg: dict,
         sem_sleep_parsing: Semaphore,
+        sem_sleep_monitoring: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
         file_path: str,
@@ -58,6 +59,7 @@ class WssSimAgent:
                 proc_name="network_sim",
                 config=cfg["argg"],
                 warn_error_status=warn_error_status,
+                sem_sleep_monitoring=sem_sleep_monitoring,
             )
             return WssSimAgent(
                 sa=sa,
@@ -69,13 +71,13 @@ class WssSimAgent:
             )
 
         except Exception:
+            traceback.print_exc()
             warn_error_status.release()
             return None
 
     def _encode_data(
         self,
         _id_m_,
-        _dgid_m,
         encoder,
         _set_status,
         line: str,
@@ -93,7 +95,8 @@ class WssSimAgent:
             return raw_data
 
         except Exception:
-            _set_status(_id_m_, _dgid_m, 153)  # Error in this func
+            traceback.print_exc()
+            _set_status(_id_m_, 153)  # Error in this func
             return False
 
     def _set_raw_data(
@@ -103,7 +106,6 @@ class WssSimAgent:
         dsib: int,
         hsib: int,
         _id_m_,
-        _dgid_m,
         _set_status,
         raw_buf: memoryview,
         raw_data: bytes,
@@ -111,7 +113,7 @@ class WssSimAgent:
         try:
             lrd = len(raw_data)
             if lrd >= dsib:
-                _set_status(_id_m_, _dgid_m, 100)  # Warn in this IF
+                _set_status(_id_m_, 100)  # Warn in this IF
                 return False
 
             iwo = raw_buf[iw]
@@ -126,7 +128,8 @@ class WssSimAgent:
             raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
 
         except Exception:
-            _set_status(_id_m_, _dgid_m, 152)  # Error in this func
+            traceback.print_exc()
+            _set_status(_id_m_, 152)  # Error in this func
             return False
 
     def run_wss_sim_engine(
@@ -135,9 +138,8 @@ class WssSimAgent:
         # JSON Encoder, SHM.Buf - LocalLink
         _raw_buf, _encoder = self.raw_buf, self.encoder
         # StatusAgents - LocalLink
-        _id_m_, _dgid_m, _set_status, _get_status = (
+        _id_m_, _set_status, _get_status = (
             self._id_m_,
-            self._dgid_m_,
             self._set,
             self._get,
         )
@@ -154,26 +156,23 @@ class WssSimAgent:
             try:
                 gc.collect()
                 _wait_main.wait()
-                _set_status(_id_m_, _dgid_m, 10)  # Starting
                 try:
                     with open(_file_path, "r") as self.f:
-                        _set_status(_id_m_, _dgid_m, 11)  # Connected
                         next(self.f)
                         for line in self.f:
                             if _get_status(_id_m_) is not True:
-                                _set_status(_id_m_, _dgid_m, 4)  # IDLE
+                                _set_status(_id_m_, 4)  # IDLE
                                 time.sleep(0.005)
                                 if _get_status(_id_m_, proc=True):
-                                    _set_status(_id_m_, _dgid_m, 2)  # Stoping
+                                    _set_status(_id_m_, 2)  # Stoping
                                     _release_parser.release()
                                     break
 
-                                _set_status(_id_m_, _dgid_m, 5)  # Running # TIME START
+                                _set_status(_id_m_, 5)  # Running # TIME START
 
                                 if (
                                     raw_data := _encode_data(
                                         _id_m_,
-                                        _dgid_m,
                                         _encoder,
                                         _set_status,
                                         line,
@@ -186,7 +185,6 @@ class WssSimAgent:
                                             _dsib,
                                             _hsib,
                                             _id_m_,
-                                            _dgid_m,
                                             _set_status,
                                             _raw_buf,
                                             raw_data,
@@ -195,23 +193,25 @@ class WssSimAgent:
                                     ):
                                         _release_parser.release()
 
-                                _set_status(_id_m_, _dgid_m, 5)  # END # TIME END
+                                _set_status(_id_m_, 5)  # END # TIME END
 
                             else:
                                 sys.exit()
 
                 except FileNotFoundError:
-                    _set_status(_id_m_, _dgid_m, 151)
+                    _set_status(_id_m_, 151)
                     break
 
             except Exception:
-                _set_status(_id_m_, _dgid_m, 150)
+                traceback.print_exc()
+                _set_status(_id_m_, 150)
                 break
 
 
 def run_wss_sim(
     config: dict,
     sem_sleep_parsing: Semaphore,
+    sem_sleep_monitoring: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -221,6 +221,7 @@ def run_wss_sim(
         cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
         general_event=general_event,
+        sem_sleep_monitoring=sem_sleep_monitoring,
         warn_error_status=warn_error_status,
         file_path="data/aggtrades.csv",
     )

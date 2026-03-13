@@ -1,4 +1,6 @@
+import struct
 import time
+import traceback
 from multiprocessing.shared_memory import SharedMemory
 from multiprocessing.synchronize import Semaphore
 from typing import TypedDict
@@ -51,18 +53,20 @@ class StatusAgent:
         proc_name: str,
         config: dict,
         warn_error_status: Semaphore,
+        sem_sleep_monitoring: Semaphore,
         daughter: bool = False,
     ):
         # initializarion
         self.cfg: dict = config
+        self.sem_sleep_monitoring = sem_sleep_monitoring
         self._warn_error_status: Semaphore = warn_error_status
         try:
             # SharedMemory-s
             self.shms: dict[str, ShmType] = IDX_NAMES[proc_name]["shms"]  # type: ignore
             # StatusSHM init, _id_m: Index parent module, _id_p: Index parent proc
-            self._id_p: int = self.cfg["status"][proc_name][0]
-            self._id_m: int = self.cfg["status"][proc_name][1]
-            self._id_d: int = self.cfg["status"][proc_name][2]
+            self._id_p: int = self.cfg["status"][proc_name]["p"]
+            self._id_m: int = self.cfg["status"][proc_name]["m"]
+            self._id_d: int = self.cfg["status"][proc_name]["d"]
             # LoadShm-s
             self._shm_init()
 
@@ -74,9 +78,13 @@ class StatusAgent:
             # DebugArray
             self.dglines: int = self.cfg["debug"]["lines"]
             self.dgcols: int = self.cfg["debug"]["cols"]
+            self.offset: int = self.cfg["debug"]["offset"]
+            self._dgc: int = self.cfg["status"][proc_name]["dgc"]
+            self.dgid = 0
             self._debug_array_init()
 
         except Exception:
+            traceback.print_exc()
             raise Exception
 
     def _shm_init(
@@ -96,6 +104,7 @@ class StatusAgent:
         self.dgarray = np.ndarray(
             (self.dglines, self.dgcols),
             dtype=np.int64,
+            offset=self.offset,
             buffer=self._debug_buf,
         )
 
@@ -110,18 +119,17 @@ class StatusAgent:
         if daughter:
             _id_m_ = self._id_d
         else:
-            _id_m_ = self._id_m
+            _id_m_, _dgc, _dg_buf = self._id_m, self._dgc, self._debug_buf
+            _dg_buf[(64 + _dgc)] = _id_m_
+            self.dgid = struct.unpack_from(
+                "!i", _dg_buf[(_dgc * 8 + 8 - 8) : (_dgc * 8 + 4)]
+            )[0]
 
-        _dgarray = self.dgarray[-1, _id_m_]
-        _dgid_m = (
-            0 if _dgarray == 0 else (_dgarray % (1_000_000 * (_dgarray // 1_000_000)))
-        )
-        return _id_m_, _dgid_m
+        return _id_m_
 
     def set_(
         self,
         id_m: int,
-        dgid_m: int,
         code: int,
     ):
         """
@@ -135,12 +143,13 @@ class StatusAgent:
                     self._warn_error_status.release()
 
                 else:
-                    self._debug_array(id_m, dgid_m, code)
+                    self._debug_array(id_m)
 
             else:
-                self._debug_array(id_m, dgid_m, code)
+                self._debug_array(id_m)
 
         except Exception as e:
+            traceback.print_exc()
             raise Exception(e)
 
     def get_(
@@ -166,22 +175,30 @@ class StatusAgent:
                 return
 
         except Exception as e:
+            traceback.print_exc()
             raise Exception(e)
 
     def _debug_array(
         self,
-        id_m: int,
-        dgid_m: int,
         code: int,
     ):
         # DebugArrat - LocalLinks
-        dglines, dgarray = self.dglines, self.dgarray
+        dglines, dgarray, dgid_m, dgc, buf = (
+            self.dglines,
+            self.dgarray,
+            self.dgid,
+            self._dgc,
+            self._debug_buf,
+        )
         # - - -
-        dgarray[dgid_m, id_m] = time.time_ns()
-        dgarray[-1, id_m] = (
-            code * 1_000_000 + dgid_m
-        )  # (code << 32) | dgid  # Set last index + status
-        self._dgid = (dgid_m + 1) % (dglines - 1)
+        dgarray[dgid_m, dgc] = time.time_ns()
+        buf[(dgc * 8 + 8 - 8) : (dgc * 8 + 8)] = struct.pack(
+            "!ii",
+            dgid_m,
+            code,
+        )
+        self.dgid = (dgid_m + 1) % dglines
+        self.sem_sleep_monitoring.release()
 
     @staticmethod
     def save_array(
@@ -197,4 +214,5 @@ class StatusAgent:
                 f.write(buf[:])
 
         except Exception as e:
+            traceback.print_exc()
             raise Exception(e)

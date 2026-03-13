@@ -1,4 +1,5 @@
 import struct
+import traceback
 
 import numpy as np
 
@@ -17,12 +18,11 @@ class FootprintEngine:
     ):
         # Initialization
         self._sa_ = _sa_
-        self._get, self._set, self._ids_ = (
+        self._get, self._set, self._id_m_ = (
             self._sa_.get_,
             self._sa_.set_,
             self._sa_._status(daughter=True),
         )
-        self._id_m_, self._dgid_m_ = self._ids_
 
         # grid init
         self.grid = grid  # 2-D. Array DType Float64
@@ -59,8 +59,6 @@ class FootprintEngine:
                 buffer=_sa_.shms["grid"]["buf"],
             )
             grid[:] = 0.0
-            a, b = _sa_._status(daughter=True)
-            _sa_.set_(a, b, 10)
             return FootprintEngine(
                 _sa_=_sa_,
                 grid=grid,
@@ -71,14 +69,13 @@ class FootprintEngine:
             )
 
         except Exception:
-            a, b = _sa_._status(daughter=True)
-            _sa_.set_(a, b, 150)  # Error in this func
+            traceback.print_exc()
+            _sa_.set_(_sa_._status(daughter=True), 150)  # Error in this func
             return None
 
     def _init_session(
         self,
         _id_m_,
-        _dgid_m,
         set_status,
         ivl_ms: int,
         lines: int,
@@ -90,14 +87,14 @@ class FootprintEngine:
     ):  # Init Center, BasePrice, BaseTimestamp
         atip = int(price / tick_size)  # amount_ticks_in_price
         if atip > int(lines * 0.8):
-            set_status(_id_m_, _dgid_m, 100)  # Warn in this IF
+            set_status(_id_m_, 100)  # Warn in this IF
             return
 
         self.center = atip if atip >= (lines - atip) else (lines - atip)
 
         grid[OHLCV_T_D_CT[0], 0] = price
         grid[OHLCV_T_D_CT[5], 0] = (timestamp // ivl_ms) * ivl_ms
-        set_status(_id_m_, _dgid_m, 11)  # Completed
+        set_status(_id_m_, 11)  # Completed
 
     def update_headers(
         self,
@@ -139,9 +136,8 @@ class FootprintEngine:
         timestamp: int,
     ):
         # StatusAgents - LocalLink
-        _id_m_, _dgid_m, _set_status, _get_status = (
+        _id_m_, _set_status, _get_status = (
             self._id_m_,
-            self._dgid_m_,
             self._set,
             self._get,
         )
@@ -162,7 +158,6 @@ class FootprintEngine:
         if _grid[_OHLCV_T_D_CT[0], 0] == 0.0:
             self._init_session(
                 _id_m_,
-                _dgid_m,
                 _set_status,
                 _ivl_ms,
                 _lines,
@@ -175,8 +170,6 @@ class FootprintEngine:
 
         if _get_status(_id_m_):
             return
-
-        _set_status(_id_m_, _dgid_m, 5)  # Running # TIME START
 
         idy = int((_grid[_OHLCV_T_D_CT[0], 0] - price) / _tick_size) + _center
         idx = ((timestamp - int(_grid[_OHLCV_T_D_CT[5], 0])) // _ivl_ms * 2) + (
@@ -196,13 +189,11 @@ class FootprintEngine:
                     is_sell,
                 )
 
-                _set_status(_id_m_, _dgid_m, 6)  # END # TIME END
                 state = struct.pack("<II", idy, idx)
 
             else:
-                _set_status(_id_m_, _dgid_m, 102)  # Warn in this IF
+                _set_status(_id_m_, 102)  # Warn in this IF
         else:
-            _set_status(_id_m_, _dgid_m, 101)  # Warn in this IF
+            _set_status(_id_m_, 101)  # Warn in this IF
 
-        _set_status(_id_m_, _dgid_m, 4)  # IDLE # TIME IDLE
         return state

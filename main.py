@@ -1,6 +1,7 @@
 import gc
 import sys
 import time
+import traceback
 from multiprocessing import Event, Process, Semaphore
 from multiprocessing.shared_memory import SharedMemory
 from typing import TypedDict
@@ -10,16 +11,19 @@ from loguru import logger
 
 from src.backtesting.wss_sim import run_wss_sim
 from src.logic.logic_agent import run_logic
+from src.monitoring import run_monitoring
 from src.network.wss_proc import run_wss
 from src.parsing.parser_agent import run_parsing
 from src.utils import StatusAgent as sa
 from src.watchdog import WatchDog
 
 PROCS = {
-    0: {"name": "PARSING", "func": run_parsing, "proc": None},
-    3: {"name": "LOGIC", "func": run_logic, "proc": None},
-    # BACKTESTING False | 6: {"name": "NETWORK", "func": run_wss, "proc": None},
-    # BACKTESTING True | 6: {"name": "NETWORK", "func": run_wss_sim, "proc": None}
+    13: {"name": "MONITORING", "func": run_monitoring, "proc": None},
+    10: {"name": "PARSING", "func": run_parsing, "proc": None},
+    11: {"name": "LOGIC", "func": run_logic, "proc": None},
+    12: {"name": "NETWORK", "func": None, "proc": None},
+    # BACKTESTING False | 12: ... "func": run_wss ...}
+    # BACKTESTING True | 12: ... "func": run_wss_sim ...}
 }
 
 SHM_S = {
@@ -42,11 +46,13 @@ class StartMain:
         cfg: dict,
     ):
         self.cfg: dict = cfg
+        self.sc_general: dict = {}
         self.dgarray_file = cfg["argg"]["dgarray_file"]
         self.status_file = cfg["argg"]["status_file"]
         # Event, Semaphores init
         self.sem_sleep_parsing = Semaphore(0)
         self.sem_sleep_logic = Semaphore(0)
+        self.sem_sleep_monitoring = Semaphore(0)
 
         self.warn_error_status = Semaphore()
         self.general_event = Event()
@@ -64,9 +70,9 @@ class StartMain:
 
         # self._procs init
         self._procs = PROCS
-        real = {"name": "NETWORK", "func": run_wss, "proc": None}
-        simulator = {"name": "NETWORK", "func": run_wss_sim, "proc": None}
-        self._procs[6] = simulator if self.cfg["argg"]["backtesting"] else real
+        self._procs[12]["func"] = (
+            run_wss_sim if self.cfg["argg"]["backtesting"] else run_wss
+        )
 
     @staticmethod
     def create(
@@ -81,34 +87,46 @@ class StartMain:
             )
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"-- MAIN -- | Create | {e}")
             return None
 
-    def _get_sem(
+    def _proc_arg_init(
         self,
-        id,
+        proc_name,
     ):
-        if id == "PARSING":
+        if proc_name == "PARSING":
             return (
                 self.cfg["argg"],
                 self.sem_sleep_parsing,
                 self.sem_sleep_logic,
+                self.sem_sleep_monitoring,
                 self.general_event,
                 self.warn_error_status,
             )
-        elif id == "LOGIC":
+        elif proc_name == "LOGIC":
             return (
                 self.cfg["argg"],
                 self.sem_sleep_logic,
+                self.sem_sleep_monitoring,
                 self.general_event,
                 self.warn_error_status,
             )
-        elif id == "NETWORK":
+        elif proc_name == "NETWORK":
             return (
                 self.cfg,
                 self.sem_sleep_parsing,
+                self.sem_sleep_monitoring,
                 self.general_event,
                 self.warn_error_status,
+            )
+        elif proc_name == "MONITORING":
+            return (
+                self.cfg["argg"],
+                self._sc["ID_INFO"],
+                self._sc["GENERAL"],
+                self.general_event,
+                self.sem_sleep_monitoring,
             )
 
     def _sem_clean(
@@ -121,6 +139,7 @@ class StartMain:
             return True
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"-- MAIN -- | SemClean | {e}")
             return False
 
@@ -178,38 +197,44 @@ class StartMain:
                 self.shms[name]["buf"][:] = b"\x00" * self.shms[name]["shm"].size
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"-- MAIN -- | ShmControl | {e}")
             return False
 
     def _run_proc(
         self,
-        id,
+        id_proc,
     ):
         try:
-            p = Process(
-                target=self._procs[id]["func"],
-                args=self._get_sem(self._procs[id]["name"]),  # type: ignore
-                name=self._procs[id]["name"],
-                daemon=True,
-            )
-            p.start()
-            self._procs[id]["proc"] = p
+            if isinstance(id_proc, int):
+                p = Process(
+                    target=self._procs[id_proc]["func"],
+                    args=self._proc_arg_init(self._procs[id_proc]["name"]),  # type: ignore
+                    name=self._procs[id_proc]["name"],
+                    daemon=True,
+                )
+                p.start()
+                self._procs[id_proc]["proc"] = p
+
+            else:
+                logger.warning("-- MAIN -- | RunProc | proc_id is not int")
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"-- MAIN -- | RunProc | {e}")
             return False
 
     def _check_proc(
         self,
-        id,
+        id_proc,
     ):
         try:
-            if self._procs[id]["proc"].is_alive() is not True:
+            if self._procs[id_proc]["proc"].is_alive() is not True:
                 logger.warning(
-                    f"-- MAIN -- | CheckProc | Process {self._procs[id]['name']} is dead. Restarting..."
+                    f"-- MAIN -- | CheckProc | Process {self._procs[id_proc]['name']} is dead. Restarting..."
                 )
-                self._run_proc(id)
-                if self._procs[id]["proc"].is_alive() is not True:
+                self._run_proc(id_proc)
+                if self._procs[id_proc]["proc"].is_alive() is not True:
                     time.sleep(0.5)
                 else:
                     return True
@@ -218,11 +243,12 @@ class StartMain:
                 return True
 
             logger.warning(
-                f"-- MAIN -- | CheckProc | Failed to run {self._procs[id]['name']} Process."
+                f"-- MAIN -- | CheckProc | Failed to run {self._procs[id_proc]['name']} Process."
             )
             return False
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"-- MAIN -- | CheckProc | {e}")
             return False
 
@@ -234,11 +260,11 @@ class StartMain:
             try:
                 if task == 0:
                     for id_proc in self._procs:
-                        if self._check_proc(id=id_proc) is False:
+                        if self._check_proc(id_proc=id_proc) is False:
                             return False
 
                 elif 100 <= task <= 106:
-                    if self._check_proc(id=(task - 100)):
+                    if self._check_proc(id_proc=(task - 100)):
                         break
                     else:
                         return False
@@ -248,7 +274,7 @@ class StartMain:
                         if self._sem_clean() is not False:
                             self.general_event.set()
                             for id_proc in self._procs:
-                                if self._check_proc(id=id_proc) is False:
+                                if self._check_proc(id_proc=id_proc) is False:
                                     return False
                         else:
                             return False
@@ -260,6 +286,7 @@ class StartMain:
                 break
 
             except Exception as e:
+                traceback.print_exc()
                 logger.error(f"-- MAIN -- | ExcWTasks | {e}")
                 return False
 
@@ -273,9 +300,10 @@ class StartMain:
             self.status_file,
         )
         if isinstance(_watchdog, WatchDog):
+            self._sc = _watchdog.sc
             _run_watchdog_engine = _watchdog.run_watchdog_engine
             for id_proc in self._procs:
-                if self._run_proc(id=id_proc) is False:
+                if self._run_proc(id_proc=id_proc) is False:
                     break
 
                 time.sleep(1)
@@ -294,6 +322,7 @@ class StartMain:
             except KeyboardInterrupt:
                 logger.warning("-- MAIN -- | RunMain | Shutting down bot")
             except Exception as e:
+                traceback.print_exc()
                 logger.error(f"-- MAIN -- | RunMain | {e}")
             finally:
                 self._exit()

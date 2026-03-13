@@ -1,6 +1,7 @@
 import gc
 import struct
 import sys
+import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 from src.logic.footprint_reader import FootprintReader
@@ -17,12 +18,11 @@ class LogicAgent:
     ):
         # Initialization
         self._sa = sa
-        self._get, self._set, self._ids_ = (
+        self._get, self._set, self._id_m_ = (
             self._sa.get_,
             self._sa.set_,
             self._sa._status(daughter=False),
         )
-        self._id_m_, self._dgid_m_ = self._ids_
 
         self.cfg = cfg
         self.acquire_parser = sem_sleep_logic
@@ -37,6 +37,7 @@ class LogicAgent:
         sem_sleep_logic: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
+        sem_sleep_monitoring: Semaphore,
     ):
         try:
             # Init SHM, DebugArray, StatusSHM
@@ -44,6 +45,7 @@ class LogicAgent:
                 proc_name="logic",
                 config=cfg,
                 warn_error_status=warn_error_status,
+                sem_sleep_monitoring=sem_sleep_monitoring,
             )
             return LogicAgent(
                 sa=sa,
@@ -53,6 +55,7 @@ class LogicAgent:
             )
 
         except Exception:
+            traceback.print_exc()
             warn_error_status.release()
             return None
 
@@ -61,7 +64,6 @@ class LogicAgent:
         sign_buf,
         _set_status,
         _id_m_,
-        _dgid_m,
     ):
         try:
             raw_sign = sign_buf[
@@ -73,7 +75,8 @@ class LogicAgent:
             return idy, idx
 
         except Exception:
-            _set_status(_id_m_, _dgid_m, 152)
+            traceback.print_exc()
+            _set_status(_id_m_, 152)
             return False
 
     def run_logic_engine(
@@ -82,9 +85,8 @@ class LogicAgent:
         # JSON Decoder, SHM.Buf - LocalLink
         _sign_buf = self.sign_buf
         # StatusAgents - LocalLink
-        _id_m_, _dgid_m, _set_status, _get_status = (
+        _id_m_, _set_status, _get_status = (
             self._id_m_,
-            self._dgid_m_,
             self._set,
             self._get,
         )
@@ -99,19 +101,18 @@ class LogicAgent:
 
                 _wait_main.wait()
 
-                _set_status(_id_m_, _dgid_m, 10)  # Started
                 reader = FootprintReader()
                 if isinstance(reader, FootprintReader):
                     while True:
                         if _get_status(_id_m_) is not True:
-                            _set_status(_id_m_, _dgid_m, 4)  # IDLE # TIME START
+                            _set_status(_id_m_, 4)  # IDLE # TIME START
 
                             _acquire_parser.acquire()
                             if _get_status(_id_m_, proc=True):
-                                _set_status(_id_m_, _dgid_m, 2)  # Stoping
+                                _set_status(_id_m_, 2)  # Stoping
                                 break
 
-                            _set_status(_id_m_, _dgid_m, 5)  # Running # TIME WACK_UP
+                            _set_status(_id_m_, 5)  # Running # TIME WACK_UP
 
                             while _acquire_parser.acquire(block=False):
                                 pass
@@ -121,27 +122,28 @@ class LogicAgent:
                                     _sign_buf,
                                     _set_status,
                                     _id_m_,
-                                    _dgid_m,
                                 )
                             ) is not False:
                                 reader.check_patterns(ids[0], ids[1])
 
-                            _set_status(_id_m_, _dgid_m, 6)  # END # TIME END
+                            _set_status(_id_m_, 6)  # END # TIME END
 
                         else:
                             sys.exit()
                 else:
-                    _set_status(_id_m_, _dgid_m, 151)  # Error in reading
+                    _set_status(_id_m_, 151)  # Error in reading
                     break
 
             except Exception:
-                _set_status(_id_m_, _dgid_m, 150)  # Error in this func
+                traceback.print_exc()
+                _set_status(_id_m_, 150)  # Error in this func
                 break
 
 
 def run_logic(
     config: dict,
     sem_sleep_logic: Semaphore,
+    sem_sleep_monitoring: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
 ):
@@ -150,6 +152,7 @@ def run_logic(
     agent = LogicAgent.create(
         cfg=config,
         sem_sleep_logic=sem_sleep_logic,
+        sem_sleep_monitoring=sem_sleep_monitoring,
         general_event=general_event,
         warn_error_status=warn_error_status,
     )

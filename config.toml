@@ -30,19 +30,21 @@
     shm = "signal_to_logic"
 
   [argg.debug]
-    lines = 5001
-    cols = 12
+    lines = 5000
+    cols = 3
+    multiplier = 1_000_000
 
-    bsize = 480096
+    offset = 128 # for headers cols 0-64 & 64-128 other info
+    bsize = 120128
     shm = "debug_array"
 
   [argg.status] # Module Status
-    parsing = [0, 1, 2]
-    logic = [3, 4, 5]
-    network = [6, 7, 8]
-    network_sim = [6, 11, 12]
+    parsing = {"p"=10, "m"=0, "d"=1, "dgc"=0}
+    logic = {"p"=11, "m"=2, "d"=3, "dgc"=1}
+    network = {"p"=12, "m"=4, "d"=5, "dgc"=2}
+    network_sim = {"p"=12, "m"=6, "d"=7, "dgc"=2}
 
-    health = 9
+    monitoring = 9
     main = 10
 
     bsize = 4096

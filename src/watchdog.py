@@ -1,5 +1,6 @@
 import gc
 import json
+import traceback
 from datetime import datetime, timedelta, timezone
 from multiprocessing.synchronize import Semaphore
 
@@ -41,6 +42,7 @@ class WatchDog:
             )
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"WatchDog | GetStatusDict | {e}")
             return None
 
@@ -54,6 +56,7 @@ class WatchDog:
                 return _int_id_p + 100
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"WatchDog | ErrorAction | {e}")
             return False
 
@@ -86,9 +89,11 @@ class WatchDog:
 
             sleep_time = (tomorrow - now).total_seconds()
             gc.collect()
+            logger.debug("sleep")
             _warn_error_status_.acquire(timeout=sleep_time)
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"WatchDog | SleepUntillMarketOpen | {e}")
             return False
 
@@ -113,6 +118,7 @@ class WatchDog:
                 return None
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"WatchDog | WarnAction | {e}")
             return False
 
@@ -171,6 +177,7 @@ class WatchDog:
                         continue
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"WatchDog | CheckStatusModules | {e}")
             return False
 
@@ -223,5 +230,6 @@ class WatchDog:
                     return False
 
             except Exception as e:
+                traceback.print_exc()
                 logger.error(f"WatchDog | RunStatusAgent | {e}")
                 return False
