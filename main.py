@@ -11,17 +11,17 @@ from loguru import logger
 
 from src.backtesting.wss_sim import run_wss_sim
 from src.logic.logic_agent import run_logic
-from src.monitoring import run_monitoring
+from src.monitoring.monitor import MonitorObj as mo
+from src.monitoring.monitoring import run_monitoring
+from src.monitoring.watchdog import WatchDog
 from src.network.wss_proc import run_wss
 from src.parsing.parser_agent import run_parsing
-from src.utils import StatusAgent as sa
-from src.watchdog import WatchDog
 
 PROCS = {
-    13: {"name": "MONITORING", "func": run_monitoring, "proc": None},
     10: {"name": "PARSING", "func": run_parsing, "proc": None},
     11: {"name": "LOGIC", "func": run_logic, "proc": None},
     12: {"name": "NETWORK", "func": None, "proc": None},
+    13: {"name": "MONITORING", "func": run_monitoring, "proc": None},
     # BACKTESTING False | 12: ... "func": run_wss ...}
     # BACKTESTING True | 12: ... "func": run_wss_sim ...}
 }
@@ -155,7 +155,7 @@ class StartMain:
             logger.warning(
                 "-- MAIN -- | _Exit | Closing Processes, SaveDebugArray, Clean SHM-s, Exit..."
             )
-            sa.save_array(self.shms["debug"]["buf"], self.dgarray_file)
+            mo.dump_debug_shm(self.shms["debug"]["buf"], self.dgarray_file)
             for id, data in self._procs.items():
                 if data["proc"] is not None and data["proc"].is_alive():
                     data["proc"].terminate()
@@ -338,7 +338,7 @@ class StartMain:
 if __name__ == "__main__":
     logger.remove()
     logger.add(
-        f"logs/{__name__}.log",
+        "logs/__main__&_watchdog.log",
         rotation="100 MB",
         enqueue=True,
         format="{time:HH:mm:ss.SSS} | {level} | {message}",

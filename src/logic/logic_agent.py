@@ -5,23 +5,23 @@ import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 from src.logic.footprint_reader import FootprintReader
-from src.utils import StatusAgent
+from src.monitoring.monitor import MonitorObj
 
 
 class LogicAgent:
     def __init__(
         self,
-        sa: StatusAgent,
+        mo: MonitorObj,
         cfg: dict,
         sem_sleep_logic: Semaphore,
         general_event: Event,
     ):
         # Initialization
-        self._sa = sa
+        self._mo = mo
         self._get, self._set, self._id_m_ = (
-            self._sa.get_,
-            self._sa.set_,
-            self._sa._status(daughter=False),
+            self._mo.get_,
+            self._mo.set_,
+            self._mo._status(daughter=False),
         )
 
         self.cfg = cfg
@@ -29,7 +29,7 @@ class LogicAgent:
         self.wait_main = general_event
 
         # SignalSHM.buf
-        self.sign_buf = self._sa.shms["sign"]["buf"]
+        self.sign_buf = self._mo.shms["sign"]["buf"]
 
     @staticmethod
     def create(
@@ -41,14 +41,14 @@ class LogicAgent:
     ):
         try:
             # Init SHM, DebugArray, StatusSHM
-            sa = StatusAgent(
+            mo = MonitorObj(
                 proc_name="logic",
                 config=cfg,
                 warn_error_status=warn_error_status,
                 _monitor=logic_monitor,
             )
             return LogicAgent(
-                sa=sa,
+                mo=mo,
                 cfg=cfg,
                 sem_sleep_logic=sem_sleep_logic,
                 general_event=general_event,

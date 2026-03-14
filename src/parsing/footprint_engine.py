@@ -3,13 +3,13 @@ import traceback
 
 import numpy as np
 
-from src.utils import StatusAgent
+from src.monitoring.monitor import MonitorObj
 
 
 class FootprintEngine:
     def __init__(
         self,
-        _sa_: StatusAgent,
+        _mo_: MonitorObj,
         grid: np.ndarray,
         lines: int,
         columns: int,
@@ -17,11 +17,11 @@ class FootprintEngine:
         tick_size: float,
     ):
         # Initialization
-        self._sa_ = _sa_
+        self._mo_ = _mo_
         self._get, self._set, self._id_m_ = (
-            self._sa_.get_,
-            self._sa_.set_,
-            self._sa_._status(daughter=True),
+            self._mo_.get_,
+            self._mo_.set_,
+            self._mo_._status(daughter=True),
         )
 
         # grid init
@@ -50,17 +50,17 @@ class FootprintEngine:
     def create(
         cfg: dict,
         tick_size: float,
-        _sa_: StatusAgent,
+        _mo_: MonitorObj,
     ):
         try:
             grid = np.ndarray(
                 ((cfg["grid"]["lines"] + 8), cfg["grid"]["cols"]),
                 dtype=np.float64,
-                buffer=_sa_.shms["grid"]["buf"],
+                buffer=_mo_.shms["grid"]["buf"],
             )
             grid[:] = 0.0
             return FootprintEngine(
-                _sa_=_sa_,
+                _mo_=_mo_,
                 grid=grid,
                 lines=cfg["grid"]["lines"],
                 columns=cfg["grid"]["cols"],
@@ -70,7 +70,7 @@ class FootprintEngine:
 
         except Exception:
             traceback.print_exc()
-            _sa_.set_(_sa_._status(daughter=True), 150)  # Error in this func
+            _mo_.set_(_mo_._status(daughter=True), 150)  # Error in this func
             return None
 
     def _init_session(

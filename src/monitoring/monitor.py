@@ -47,7 +47,7 @@ class ShmType(TypedDict):
     buf: memoryview
 
 
-class StatusAgent:
+class MonitorObj:
     def __init__(
         self,
         proc_name: str,
@@ -201,7 +201,7 @@ class StatusAgent:
         self._monitor.release()
 
     @staticmethod
-    def save_array(
+    def dump_debug_shm(
         buf: memoryview,
         file_path: str,
     ):

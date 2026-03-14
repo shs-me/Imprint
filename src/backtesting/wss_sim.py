@@ -6,13 +6,13 @@ from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
 
-from src.utils import StatusAgent
+from src.monitoring.monitor import MonitorObj
 
 
 class WssSimAgent:
     def __init__(
         self,
-        sa: StatusAgent,
+        mo: MonitorObj,
         cfg: dict,
         encoder: msgspec.json.Encoder,
         sem_sleep_parsing: Semaphore,
@@ -20,11 +20,11 @@ class WssSimAgent:
         file_path: str,
     ):
         # Initialization
-        self._sa = sa
+        self._mo = mo
         self._get, self._set, self._id_m_ = (
-            self._sa.get_,
-            self._sa.set_,
-            self._sa._status(daughter=False),
+            self._mo.get_,
+            self._mo.set_,
+            self._mo._status(daughter=False),
         )
 
         self.cfg: dict = cfg
@@ -35,13 +35,13 @@ class WssSimAgent:
         self.wait_main = general_event
 
         # RawSHM.buf
-        self.raw_buf = self._sa.shms["raw"]["buf"]
+        self.raw_buf = self._mo.shms["raw"]["buf"]
 
         # InitSetRawData
         self.ac: int = self.cfg["argg"]["raw"]["ac"]  # Amount Cells
         self.dsib: int = self.cfg["argg"]["raw"]["dsib"]  # Data size in bytes
         self.hsib: int = self.cfg["argg"]["raw"]["hsib"]  # Headers size in bytes
-        self.iw: int = self._sa.shms["raw"]["shm"].size - 1  # Index, Write counter
+        self.iw: int = self._mo.shms["raw"]["shm"].size - 1  # Index, Write counter
 
     @staticmethod
     def create(
@@ -55,14 +55,14 @@ class WssSimAgent:
         try:
             encoder = msgspec.json.Encoder()
             # Init SHM, DebugArray, StatusSHM
-            sa = StatusAgent(
+            mo = MonitorObj(
                 proc_name="network_sim",
                 config=cfg["argg"],
                 warn_error_status=warn_error_status,
                 _monitor=network_monitor,
             )
             return WssSimAgent(
-                sa=sa,
+                mo=mo,
                 cfg=cfg,
                 encoder=encoder,
                 general_event=general_event,

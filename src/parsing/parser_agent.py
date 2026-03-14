@@ -5,8 +5,8 @@ from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
 
+from src.monitoring.monitor import MonitorObj
 from src.parsing.footprint_engine import FootprintEngine
-from src.utils import StatusAgent
 
 
 class AggTrade(msgspec.Struct):
@@ -19,7 +19,7 @@ class AggTrade(msgspec.Struct):
 class ParserAgent:
     def __init__(
         self,
-        sa: StatusAgent,
+        mo: MonitorObj,
         cfg: dict,
         decoder: msgspec.json.Decoder,
         sem_sleep_parsing: Semaphore,
@@ -27,11 +27,11 @@ class ParserAgent:
         general_event: Event,
     ):
         # initializarion
-        self._sa = sa
+        self._mo = mo
         self._get, self._set, self._id_m_ = (
-            self._sa.get_,
-            self._sa.set_,
-            self._sa._status(daughter=False),
+            self._mo.get_,
+            self._mo.set_,
+            self._mo._status(daughter=False),
         )
 
         self.cfg = cfg
@@ -44,14 +44,14 @@ class ParserAgent:
         self.decoder: msgspec.json.Decoder = decoder
 
         # RawSHM.buf
-        self.raw_buf = self._sa.shms["raw"]["buf"]
+        self.raw_buf = self._mo.shms["raw"]["buf"]
         # SignSHM.buf
-        self.sign_buf = self._sa.shms["sign"]["buf"]
+        self.sign_buf = self._mo.shms["sign"]["buf"]
         # InitGetRawData
         self.ac: int = self.cfg["raw"]["ac"]  # Amount Cells
         self.dsib: int = self.cfg["raw"]["dsib"]  # Data size in bytes
         self.hsib: int = self.cfg["raw"]["hsib"]  # Headers size in bytes
-        self.ir: int = self._sa.shms["raw"]["shm"].size - 2  # Index, Read _current_id
+        self.ir: int = self._mo.shms["raw"]["shm"].size - 2  # Index, Read _current_id
 
     @staticmethod
     def create(
@@ -64,7 +64,7 @@ class ParserAgent:
     ):
         try:
             # Init SHM, DebugArray, StatusSHM
-            sa = StatusAgent(
+            mo = MonitorObj(
                 proc_name="parsing",
                 config=cfg,
                 warn_error_status=warn_error_status,
@@ -74,7 +74,7 @@ class ParserAgent:
             decoder = msgspec.json.Decoder(AggTrade)
 
             return ParserAgent(
-                sa=sa,
+                mo=mo,
                 cfg=cfg,
                 decoder=decoder,
                 sem_sleep_logic=sem_sleep_logic,
@@ -181,7 +181,7 @@ class ParserAgent:
 
                 _raw_buf[_ir] = _raw_buf[_ir + 1]
                 engine = FootprintEngine.create(
-                    _sa_=self._sa,
+                    _mo_=self._mo,
                     cfg=self.cfg,
                     tick_size=self.tick_size,
                 )

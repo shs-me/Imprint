@@ -89,7 +89,6 @@ class WatchDog:
 
             sleep_time = (tomorrow - now).total_seconds()
             gc.collect()
-            logger.debug("sleep")
             _warn_error_status_.acquire(timeout=sleep_time)
 
         except Exception as e:
