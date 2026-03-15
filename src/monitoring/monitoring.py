@@ -9,7 +9,7 @@ from multiprocessing.synchronize import Event, Semaphore
 import numpy as np
 from loguru import logger
 
-from src.monitoring.monitor import MonitorObj as _mo
+from src import MonitorObj as _mo
 
 
 class MonitoringAgent:

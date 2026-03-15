@@ -1,4 +1,4 @@
-class FootprintReader:
+class BaseFootprintReader:
     def __init__(
         self,
     ):

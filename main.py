@@ -9,13 +9,8 @@ from typing import TypedDict
 import tomllib
 from loguru import logger
 
-from src.backtesting.wss_sim import run_wss_sim
-from src.logic.logic_agent import run_logic
-from src.monitoring.monitor import MonitorObj as mo
-from src.monitoring.monitoring import run_monitoring
-from src.monitoring.watchdog import WatchDog
-from src.network.wss_proc import run_wss
-from src.parsing.parser_agent import run_parsing
+from src import MonitorObj as mo
+from src import WatchDog, run_logic, run_monitoring, run_parsing, run_wss, run_wss_sim
 
 PROCS = {
     10: {"name": "PARSING", "func": run_parsing, "proc": None},

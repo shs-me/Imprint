@@ -3,7 +3,7 @@ import traceback
 
 import numpy as np
 
-from src.monitoring.monitor import MonitorObj
+from src import MonitorObj
 
 
 class FootprintEngine:

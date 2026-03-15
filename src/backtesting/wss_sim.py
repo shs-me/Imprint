@@ -6,7 +6,7 @@ from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
 
-from src.monitoring.monitor import MonitorObj
+from src import MonitorObj
 
 
 class WssSimAgent:

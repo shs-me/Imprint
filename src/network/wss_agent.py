@@ -7,7 +7,7 @@ from multiprocessing.synchronize import Event, Semaphore
 import winloop
 from websockets.asyncio.client import connect
 
-from src.monitoring.monitor import MonitorObj
+from src import MonitorObj
 
 
 class WSSAgent:

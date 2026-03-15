@@ -5,8 +5,8 @@ from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
 
-from src.monitoring.monitor import MonitorObj
-from src.parsing.footprint_engine import FootprintEngine
+from parsing import FootprintEngine
+from src import MonitorObj
 
 
 class AggTrade(msgspec.Struct):

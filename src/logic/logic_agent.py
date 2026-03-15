@@ -4,8 +4,8 @@ import sys
 import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
-from src.logic.footprint_reader import FootprintReader
-from src.monitoring.monitor import MonitorObj
+from logic import BaseFootprintReader
+from src import MonitorObj
 
 
 class LogicAgent:
@@ -101,8 +101,8 @@ class LogicAgent:
 
                 _wait_main.wait()
 
-                reader = FootprintReader()
-                if isinstance(reader, FootprintReader):
+                reader = BaseFootprintReader()
+                if isinstance(reader, BaseFootprintReader):
                     while True:
                         if _get_status(_id_m_) is not True:
                             _set_status(_id_m_, 4)  # IDLE # TIME START
