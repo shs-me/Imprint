@@ -35,7 +35,7 @@ class ShmType(TypedDict):
     buf: memoryview
 
 
-class StartMain:
+class RunCore:
     def __init__(
         self,
         cfg: dict,
@@ -80,7 +80,7 @@ class StartMain:
             with open(cfg_file, "rb") as f:
                 config = tomllib.load(f)
 
-            return StartMain(
+            return RunCore(
                 cfg=config,
             )
 
@@ -341,8 +341,8 @@ if __name__ == "__main__":
 
     gc.disable()
 
-    state = StartMain.create(
+    state = RunCore.create(
         cfg_file="config.toml",
     )
-    if isinstance(state, StartMain):
+    if isinstance(state, RunCore):
         state.run_main()
