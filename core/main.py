@@ -66,6 +66,7 @@ class RunMain:
 
         # SharedMemory init
         self.shms: dict[str, ShmType] = SHM_S  # type: ignore
+        self._shm_close()
         if self._shm_create() is False:
             # if true: shms get ShM obj | else: SysExit
             sys.exit()
@@ -121,7 +122,7 @@ class RunMain:
     # Close SharedMemory
     def _shm_close(
         self,
-    ):
+    ) -> None:
         for name in self.shms.keys():
             try:
                 shm = SharedMemory(name=self.cfg["argg"][name]["shm"])
@@ -146,15 +147,6 @@ class RunMain:
 
                 except FileExistsError:
                     shm = SharedMemory(name=self.cfg["argg"][name]["shm"])
-                    if shm.size != self.cfg["argg"][name]["bsize"]:
-                        shm.close()
-                        shm.unlink()
-                        time.sleep(0.1)
-                        shm = SharedMemory(
-                            name=self.cfg["argg"][name]["shm"],
-                            size=self.cfg["argg"][name]["bsize"],
-                            create=True,
-                        )
 
                 self.shms[name]["shm"] = shm
                 if isinstance(shm.buf, memoryview):

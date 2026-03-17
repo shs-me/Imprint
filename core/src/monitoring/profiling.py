@@ -157,10 +157,15 @@ class MonitoringAgent:
         _dgheaders: np.ndarray,
     ) -> None:
         _times = _dgheaders[3]  # Get last ping agents, time_ns
+        _arr = np.where(_times == 0)[0]
+        if len(_arr) > 0:
+            # - - -
+            return
+
         _max, _min = np.max(_times), np.min(_times)
         # Diff microsecond > 5 second in microsecond == True
         if ((_max - _min) // 1000) > (5000 * 1000):
-            _col = int(np.where(_times == _min)[0])  # Get index min on line
+            _col = int(np.where(_times == _min)[0][0])  # Get index min on line
             _id_m = _dgheaders[1, _col]  # Get min ID-module
             # ID min not have status Warn & Error in StatusSHM == True
             if self._mo.get_(_id_m) is not True:
