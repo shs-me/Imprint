@@ -95,7 +95,7 @@ class RunMain:
             logger.error(f"-- Core -- | Create | {e}")
             return None
 
-    def _close_procs(
+    def _close_(
         self,
     ) -> None:
         try:
@@ -290,7 +290,7 @@ class RunMain:
             traceback.print_exc()
             logger.error(f"-- Core -- | RunCoreEngine | {e}")
         finally:
-            self._close_procs()
+            self._close_()
 
 
 # Start Core Func
@@ -313,4 +313,4 @@ def run_core(
     if isinstance(state, RunMain):
         if state.run_core_engine() is False:
             logger.warning("-- Core -- | RunCoreEngine | RunProc in start failed")
-            state._close_procs()
+            state._close_()

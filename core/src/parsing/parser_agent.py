@@ -49,6 +49,11 @@ class ParserAgent:
         self.metrics_buf = self._mo.shms["metrics"]["buf"]
         self._id_y_x_offset: int = self.cfg["metrics"]["id_y_x"]
         # InitGetRawData
+        self.header_memory: list[int] = self.cfg["raw"]["header_memory"]
+        self.data_size: int = self.cfg["raw"]["data_size"]
+        self.flag_r: int = self.cfg["raw"]["flag_r"]
+        self.flag_w: int = self.cfg["raw"]["flag_w"]
+
         self.ac: int = self.cfg["raw"]["ac"]  # Amount Cells
         self.dsib: int = self.cfg["raw"]["dsib"]  # Data size in bytes
         self.hsib: int = self.cfg["raw"]["hsib"]  # Headers size in bytes
@@ -62,7 +67,7 @@ class ParserAgent:
         parser_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
-    ):
+    ) -> object | None:
         try:
             # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
@@ -88,40 +93,47 @@ class ParserAgent:
             warn_error_status.release()
             return None
 
+    # Get Bytes from RawSHM
     def _get_raw_data(
         self,
-        ir: int,
-        ac: int,
-        hsib: int,
+        flag_w: int,
+        flag_r: int,
+        header_memory: list[int],
         _id_m_,
         _set_status,
-        raw_buf: memoryview,
-    ):
+        _raw_buf: memoryview,
+    ) -> memoryview | bool | None:
         try:
-            iro = raw_buf[ir]
-            if iro >= (ac * hsib):
-                irn = raw_buf[ir] = hsib
-                iro = 0
-            else:
-                irn = raw_buf[ir] = hsib + iro
+            while _raw_buf[flag_w] == 5:  # Working w...
+                pass
 
-            lrd = int.from_bytes(raw_buf[iro:irn], byteorder="little")
-            raw_data = raw_buf[(irn * ac) : ((irn * ac) + lrd)]
-            return raw_data
+            if _raw_buf[flag_w] == 4:  # Idle w
+                _raw_buf[flag_r] = 5  # Working r...
+                lrd = int.from_bytes(_raw_buf[header_memory[0] : header_memory[1]])
+                raw_data = _raw_buf[:lrd]
+                _raw_buf[flag_r] = 4  # Idle r
+                return raw_data
+
+            else:
+                return
 
         except Exception:
             traceback.print_exc()
-            _set_status(_id_m_, 154)
+            _set_status(_id_m_, 154)  # Error in this func
             return False
 
+    # Decode RawData to Struct AggTrade
     def _decode_raw_data(
         self,
         _id_m_,
         decoder,
         _set_status,
-        raw_data: memoryview,
-    ):
+        raw_data: memoryview | None,
+    ) -> AggTrade | bool | None:
         try:
+            if raw_data is None:
+                return None
+
             trade = decoder(raw_data)
             return trade
 
@@ -132,7 +144,7 @@ class ParserAgent:
 
     def run_parsing_engine(
         self,
-    ):
+    ) -> None:
         # JSON Decoder, SHM.Buf - LocalLink
         _raw_buf, _metrics_buf, _decoder = (
             self.raw_buf,
@@ -146,7 +158,11 @@ class ParserAgent:
             self._get,
         )
         # GetRawData - LocalLink
-        _ac, _dsib, _hsib, _ir = self.ac, self.dsib, self.hsib, self.ir
+        flag_w, flag_r, header_memory = (
+            self.flag_w,
+            self.flag_r,
+            self.header_memory,
+        )
         # SetRawMetrics
         _id_y_x_offset = self._id_y_x_offset
         # Semaphore, Event - LocalLink
@@ -166,7 +182,7 @@ class ParserAgent:
                 gc.collect()
                 _wait_main.wait()
 
-                _raw_buf[_ir] = _raw_buf[_ir + 1]
+                _raw_buf[flag_r] = 4
                 engine = GridEngine.create(
                     _mo_=self._mo,
                     cfg=self.cfg,
@@ -182,33 +198,44 @@ class ParserAgent:
                                 break
 
                             _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
-
-                            if (
-                                raw_data := _get_raw_data(
-                                    _ir,
-                                    _ac,
-                                    _hsib,
-                                    _id_m_,
-                                    _set_status,
-                                    _raw_buf,
-                                )
-                            ) is not False:
-                                if (
-                                    trade := _decode_raw_data(
+                            if isinstance(
+                                (
+                                    raw_data := _get_raw_data(
+                                        flag_w,
+                                        flag_r,
+                                        header_memory,
                                         _id_m_,
-                                        _decoder,
                                         _set_status,
-                                        raw_data,
+                                        _raw_buf,
                                     )
-                                ) is not False:
+                                ),
+                                memoryview,
+                            ):
+                                if isinstance(
+                                    (
+                                        trade := _decode_raw_data(
+                                            _id_m_,
+                                            _decoder,
+                                            _set_status,
+                                            raw_data,
+                                        )
+                                    ),
+                                    AggTrade,
+                                ):
                                     state = engine.update(
                                         price=float(trade.p),
                                         qty=float(trade.q),
                                         is_sell=trade.m,
                                         timestamp=trade.E,
                                     )
-                                    if state:
+                                    if isinstance(state, bool):
                                         _release_logic.release()
+
+                                elif trade is False:
+                                    pass
+
+                            elif raw_data is False:
+                                pass
 
                         else:
                             sys.exit()

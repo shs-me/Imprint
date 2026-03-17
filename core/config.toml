@@ -5,8 +5,10 @@
 [argg]
   symbol = "dashusdt"
   backtesting = 1 # for backtesting 0 false 1 true
+
   profiling_dump = "dump/profiling.bin"
   profiling_dump_csv = "dump/profiling.csv"
+  pheaders_dump_csv = "dump/pheaders.csv"
   status_file = "status_code.json"
   data_path = "data/aggtrades.csv"
 
@@ -17,7 +19,6 @@
 
     bsize = 327680 #480432 # (lines + headers) * cols * bytesize (float64==8bytes)
     shm = "algo_bot_grid"
-
 
   [argg.profiling]
     lines = 5000
@@ -32,7 +33,12 @@
     dsib = 164  # Data size in bytes
     hsib = 4
 
-    bsize = 8192  # 6890 (4 * 41 = 164) headers +
+    data_size = 256
+    header_memory = [256, 264]
+    flag_r = 264
+    flag_w = 265
+
+    bsize = 4096 # 8192  # 6890 (4 * 41 = 164) headers +
     # (41*164=6724) data + 2 counter status write/read
     shm = "raw_data_memory"
 

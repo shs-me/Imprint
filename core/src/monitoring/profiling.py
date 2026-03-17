@@ -23,6 +23,7 @@ class MonitoringAgent:
         # Initialization
         self.cfg = cfg
         self.profiling_dump_path = self.cfg["profiling_dump_csv"]
+        self.pheaders_dump_path = self.cfg["pheaders_dump_csv"]
         self._mo = mo
         self.wait_main: Event = general_event
 
@@ -218,7 +219,12 @@ class MonitoringAgent:
                     else:
                         if _counter >= 60:
                             self._mo.dump_profile(
-                                self.profiling_dump_path, self.dgarray
+                                self.profiling_dump_path,
+                                self.dgarray,
+                            )
+                            self._mo.dump_profile(
+                                self.pheaders_dump_path,
+                                self.dgheaders,
                             )
                             _reset_headers(
                                 _dgheaders,

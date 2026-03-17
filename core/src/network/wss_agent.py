@@ -37,10 +37,10 @@ class WSSAgent:
         self.raw_buf = self._mo.shms["raw"]["buf"]
 
         # InitSetRawData
-        self.ac: int = self.cfg["argg"]["raw"]["ac"]  # Amount Cells
-        self.dsib: int = self.cfg["argg"]["raw"]["dsib"]  # Data size in bytes
-        self.hsib: int = self.cfg["argg"]["raw"]["hsib"]  # Headers size in bytes
-        self.iw: int = self._mo.shms["raw"]["shm"].size - 1  # Index, Write counter
+        self.header_memory: list[int] = self.cfg["argg"]["raw"]["header_memory"]
+        self.data_size: int = self.cfg["argg"]["raw"]["data_size"]
+        self.flag_r: int = self.cfg["argg"]["raw"]["flag_r"]
+        self.flag_w: int = self.cfg["argg"]["raw"]["flag_w"]
 
     @staticmethod
     def create(
@@ -49,7 +49,7 @@ class WSSAgent:
         network_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
-    ):
+    ) -> object | None:
         try:
             # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
@@ -70,42 +70,44 @@ class WSSAgent:
             warn_error_status.release()
             return None
 
+    # Set Bytes to RawSHM
     def _set_raw_data(
         self,
-        iw: int,
-        ac: int,
-        dsib: int,
-        hsib: int,
+        flag_w: int,
+        flag_r: int,
+        data_size: int,
+        header_memory: list[int],
         _id_m_,
         _set_status,
         raw_buf: memoryview,
         raw_data: bytes,
-    ):  # Set Bytes to RawSHM: RING BUFFER
+    ) -> bool | None:
         try:
             lrd = len(raw_data)
-            if lrd >= dsib:
+            if lrd < data_size:
+                if raw_buf[flag_r] == 4:  # Idle r
+                    raw_buf[flag_w] = 5  # Working w...
+                    raw_buf[header_memory[0] : header_memory[1]] = lrd.to_bytes(8)
+                    raw_buf[:lrd] = raw_data
+                    raw_buf[flag_w] = 4  # Idle w
+                    return True
+
+                elif raw_buf[flag_r] == 5:  # Working r...
+                    # - - -
+                    return None
+
+            else:
                 _set_status(_id_m_, 100)  # Warn in this IF
                 return False
 
-            iwo = raw_buf[iw]
-
-            if iwo >= (ac * hsib):
-                iwn = raw_buf[iw] = hsib
-                iwo = 0
-            else:
-                iwn = raw_buf[iw] = hsib + iwo
-
-            raw_buf[iwo:iwn] = lrd.to_bytes(4, byteorder="little")
-            raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
-
         except Exception:
             traceback.print_exc()
-            _set_status(_id_m_, 151)  # Error in this func
+            _set_status(_id_m_, 152)  # Error in this func
             return False
 
     async def run_wss_engine(
         self,
-    ):
+    ) -> None:
         # JSON Decoder, SHM.Buf - LocalLink
         _raw_buf = self.raw_buf
         # StatusAgents - LocalLink
@@ -115,7 +117,12 @@ class WSSAgent:
             self._get,
         )
         # GetRawData - LocalLink
-        _ac, _dsib, _hsib, _iw = self.ac, self.dsib, self.hsib, self.iw
+        flag_w, flag_r, data_size, header_memory = (
+            self.flag_w,
+            self.flag_r,
+            self.data_size,
+            self.header_memory,
+        )
         # Semaphore, Event - LocalLink
         _wait_main, _release_parser = self.wait_main, self.release_parser
         # Methods - LocalLinks
@@ -141,20 +148,23 @@ class WSSAgent:
                                 _set_status(_id_m_, 5)  # WakeUp
 
                                 if (
-                                    _set_raw_data(
-                                        _iw,
-                                        _ac,
-                                        _dsib,
-                                        _hsib,
+                                    _state := _set_raw_data(
+                                        flag_w,
+                                        flag_r,
+                                        data_size,
+                                        header_memory,
                                         _id_m_,
                                         _set_status,
                                         _raw_buf,
                                         raw_data,
                                     )
-                                    is not False
+                                    is True
                                 ):
                                     _release_parser.release()
 
+                                else:
+                                    if _state is False:
+                                        pass
                             else:
                                 sys.exit()
 
