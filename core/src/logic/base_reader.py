@@ -9,5 +9,11 @@ class BaseFootprintReader:
         idy: int,
         idx: int,
     ):
-        pass
+        self.run_algorithm()
+
         # np.copyto(self.grid_copy, self.grid)
+
+    def run_algorithm(
+        self,
+    ):
+        pass

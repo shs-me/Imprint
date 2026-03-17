@@ -5,8 +5,8 @@ from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
 
-from parsing import FootprintEngine
-from src import MonitorObj
+from .. import MonitorObj
+from . import GridEngine
 
 
 class AggTrade(msgspec.Struct):
@@ -45,8 +45,9 @@ class ParserAgent:
 
         # RawSHM.buf
         self.raw_buf = self._mo.shms["raw"]["buf"]
-        # SignSHM.buf
-        self.sign_buf = self._mo.shms["sign"]["buf"]
+        # MetricsSHM.buf
+        self.metrics_buf = self._mo.shms["metrics"]["buf"]
+        self._id_y_x_offset: int = self.cfg["metrics"]["id_y_x"]
         # InitGetRawData
         self.ac: int = self.cfg["raw"]["ac"]  # Amount Cells
         self.dsib: int = self.cfg["raw"]["dsib"]  # Data size in bytes
@@ -63,7 +64,7 @@ class ParserAgent:
         warn_error_status: Semaphore,
     ):
         try:
-            # Init SHM, DebugArray, StatusSHM
+            # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
                 proc_name="parsing",
                 config=cfg,
@@ -129,30 +130,15 @@ class ParserAgent:
             _set_status(_id_m_, 153)
             return False
 
-    def _set_raw_signal(
-        self,
-        _id_m_,
-        _set_status,
-        sign_buf,
-        state: None | bytes,
-    ):
-        try:
-            if isinstance(state, bytes):
-                sign_buf[:4] = len(state).to_bytes(4, byteorder="little")
-                sign_buf[4 : 4 + len(state)] = state
-            else:
-                return False
-
-        except Exception:
-            traceback.print_exc()
-            _set_status(_id_m_, 152)  # Error in this func
-            return False
-
     def run_parsing_engine(
         self,
     ):
         # JSON Decoder, SHM.Buf - LocalLink
-        _raw_buf, _sign_buf, _decoder = self.raw_buf, self.sign_buf, self.decoder.decode
+        _raw_buf, _metrics_buf, _decoder = (
+            self.raw_buf,
+            self.metrics_buf,
+            self.decoder.decode,
+        )
         # StatusAgents - LocalLink
         _id_m_, _set_status, _get_status = (
             self._id_m_,
@@ -161,6 +147,8 @@ class ParserAgent:
         )
         # GetRawData - LocalLink
         _ac, _dsib, _hsib, _ir = self.ac, self.dsib, self.hsib, self.ir
+        # SetRawMetrics
+        _id_y_x_offset = self._id_y_x_offset
         # Semaphore, Event - LocalLink
         _wait_main, _release_logic, _acquire_wss = (
             self.wait_main,
@@ -168,10 +156,9 @@ class ParserAgent:
             self.acquire_wss,
         )
         # Methods - LocalLinks
-        _get_raw_data, _decode_raw_data, _set_raw_signal = (
+        _get_raw_data, _decode_raw_data = (
             self._get_raw_data,
             self._decode_raw_data,
-            self._set_raw_signal,
         )
         #  - - -
         while True:
@@ -180,18 +167,17 @@ class ParserAgent:
                 _wait_main.wait()
 
                 _raw_buf[_ir] = _raw_buf[_ir + 1]
-                engine = FootprintEngine.create(
+                engine = GridEngine.create(
                     _mo_=self._mo,
                     cfg=self.cfg,
                     tick_size=self.tick_size,
                 )
-                if isinstance(engine, FootprintEngine):
+                if isinstance(engine, GridEngine):
                     while True:
                         if _get_status(_id_m_) is not True:
                             _set_status(_id_m_, 4)  # IDLE # TIME START
                             _acquire_wss.acquire()
                             if _get_status(_id_m_, proc=True):
-                                _set_status(_id_m_, 2)  # Stoping
                                 _release_logic.release()
                                 break
 
@@ -221,18 +207,8 @@ class ParserAgent:
                                         is_sell=trade.m,
                                         timestamp=trade.E,
                                     )
-                                    if (
-                                        _set_raw_signal(
-                                            _id_m_,
-                                            _set_status,
-                                            _sign_buf,
-                                            state,
-                                        )
-                                        is not False
-                                    ):
+                                    if state:
                                         _release_logic.release()
-
-                            _set_status(_id_m_, 6)  # Running # TIME END
 
                         else:
                             sys.exit()

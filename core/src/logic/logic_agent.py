@@ -1,11 +1,12 @@
 import gc
+import os
 import struct
 import sys
 import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
-from logic import BaseFootprintReader
-from src import MonitorObj
+from .. import MonitorObj
+from . import BaseFootprintReader
 
 
 class LogicAgent:
@@ -25,11 +26,16 @@ class LogicAgent:
         )
 
         self.cfg = cfg
+        self._algorithm_path = "algorithm"
         self.acquire_parser = sem_sleep_logic
         self.wait_main = general_event
 
-        # SignalSHM.buf
-        self.sign_buf = self._mo.shms["sign"]["buf"]
+        # MetricsSHM.buf
+        self.metrics_buf = self._mo.shms["metrics"]["buf"]
+        # Offsets
+        self._metrics_buf: memoryview = self._mo.shms["metrics"]["buf"]
+        self._id_y_x_offset: int = self.cfg["metrics"]["id_y_x"]
+        self._flag_for_logic_offset: int = self.cfg["metrics"]["flag_for_logic"]
 
     @staticmethod
     def create(
@@ -40,7 +46,7 @@ class LogicAgent:
         logic_monitor: Semaphore,
     ):
         try:
-            # Init SHM, DebugArray, StatusSHM
+            # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
                 proc_name="logic",
                 config=cfg,
@@ -59,20 +65,39 @@ class LogicAgent:
             warn_error_status.release()
             return None
 
-    def _get_raw_signal(
+    def _resolve_reader(self, dauhter_path):
+        if not os.path.exists(dauhter_path):
+            return BaseFootprintReader
+
+        for filename in os.listdir(dauhter_path):
+            if filename.endswith(".py") and not filename.startswith("__"):
+                _module_name = filename[:-3]
+                try:
+                    if dauhter_path not in sys.path:
+                        sys.path.append(dauhter_path)
+
+                    # . . .
+
+                except Exception:
+                    traceback.print_exc()
+
+        return BaseFootprintReader
+
+    def _get_raw_metrics(
         self,
-        sign_buf,
+        _metrics_buf: memoryview,
+        _ids: int,
+        _flag: int,
         _set_status,
-        _id_m_,
+        _id_m_: int,
     ):
         try:
-            raw_sign = sign_buf[
-                4 : 4 + int.from_bytes(sign_buf[:4], byteorder="little")
-            ]
-
-            idy, idx = struct.unpack("<II", raw_sign)
-
-            return idy, idx
+            _metrics_buf[_flag] = 1
+            ids: tuple[int, int] = struct.unpack_from(
+                "!qq", _metrics_buf[_ids : (8 * 2 + _ids)]
+            )
+            _metrics_buf[_flag] = 2
+            return ids
 
         except Exception:
             traceback.print_exc()
@@ -82,51 +107,51 @@ class LogicAgent:
     def run_logic_engine(
         self,
     ):
-        # JSON Decoder, SHM.Buf - LocalLink
-        _sign_buf = self.sign_buf
-        # StatusAgents - LocalLink
-        _id_m_, _set_status, _get_status = (
-            self._id_m_,
-            self._set,
-            self._get,
+        # JSON Decoder, SHM.Buf, BaseInit - LocalLink
+        _metrics_buf, _ids, _flag = (
+            self.metrics_buf,
+            self._id_y_x_offset,
+            self._flag_for_logic_offset,
         )
+        # StatusAgents - LocalLink
+        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
         # Semaphore, Event - LocalLink
         _wait_main, _acquire_parser = self.wait_main, self.acquire_parser
         # Methods - LocalLinks
-        _get_raw_signal = self._get_raw_signal
+        _get_raw_metrics, _resolve_reader = self._get_raw_metrics, self._resolve_reader
+        # Other - LocalLinks
+        _algorithm_path = self._algorithm_path
         # - - -
         while True:
             try:
                 gc.collect()
 
                 _wait_main.wait()
-
-                reader = BaseFootprintReader()
-                if isinstance(reader, BaseFootprintReader):
+                _ObjReader = _resolve_reader(_algorithm_path)
+                reader = _ObjReader()
+                if issubclass(_ObjReader, BaseFootprintReader):
                     while True:
                         if _get_status(_id_m_) is not True:
-                            _set_status(_id_m_, 4)  # IDLE # TIME START
+                            _set_status(_id_m_, 4)  # Sleep
 
                             _acquire_parser.acquire()
                             if _get_status(_id_m_, proc=True):
-                                _set_status(_id_m_, 2)  # Stoping
                                 break
 
-                            _set_status(_id_m_, 5)  # Running # TIME WACK_UP
-
+                            _set_status(_id_m_, 5)  # WakeUp
                             while _acquire_parser.acquire(block=False):
                                 pass
 
                             if (
-                                ids := _get_raw_signal(
-                                    _sign_buf,
+                                ids := _get_raw_metrics(
+                                    _metrics_buf,
+                                    _ids,
+                                    _flag,
                                     _set_status,
                                     _id_m_,
                                 )
                             ) is not False:
                                 reader.check_patterns(ids[0], ids[1])
-
-                            _set_status(_id_m_, 6)  # END # TIME END
 
                         else:
                             sys.exit()

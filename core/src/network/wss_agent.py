@@ -1,23 +1,22 @@
+import asyncio
 import gc
 import sys
-import time
 import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
-import msgspec
+import winloop
+from websockets.asyncio.client import connect
 
-from src import MonitorObj
+from .. import MonitorObj
 
 
-class WssSimAgent:
+class WSSAgent:
     def __init__(
         self,
         mo: MonitorObj,
         cfg: dict,
-        encoder: msgspec.json.Encoder,
         sem_sleep_parsing: Semaphore,
         general_event: Event,
-        file_path: str,
     ):
         # Initialization
         self._mo = mo
@@ -27,12 +26,12 @@ class WssSimAgent:
             self._mo._status(daughter=False),
         )
 
-        self.cfg: dict = cfg
-        self.file_path = file_path
-        self.encoder = encoder.encode
-
+        self.cfg = cfg
         self.release_parser = sem_sleep_parsing
         self.wait_main = general_event
+
+        # variables
+        self.url = f"{self.cfg['urls']['wsagg']}{self.cfg['argg']['symbol']}@aggTrade"
 
         # RawSHM.buf
         self.raw_buf = self._mo.shms["raw"]["buf"]
@@ -50,54 +49,26 @@ class WssSimAgent:
         network_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
-        file_path: str,
     ):
         try:
-            encoder = msgspec.json.Encoder()
-            # Init SHM, DebugArray, StatusSHM
+            # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
                 proc_name="network_sim",
                 config=cfg["argg"],
-                warn_error_status=warn_error_status,
                 _monitor=network_monitor,
+                warn_error_status=warn_error_status,
             )
-            return WssSimAgent(
+            return WSSAgent(
                 mo=mo,
                 cfg=cfg,
-                encoder=encoder,
                 general_event=general_event,
                 sem_sleep_parsing=sem_sleep_parsing,
-                file_path=file_path,
             )
 
         except Exception:
             traceback.print_exc()
             warn_error_status.release()
             return None
-
-    def _encode_data(
-        self,
-        _id_m_,
-        encoder,
-        _set_status,
-        line: str,
-    ):  # Line from file convert to raw_data for simulation:
-        try:
-            data = line.strip().split(",")
-            raw_data = encoder(
-                {
-                    "E": int(data[5]),  # transact_time
-                    "p": data[1],  # price
-                    "q": data[2],  # quantity
-                    "m": bool(data[6]),  # is_buyer_maker
-                }
-            )
-            return raw_data
-
-        except Exception:
-            traceback.print_exc()
-            _set_status(_id_m_, 153)  # Error in this func
-            return False
 
     def _set_raw_data(
         self,
@@ -129,14 +100,14 @@ class WssSimAgent:
 
         except Exception:
             traceback.print_exc()
-            _set_status(_id_m_, 152)  # Error in this func
+            _set_status(_id_m_, 151)  # Error in this func
             return False
 
-    def run_wss_sim_engine(
+    async def run_wss_engine(
         self,
     ):
-        # JSON Encoder, SHM.Buf - LocalLink
-        _raw_buf, _encoder = self.raw_buf, self.encoder
+        # JSON Decoder, SHM.Buf - LocalLink
+        _raw_buf = self.raw_buf
         # StatusAgents - LocalLink
         _id_m_, _set_status, _get_status = (
             self._id_m_,
@@ -148,67 +119,55 @@ class WssSimAgent:
         # Semaphore, Event - LocalLink
         _wait_main, _release_parser = self.wait_main, self.release_parser
         # Methods - LocalLinks
-        _set_raw_data, _encode_data = self._set_raw_data, self._encode_data
+        _set_raw_data = self._set_raw_data
         # Other - LocalLink
-        _file_path = self.file_path
+        uri = self.url
         # - - -
         while True:
             try:
                 gc.collect()
+
                 _wait_main.wait()
                 try:
-                    with open(_file_path, "r") as self.f:
-                        next(self.f)
-                        for line in self.f:
+                    async with connect(uri, ping_interval=20) as ws:
+                        while True:
                             if _get_status(_id_m_) is not True:
-                                _set_status(_id_m_, 4)  # IDLE
-                                time.sleep(0.005)
                                 if _get_status(_id_m_, proc=True):
-                                    _set_status(_id_m_, 2)  # Stoping
                                     _release_parser.release()
                                     break
 
-                                _set_status(_id_m_, 5)  # Running # TIME START
+                                _set_status(_id_m_, 4)  # Sleep
+                                raw_data = await ws.recv(decode=False)
+                                _set_status(_id_m_, 5)  # WakeUp
 
                                 if (
-                                    raw_data := _encode_data(
+                                    _set_raw_data(
+                                        _iw,
+                                        _ac,
+                                        _dsib,
+                                        _hsib,
                                         _id_m_,
-                                        _encoder,
                                         _set_status,
-                                        line,
+                                        _raw_buf,
+                                        raw_data,
                                     )
-                                ) is not False:
-                                    if (
-                                        _set_raw_data(
-                                            _iw,
-                                            _ac,
-                                            _dsib,
-                                            _hsib,
-                                            _id_m_,
-                                            _set_status,
-                                            _raw_buf,
-                                            raw_data,
-                                        )
-                                        is not False
-                                    ):
-                                        _release_parser.release()
-
-                                _set_status(_id_m_, 5)  # END # TIME END
+                                    is not False
+                                ):
+                                    _release_parser.release()
 
                             else:
                                 sys.exit()
 
-                except FileNotFoundError:
-                    _set_status(_id_m_, 151)
+                except Exception:
                     break
 
             except Exception:
                 traceback.print_exc()
-                _set_status(_id_m_, 150)
+                _set_status(_id_m_, 150)  # Error in this func
                 break
 
 
-def run_wss_sim(
+def run_wss(
     config: dict,
     sem_sleep_parsing: Semaphore,
     network_monitor: Semaphore,
@@ -217,14 +176,14 @@ def run_wss_sim(
 ):
     gc.disable()
 
-    wss = WssSimAgent.create(
+    winloop.install()
+
+    wss = WSSAgent.create(
         cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
-        general_event=general_event,
         network_monitor=network_monitor,
+        general_event=general_event,
         warn_error_status=warn_error_status,
-        file_path="data/aggtrades.csv",
     )
-
-    if isinstance(wss, WssSimAgent):
-        wss.run_wss_sim_engine()
+    if isinstance(wss, WSSAgent):
+        asyncio.run(wss.run_wss_engine())

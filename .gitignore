@@ -1,8 +1,9 @@
-# archive | data for backtest
 archive
 data
+algorithm
 *.bin
 *.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

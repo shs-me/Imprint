@@ -5,16 +5,27 @@
 [argg]
   symbol = "dashusdt"
   backtesting = 1 # for backtesting 0 false 1 true
-  dgarray_file = "dgarray.bin"
+  profiling_dump = "dump/profiling.bin"
+  profiling_dump_csv = "dump/profiling.csv"
   status_file = "status_code.json"
+  data_path = "data/aggtrades.csv"
 
   [argg.grid] # array aggTrades
     lines = 10000 #10000 # + 8 lines headers
     cols = 4
     interval_min = 1
 
-    bsize = 320000 #480432 # (lines + headers) * cols * bytesize (float64==8bytes)
+    bsize = 327680 #480432 # (lines + headers) * cols * bytesize (float64==8bytes)
     shm = "algo_bot_grid"
+
+
+  [argg.profiling]
+    lines = 5000
+    cols = 3
+
+    offset = 128 # for headers cols 0-64 & 64-128 other info
+    bsize = 122880
+    shm = "profiling_array"
 
   [argg.raw]
     ac = 41  # Amount Cells
@@ -25,20 +36,20 @@
     # (41*164=6724) data + 2 counter status write/read
     shm = "raw_data_memory"
 
-  [argg.sign]
+  [argg.metrics]
+    # grid
+    base_price_and_timestamp = 0 # 0 start id , and 0 + size, example: float/int64=8, [0: 0+8+8]
+    price = 16
+    spec_vwap = 24
+    # reader
+    id_y_x = 128 # +8+8
+    flag_for_logic = 144 # 1 byte
+    # tools
     bsize = 4096
     shm = "signal_to_logic"
 
-  [argg.debug]
-    lines = 5000
-    cols = 3
-    multiplier = 1_000_000
-
-    offset = 128 # for headers cols 0-64 & 64-128 other info
-    bsize = 120128
-    shm = "debug_array"
-
   [argg.status] # Module Status
+
     parsing = {"p"=10, "m"=0, "d"=1, "dgc"=0}
     logic = {"p"=11, "m"=2, "d"=3, "dgc"=1}
     network = {"p"=12, "m"=4, "d"=5, "dgc"=2}

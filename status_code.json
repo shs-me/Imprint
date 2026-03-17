@@ -947,12 +947,12 @@
     }
   },
   "GENERAL": {
+    "0": "IDLE",
     "1": "RUNNING",
     "2": "STOPING",
     "3": "SYSEXIT",
-    "4": "START",
-    "5": "WACK_UP",
-    "6": "END"
+    "4": "SLEEP",
+    "5": "WACK_UP"
   },
   "ID_INFO": {
     "10": {
@@ -990,22 +990,22 @@
   },
   "WARN": {
     "50": {
-      "0": "",
-      "1": "",
-      "2": "",
-      "3": "",
-      "4": "",
-      "5": "",
-      "6": ""
+      "0": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work",
+      "1": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work",
+      "2": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work",
+      "3": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work",
+      "4": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work",
+      "5": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work",
+      "6": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work"
     },
     "51": {
-      "0": "",
-      "1": "",
-      "2": "",
-      "3": "",
-      "4": "",
-      "5": "",
-      "6": ""
+      "0": "Profiling task for Watchdog: Check the module: Why? Maybe the Module is stuck after <WakeUp> status",
+      "1": "Profiling task for Watchdog: Check the module: Why? Maybe the Module is stuck after <WakeUp> status",
+      "2": "Profiling task for Watchdog: Check the module: Why? Maybe the Module is stuck after <WakeUp> status",
+      "3": "Profiling task for Watchdog: Check the module: Why? Maybe the Module is stuck after <WakeUp> status",
+      "4": "Profiling task for Watchdog: Check the module: Why? Maybe the Module is stuck after <WakeUp> status",
+      "5": "Profiling task for Watchdog: Check the module: Why? Maybe the Module is stuck after <WakeUp> status",
+      "6": "Profiling task for Watchdog: Check the module: Why? Maybe the Module is stuck after <WakeUp> status"
     },
     "52": {
       "0": "",
