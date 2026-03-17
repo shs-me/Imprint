@@ -138,6 +138,7 @@ class WatchDog:
                                     status_buf=_status_buf,
                                     procs_name=_procs_name,
                                     init_task_=_init_task,
+                                    _id_m=_int_id_m,
                                 )
                                 is False
                             ):
@@ -210,13 +211,14 @@ class WatchDog:
         status_buf: memoryview,
         procs_name: dict,
         init_task_,
+        _id_m: int | None = None,
     ) -> bool:
         try:
             self._task = (
                 task if isinstance((task := init_task_(_code)), int) else self._task
             )
 
-            if task == 0 or task == 50 or task == 150:  # Check Proc
+            if task == 1 or task == 50 or task == 150:  # Check Proc
                 for id_proc in self._procs:
                     if self._check_proc(id_proc=id_proc) is False:
                         return False
@@ -228,7 +230,7 @@ class WatchDog:
                 # Start
                 self._set_status_for_all_proc(status_buf, procs_name, stoping=False)
 
-                if self._shm_zeros is True:
+                if self._shm_zeros() is True:
                     for id_proc in self._procs:
                         if self._check_proc(id_proc=id_proc) is False:
                             return False
@@ -242,6 +244,9 @@ class WatchDog:
                     return False
 
             self._task = 0
+            if isinstance(_id_m, int):
+                status_buf[_id_m] = 0
+
             return True
 
         except Exception as e:

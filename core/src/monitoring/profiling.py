@@ -2,7 +2,6 @@ import gc
 import struct
 import time
 import traceback
-from multiprocessing.shared_memory import SharedMemory
 from multiprocessing.synchronize import Event, Semaphore
 
 import numpy as np
@@ -46,8 +45,7 @@ class MonitoringAgent:
         }
 
         # SHMS
-        self._shm: SharedMemory = None  # type: ignore
-        self._shm_buf: memoryview = None  # type: ignore
+        self.profiling_buf: memoryview = self._mo._profiling_buf
 
         # ProfilingArray
         self.dglines: int = self._mo.dglines
@@ -91,20 +89,20 @@ class MonitoringAgent:
         _dgcols: int,
         _dgheaders: np.ndarray,
         _sems: dict[int, Semaphore],
-        _shm_buf: memoryview,
+        profiling_buf: memoryview,
     ) -> None:
         _ids_scs = struct.unpack_from(
-            f"!{'i' * (_dgcols * 2)}", _shm_buf[: (_dgcols * 8)]
+            f"!{'i' * (_dgcols * 2)}", profiling_buf[: (_dgcols * 8)]
         )  # index's and status code's
         # Example: (1000 # index in array, 4 status ping, 10001, 5, ...)
         _value = 1
         for _col in range(_dgcols):
-            _m_id = int(_shm_buf[(64 + _col)])  # Get ID Module
+            _m_id = int(profiling_buf[(64 + _col)])  # Get ID Module
             _sems[_col] = _sems.pop(_m_id)  # Replaces ID_M, COL
 
             # Init Headers
             _dgheaders[0, _col] = _ids_scs[_value - 1]  # set index line
-            _dgheaders[1, _col] = int(_shm_buf[(64 + _col)])  # set id module
+            _dgheaders[1, _col] = int(profiling_buf[(64 + _col)])  # set id module
             _dgheaders[2, _col] = (
                 _ids_scs[_value] if _ids_scs[_value] != 0 else 4
             )  # set status code ping
@@ -115,6 +113,18 @@ class MonitoringAgent:
             _value += 2  # next [index+status]
 
         self.dgheaders = _dgheaders  # Update Headers
+
+    def _reset_headers(
+        self,
+        _dgheaders: np.ndarray,
+        _dgcols: int,
+    ) -> None:
+        for _col in range(_dgcols):
+            _dgheaders[0, _col] = 0
+            _dgheaders[2, _col] = 4
+            _dgheaders[3, _col] = 0
+
+        self.dgheaders = _dgheaders
 
     def _read_profile(
         self,
@@ -164,32 +174,32 @@ class MonitoringAgent:
         # Semaphore, Event - LocalLink
         _sems, _wait_main = self.sems, self.wait_main
         # profilingArray - LocalLinks
-        _dgarray, _dgheaders, _dglines, _dgcols, _shm, _shm_buf = (
+        _dgarray, _dgheaders, _dglines, _dgcols, profiling_buf = (
             self.dgarray,
             self.dgheaders,
             self.dglines,
             self.dgcols,
-            self._shm,
-            self._shm_buf,
+            self.profiling_buf,
         )
         # Methods - LocalLinks
-        _init_session, _read_profile, _profiling = (
+        _init_session, _reset_headers, _read_profile, _profiling = (
             self._init_session,
+            self._reset_headers,
             self._read_profile,
             self._profiling,
         )
+        _init_session(_dgcols, _dgheaders, _sems, profiling_buf)
         #  - - -
         while True:
             try:
                 gc.collect()
                 _wait_main.wait()
-                _init_session(_dgcols, _dgheaders, _sems, _shm_buf)
                 _counter = 0
                 while True:
                     if any(_sem.get_value() > 0 for _sem in _sems.values()):
                         _counter = 0
                         for _col, _sem in _sems.items():
-                            if _count := _sem.get_value() > 0:
+                            if (_count := _sem.get_value()) > 0:
                                 for _ in range(_count):
                                     _sem.acquire(block=False)
                                     _read_profile(
@@ -209,6 +219,10 @@ class MonitoringAgent:
                         if _counter >= 60:
                             self._mo.dump_profile(
                                 self.profiling_dump_path, self.dgarray
+                            )
+                            _reset_headers(
+                                _dgheaders,
+                                _dgcols,
                             )
                             break
 

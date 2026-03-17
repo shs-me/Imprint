@@ -66,7 +66,7 @@ class RunMain:
 
         # SharedMemory init
         self.shms: dict[str, ShmType] = SHM_S  # type: ignore
-        if self._shm_create is False:
+        if self._shm_create() is False:
             # if true: shms get ShM obj | else: SysExit
             sys.exit()
 
@@ -248,7 +248,6 @@ class RunMain:
         try:
             logger.info("--- Core --- Started. Init...")
             # Init Watchdog
-            print(self.shms)
             _watchdog = WatchDog.create(
                 self._procs,
                 self.shms,
@@ -291,7 +290,6 @@ class RunMain:
             traceback.print_exc()
             logger.error(f"-- Core -- | RunCoreEngine | {e}")
         finally:
-            print(1111111111111111111)
             self._close_procs()
 
 

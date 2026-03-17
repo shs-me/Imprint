@@ -207,5 +207,4 @@ class GridEngine:
             else:
                 _set_status(_id_m_, 102)  # Warn in this IF
         else:
-            print(idx, _grid.shape[1], timestamp, _base_timestamp, _ivl_ms, is_sell)
             _set_status(_id_m_, 101)  # Warn in this IF
