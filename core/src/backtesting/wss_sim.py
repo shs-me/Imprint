@@ -17,7 +17,7 @@ class WssSimAgent:
         encoder: msgspec.json.Encoder,
         sem_sleep_parsing: Semaphore,
         general_event: Event,
-    ):
+    ) -> None:
         # Initialization
         self._mo = mo
         self._get, self._set, self._id_m_ = (
@@ -28,19 +28,22 @@ class WssSimAgent:
 
         self.cfg: dict = cfg
         self.file_path = self.cfg["argg"]["data_path"]
+        # Encoder, Variables
         self.encoder = encoder.encode
+        self.ottrade: int = 0  # old time trade
+        self.nttrade: int = 0  # new time trade
 
+        # Semaphore, Event
         self.release_parser = sem_sleep_parsing
         self.wait_main = general_event
-
         # RawSHM.buf
         self.raw_buf = self._mo.shms["raw"]["buf"]
-
         # InitSetRawData
-        self.header_memory: list[int] = self.cfg["argg"]["raw"]["header_memory"]
-        self.data_size: int = self.cfg["argg"]["raw"]["data_size"]
-        self.flag_r: int = self.cfg["argg"]["raw"]["flag_r"]
-        self.flag_w: int = self.cfg["argg"]["raw"]["flag_w"]
+        self.ac = self.cfg["argg"]["raw"]["ac"]  # Amount Cells
+        self.dsib = self.cfg["argg"]["raw"]["dsib"]  # Data size in bytes
+        self.hsib = self.cfg["argg"]["raw"]["hsib"]  # Headers size in bytes
+        self._iw = self._mo.shms["raw"]["shm"].size - 1  # Index, Write counter
+        self._sssd = self._mo.shms["raw"]["shm"].size - 3  # Index, Start Start Set Data
 
     @staticmethod
     def create(
@@ -68,11 +71,12 @@ class WssSimAgent:
             )
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             warn_error_status.release()
             return None
 
     # Encode ListStr to Bytes Json structure
+    # Also set, new time trade
     def _encode_data(
         self,
         _id_m_,
@@ -90,47 +94,68 @@ class WssSimAgent:
                     "m": bool(data[6]),  # is_buyer_maker
                 }
             )
+            self.nttrade = int(data[5])
             return raw_data
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             _set_status(_id_m_, 153)  # Error in this func
             return False
 
     # Set Bytes to RawSHM
     def _set_raw_data(
         self,
-        flag_w: int,
-        flag_r: int,
-        data_size: int,
-        header_memory: list[int],
+        ac: int,
+        iw: int,
+        hsib: int,
+        dsib: int,
         _id_m_,
         _set_status,
         raw_buf: memoryview,
         raw_data: bytes,
     ) -> bool | None:
         try:
-            lrd = len(raw_data)
-            if lrd < data_size:
-                if raw_buf[flag_r] == 4:  # Idle r
-                    raw_buf[flag_w] = 5  # Working w...
-                    raw_buf[header_memory[0] : header_memory[1]] = lrd.to_bytes(8)
-                    raw_buf[:lrd] = raw_data
-                    raw_buf[flag_w] = 4  # Idle w
-                    return True
+            lrd = len(raw_data)  # lrd: Len Raw Data
+            if (lrd % dsib) != 0:  # dsib: Data Size in Bytes
+                iwo = raw_buf[iw]  # iwo: Index Write Old
+                if (iwo % (ac * hsib)) == 0:  # ac: Amount Cells
+                    # hsib: Headers Size In Bytes
+                    iwn = raw_buf[iw] = hsib  # iwn: Index Write New
+                    iwo = 0
+                else:
+                    iwn = raw_buf[iw] = hsib + iwo
 
-                elif raw_buf[flag_r] == 5:  # Working r...
-                    # - - -
-                    return None
-
+                # Set lrd To Next Cell Hsib
+                raw_buf[iwo] = lrd
+                # Set RawData To Next Cell Dsib
+                raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
             else:
                 _set_status(_id_m_, 100)  # Warn in this IF
                 return False
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             _set_status(_id_m_, 152)  # Error in this func
             return False
+
+    # Return Base OR Sim Time To Sleep
+    def _time_to_sleep(
+        self,
+    ) -> float:
+        # ott: Old Time Trade | ntt: New Time Trade
+        ott, ntt = self.ottrade, self.nttrade
+        # - - -
+        if 0 < ott:
+            if ott <= ntt:
+                if ott < ntt:
+                    self.ottrade = ntt
+
+                return (ntt - ott) / 1000  # tts: Time To Sleep
+
+        else:
+            self.ottrade = ntt
+
+        return 0.01  # btts: Base Time To Sleep
 
     def run_wss_sim_engine(
         self,
@@ -143,17 +168,16 @@ class WssSimAgent:
             self._set,
             self._get,
         )
-        # GetRawData - LocalLink
-        flag_w, flag_r, data_size, header_memory = (
-            self.flag_w,
-            self.flag_r,
-            self.data_size,
-            self.header_memory,
-        )
+        # SetRawData - LocalLink
+        ac, iw, hsib, dsib, sssd = self.ac, self._iw, self.hsib, self.dsib, self._sssd
         # Semaphore, Event - LocalLink
         _wait_main, _release_parser = self.wait_main, self.release_parser
         # Methods - LocalLinks
-        _set_raw_data, _encode_data = self._set_raw_data, self._encode_data
+        _set_raw_data, _encode_data, _time_to_sleep = (
+            self._set_raw_data,
+            self._encode_data,
+            self._time_to_sleep,
+        )
         # Other - LocalLink
         _file_path = self.file_path
         # - - -
@@ -162,14 +186,15 @@ class WssSimAgent:
                 gc.collect()
                 _wait_main.wait()
                 _set_status(_id_m_, 4)  # IDLE
-                _release_parser.acquire(timeout=3)
+                while _raw_buf[sssd] != 1:
+                    time.sleep(0.1)
                 try:
-                    with open(_file_path, "r") as self.f:
-                        next(self.f)
-                        for line in self.f:
+                    with open(_file_path, "r") as f:
+                        next(f)
+                        for line in f:
                             if _get_status(_id_m_) is not True:
                                 _set_status(_id_m_, 4)  # Sleep
-                                time.sleep(0.01)
+                                time.sleep(_time_to_sleep())
                                 if _get_status(_id_m_, proc=True):
                                     _release_parser.release()
                                     break
@@ -189,14 +214,14 @@ class WssSimAgent:
                                 ):
                                     if (
                                         _state := _set_raw_data(
-                                            flag_w,
-                                            flag_r,
-                                            data_size,
-                                            header_memory,
-                                            _id_m_,
-                                            _set_status,
-                                            _raw_buf,
-                                            raw_data,
+                                            ac=ac,
+                                            iw=iw,
+                                            hsib=hsib,
+                                            dsib=dsib,
+                                            _id_m_=_id_m_,
+                                            _set_status=_set_status,
+                                            raw_buf=_raw_buf,
+                                            raw_data=raw_data,
                                         )
                                         is True
                                     ):
@@ -216,7 +241,7 @@ class WssSimAgent:
                     break
 
             except Exception:
-                traceback.print_exc()
+                traceback.print_exc()  # Debug
                 _set_status(_id_m_, 150)
                 break
 
@@ -227,7 +252,7 @@ def run_wss_sim(
     network_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
-):
+) -> None:
     gc.disable()
 
     wss = WssSimAgent.create(

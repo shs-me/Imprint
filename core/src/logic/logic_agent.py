@@ -16,7 +16,7 @@ class LogicAgent:
         cfg: dict,
         sem_sleep_logic: Semaphore,
         general_event: Event,
-    ):
+    ) -> None:
         # Initialization
         self._mo = mo
         self._get, self._set, self._id_m_ = (
@@ -35,7 +35,9 @@ class LogicAgent:
         # Offsets
         self._metrics_buf: memoryview = self._mo.shms["metrics"]["buf"]
         self._id_y_x_offset: int = self.cfg["metrics"]["id_y_x"]
-        self._flag_for_logic_offset: int = self.cfg["metrics"]["flag_for_logic"]
+
+        self._flag_r: int = self.cfg["metrics"]["flag_r"]
+        self._flag_w: int = self.cfg["metrics"]["flag_w"]
 
     @staticmethod
     def create(
@@ -44,7 +46,7 @@ class LogicAgent:
         general_event: Event,
         warn_error_status: Semaphore,
         logic_monitor: Semaphore,
-    ):
+    ) -> object | None:
         try:
             # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
@@ -61,10 +63,11 @@ class LogicAgent:
             )
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             warn_error_status.release()
             return None
 
+    # Get BaseReader Or Plagins
     def _resolve_reader(self, dauhter_path):
         if not os.path.exists(dauhter_path):
             return BaseFootprintReader
@@ -79,40 +82,45 @@ class LogicAgent:
                     # . . .
 
                 except Exception:
-                    traceback.print_exc()
+                    traceback.print_exc()  # Debug
 
         return BaseFootprintReader
 
+    # Get ID-X : ID-Y from buffer
+    # WARN: This Func Have SpinLock
     def _get_raw_metrics(
         self,
         _metrics_buf: memoryview,
         _ids: int,
-        _flag: int,
+        _flag_r: int,
+        _flag_w: int,
         _set_status,
         _id_m_: int,
-    ):
+    ) -> tuple[int, int] | bool | None:
         try:
-            _metrics_buf[_flag] = 1
-            ids: tuple[int, int] = struct.unpack_from(
-                "!qq", _metrics_buf[_ids : (8 * 2 + _ids)]
-            )
-            _metrics_buf[_flag] = 2
-            return ids
+            while _metrics_buf[_flag_w] == 5:  # Working w...
+                pass
+
+            if _metrics_buf[_flag_w] == 4:  # Idle w
+                _metrics_buf[_flag_r] = 5  # Working r...
+                ids: tuple[int, int] = struct.unpack_from(
+                    "!qq", _metrics_buf[_ids : (8 * 2 + _ids)]
+                )
+                _metrics_buf[_flag_r] = 4  # Idle r
+                return ids
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             _set_status(_id_m_, 152)
             return False
 
     def run_logic_engine(
         self,
     ):
-        # JSON Decoder, SHM.Buf, BaseInit - LocalLink
-        _metrics_buf, _ids, _flag = (
-            self.metrics_buf,
-            self._id_y_x_offset,
-            self._flag_for_logic_offset,
-        )
+        # JSON Decoder, SHM.Buf
+        _metrics_buf = self.metrics_buf
+        # BaseInit - LocalLink
+        _ids, _flag_r, _flag_w = self._id_y_x_offset, self._flag_r, self._flag_w
         # StatusAgents - LocalLink
         _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
         # Semaphore, Event - LocalLink
@@ -133,7 +141,6 @@ class LogicAgent:
                     while True:
                         if _get_status(_id_m_) is not True:
                             _set_status(_id_m_, 4)  # Sleep
-
                             _acquire_parser.acquire()
                             if _get_status(_id_m_, proc=True):
                                 break
@@ -142,16 +149,24 @@ class LogicAgent:
                             while _acquire_parser.acquire(block=False):
                                 pass
 
-                            if (
-                                ids := _get_raw_metrics(
-                                    _metrics_buf,
-                                    _ids,
-                                    _flag,
-                                    _set_status,
-                                    _id_m_,
-                                )
-                            ) is not False:
+                            if isinstance(
+                                (
+                                    ids := _get_raw_metrics(
+                                        _metrics_buf,
+                                        _ids,
+                                        _flag_r,
+                                        _flag_w,
+                                        _set_status,
+                                        _id_m_,
+                                    )
+                                ),
+                                tuple,
+                            ):
                                 reader.check_patterns(ids[0], ids[1])
+
+                            else:
+                                if ids is False:
+                                    sys.exit()
 
                         else:
                             sys.exit()
@@ -160,7 +175,7 @@ class LogicAgent:
                     break
 
             except Exception:
-                traceback.print_exc()
+                traceback.print_exc()  # Debug
                 _set_status(_id_m_, 150)  # Error in this func
                 break
 

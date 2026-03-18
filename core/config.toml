@@ -29,27 +29,22 @@
     shm = "profiling_array"
 
   [argg.raw]
-    ac = 41  # Amount Cells
-    dsib = 164  # Data size in bytes
-    hsib = 4
+    ac = 128  # Amount Cells
+    dsib = 256  # Data size in bytes
+    hsib = 1
+    # also in code: _sssd = -3, _ir = -2 , _iw = -1
 
-    data_size = 256
-    header_memory = [256, 264]
-    flag_r = 264
-    flag_w = 265
-
-    bsize = 4096 # 8192  # 6890 (4 * 41 = 164) headers +
-    # (41*164=6724) data + 2 counter status write/read
+    bsize = 40960 # 8192  # 6890 (128 * 4 = 512) headers +
+    # (128 * 256 = 32768) data + 2 counter status write/read
     shm = "raw_data_memory"
 
   [argg.metrics]
     # grid
     base_price_and_timestamp = 0 # 0 start id , and 0 + size, example: float/int64=8, [0: 0+8+8]
-    price = 16
-    spec_vwap = 24
     # reader
     id_y_x = 128 # +8+8
-    flag_for_logic = 144 # 1 byte
+    flag_r = 144 # 1 byte
+    flag_w = 145 # 1 byte
     # tools
     bsize = 4096
     shm = "signal_to_logic"

@@ -81,7 +81,7 @@ class MonitoringAgent:
             )
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             warn_error_status.release()
             return None
 
@@ -173,6 +173,7 @@ class MonitoringAgent:
                     self._mo.set_(_id_m, 50)  # Set Status Warn, Module min
                 else:  # Maybe stuck after "WakeUp"
                     self._mo.set_(_id_m, 51)  # Set Status Warn, Module min
+                print(_times)
 
     def run_profilling_engine(
         self,
@@ -241,7 +242,7 @@ class MonitoringAgent:
                         time.sleep(1)
 
             except Exception as e:
-                traceback.print_exc()
+                traceback.print_exc()  # Debug
                 logger.error(f"MonitoringAgent | RunMonitoringEngine | {e}")
                 break
 
@@ -253,7 +254,7 @@ def run_monitoring(
     logic_monitor: Semaphore,
     network_monitor: Semaphore,
     warn_error_status: Semaphore,
-):
+) -> None:
     logger.remove()
     logger.add(
         "logs/monitoring.log",

@@ -13,9 +13,9 @@ from .src import MonitorObj as mo
 from .src import WatchDog, run_logic, run_monitoring, run_parsing, run_wss, run_wss_sim
 
 PROCS = {
-    12: {"name": "NETWORK", "func": None, "proc": None},
     10: {"name": "PARSING", "func": run_parsing, "proc": None},
     11: {"name": "LOGIC", "func": run_logic, "proc": None},
+    12: {"name": "NETWORK", "func": None, "proc": None},
     13: {"name": "MONITORING", "func": run_monitoring, "proc": None},
     # BACKTESTING False | 12: ... "func": run_wss ...}
     # BACKTESTING True | 12: ... "func": run_wss_sim ...}
@@ -92,7 +92,7 @@ class RunMain:
             )
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | Create | {e}")
             return None
 
@@ -116,7 +116,7 @@ class RunMain:
             self._shm_close()
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | _Exit | {e}")
 
     # Close SharedMemory
@@ -155,7 +155,7 @@ class RunMain:
 
             return True
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | ShmControl | {e}")
             return False
 
@@ -229,7 +229,7 @@ class RunMain:
                 return False
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | RunProc | {e}")
             return False
 
@@ -279,7 +279,7 @@ class RunMain:
                 )
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | RunCoreEngine | {e}")
         finally:
             self._close_()

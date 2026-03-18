@@ -73,7 +73,7 @@ class MonitorObj:
         self.shms: dict[str, ShmType] = IDX_NAMES[proc_name]["shms"]  # type: ignore
         # Semaphore, Event
         self._warn_error_status: Semaphore = warn_error_status
-        if isinstance(_monitor, Semaphore):
+        if _monitor is not None:
             self._monitor = _monitor
         try:
             # LoadShm-s
@@ -97,24 +97,31 @@ class MonitorObj:
                 self._profiling_array_init(headers=True)
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             raise Exception
 
+    # Load SharedMemory-s, IF SHM not found raise FileNotFoundError
     def _shm_init(
         self,
-    ):  # Load SharedMemory-s
-        for name in self.shms.keys():
-            shm = SharedMemory(
-                name=self.cfg[name]["shm"],
-            )
-            self.shms[name]["shm"] = shm
-            if shm.buf is not None:
-                self.shms[name]["buf"] = shm.buf
+    ) -> None | Exception:
+        try:
+            for name in self.shms.keys():
+                shm = SharedMemory(
+                    name=self.cfg[name]["shm"],
+                )
+                self.shms[name]["shm"] = shm
+                if shm.buf is not None:
+                    self.shms[name]["buf"] = shm.buf
 
+        except FileNotFoundError as e:
+            traceback.print_exc()  # Debug
+            raise FileNotFoundError(e)
+
+    # Create 2-D Array on buffer: ProfilingShm, without buf: Headers
     def _profiling_array_init(
         self,
         headers=False,
-    ):  # Create Array on buffer
+    ) -> None:
         self.dgarray = np.ndarray(
             (self.dglines, self.dgcols),
             dtype=np.int64,
@@ -126,10 +133,12 @@ class MonitorObj:
             self.dgheaders[:] = 0
 
     # For module's
+    # Return ID_Dauhter or ID_"Parent".
+    # Also set ID Parent on headers Profiling Shm
     def _status(
         self,
         daughter: bool = False,
-    ):
+    ) -> int:
         """
         Return ID_Dauhter, IF dauhter True \n
         Else, Return ID_Module "Parent".\n
@@ -138,18 +147,46 @@ class MonitorObj:
             _id_m_ = self._id_d
         else:
             _id_m_, _dgc, _dg_buf = self._id_m, self._dgc, self._profiling_buf
+            # Set ID Module on Headers ProfilingSHM
             _dg_buf[(64 + _dgc)] = _id_m_
+            # Get Index Line & Status code from Profiling SHM headers
             self.dgid = struct.unpack_from("!i", _dg_buf[(_dgc * 8) : (_dgc * 8 + 4)])[
                 0
             ]
 
         return _id_m_
 
+    # For module's | MonitoringAgent | Watchdog
+    # Set Status & TimeNS, If Warn & Error: StatusSHM, IF <10: ProfilingSHM
+    def set_(
+        self,
+        id_m: int,
+        code: int,
+    ) -> bool | Exception:
+        """
+        IF code SET: IF code > 49 write on SHM_STATUS.BUF: index ID_M.\n
+        Else, called "_profiling_array" that write code+time_ns on SHM_profiling.BUF.\n
+        """
+        try:
+            if code > 49:
+                self._status_buf[id_m] = code
+                self._warn_error_status.release()
+                return True
+            else:
+                self._profiling_(code)
+                return True
+
+        except Exception as e:
+            traceback.print_exc()  # Debug
+            raise Exception(e)
+
+    # Set TimeNS on 2-D Array, Buffer: Profiling Shm
+    # Also set IndexLine & Status Code on Headers Profiling SHM
     def _profiling_(
         self,
         code: int,
-    ):
-        # profilingArrat - LocalLinks
+    ) -> None:
+        # profilingArray - LocalLinks
         dglines, dgarray, dgid_m, dgc, buf = (
             self.dglines,
             self.dgarray,
@@ -167,33 +204,12 @@ class MonitorObj:
         self.dgid = (dgid_m + 1) % dglines
         self._monitor.release()
 
-    # For module's | MonitoringAgent | Watchdog
-    def set_(
-        self,
-        id_m: int,
-        code: int,
-    ):
-        """
-        IF code SET: IF code > 49 write on SHM_STATUS.BUF: index ID_M.\n
-        Else, called "_profiling_array" that write code+time_ns on SHM_profiling.BUF.\n
-        """
-        try:
-            if code > 49:
-                self._status_buf[id_m] = code
-                self._warn_error_status.release()
-
-            else:
-                self._profiling_(code)
-
-        except Exception as e:
-            traceback.print_exc()
-            raise Exception(e)
-
+    # Get Status Module or Proc if Warn & Error return True
     def get_(
         self,
         id_m: int,
         proc=False,
-    ):  # Get Status Module or Proc if True
+    ) -> bool | Exception:
         """
         Return True, if status module or proc: WARN,ERROR,STOPING,
         In other cases, return None
@@ -203,35 +219,31 @@ class MonitorObj:
                 if self._status_buf[self._id_p] == 2:
                     return True
 
-                return
+                return False
 
             else:
                 if self._status_buf[id_m] > 49:
                     return True
 
-                return
+                return False
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             raise Exception(e)
 
     # For MonitoringAgent | Main
     @staticmethod
     def dump_profile(
         file_path: str,
-        _X_: np.ndarray | memoryview | None = None,
+        _X_: np.ndarray | memoryview,
         _bin=False,
-    ):
-        """
-        DUMP shm buf to File.bin. \n
-        Shape config[profilingLines, profilingCols], dtype: np.int64.
-        """
+    ) -> None | Exception:
         try:
-            if _X_ is not None:
-                if _bin:
-                    with open(file_path, "wb") as f:
-                        f.write(_X_[:])
-                else:
+            if _bin:
+                with open(file_path, "wb") as f:
+                    f.write(_X_[:])
+            else:
+                if isinstance(_X_, np.ndarray):
                     np.savetxt(
                         file_path,
                         _X_,
@@ -239,5 +251,5 @@ class MonitorObj:
                     )
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             raise Exception(e)

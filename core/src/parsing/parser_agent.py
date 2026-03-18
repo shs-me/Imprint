@@ -25,7 +25,7 @@ class ParserAgent:
         sem_sleep_parsing: Semaphore,
         sem_sleep_logic: Semaphore,
         general_event: Event,
-    ):
+    ) -> None:
         # initializarion
         self._mo = mo
         self._get, self._set, self._id_m_ = (
@@ -47,17 +47,12 @@ class ParserAgent:
         self.raw_buf = self._mo.shms["raw"]["buf"]
         # MetricsSHM.buf
         self.metrics_buf = self._mo.shms["metrics"]["buf"]
-        self._id_y_x_offset: int = self.cfg["metrics"]["id_y_x"]
         # InitGetRawData
-        self.header_memory: list[int] = self.cfg["raw"]["header_memory"]
-        self.data_size: int = self.cfg["raw"]["data_size"]
-        self.flag_r: int = self.cfg["raw"]["flag_r"]
-        self.flag_w: int = self.cfg["raw"]["flag_w"]
-
-        self.ac: int = self.cfg["raw"]["ac"]  # Amount Cells
-        self.dsib: int = self.cfg["raw"]["dsib"]  # Data size in bytes
-        self.hsib: int = self.cfg["raw"]["hsib"]  # Headers size in bytes
-        self.ir: int = self._mo.shms["raw"]["shm"].size - 2  # Index, Read _current_id
+        self.ac = self.cfg["raw"]["ac"]  # Amount Cells
+        self.dsib = self.cfg["raw"]["dsib"]  # Data size in bytes
+        self.hsib = self.cfg["raw"]["hsib"]  # Headers size in bytes
+        self._ir = self._mo.shms["raw"]["shm"].size - 2  # Index, Write counter
+        self._sssd = self._mo.shms["raw"]["shm"].size - 3  # Index, Start Start Set Data
 
     @staticmethod
     def create(
@@ -89,37 +84,35 @@ class ParserAgent:
             )
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             warn_error_status.release()
             return None
 
     # Get Bytes from RawSHM
     def _get_raw_data(
         self,
-        flag_w: int,
-        flag_r: int,
-        header_memory: list[int],
+        ir: int,
+        ac: int,
+        hsib: int,
         _id_m_,
         _set_status,
         _raw_buf: memoryview,
     ) -> memoryview | bool | None:
         try:
-            while _raw_buf[flag_w] == 5:  # Working w...
-                pass
-
-            if _raw_buf[flag_w] == 4:  # Idle w
-                _raw_buf[flag_r] = 5  # Working r...
-                lrd = int.from_bytes(_raw_buf[header_memory[0] : header_memory[1]])
-                raw_data = _raw_buf[:lrd]
-                _raw_buf[flag_r] = 4  # Idle r
-                return raw_data
-
+            iro = _raw_buf[ir]  # iro: Index Read Old
+            if iro >= (ac * hsib):  # ac: Amount Cells
+                irn = _raw_buf[ir] = hsib  # hsib: Header Size In Byte
+                iro = 0
             else:
-                return
+                irn = _raw_buf[ir] = hsib + iro  # irn: Index Read New
+
+            lrd = _raw_buf[iro]  # Get Len Raw Data
+            raw_data = _raw_buf[(irn * ac) : ((irn * ac) + lrd)]  # Get Raw Data
+            return raw_data
 
         except Exception:
             traceback.print_exc()
-            _set_status(_id_m_, 154)  # Error in this func
+            _set_status(_id_m_, 154)
             return False
 
     # Decode RawData to Struct AggTrade
@@ -138,7 +131,7 @@ class ParserAgent:
             return trade
 
         except Exception:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             _set_status(_id_m_, 153)
             return False
 
@@ -158,13 +151,8 @@ class ParserAgent:
             self._get,
         )
         # GetRawData - LocalLink
-        flag_w, flag_r, header_memory = (
-            self.flag_w,
-            self.flag_r,
-            self.header_memory,
-        )
+        ac, ir, hsib, sssd = self.ac, self._ir, self.hsib, self._sssd
         # SetRawMetrics
-        _id_y_x_offset = self._id_y_x_offset
         # Semaphore, Event - LocalLink
         _wait_main, _release_logic, _acquire_wss = (
             self.wait_main,
@@ -181,13 +169,18 @@ class ParserAgent:
             try:
                 gc.collect()
                 _wait_main.wait()
-
-                _raw_buf[flag_r] = 4
                 engine = GridEngine.create(
                     _mo_=self._mo,
                     cfg=self.cfg,
                     tick_size=self.tick_size,
                 )
+                if _raw_buf[sssd] != 1:
+                    while _acquire_wss.acquire(block=False):
+                        pass
+
+                    _raw_buf[ir] = _raw_buf[ir + 1]
+                    _raw_buf[sssd] = 1
+
                 if isinstance(engine, GridEngine):
                     while True:
                         if _get_status(_id_m_) is not True:
@@ -201,9 +194,9 @@ class ParserAgent:
                             if isinstance(
                                 (
                                     raw_data := _get_raw_data(
-                                        flag_w,
-                                        flag_r,
-                                        header_memory,
+                                        ir,
+                                        ac,
+                                        hsib,
                                         _id_m_,
                                         _set_status,
                                         _raw_buf,
@@ -222,29 +215,28 @@ class ParserAgent:
                                     ),
                                     AggTrade,
                                 ):
-                                    state = engine.update(
+                                    if engine.update(
                                         price=float(trade.p),
                                         qty=float(trade.q),
                                         is_sell=trade.m,
                                         timestamp=trade.E,
-                                    )
-                                    if isinstance(state, bool):
+                                    ):
                                         _release_logic.release()
 
                                 elif trade is False:
-                                    pass
+                                    sys.exit()
 
                             elif raw_data is False:
-                                pass
+                                sys.exit()
 
                         else:
-                            sys.exit()
+                            pass
                 else:
                     _set_status(_id_m_, 151)  # Error in engine
                     break
 
             except Exception:
-                traceback.print_exc()
+                traceback.print_exc()  # Debug
                 _set_status(_id_m_, 150)  # Error in this func
                 break
 
@@ -256,7 +248,7 @@ def run_parsing(
     parser_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
-):
+) -> None:
     gc.disable()
     agent = ParserAgent.create(
         cfg=config,

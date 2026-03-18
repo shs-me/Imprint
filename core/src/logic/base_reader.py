@@ -9,7 +9,7 @@ class BaseFootprintReader:
         idy: int,
         idx: int,
     ):
-        self.run_algorithm()
+        print(idy, idx)
 
         # np.copyto(self.grid_copy, self.grid)
 

@@ -61,7 +61,7 @@ class WatchDog:
             )
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"WatchDog | GetStatusDict | {e}")
             return None
 
@@ -111,26 +111,28 @@ class WatchDog:
                 _warn_error_status.acquire(timeout=60)
 
                 # Check Status module's
-                for id_p_ in _id_info.keys():
-                    for id_m_ in _id_info[id_p_]:
-                        _code = _status_buf[int(id_m_)]
+                for id_p_ in _id_info.keys():  # Get ID Proc, str
+                    for id_m_ in _id_info[id_p_]:  # Get ID Modules on ID proc, str
+                        _code = _status_buf[int(id_m_)]  # Get Status Code Module, int
+                        # Convert's
                         _str_code, _int_id_p, _int_id_m = (
                             str(_code),
                             int(id_p_),
                             int(id_m_),
                         )
-
+                        # Warn & Error Range
                         if 50 <= _code < 256:
+                            # Logging Code Designaton
                             if _str_code in _warn:
                                 logger.warning(
                                     f"{_id_info[id_p_][id_m_]['name']} | {_warn[_str_code][id_m_]}"
                                 )
 
-                            elif _str_code in _error:
+                            if _str_code in _error:
                                 logger.error(
                                     f"{_id_info[id_p_][id_m_]['name']} | {_error[_str_code][id_m_]}"
                                 )
-
+                            # Action's id False Close Core
                             if (
                                 _task_action(
                                     _code=_code,
@@ -139,13 +141,14 @@ class WatchDog:
                                     procs_name=_procs_name,
                                     init_task_=_init_task,
                                     _id_m=_int_id_m,
+                                    _id_p=_int_id_p,
                                 )
                                 is False
                             ):
                                 return False
 
             except Exception as e:
-                traceback.print_exc()
+                traceback.print_exc()  # Debug
                 logger.error(f"WatchDog | RunStatusAgent | {e}")
                 return False
 
@@ -160,7 +163,7 @@ class WatchDog:
             return True
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"WatchDog | ShmZeros | {e}")
             return False
 
@@ -199,7 +202,7 @@ class WatchDog:
                 return True
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"Watchdog | CheckProc | {e}")
             return False
 
@@ -212,17 +215,19 @@ class WatchDog:
         procs_name: dict,
         init_task_,
         _id_m: int | None = None,
+        _id_p: int | None = None,
     ) -> bool:
         try:
             self._task = (
                 task if isinstance((task := init_task_(_code)), int) else self._task
             )
-
-            if task == 1 or task == 50 or task == 150:  # Check Proc
+            # Check Procs Live or not
+            if task == 1:
                 for id_proc in self._procs:
                     if self._check_proc(id_proc=id_proc) is False:
                         return False
 
+            # Sleep All Procs untill market open
             elif task == 101:
                 # Sleep
                 self._set_status_for_all_proc(status_buf, procs_name, stoping=True)
@@ -243,14 +248,21 @@ class WatchDog:
                 else:
                     return False
 
-            self._task = 0
-            if isinstance(_id_m, int):
-                status_buf[_id_m] = 0
+            # Check Proc live or not
+            elif task == 150 or task == 50 or task == 51:
+                if _id_p:
+                    if self._check_proc(id_proc=_id_p) is False:
+                        return False
 
+            # Reset Status
+            self._task = 0
+            if _id_m:
+                status_buf[_id_m] = 0
+                print(_id_m)
             return True
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc()  # Debug
             logger.error(f"WatchDog | TaskAction | {e}")
             return False
 
