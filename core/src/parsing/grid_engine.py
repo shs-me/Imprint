@@ -120,9 +120,8 @@ class GridEngine:
             idx = idx - 1
 
         if grid[OHLCV_T_D_CT[7], idx] == 0.0:
-            if idx != 0:
-                grid[OHLCV_T_D_CT[0], idx] = price
-                grid[OHLCV_T_D_CT[5], idx] = timestamp
+            grid[OHLCV_T_D_CT[0], idx] = price
+            grid[OHLCV_T_D_CT[5], idx] = timestamp
 
             grid[OHLCV_T_D_CT[1], idx] = price
             grid[OHLCV_T_D_CT[2], idx] = price

@@ -116,7 +116,7 @@ class WssSimAgent:
     ) -> bool:
         try:
             lrd = len(raw_data)  # lrd: Len Raw Data
-            if (lrd % dsib) != 0:  # dsib: Data Size in Bytes
+            if lrd < dsib:  # dsib: Data Size in Bytes
                 iwo = raw_buf[iw]  # iwo: Index Write Old
                 if (iwo % (ac * hsib)) == 0:  # ac: Amount Cells
                     # hsib: Headers Size In Bytes
