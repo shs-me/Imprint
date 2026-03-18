@@ -253,13 +253,13 @@ class RunMain:
                 _run_watchdog_engine = _watchdog.run_watchdog_engine
                 logger.info("WatchDog | Started")
                 # Init Process's
-                self.general_event.set()  # pass
                 for id_proc in self._procs:
                     if self._run_proc(id_proc=id_proc) is False:
                         return False
 
                     time.sleep(0.5)
 
+                self.general_event.set()  # pass
                 logger.info("--- Core --- Init Completed.")
                 try:
                     while True:

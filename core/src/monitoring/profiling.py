@@ -173,7 +173,6 @@ class MonitoringAgent:
                     self._mo.set_(_id_m, 50)  # Set Status Warn, Module min
                 else:  # Maybe stuck after "WakeUp"
                     self._mo.set_(_id_m, 51)  # Set Status Warn, Module min
-                print(_times)
 
     def run_profilling_engine(
         self,
@@ -195,12 +194,12 @@ class MonitoringAgent:
             self._read_profile,
             self._profiling,
         )
-        _init_session(_dgcols, _dgheaders, _sems, profiling_buf)
-        #  - - -
+        # - - -
         while True:
             try:
                 gc.collect()
                 _wait_main.wait()
+                _init_session(_dgcols, _dgheaders, _sems, profiling_buf)
                 _counter = 0
                 while True:
                     if any(_sem.get_value() > 0 for _sem in _sems.values()):
