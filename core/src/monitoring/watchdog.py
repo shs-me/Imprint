@@ -258,7 +258,6 @@ class WatchDog:
             self._task = 0
             if _id_m:
                 status_buf[_id_m] = 0
-                print(_id_m)
             return True
 
         except Exception as e:

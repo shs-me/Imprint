@@ -97,7 +97,7 @@ class ParserAgent:
         _id_m_,
         _set_status,
         _raw_buf: memoryview,
-    ) -> memoryview | bool | None:
+    ) -> memoryview | bool:
         try:
             iro = _raw_buf[ir]  # iro: Index Read Old
             if iro >= (ac * hsib):  # ac: Amount Cells

@@ -82,7 +82,7 @@ class WSSAgent:
         _set_status,
         raw_buf: memoryview,
         raw_data: bytes,
-    ) -> bool | None:
+    ) -> bool:
         try:
             lrd = len(raw_data)  # lrd: Len Raw Data
             if (lrd % dsib) != 0:  # dsib: Data Size in Bytes
@@ -93,10 +93,12 @@ class WSSAgent:
                     iwo = 0
                 else:
                     iwn = raw_buf[iw] = hsib + iwo
+
                 # Set lrd To Next Cell Hsib
-                raw_buf[iwo:iwn] = lrd.to_bytes(4)
+                raw_buf[iwo] = lrd
                 # Set RawData To Next Cell Dsib
                 raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
+                return True
             else:
                 _set_status(_id_m_, 100)  # Warn in this IF
                 return False
