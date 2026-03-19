@@ -45,15 +45,15 @@
   └──────────────────────────────────────────────────────────────┘
 ```
 >**Price -> ID-Y:**  $$idy =  IDYcenter + \frac{basePrice - price}{tickSize}$$
- >>*Example:*$$9000 = 10000 + \frac{100 - 110}{0.01}$$
+ >>**Example:** $$9000 = 10000 + \frac{100 - 110}{0.01}$$
 
 >**ID-Y -> Price:** $$price = basePrice + (idyCenter - idy)\cdot tickSize$$
 >>**Example:** $$110 = 100 + (10000 - 9000) \cdot 0.01$$
 
 ---
 >**Timestamp -> ID-X:**  $$idx = \frac{timestamp - baseTimestamp}{range}\cdot 2 + side$$
->>*Example:*$$1 = \frac{1'773'906'698 - 1'773'906'534}{60000}\cdot 2 + 1$$
+>>**Example:** $$1 = \frac{1'773'906'698 - 1'773'906'534}{60000}\cdot 2 + 1$$
 >>>**range**: interval **chart** in milisecond, exp $1min \cdot 60s \cdot 1000ms$ **, side:** 0 if **is_sell** else 1
 
 >**ID-X -> Timestamp:**  $$timestamp = \frac{idx - side}{2}\cdot range + baseTimestamp $$
->>*Example:*$$1'773'906'698 = \frac{1 - 1}{2}\cdot60000 + 1'773'906'534$$
+>>**Example:** $$1'773'906'698 = \frac{1 - 1}{2}\cdot60000 + 1'773'906'534$$
