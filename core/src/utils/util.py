@@ -20,7 +20,7 @@ class ConvertMetrics:
     def to_idy(
         self,
         price: float,
-    ) -> int:
+    ) -> int | None:
         """
         IF 0 <= ID-Y < Lines, Return ID-Y | Else, Return None
         """
@@ -29,13 +29,13 @@ class ConvertMetrics:
         if 0 <= idy < self.lines:
             return idy
         else:
-            return idy
+            return None
 
     def to_idx(
         self,
         timestamp: int,
         is_sell: bool,
-    ):
+    ) -> int | None:
         """
         is_sell: True is bid, False ask.\n
         IF 0 <= ID-X < Cols, Return ID-X | Else, Return None.

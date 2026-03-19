@@ -40,7 +40,7 @@ class BaseGridReader:
         self._metrics_buf: memoryview = self._mo_.shms["metrics"]["buf"]
         # Cord init
         self.cord: np.ndarray = cord
-        self._ac: int = self.cfg["metrics"]["flag_r"]
+        self._ac: int = self.cfg["metrics"]["ac"]
         self._flag_r: int = self.cfg["metrics"]["flag_r"]
         self._flag_w: int = self.cfg["metrics"]["flag_w"]
 
@@ -66,7 +66,6 @@ class BaseGridReader:
                 dtype=np.float64,
                 buffer=_mo_.shms["grid"]["buf"],
             )
-            shm_grid[:] = 0.0
             # Local Grid
             grid = np.ndarray(
                 ((cfg["grid"]["lines"] + 8), cfg["grid"]["cols"]),
@@ -78,9 +77,8 @@ class BaseGridReader:
                 ((cfg["metrics"]["lines"]), cfg["metrics"]["cols"]),
                 dtype=np.int32,
                 buffer=_mo_.shms["metrics"]["buf"],
-                offset=4096,
+                offset=8192,
             )
-            cord[:] = 0
             return BaseGridReader(
                 _mo_=_mo_,
                 grid=grid,
@@ -137,8 +135,13 @@ class BaseGridReader:
         idy_s, idy_e = _cord[_row_r, 0], _cord[_row_w - 1, 0]
         idx_s, idx_e = _cord[_row_r, 1], _cord[_row_w - 1, 1]
         # update grid local
-        self.grid[idy_s:idy_e, idx_s:idx_e] = self.shm_grid[idy_s:idy_e, idx_s:idx_e]
+        self.grid[
+            min(idy_s, idy_e) : max(idy_s, idy_e), min(idx_s, idx_e) : max(idx_s, idx_e)
+        ] = self.shm_grid[
+            min(idy_s, idy_e) : max(idy_s, idy_e), min(idx_s, idx_e) : max(idx_s, idx_e)
+        ]
         _metrics_buf[_flag_r] = _row_w
+
         # convert idy, idx to price, timestamp
         price, timestamp = (
             self.convert.to_price(idy_e),

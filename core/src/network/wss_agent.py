@@ -54,7 +54,7 @@ class WSSAgent:
         try:
             # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
-                proc_name="network_sim",
+                proc_name="network",
                 config=cfg["argg"],
                 _monitor=network_monitor,
                 warn_error_status=warn_error_status,
@@ -87,7 +87,7 @@ class WSSAgent:
             lrd = len(raw_data)  # lrd: Len Raw Data
             if lrd < dsib:  # dsib: Data Size in Bytes
                 iwo = raw_buf[iw]  # iwo: Index Write Old
-                if (iwo % (ac * hsib)) == 0:  # ac: Amount Cells
+                if (iwo + 1) >= (ac * hsib):  # ac: Amount Cells
                     # hsib: Headers Size In Bytes
                     iwn = raw_buf[iw] = hsib  # iwn: Index Write New
                     iwo = 0
@@ -105,7 +105,7 @@ class WSSAgent:
 
         except Exception:
             traceback.print_exc()  # Debug
-            _set_status(_id_m_, 152)  # Error in this func
+            _set_status(_id_m_, 151)  # Error in this func
             return False
 
     async def run_wss_engine(
@@ -169,6 +169,8 @@ class WSSAgent:
                                 sys.exit()
 
                 except Exception:
+                    traceback.print_exc()  # Debug
+                    _set_status(_id_m_, 150)  # Error in this func
                     break
 
             except Exception:

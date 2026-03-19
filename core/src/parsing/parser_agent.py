@@ -26,7 +26,7 @@ class ParserAgent:
         sem_sleep_logic: Semaphore,
         general_event: Event,
     ) -> None:
-        # initializarion
+        # initialization
         self._mo = mo
         self._get, self._set, self._id_m_ = (
             self._mo.get_,
@@ -190,12 +190,12 @@ class ParserAgent:
                                 if isinstance(
                                     (
                                         raw_data := _get_raw_data(
-                                            ir,
-                                            ac,
-                                            hsib,
-                                            _id_m_,
-                                            _set_status,
-                                            _raw_buf,
+                                            ir=ir,
+                                            ac=ac,
+                                            hsib=hsib,
+                                            _id_m_=_id_m_,
+                                            _set_status=_set_status,
+                                            _raw_buf=_raw_buf,
                                         )
                                     ),
                                     memoryview,
@@ -203,10 +203,10 @@ class ParserAgent:
                                     if isinstance(
                                         (
                                             trade := _decode_raw_data(
-                                                _id_m_,
-                                                _decoder,
-                                                _set_status,
-                                                raw_data,
+                                                _id_m_=_id_m_,
+                                                decoder=_decoder,
+                                                _set_status=_set_status,
+                                                raw_data=raw_data,
                                             )
                                         ),
                                         AggTrade,
@@ -252,8 +252,8 @@ def run_parsing(
     gc.disable()
     agent = ParserAgent.create(
         cfg=config,
-        sem_sleep_logic=sem_sleep_logic,
         sem_sleep_parsing=sem_sleep_parsing,
+        sem_sleep_logic=sem_sleep_logic,
         parser_monitor=parser_monitor,
         general_event=general_event,
         warn_error_status=warn_error_status,

@@ -4,7 +4,7 @@
 
 [argg]
   symbol = "dashusdt"
-  backtesting = 1 # for backtesting 0 false 1 true
+  backtesting = 0 # for backtesting 0 false 1 true
 
   profiling_dump = "dump/profiling.bin"
   profiling_dump_csv = "dump/profiling.csv"
@@ -50,7 +50,7 @@
     cols = 2
     lines = 256
 
-    bsize = 8192  # 4096 headers +
+    bsize = 12228  # 4096 headers +
     # (256 * 2 * 8 = 4096) data + 2 flag write/read
     shm = "_different_metrics_shm"
 

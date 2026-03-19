@@ -43,7 +43,7 @@ class GridEngine:
         self._metrics_buf: memoryview = self._mo_.shms["metrics"]["buf"]
         # Cord init
         self.cord: np.ndarray = cord
-        self._ac: int = self.cfg["metrics"]["flag_r"]
+        self._ac: int = self.cfg["metrics"]["ac"]
         self._flag_r: int = self.cfg["metrics"]["flag_r"]
         self._flag_w: int = self.cfg["metrics"]["flag_w"]
 
@@ -69,14 +69,12 @@ class GridEngine:
                 dtype=np.float64,
                 buffer=_mo_.shms["grid"]["buf"],
             )
-            grid[:] = 0.0
             cord = np.ndarray(
                 ((cfg["metrics"]["lines"]), cfg["metrics"]["cols"]),
                 dtype=np.int32,
                 buffer=_mo_.shms["metrics"]["buf"],
-                offset=4096,
+                offset=8192,
             )
-            cord[:] = 0.0
             return GridEngine(
                 _mo_=_mo_,
                 grid=grid,
@@ -160,7 +158,7 @@ class GridEngine:
         if (_row + 1) < self._ac:
             _metrics_buf[_flag_w] = _row + 1
         else:
-            _metrics_buf[_flag_w] = _row
+            _metrics_buf[_flag_w] = 0
 
         self.cord[_row] = idy, idx
         return True
@@ -191,7 +189,7 @@ class GridEngine:
                 return False
 
         idy = round(((self.base_price - price) / self.tick_size) + self.center)
-        idx = round((timestamp - self.base_timestamp) // self.ims * 2) + (
+        idx = round((timestamp - self.base_timestamp) / self.ims * 2) + (
             0 if is_sell else 1
         )
 
