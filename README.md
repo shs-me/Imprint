@@ -45,7 +45,7 @@
   └──────────────────────────────────────────────────────────────┘
 ```
 >**Price -> ID-Y:**  $$idy =  IDYcenter + \frac{basePrice - price}{tickSize}$$
- >>**Example:** $$9000 = 10000 + \frac{100 - 110}{0.01}$$
+ >>**Example:** $$9'000 = 10'000 + \frac{100 - 110}{0.01}$$
 
 >**ID-Y -> Price:** $$price = basePrice + (idyCenter - idy)\cdot tickSize$$
 >>**Example:** $$110 = 100 + (10000 - 9000) \cdot 0.01$$
