@@ -1,4 +1,5 @@
 import gc
+import struct
 import sys
 import time
 import traceback
@@ -39,7 +40,7 @@ class RunMain:
     def __init__(
         self,
         cfg: dict,
-    ):
+    ) -> None:
         self.cfg: dict = cfg
         self.sc_general: dict = {}
         self.profiling_dump = cfg["argg"]["profiling_dump"]
@@ -248,6 +249,12 @@ class RunMain:
                 self.warn_error_status,
                 self.status_file,
             )
+            # debug
+            _offset = self.cfg["argg"]["metrics"]["tick_size"]
+            self.shms["metrics"]["buf"][_offset: _offset+8] = (
+                struct.pack("!d", 0.01)
+            )
+            # - - -
             if isinstance(_watchdog, WatchDog):
                 self._sc = _watchdog.sc
                 _run_watchdog_engine = _watchdog.run_watchdog_engine

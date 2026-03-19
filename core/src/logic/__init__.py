@@ -1,7 +1,7 @@
-from .base_reader import BaseFootprintReader
+from .base_reader import BaseGridReader
 from .logic_agent import run_logic
 
 __all__ = [
     "run_logic",
-    "BaseFootprintReader",
+    "BaseGridReader",
 ]

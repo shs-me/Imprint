@@ -39,10 +39,8 @@ class ParserAgent:
         self.release_logic = sem_sleep_logic
         self.wait_main = general_event
 
-        # variables init
-        self.tick_size = 0.01
+        # variables
         self.decoder: msgspec.json.Decoder = decoder
-
         # RawSHM.buf
         self.raw_buf = self._mo.shms["raw"]["buf"]
         # MetricsSHM.buf
@@ -100,7 +98,7 @@ class ParserAgent:
     ) -> memoryview | bool:
         try:
             iro = _raw_buf[ir]  # iro: Index Read Old
-            if iro >= (ac * hsib):  # ac: Amount Cells
+            if (iro + 1) >= (ac * hsib):  # ac: Amount Cells
                 irn = _raw_buf[ir] = hsib  # hsib: Header Size In Byte
                 iro = 0
             else:
@@ -165,80 +163,82 @@ class ParserAgent:
             self._decode_raw_data,
         )
         #  - - -
-        while True:
-            try:
-                gc.collect()
-                _wait_main.wait()
-                engine = GridEngine.create(
-                    _mo_=self._mo,
-                    cfg=self.cfg,
-                    tick_size=self.tick_size,
-                )
-                if _raw_buf[sssd] != 1:
-                    while _acquire_wss.acquire(block=False):
-                        pass
+        try:
+            engine = GridEngine.create(_mo_=self._mo, cfg=self.cfg)
+            if isinstance(engine, GridEngine):
+                while True:
+                    try:
+                        gc.collect()
+                        _wait_main.wait()
+                        if _raw_buf[sssd] != 1:
+                            while _acquire_wss.acquire(block=False):
+                                pass
 
-                    _raw_buf[ir] = _raw_buf[ir + 1]
-                    _raw_buf[sssd] = 1
+                            _raw_buf[ir] = _raw_buf[ir + 1]
+                            _raw_buf[sssd] = 1
 
-                if isinstance(engine, GridEngine):
-                    while True:
-                        if _get_status(_id_m_) is not True:
-                            _set_status(_id_m_, 4)  # IDLE # TIME START
-                            _acquire_wss.acquire()
-                            if _get_status(_id_m_, proc=True):
-                                _release_logic.release()
-                                break
+                        while True:
+                            if _get_status(_id_m_) is not True:
+                                _set_status(_id_m_, 4)  # IDLE # TIME START
+                                _acquire_wss.acquire()
+                                if _get_status(_id_m_, proc=True):
+                                    _release_logic.release()
+                                    break
 
-                            _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
-                            if isinstance(
-                                (
-                                    raw_data := _get_raw_data(
-                                        ir,
-                                        ac,
-                                        hsib,
-                                        _id_m_,
-                                        _set_status,
-                                        _raw_buf,
-                                    )
-                                ),
-                                memoryview,
-                            ):
+                                _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
+
                                 if isinstance(
                                     (
-                                        trade := _decode_raw_data(
+                                        raw_data := _get_raw_data(
+                                            ir,
+                                            ac,
+                                            hsib,
                                             _id_m_,
-                                            _decoder,
                                             _set_status,
-                                            raw_data,
+                                            _raw_buf,
                                         )
                                     ),
-                                    AggTrade,
+                                    memoryview,
                                 ):
-                                    if engine.update(
-                                        price=float(trade.p),
-                                        qty=float(trade.q),
-                                        is_sell=trade.m,
-                                        timestamp=trade.E,
+                                    if isinstance(
+                                        (
+                                            trade := _decode_raw_data(
+                                                _id_m_,
+                                                _decoder,
+                                                _set_status,
+                                                raw_data,
+                                            )
+                                        ),
+                                        AggTrade,
                                     ):
-                                        _release_logic.release()
+                                        if engine.update(
+                                            price=float(trade.p),
+                                            qty=float(trade.q),
+                                            is_sell=trade.m,
+                                            timestamp=trade.E,
+                                        ):
+                                            _release_logic.release()
 
-                                elif trade is False:
+                                    elif trade is False:
+                                        sys.exit()
+
+                                elif raw_data is False:
                                     sys.exit()
 
-                            elif raw_data is False:
+                            else:
                                 sys.exit()
 
-                        else:
-                            pass
-                else:
-                    _set_status(_id_m_, 151)  # Error in engine
-                    break
+                    except Exception:
+                        traceback.print_exc()  # Debug
+                        _set_status(_id_m_, 150)  # Error in this func
+                        break
+            else:
+                _set_status(_id_m_, 151)  # Error in engine
+                return
 
-            except Exception:
-                traceback.print_exc()  # Debug
-                _set_status(_id_m_, 150)  # Error in this func
-                break
+        except Exception:
+            traceback.print_exc()  # Debug
+            _set_status(_id_m_, 150)  # Error in this func
 
 
 def run_parsing(

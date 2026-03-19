@@ -1,7 +1,7 @@
 from .main import run_core
-from .src import BaseFootprintReader
+from .src import BaseGridReader
 
 __all__ = [
     "run_core",
-    "BaseFootprintReader",
+    "BaseGridReader",
 ]

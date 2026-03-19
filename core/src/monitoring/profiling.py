@@ -1,4 +1,5 @@
 import gc
+import socket
 import struct
 import time
 import traceback
@@ -8,6 +9,11 @@ import numpy as np
 from loguru import logger
 
 from . import MonitorObj
+
+# Configuration
+UDP_IP = "127.0.0.1"
+UDP_PORT = 5005
+DELAY = 0.1  # 10ms interval
 
 
 class MonitoringAgent:
@@ -53,7 +59,8 @@ class MonitoringAgent:
         self.dgcols: int = self._mo.dgcols
         self.dgarray: np.ndarray = self._mo.dgarray
         self.dgheaders: np.ndarray = self._mo.dgheaders
-        # HEADERS L_I_C_T[COL] = LINE[0], ID_MODULE[1], STATUSCODE[2], TIME_NS[3]
+        # HEADERS ROW[0]LINE, ROW[1]ID_MODULE, ROW[2]STATUSCODE, ROW[3]TIME_NS
+        # ROW4[4]DIFF_WAIT, ROW[5]DIFF_WORK
 
     @staticmethod
     def create(
@@ -110,6 +117,8 @@ class MonitoringAgent:
             _dgheaders[3, _col] = self.dgarray[
                 _ids_scs[_value - 1], _col
             ]  # set time nanosecond
+            _dgheaders[4, _col] = 0  # set diff_wait
+            _dgheaders[5, _col] = 0  # set diff_work
 
             _value += 2  # next [index+status]
 
@@ -145,6 +154,12 @@ class MonitoringAgent:
             _dgheaders[0, _col] = _nline
             _dgheaders[2, _col] = (_oscode + 1) if (_oscode + 1) != 6 else 4
             _dgheaders[3, _col] = _ntimens
+            if 0 < _otimens < _ntimens:
+                diff_wait_or_work = int((_ntimens - _otimens) / 1000 // 1000)
+                if _oscode == 4:
+                    _dgheaders[4, _col] = diff_wait_or_work
+                if _oscode == 5:
+                    _dgheaders[5, _col] = diff_wait_or_work
 
             self.dgheaders = _dgheaders
 
@@ -155,16 +170,23 @@ class MonitoringAgent:
         _dglines: int,
         _dgarray: np.ndarray,
         _dgheaders: np.ndarray,
+        _send_udp,
     ) -> None:
-        _times = _dgheaders[3]  # Get last ping agents, time_ns
-        _arr = np.where(_times == 0)[0]
-        if len(_arr) > 0:
+        _times: np.ndarray = _dgheaders[3]  # Get last ping agents, time_ns
+        arr = np.where(_times == 0)[0]
+
+        if len(arr) > 0:
             # - - -
             return
 
+        _send_udp(_dgheaders[4, 2], _dgheaders[4, 0], _dgheaders[4, 1])
+        _diff_wss_parser, _diff_parser_logic = (
+            int((_times[0] - _times[2]) // 1000),
+            int((_times[1] - _times[0]) // 1000),
+        )
         _max, _min = np.max(_times), np.min(_times)
         # Diff microsecond > 5 second in microsecond == True
-        if ((_max - _min) // 1000) > (5000 * 1000):
+        if int((_max - _min) // 1000) > (5000 * 1000):
             _col = int(np.where(_times == _min)[0][0])  # Get index min on line
             _id_m = _dgheaders[1, _col]  # Get min ID-module
             # ID min not have status Warn & Error in StatusSHM == True
@@ -173,6 +195,10 @@ class MonitoringAgent:
                     self._mo.set_(_id_m, 50)  # Set Status Warn, Module min
                 else:  # Maybe stuck after "WakeUp"
                     self._mo.set_(_id_m, 51)  # Set Status Warn, Module min
+
+    def _send_udp(self, val1, val2, val3) -> None:
+        data = struct.pack("!qqq", val1, val2, val3)
+        self.sock.sendto(data, (UDP_IP, UDP_PORT))
 
     def run_profilling_engine(
         self,
@@ -195,6 +221,8 @@ class MonitoringAgent:
             self._profiling,
         )
         # - - -
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        _send_udp = self._send_udp
         while True:
             try:
                 gc.collect()
@@ -219,6 +247,7 @@ class MonitoringAgent:
                             _dglines,
                             _dgarray,
                             _dgheaders,
+                            _send_udp,
                         )
 
                     else:
@@ -235,6 +264,7 @@ class MonitoringAgent:
                                 _dgheaders,
                                 _dgcols,
                             )
+                            logger.warning("MonitorAgent | STOPING")
                             break
 
                         _counter += 1
@@ -243,6 +273,8 @@ class MonitoringAgent:
             except Exception as e:
                 traceback.print_exc()  # Debug
                 logger.error(f"MonitoringAgent | RunMonitoringEngine | {e}")
+            finally:
+                self.sock.close()
                 break
 
 

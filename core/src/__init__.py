@@ -1,7 +1,7 @@
-
 from .monitoring import MonitorObj, WatchDog, run_monitoring
+from .utils import ConvertMetrics
 from .backtesting import run_wss_sim
-from .logic import BaseFootprintReader, run_logic
+from .logic import BaseGridReader, run_logic
 from .network import run_wss
 from .parsing import run_parsing
 
@@ -13,5 +13,6 @@ __all__ = [
     "run_monitoring",
     "MonitorObj",
     "WatchDog",
-    "BaseFootprintReader",
+    "BaseGridReader",
+    "ConvertMetrics",
 ]

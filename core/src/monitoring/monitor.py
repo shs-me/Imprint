@@ -129,7 +129,7 @@ class MonitorObj:
             buffer=self._profiling_buf,
         )
         if headers:
-            self.dgheaders = np.ndarray((4, self.dgcols), dtype=np.int64)
+            self.dgheaders = np.ndarray((6, self.dgcols), dtype=np.int64)
             self.dgheaders[:] = 0
 
     # For module's

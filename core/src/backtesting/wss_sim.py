@@ -118,7 +118,7 @@ class WssSimAgent:
             lrd = len(raw_data)  # lrd: Len Raw Data
             if lrd < dsib:  # dsib: Data Size in Bytes
                 iwo = raw_buf[iw]  # iwo: Index Write Old
-                if (iwo % (ac * hsib)) == 0:  # ac: Amount Cells
+                if (iwo + 1) >= (ac * hsib):  # ac: Amount Cells
                     # hsib: Headers Size In Bytes
                     iwn = raw_buf[iw] = hsib  # iwn: Index Write New
                     iwo = 0
@@ -201,7 +201,6 @@ class WssSimAgent:
                                     break
 
                                 _set_status(_id_m_, 5)  # WakeUp
-
                                 if isinstance(
                                     (
                                         raw_data := _encode_data(
