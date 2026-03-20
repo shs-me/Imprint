@@ -184,7 +184,7 @@ class GridEngine:
         _metrics_buf[_offset : _offset + 12] = struct.pack(
             "!HHHHHH", idy_min, idx_min, idy_max, idx_max, idy, idx
         )
-        print(idy_min, idx_min, idy_max, idx_max, idy, idx)
+        # print(idy_min, idx_min, idy_max, idx_max, idy, idx)
         return True
 
     def update(

@@ -10,10 +10,10 @@ from . import GridEngine
 
 
 class AggTrade(msgspec.Struct):
-    E: int  # Event time
-    p: str  # Price
-    q: str  # Quantity
-    m: bool  # Is buyer maker? (True=Sell)
+    T: int  # Trade time
+    p: float  # Price
+    q: float  # Quantity
+    m: bool  # Is buyer maker?
 
 
 class ParserAgent:
@@ -21,7 +21,6 @@ class ParserAgent:
         self,
         mo: MonitorObj,
         cfg: dict,
-        decoder: msgspec.json.Decoder,
         sem_sleep_parsing: Semaphore,
         sleep_logic: Event,
         general_event: Event,
@@ -41,7 +40,7 @@ class ParserAgent:
         self.wait_main = general_event
         self.wait_reader = writer_sleep
         # variables
-        self.decoder: msgspec.json.Decoder = decoder
+        self.decoder = msgspec.json.Decoder(type=AggTrade, strict=False)
         # RawSHM.buf
         self.raw_buf = self._mo.shms["raw"]["buf"]
         # MetricsSHM.buf
@@ -72,12 +71,9 @@ class ParserAgent:
                 _monitor=parser_monitor,
             )
 
-            decoder = msgspec.json.Decoder(AggTrade)
-
             return ParserAgent(
                 mo=mo,
                 cfg=cfg,
-                decoder=decoder,
                 sleep_logic=sleep_logic,
                 sem_sleep_parsing=sem_sleep_parsing,
                 general_event=general_event,
@@ -129,6 +125,9 @@ class ParserAgent:
                 return None
 
             trade = decoder(raw_data)
+            if trade.p < 0 or trade.q < 0 or trade.T < 0:
+                return None
+
             return trade
 
         except Exception:
@@ -217,10 +216,10 @@ class ParserAgent:
                                         AggTrade,
                                     ):
                                         if engine.update(
-                                            price=float(trade.p),
-                                            qty=float(trade.q),
+                                            price=trade.p,
+                                            qty=trade.q,
                                             is_sell=trade.m,
-                                            timestamp=trade.E,
+                                            timestamp=trade.T,
                                         ):
                                             _sleep_logic.set()
 

@@ -55,7 +55,7 @@ class ConvertMetrics:
         is_sell: True is bid, False ask.\n
         IF 0 <= ID-X < Cols, Return ID-X | Else, Return None.
         """
-        idx: int = int((timestamp - self.base_timestamp) // self.ims) * 2 + (
+        idx: int = int((timestamp - self.base_timestamp) // self.ims * 2) + (
             0 if is_sell else 1
         )
         if 0 <= idx < self.cols:

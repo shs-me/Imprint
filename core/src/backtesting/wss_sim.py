@@ -14,7 +14,6 @@ class WssSimAgent:
         self,
         mo: MonitorObj,
         cfg: dict,
-        encoder: msgspec.json.Encoder,
         sem_sleep_parsing: Semaphore,
         general_event: Event,
     ) -> None:
@@ -29,10 +28,10 @@ class WssSimAgent:
         self.cfg: dict = cfg
         self.file_path = self.cfg["argg"]["data_path"]
         # Encoder, Variables
-        self.encoder = encoder.encode
+        self.encoder: msgspec.json.Encoder = msgspec.json.Encoder()
         self.ottrade: int = 0  # old time trade
         self.nttrade: int = 0  # new time trade
-
+        self.symbol: str = str(self.cfg["argg"]["symbol"]).upper()
         # Semaphore, Event
         self.release_parser = sem_sleep_parsing
         self.wait_main = general_event
@@ -54,7 +53,6 @@ class WssSimAgent:
         warn_error_status: Semaphore,
     ) -> object | None:
         try:
-            encoder = msgspec.json.Encoder()
             # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
                 proc_name="network_sim",
@@ -65,7 +63,6 @@ class WssSimAgent:
             return WssSimAgent(
                 mo=mo,
                 cfg=cfg,
-                encoder=encoder,
                 general_event=general_event,
                 sem_sleep_parsing=sem_sleep_parsing,
             )
@@ -79,19 +76,25 @@ class WssSimAgent:
     # Also set, new time trade
     def _encode_data(
         self,
-        _id_m_,
-        encoder,
+        _id_m_: int,
+        encoder: msgspec.json.Encoder,
         _set_status,
         line: str,
     ) -> bytes | bool:
         try:
             data = line.strip().split(",")
-            raw_data: bytes = encoder(
+            raw_data: bytes = encoder.encode(
                 {
-                    "E": int(data[5]),  # transact_time
-                    "p": data[1],  # price
-                    "q": data[2],  # quantity
-                    "m": bool(data[6]),  # is_buyer_maker
+                    "e": "aggTrade",  # Event type
+                    "E": int(data[5]),  # Event time (Copy T)
+                    "a": int(data[0]),  # Aggregate trade ID
+                    "s": self.symbol,  # Symbol (from Config)
+                    "p": data[1],  # Price
+                    "q": data[2],  # Quantity
+                    "f": int(data[3]),  # First trade ID
+                    "l": int(data[4]),  # Last trade ID
+                    "T": int(data[5]),  # Trade time
+                    "m": data[6].lower() in ("true", "1"),  # Convert to bool
                 }
             )
             self.nttrade = int(data[5])
