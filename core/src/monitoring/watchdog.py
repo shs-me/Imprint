@@ -16,6 +16,8 @@ class WatchDog:
         shm_s: dict,
         sem_s: list,
         general_event: Event,
+        sleep_logic: Event,
+        writer_sleep: Event,
         warn_error_status: Semaphore,
     ):
         # initializarion
@@ -25,6 +27,8 @@ class WatchDog:
         self.status_buf = self._shms["status"]["buf"]
         # Semaphore's, Event
         self.general_event: Event = general_event
+        self.sleep_logic: Event = sleep_logic
+        self.writer_sleep: Event = writer_sleep
         self.warn_error_status = warn_error_status
         self.sem_s = sem_s
         # Variable's
@@ -44,6 +48,8 @@ class WatchDog:
         shm_s: dict,
         sem_s: list,
         general_event: Event,
+        sleep_logic: Event,
+        writer_sleep: Event,
         warn_error_status: Semaphore,
         file_path: str,
     ) -> object | None:
@@ -57,6 +63,8 @@ class WatchDog:
                 shm_s=shm_s,
                 sem_s=sem_s,
                 general_event=general_event,
+                sleep_logic=sleep_logic,
+                writer_sleep=writer_sleep,
                 warn_error_status=warn_error_status,
             )
 
@@ -241,8 +249,10 @@ class WatchDog:
                             return False
 
                     self._sems_clear()
+                    self.writer_sleep.clear()
+                    self.sleep_logic.clear()
                     self.general_event.set()
-                    time.sleep(0.1)
+                    time.sleep(0.5)
                     self.general_event.clear()
 
                 else:

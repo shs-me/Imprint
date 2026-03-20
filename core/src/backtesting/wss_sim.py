@@ -212,18 +212,15 @@ class WssSimAgent:
                                     ),
                                     bytes,
                                 ):
-                                    if (
-                                        _state := _set_raw_data(
-                                            ac=ac,
-                                            iw=iw,
-                                            hsib=hsib,
-                                            dsib=dsib,
-                                            _id_m_=_id_m_,
-                                            _set_status=_set_status,
-                                            raw_buf=_raw_buf,
-                                            raw_data=raw_data,
-                                        )
-                                        is True
+                                    if _state := _set_raw_data(
+                                        ac=ac,
+                                        iw=iw,
+                                        hsib=hsib,
+                                        dsib=dsib,
+                                        _id_m_=_id_m_,
+                                        _set_status=_set_status,
+                                        raw_buf=_raw_buf,
+                                        raw_data=raw_data,
                                     ):
                                         _release_parser.release()
 

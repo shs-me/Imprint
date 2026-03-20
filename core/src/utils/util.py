@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+
 class ConvertMetrics:
     def __init__(
         self,
@@ -9,6 +12,7 @@ class ConvertMetrics:
         cols: int,
         ims: int,
     ) -> None:
+        # Initialization
         self.tick_size: float = tick_size
         self.base_price: float = base_price
         self.base_timestamp: int = base_timestamp
@@ -16,6 +20,17 @@ class ConvertMetrics:
         self.lines: int = lines
         self.cols: int = cols
         self.ims: int = ims
+        # Init Session
+        self.precision: int = abs(
+            Decimal(str(self.tick_size)).normalize().as_tuple().exponent  # type: ignore
+        )
+
+    def round_to_tick(
+        self,
+        price: float,
+    ) -> float:
+        steps = round(price / self.tick_size)
+        return round(steps * self.tick_size, self.precision)
 
     def to_idy(
         self,
@@ -40,7 +55,7 @@ class ConvertMetrics:
         is_sell: True is bid, False ask.\n
         IF 0 <= ID-X < Cols, Return ID-X | Else, Return None.
         """
-        idx = round((timestamp - self.base_timestamp) / self.ims) * 2 + (
+        idx: int = ((timestamp - self.base_timestamp) // self.ims) * 2 + (
             0 if is_sell else 1
         )
         if 0 <= idx < self.cols:
@@ -55,7 +70,7 @@ class ConvertMetrics:
         """
         Return Price.
         """
-        price = self.base_price + (self.center - idy) * self.tick_size
+        price: float = self.base_price + ((self.center - idy) * self.tick_size)
         return price
 
     def to_timestamp(
@@ -65,8 +80,8 @@ class ConvertMetrics:
         """
         Return Timestamp.
         """
-        timestamp = (
-            round((idx - (0 if idx % 2 == 0 else 1)) / 2) * self.ims
+        timestamp: int = (
+            round((idx - (0 if idx % 2 == 0 else 1)) // 2) * self.ims
             + self.base_timestamp
         )
         return timestamp

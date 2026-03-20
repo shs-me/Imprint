@@ -1,5 +1,6 @@
 import struct
 import traceback
+from multiprocessing.synchronize import Event
 
 import numpy as np
 
@@ -9,11 +10,11 @@ from .. import ConvertMetrics, MonitorObj
 class BaseGridReader:
     def __init__(
         self,
-        _mo_: MonitorObj,
-        grid: np.ndarray,
-        cord: np.ndarray,
-        shm_grid: np.ndarray,
         cfg: dict,
+        _mo_: MonitorObj,
+        writer_sleep: Event,
+        grid: np.ndarray,
+        shm_grid: np.ndarray,
     ) -> None:
         # Initialization
         self.cfg = cfg
@@ -26,24 +27,6 @@ class BaseGridReader:
         self.ivl_m: int = self.cfg["grid"][
             "interval_min"
         ]  # Interval cluster in minutes
-        self.tick_size: float = 0.0  # tick size SYMBOL
-        # Init session
-        self.base_price = 0.0
-        self.base_timestamp = 0
-        self.center = 0  # Index, Center array for + -
-        self.ims = self.ivl_m * 60 * 1000  # Interval cluster in millisecond
-        # MetricsSHM
-        self._base_price_timestamp_offset: int = self.cfg["metrics"][
-            "base_price_and_timestamp"
-        ]
-        self._ts_id: int = self.cfg["metrics"]["tick_size"]
-        self._metrics_buf: memoryview = self._mo_.shms["metrics"]["buf"]
-        # Cord init
-        self.cord: np.ndarray = cord
-        self._ac: int = self.cfg["metrics"]["ac"]
-        self._flag_r: int = self.cfg["metrics"]["flag_r"]
-        self._flag_w: int = self.cfg["metrics"]["flag_w"]
-
         self.OHLCV_T_D_CT = [
             self.lines + 0,  # Open price
             self.lines + 1,  # High
@@ -55,10 +38,27 @@ class BaseGridReader:
             self.lines + 7,  # Count Trade
         ]
 
+        # Init session
+        self.base_price: float = 0.0
+        self.base_timestamp: int = 0
+        self.tick_size: float = 0.0  # tick size SYMBOL
+        self.center: int = 0  # Index, Center array for + -
+        self.ims: int = self.ivl_m * 60 * 1000  # Interval cluster in millisecond
+        # MetricsSHM
+        self._base_price_timestamp_offset: int = self.cfg["metrics"][
+            "base_price_and_timestamp"
+        ]
+        self._ts_id: int = self.cfg["metrics"]["tick_size"]
+        self._metrics_buf: memoryview = self._mo_.shms["metrics"]["buf"]
+        # Cord init
+        self.coord_offset: int = self.cfg["metrics"]["coord_offset"]
+        self.writer_sleep: Event = writer_sleep
+
     @staticmethod
     def create(
         cfg: dict,
         _mo_: MonitorObj,
+        writer_sleep: Event,
     ) -> object | None:
         try:
             shm_grid = np.ndarray(
@@ -72,19 +72,12 @@ class BaseGridReader:
                 dtype=np.float64,
             )
             grid[:] = 0.0
-            # Coordinaties
-            cord = np.ndarray(
-                ((cfg["metrics"]["lines"]), cfg["metrics"]["cols"]),
-                dtype=np.int32,
-                buffer=_mo_.shms["metrics"]["buf"],
-                offset=8192,
-            )
             return BaseGridReader(
-                _mo_=_mo_,
-                grid=grid,
-                cord=cord,
-                shm_grid=shm_grid,
                 cfg=cfg,
+                _mo_=_mo_,
+                writer_sleep=writer_sleep,
+                grid=grid,
+                shm_grid=shm_grid,
             )
 
         except Exception:
@@ -122,32 +115,36 @@ class BaseGridReader:
     # Get Coordinaties IDY:IDX from 2-D Array "Cord"
     def _get_cords(
         self,
-    ) -> tuple[int, int, float, int]:
-        _metrics_buf, _cord = self._metrics_buf, self.cord
-        _flag_r, _flag_w = self._flag_r, self._flag_w
+    ) -> tuple[int, int, float, int] | None:
+        _metrics_buf, _writer_sleep = self._metrics_buf, self.writer_sleep
+        _offset = self.coord_offset
         # - - -
-        # get start/end idy, idx
-        _row_w = _metrics_buf[_flag_w]  # get row where writer stopped
-        _row_r = _metrics_buf[_flag_r]  # get row where reader stopped
-        if _row_r > _row_w:
-            _row_r = 0
-
-        idy_s, idy_e = _cord[_row_r, 0], _cord[_row_w - 1, 0]
-        idx_s, idx_e = _cord[_row_r, 1], _cord[_row_w - 1, 1]
+        # get XYZ for slice
+        _writer_sleep.set()
+        coords: tuple[int, int, int, int, int, int] = struct.unpack(
+            "!HHHHHH", _metrics_buf[_offset : _offset + 12]
+        )
+        idy_min, idx_min, idy_max, idx_max, idy, idx = coords
         # update grid local
         self.grid[
-            min(idy_s, idy_e) : max(idy_s, idy_e), min(idx_s, idx_e) : max(idx_s, idx_e)
+            min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
+            min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
         ] = self.shm_grid[
-            min(idy_s, idy_e) : max(idy_s, idy_e), min(idx_s, idx_e) : max(idx_s, idx_e)
+            min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
+            min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
         ]
-        _metrics_buf[_flag_r] = _row_w
-
+        # reset
+        _metrics_buf[_offset : _offset + 12] = struct.pack(
+            "!HHHHHH", 65535, 65535, 0, 0, 0, 0
+        )
+        _writer_sleep.clear()
+        print(idy_min, idx_min, idy_max, idx_max, idy, idx, "\n")
         # convert idy, idx to price, timestamp
         price, timestamp = (
-            self.convert.to_price(idy_e),
-            self.convert.to_timestamp(idx_e),
+            self.convert.to_price(idy),
+            self.convert.to_timestamp(idx),
         )
-        return (idy_e, idx_e, price, timestamp)
+        return (idy, idx, price, timestamp)
 
     # Start
     def _check_update(
@@ -157,15 +154,16 @@ class BaseGridReader:
             if self._init_session() is False:
                 return False
 
-        _idy, _idx, _price, _timestamp = self._get_cords()
-        self.check_patterns(
-            idy=_idy,
-            idx=_idx,
-            price=_price,
-            timestamp=_timestamp,
-            grid=self.grid,
-        )
-        return True
+        if (data := self._get_cords()) is not None:
+            self.check_patterns(
+                idy=data[0],
+                idx=data[1],
+                price=data[2],
+                timestamp=data[3],
+                grid=self.grid,
+            )
+            return True
+        return False
 
     def check_patterns(
         self,
@@ -175,4 +173,4 @@ class BaseGridReader:
         timestamp: int,
         grid: np.ndarray,
     ):
-        print(idy, idx, price, timestamp)
+        pass

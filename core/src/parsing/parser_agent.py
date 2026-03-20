@@ -23,8 +23,9 @@ class ParserAgent:
         cfg: dict,
         decoder: msgspec.json.Decoder,
         sem_sleep_parsing: Semaphore,
-        sem_sleep_logic: Semaphore,
+        sleep_logic: Event,
         general_event: Event,
+        writer_sleep: Event,
     ) -> None:
         # initialization
         self._mo = mo
@@ -36,9 +37,9 @@ class ParserAgent:
 
         self.cfg = cfg
         self.acquire_wss = sem_sleep_parsing
-        self.release_logic = sem_sleep_logic
+        self.sleep_logic = sleep_logic
         self.wait_main = general_event
-
+        self.wait_reader = writer_sleep
         # variables
         self.decoder: msgspec.json.Decoder = decoder
         # RawSHM.buf
@@ -56,9 +57,10 @@ class ParserAgent:
     def create(
         cfg: dict,
         sem_sleep_parsing: Semaphore,
-        sem_sleep_logic: Semaphore,
+        sleep_logic: Event,
         parser_monitor: Semaphore,
         general_event: Event,
+        writer_sleep: Event,
         warn_error_status: Semaphore,
     ) -> object | None:
         try:
@@ -76,9 +78,10 @@ class ParserAgent:
                 mo=mo,
                 cfg=cfg,
                 decoder=decoder,
-                sem_sleep_logic=sem_sleep_logic,
+                sleep_logic=sleep_logic,
                 sem_sleep_parsing=sem_sleep_parsing,
                 general_event=general_event,
+                writer_sleep=writer_sleep,
             )
 
         except Exception:
@@ -152,9 +155,9 @@ class ParserAgent:
         ac, ir, hsib, sssd = self.ac, self._ir, self.hsib, self._sssd
         # SetRawMetrics
         # Semaphore, Event - LocalLink
-        _wait_main, _release_logic, _acquire_wss = (
+        _wait_main, _sleep_logic, _acquire_wss = (
             self.wait_main,
-            self.release_logic,
+            self.sleep_logic,
             self.acquire_wss,
         )
         # Methods - LocalLinks
@@ -164,7 +167,9 @@ class ParserAgent:
         )
         #  - - -
         try:
-            engine = GridEngine.create(_mo_=self._mo, cfg=self.cfg)
+            engine = GridEngine.create(
+                _mo_=self._mo, cfg=self.cfg, wait_reader=self.wait_reader
+            )
             if isinstance(engine, GridEngine):
                 while True:
                     try:
@@ -182,7 +187,7 @@ class ParserAgent:
                                 _set_status(_id_m_, 4)  # IDLE # TIME START
                                 _acquire_wss.acquire()
                                 if _get_status(_id_m_, proc=True):
-                                    _release_logic.release()
+                                    _sleep_logic.wait()
                                     break
 
                                 _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
@@ -217,7 +222,7 @@ class ParserAgent:
                                             is_sell=trade.m,
                                             timestamp=trade.E,
                                         ):
-                                            _release_logic.release()
+                                            _sleep_logic.set()
 
                                     elif trade is False:
                                         sys.exit()
@@ -244,18 +249,20 @@ class ParserAgent:
 def run_parsing(
     config: dict,
     sem_sleep_parsing: Semaphore,
-    sem_sleep_logic: Semaphore,
+    sleep_logic: Event,
     parser_monitor: Semaphore,
     general_event: Event,
+    writer_sleep: Event,
     warn_error_status: Semaphore,
 ) -> None:
     gc.disable()
     agent = ParserAgent.create(
         cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
-        sem_sleep_logic=sem_sleep_logic,
+        sleep_logic=sleep_logic,
         parser_monitor=parser_monitor,
         general_event=general_event,
+        writer_sleep=writer_sleep,
         warn_error_status=warn_error_status,
     )
     if isinstance(agent, ParserAgent):

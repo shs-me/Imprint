@@ -13,8 +13,9 @@ class LogicAgent:
         self,
         mo: MonitorObj,
         cfg: dict,
-        sem_sleep_logic: Semaphore,
+        sleep_logic: Event,
         general_event: Event,
+        writer_sleep: Event,
     ) -> None:
         # Initialization
         self._mo = mo
@@ -24,19 +25,20 @@ class LogicAgent:
             self._mo._status(daughter=False),
         )
 
-        self.cfg = cfg
-        self._algorithm_path = "algorithm"
-        self.acquire_parser = sem_sleep_logic
-        self.wait_main = general_event
-
+        self.cfg: dict = cfg
+        self._algorithm_path: str = "algorithm"
+        self.wait_parser: Event = sleep_logic
+        self.wait_main: Event = general_event
+        self.writer_sleep: Event = writer_sleep
 
     @staticmethod
     def create(
         cfg: dict,
-        sem_sleep_logic: Semaphore,
-        general_event: Event,
-        warn_error_status: Semaphore,
+        sleep_logic: Event,
         logic_monitor: Semaphore,
+        general_event: Event,
+        writer_sleep: Event,
+        warn_error_status: Semaphore,
     ) -> object | None:
         try:
             # Init SHM, profilingArray, StatusSHM
@@ -49,8 +51,9 @@ class LogicAgent:
             return LogicAgent(
                 mo=mo,
                 cfg=cfg,
-                sem_sleep_logic=sem_sleep_logic,
+                sleep_logic=sleep_logic,
                 general_event=general_event,
+                writer_sleep=writer_sleep,
             )
 
         except Exception:
@@ -83,11 +86,13 @@ class LogicAgent:
         # StatusAgents - LocalLink
         _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
         # Semaphore, Event - LocalLink
-        _wait_main, _acquire_parser = self.wait_main, self.acquire_parser
+        _wait_main, _wait_parser = self.wait_main, self.wait_parser
         # Methods - LocalLinks
         #  - - -
         try:
-            reader = BaseGridReader.create(self.cfg, self._mo)
+            reader = BaseGridReader.create(
+                cfg=self.cfg, _mo_=self._mo, writer_sleep=self.writer_sleep
+            )
             if isinstance(reader, BaseGridReader):
                 while True:
                     try:
@@ -96,16 +101,13 @@ class LogicAgent:
                         while True:
                             if _get_status(_id_m_) is not True:
                                 _set_status(_id_m_, 4)  # IDLE # TIME START
-                                while _acquire_parser.acquire(block=False):
-                                    pass
-
-                                _acquire_parser.acquire()
+                                _wait_parser.wait()
                                 if _get_status(_id_m_, proc=True):
                                     break
 
                                 _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
                                 reader._check_update()
-
+                                _wait_parser.clear()
                             else:
                                 sys.exit()
 
@@ -124,18 +126,20 @@ class LogicAgent:
 
 def run_logic(
     config: dict,
-    sem_sleep_logic: Semaphore,
+    sleep_logic: Event,
     logic_monitor: Semaphore,
     general_event: Event,
+    writer_sleep: Event,
     warn_error_status: Semaphore,
 ):
 
     gc.disable()
     agent = LogicAgent.create(
         cfg=config,
-        sem_sleep_logic=sem_sleep_logic,
+        sleep_logic=sleep_logic,
         logic_monitor=logic_monitor,
         general_event=general_event,
+        writer_sleep=writer_sleep,
         warn_error_status=warn_error_status,
     )
     if isinstance(agent, LogicAgent):

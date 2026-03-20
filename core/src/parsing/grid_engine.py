@@ -1,5 +1,6 @@
 import struct
 import traceback
+from multiprocessing.synchronize import Event
 
 import numpy as np
 
@@ -9,10 +10,10 @@ from .. import MonitorObj
 class GridEngine:
     def __init__(
         self,
-        _mo_: MonitorObj,
-        grid: np.ndarray,
-        cord: np.ndarray,
         cfg: dict,
+        _mo_: MonitorObj,
+        wait_reader: Event,
+        grid: np.ndarray,
     ) -> None:
         # Initialization
         self.cfg = cfg
@@ -30,23 +31,6 @@ class GridEngine:
             "interval_min"
         ]  # Interval cluster in minutes
         self.tick_size: float = 0.0  # tick size SYMBOL
-        # Init session
-        self.base_price = 0.0
-        self.base_timestamp = 0
-        self.center = 0  # Index, Center array for + -
-        self.ims = self.ivl_m * 60 * 1000  # Interval cluster in millisecond
-        # MetricsSHM
-        self._base_price_timestamp_offset: int = self.cfg["metrics"][
-            "base_price_and_timestamp"
-        ]
-        self._ts_id: int = self.cfg["metrics"]["tick_size"]
-        self._metrics_buf: memoryview = self._mo_.shms["metrics"]["buf"]
-        # Cord init
-        self.cord: np.ndarray = cord
-        self._ac: int = self.cfg["metrics"]["ac"]
-        self._flag_r: int = self.cfg["metrics"]["flag_r"]
-        self._flag_w: int = self.cfg["metrics"]["flag_w"]
-
         self.OHLCV_T_D_CT = [
             self.lines + 0,  # Open price
             self.lines + 1,  # High
@@ -58,10 +42,27 @@ class GridEngine:
             self.lines + 7,  # Count Trade
         ]
 
+        # Init session
+        self.base_price = 0.0
+        self.base_timestamp = 0
+        self.center = 0  # Index, Center array for + -
+        self.ims = self.ivl_m * 60 * 1000  # Interval cluster in millisecond
+
+        # MetricsSHM
+        self._base_price_timestamp_offset: int = self.cfg["metrics"][
+            "base_price_and_timestamp"
+        ]
+        self._ts_id: int = self.cfg["metrics"]["tick_size"]
+        self._metrics_buf: memoryview = self._mo_.shms["metrics"]["buf"]
+        # Cord init
+        self.coord_offset: int = self.cfg["metrics"]["coord_offset"]
+        self.wait_reader: Event = wait_reader
+
     @staticmethod
     def create(
         cfg: dict,
         _mo_: MonitorObj,
+        wait_reader: Event,
     ) -> object | None:
         try:
             grid = np.ndarray(
@@ -69,17 +70,11 @@ class GridEngine:
                 dtype=np.float64,
                 buffer=_mo_.shms["grid"]["buf"],
             )
-            cord = np.ndarray(
-                ((cfg["metrics"]["lines"]), cfg["metrics"]["cols"]),
-                dtype=np.int32,
-                buffer=_mo_.shms["metrics"]["buf"],
-                offset=8192,
-            )
             return GridEngine(
+                cfg=cfg,
                 _mo_=_mo_,
                 grid=grid,
-                cord=cord,
-                cfg=cfg,
+                wait_reader=wait_reader,
             )
 
         except Exception:
@@ -150,17 +145,30 @@ class GridEngine:
         self,
         idy: int,
         idx: int,
-    ) -> bool:
-        _metrics_buf = self._metrics_buf
-        _flag_r, _flag_w = self._flag_r, self._flag_w
+    ) -> bool | None:
+        _metrics_buf, _wait_reader = self._metrics_buf, self.wait_reader
+        _offset = self.coord_offset
         # - - -
-        _row = _metrics_buf[_flag_w]
-        if (_row + 1) < self._ac:
-            _metrics_buf[_flag_w] = _row + 1
-        else:
-            _metrics_buf[_flag_w] = 0
+        while _wait_reader.is_set():  # Reader work
+            pass
 
-        self.cord[_row] = idy, idx
+        coords: tuple[int, int, int, int] = struct.unpack(
+            "!HHHH", _metrics_buf[_offset : _offset + 8]
+        )
+        idy_min, idx_min, idy_max, idx_max = coords
+        if idy < idy_min:
+            idy_min = idy
+        if idy > idy_max:
+            idy_max = idy
+        if idx < idx_min:
+            idx_min = idx
+        if idx > idx_max:
+            idx_max = idx
+
+        _metrics_buf[_offset : _offset + 12] = struct.pack(
+            "!HHHHHH", idy_min, idx_min, idy_max, idx_max, idy, idx
+        )
+        print(idy_min, idx_min, idy_max, idx_max, idy, idx)
         return True
 
     def update(

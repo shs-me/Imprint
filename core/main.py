@@ -46,9 +46,10 @@ class RunMain:
         self.profiling_dump = cfg["argg"]["profiling_dump"]
         self.status_file = cfg["argg"]["status_file"]
         # Event, Semaphores init
-        # Module's sem's
+        # Module's sem's | Event's
         self.sem_sleep_parsing = Semaphore(0)
-        self.sem_sleep_logic = Semaphore(0)
+        self.sleep_logic = Event()
+        self.writer_sleep = Event()
         # Profiling sem's
         self._parser_monitor = Semaphore(0)
         self._logic_monitor = Semaphore(0)
@@ -59,7 +60,6 @@ class RunMain:
 
         self.sem_s = [
             self.sem_sleep_parsing,
-            self.sem_sleep_logic,
             self._parser_monitor,
             self._logic_monitor,
             self._network_monitor,
@@ -82,12 +82,14 @@ class RunMain:
 
     @staticmethod
     def create(
+        backtesting: bool,
         cfg_file: str,
     ) -> object | None:
         try:
             with open(cfg_file, "rb") as f:
                 config = tomllib.load(f)
 
+            config["argg"]["backtesting"] = 1 if backtesting else 0
             return RunMain(
                 cfg=config,
             )
@@ -169,17 +171,19 @@ class RunMain:
             return (
                 self.cfg["argg"],
                 self.sem_sleep_parsing,
-                self.sem_sleep_logic,
+                self.sleep_logic,
                 self._parser_monitor,
                 self.general_event,
+                self.writer_sleep,
                 self.warn_error_status,
             )
         elif proc_name == "LOGIC":
             return (
                 self.cfg["argg"],
-                self.sem_sleep_logic,
+                self.sleep_logic,
                 self._logic_monitor,
                 self.general_event,
+                self.writer_sleep,
                 self.warn_error_status,
             )
         elif proc_name == "NETWORK":
@@ -246,14 +250,14 @@ class RunMain:
                 self.shms,
                 self.sem_s,
                 self.general_event,
+                self.sleep_logic,
+                self.writer_sleep,
                 self.warn_error_status,
                 self.status_file,
             )
             # debug
             _offset = self.cfg["argg"]["metrics"]["tick_size"]
-            self.shms["metrics"]["buf"][_offset: _offset+8] = (
-                struct.pack("!d", 0.01)
-            )
+            self.shms["metrics"]["buf"][_offset : _offset + 8] = struct.pack("!d", 0.01)
             # - - -
             if isinstance(_watchdog, WatchDog):
                 self._sc = _watchdog.sc
@@ -294,6 +298,7 @@ class RunMain:
 
 # Start Core Func
 def run_core(
+    backtesting=True,
     cfg_path="core/config.toml",
 ):
     logger.remove()
@@ -307,6 +312,7 @@ def run_core(
     gc.disable()
 
     state = RunMain.create(
+        backtesting=True,
         cfg_file=cfg_path,
     )
     if isinstance(state, RunMain):
