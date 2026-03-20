@@ -126,13 +126,16 @@ class BaseGridReader:
         )
         idy_min, idx_min, idy_max, idx_max, idy, idx = coords
         # update grid local
-        self.grid[
-            min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
-            min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
-        ] = self.shm_grid[
-            min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
-            min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
-        ]
+        np.copyto(
+            self.grid[
+                min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
+                min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
+            ],
+            self.shm_grid[
+                min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
+                min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
+            ],
+        )
         # reset
         _metrics_buf[_offset : _offset + 12] = struct.pack(
             "!HHHHHH", 65535, 65535, 0, 0, 0, 0

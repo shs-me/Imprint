@@ -102,13 +102,17 @@ class GridEngine:
             self._metrics_buf[_bpat : (8 * 2 + _bpat)] = struct.pack(
                 "!dq", price, ((timestamp // self.ims) * self.ims)
             )
+            # coord
+            self._metrics_buf[self.coord_offset : self.coord_offset + 12] = struct.pack(
+                "!HHHHHH", 65535, 65535, 0, 0, 0, 0
+            )
             return True
 
         else:
             set_status(_id_m_, 100)  # Warn in this IF
             return False
 
-    # Update Headers Claster: Data OHLC,V,CT,D,T
+    # Update Headers Cluster: Data OHLC,V,CT,D,T
     def update_headers(
         self,
         idx: int,
@@ -140,7 +144,7 @@ class GridEngine:
         grid[OHLCV_T_D_CT[4], idx] += qty
         grid[OHLCV_T_D_CT[6], idx] += -qty if is_sell else qty
 
-    # Set Coordinaties IDY:IDX on 2-D Array "Cord"
+    # Set Coordinates IDY:IDX on 2-D Array "Cord"
     def set_cords(
         self,
         idy: int,
@@ -196,8 +200,8 @@ class GridEngine:
             ):
                 return False
 
-        idy = round(((self.base_price - price) / self.tick_size) + self.center)
-        idx = round((timestamp - self.base_timestamp) / self.ims * 2) + (
+        idy: int = round((self.base_price - price) / self.tick_size) + self.center
+        idx: int = round((timestamp - self.base_timestamp) / self.ims * 2) + (
             0 if is_sell else 1
         )
 
