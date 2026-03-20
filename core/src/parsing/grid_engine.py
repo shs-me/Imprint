@@ -4,7 +4,7 @@ from multiprocessing.synchronize import Event
 
 import numpy as np
 
-from .. import MonitorObj
+from .. import ConvertMetrics, MonitorObj
 
 
 class GridEngine:
@@ -102,9 +102,21 @@ class GridEngine:
             self._metrics_buf[_bpat : (8 * 2 + _bpat)] = struct.pack(
                 "!dq", price, ((timestamp // self.ims) * self.ims)
             )
+
             # coord
             self._metrics_buf[self.coord_offset : self.coord_offset + 12] = struct.pack(
                 "!HHHHHH", 65535, 65535, 0, 0, 0, 0
+            )
+
+            # Init Converter
+            self.convert: ConvertMetrics = ConvertMetrics(
+                tick_size=self.tick_size,
+                base_price=self.base_price,
+                base_timestamp=self.base_timestamp,
+                center=self.center,
+                lines=self.lines,
+                cols=self.cols,
+                ims=self.ims,
             )
             return True
 
@@ -200,13 +212,10 @@ class GridEngine:
             ):
                 return False
 
-        idy: int = round((self.base_price - price) / self.tick_size) + self.center
-        idx: int = round((timestamp - self.base_timestamp) / self.ims * 2) + (
-            0 if is_sell else 1
-        )
-
-        if 0 <= idx < self.cols:
-            if 0 <= idy < self.lines:
+        idy: int | None = self.convert.to_idy(price=price)
+        idx: int | None = self.convert.to_idx(timestamp=timestamp, is_sell=is_sell)
+        if idx is not None:
+            if idy is not None:
                 self.grid[idy, idx] += qty  # update cluster
                 self.update_headers(
                     idx=idx,

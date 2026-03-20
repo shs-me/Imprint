@@ -39,7 +39,7 @@ class ConvertMetrics:
         """
         IF 0 <= ID-Y < Lines, Return ID-Y | Else, Return None
         """
-        idy = round(((self.base_price - price) / self.tick_size)) + self.center
+        idy = int((self.base_price - price) // self.tick_size) + self.center
 
         if 0 <= idy < self.lines:
             return idy
@@ -55,7 +55,7 @@ class ConvertMetrics:
         is_sell: True is bid, False ask.\n
         IF 0 <= ID-X < Cols, Return ID-X | Else, Return None.
         """
-        idx: int = round((timestamp - self.base_timestamp) / self.ims) * 2 + (
+        idx: int = int((timestamp - self.base_timestamp) // self.ims) * 2 + (
             0 if is_sell else 1
         )
         if 0 <= idx < self.cols:
@@ -81,7 +81,6 @@ class ConvertMetrics:
         Return Timestamp.
         """
         timestamp: int = (
-            round((idx - (0 if idx % 2 == 0 else 1)) / 2) * self.ims
-            + self.base_timestamp
-        )
+            (idx - (0 if idx % 2 == 0 else 1)) // 2
+        ) * self.ims + self.base_timestamp
         return timestamp
