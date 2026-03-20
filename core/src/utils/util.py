@@ -1,6 +1,3 @@
-from decimal import Decimal
-
-
 class ConvertMetrics:
     def __init__(
         self,
@@ -21,16 +18,16 @@ class ConvertMetrics:
         self.cols: int = cols
         self.ims: int = ims
         # Init Session
-        self.precision: int = abs(
-            Decimal(str(self.tick_size)).normalize().as_tuple().exponent  # type: ignore
-        )
+        self.precision: int = 0
 
     def round_to_tick(
         self,
         price: float,
-    ) -> float:
-        steps = round(price / self.tick_size)
-        return round(steps * self.tick_size, self.precision)
+    ) -> int | float:
+        tick_size = self.tick_size
+        precision = len(str(tick_size).split(".")[-1]) if "." in str(tick_size) else 0
+        clear_price = round(round(price / tick_size) * tick_size, precision)
+        return clear_price
 
     def to_idy(
         self,

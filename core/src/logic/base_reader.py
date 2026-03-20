@@ -175,4 +175,5 @@ class BaseGridReader:
         timestamp: int,
         grid: np.ndarray,
     ):
-        print(idy, idx, price, timestamp)
+        _price = self.convert.round_to_tick(price)
+        print(idy, idx, _price, timestamp)  # debug
