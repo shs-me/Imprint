@@ -247,6 +247,7 @@ class MonitorObj:
                     np.savetxt(
                         file_path,
                         _X_,
+                        fmt="%d",
                         delimiter=",",
                     )
 

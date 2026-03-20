@@ -155,7 +155,7 @@ class MonitoringAgent:
             _dgheaders[2, _col] = (_oscode + 1) if (_oscode + 1) != 6 else 4
             _dgheaders[3, _col] = _ntimens
             if 0 < _otimens < _ntimens:
-                diff_wait_or_work: int = (_ntimens - _otimens) / 1000 // 1000
+                diff_wait_or_work: int = (_ntimens - _otimens) // 1000
                 if _oscode == 4:
                     _dgheaders[4, _col] = diff_wait_or_work
                 if _oscode == 5:

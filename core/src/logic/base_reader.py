@@ -141,7 +141,6 @@ class BaseGridReader:
             "!HHHHHH", 65535, 65535, 0, 0, 0, 0
         )
         _writer_sleep.clear()
-        print(idy_min, idx_min, idy_max, idx_max, idy, idx, "\n")
         # convert idy, idx to price, timestamp
         price, timestamp = (
             self.convert.to_price(idy),
@@ -176,4 +175,4 @@ class BaseGridReader:
         timestamp: int,
         grid: np.ndarray,
     ):
-        pass
+        print(idy, idx, price, timestamp)
