@@ -1,12 +1,77 @@
 import gc
-import sys
 import time
 import traceback
+from collections import deque
 from multiprocessing.synchronize import Event, Semaphore
+from threading import Thread
 
 import msgspec
 
 from .. import MonitorObj
+
+
+class AggTradeSim(msgspec.Struct):
+    e: str  # Event name
+    E: int  # Event time
+    a: int  # Agg Trade id
+    s: str  # Symbol
+    p: str  # Price
+    q: str  # Quantity
+    f: int  # First trade id
+    l: int  # Last trade id # noqa
+    T: int  # Trade time
+    m: bool  # Is buyer maker
+
+
+class DataPrepper:
+    def __init__(
+        self,
+        config: dict,
+    ) -> None:
+        # Initialization
+        self.cfg: dict = config
+        self.file_path = self.cfg["argg"]["data_path"]
+        self.symbol: str = str(self.cfg["argg"]["symbol"]).upper()
+        self.queue = deque(maxlen=10000)
+        self.is_running = True
+        self.error = None
+
+    def start(
+        self,
+    ) -> None:
+        "Run Daemon Thread"
+        Thread(target=self._run, daemon=True).start()
+
+    def _run(
+        self,
+    ) -> None:
+        try:
+            with open(self.file_path, "r") as f:
+                next(f)
+                for line in f:
+                    if not self.is_running:
+                        break
+
+                    d = line.strip().split(",")
+                    obj = AggTradeSim(
+                        e="aggTrade",
+                        E=int(d[5]),
+                        a=int(d[0]),
+                        s=self.symbol,
+                        p=d[1],
+                        q=d[2],
+                        f=int(d[3]),
+                        l=int(d[4]),
+                        T=int(d[5]),
+                        m=(d[6] in ("true", "1")),
+                    )
+                    self.queue.append(obj)
+                    while len(self.queue) == self.queue.maxlen:
+                        time.sleep(0.001)
+
+        except Exception as e:
+            self.error = f"Prepper Error: {e}\n{traceback.format_exc()}"
+            self.is_running = False
 
 
 class WssSimAgent:
@@ -26,12 +91,10 @@ class WssSimAgent:
         )
 
         self.cfg: dict = cfg
-        self.file_path = self.cfg["argg"]["data_path"]
         # Encoder, Variables
         self.encoder: msgspec.json.Encoder = msgspec.json.Encoder()
         self.ottrade: int = 0  # old time trade
         self.nttrade: int = 0  # new time trade
-        self.symbol: str = str(self.cfg["argg"]["symbol"]).upper()
         # Semaphore, Event
         self.release_parser = sem_sleep_parsing
         self.wait_main = general_event
@@ -72,32 +135,19 @@ class WssSimAgent:
             warn_error_status.release()
             return None
 
-    # Encode ListStr to Bytes Json structure
+    # Encode AggTradeSim Obj to Bytes Json structure
     # Also set, new time trade
     def _encode_data(
         self,
         _id_m_: int,
         encoder: msgspec.json.Encoder,
         _set_status,
-        line: str,
+        prepper,
     ) -> bytes | bool:
         try:
-            data = line.strip().split(",")
-            raw_data: bytes = encoder.encode(
-                {
-                    "e": "aggTrade",  # Event type
-                    "E": int(data[5]),  # Event time (Copy T)
-                    "a": int(data[0]),  # Aggregate trade ID
-                    "s": self.symbol,  # Symbol (from Config)
-                    "p": data[1],  # Price
-                    "q": data[2],  # Quantity
-                    "f": int(data[3]),  # First trade ID
-                    "l": int(data[4]),  # Last trade ID
-                    "T": int(data[5]),  # Trade time
-                    "m": data[6].lower() in ("true", "1"),  # Convert to bool
-                }
-            )
-            self.nttrade = int(data[5])
+            obj = prepper.queue.popleft()
+            raw_data = encoder.encode(obj)
+            self.nttrade = obj.E
             return raw_data
 
         except Exception:
@@ -164,81 +214,77 @@ class WssSimAgent:
     def run_wss_sim_engine(
         self,
     ) -> None:
-        # JSON Encoder, SHM.Buf - LocalLink
-        _raw_buf, _encoder = self.raw_buf, self.encoder
-        # StatusAgents - LocalLink
-        _id_m_, _set_status, _get_status = (
-            self._id_m_,
-            self._set,
-            self._get,
-        )
-        # SetRawData - LocalLink
+        # Local Links
+        _release_parser = self.release_parser  # Semaphore
+        _raw_buf = self.raw_buf  # RawShM.buf
+        _encoder = self.encoder  # JSON msgspec Encoder
+        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
         ac, iw, hsib, dsib, sssd = self.ac, self._iw, self.hsib, self.dsib, self._sssd
-        # Semaphore, Event - LocalLink
-        _wait_main, _release_parser = self.wait_main, self.release_parser
-        # Methods - LocalLinks
         _set_raw_data, _encode_data, _time_to_sleep = (
             self._set_raw_data,
             self._encode_data,
             self._time_to_sleep,
         )
-        # Other - LocalLink
-        _file_path = self.file_path
         # - - -
         while True:
             try:
                 gc.collect()
-                _wait_main.wait()
+                self.wait_main.wait()
                 _set_status(_id_m_, 4)  # IDLE
+                prepper = DataPrepper(config=self.cfg)
                 while _raw_buf[sssd] != 1:
                     time.sleep(0.1)
-                try:
-                    with open(_file_path, "r") as f:
-                        next(f)
-                        for line in f:
-                            if _get_status(_id_m_) is not True:
-                                _set_status(_id_m_, 4)  # Sleep
-                                time.sleep(_time_to_sleep())
-                                if _get_status(_id_m_, proc=True):
-                                    _release_parser.release()
-                                    break
 
-                                _set_status(_id_m_, 5)  # WakeUp
-                                if isinstance(
-                                    (
-                                        raw_data := _encode_data(
-                                            _id_m_,
-                                            _encoder,
-                                            _set_status,
-                                            line,
-                                        )
-                                    ),
-                                    bytes,
+                prepper.start()
+                while True:
+                    if _get_status(_id_m_) is not True:
+                        _set_status(_id_m_, 4)  # Sleep
+                        if _get_status(_id_m_, proc=True):
+                            _release_parser.release()
+                            break
+
+                        if prepper.error is None:
+                            if not prepper.queue:
+                                time.sleep(0.0001)
+                                continue
+
+                            time.sleep(_time_to_sleep())
+                            _set_status(_id_m_, 5)  # WakeUp
+                            if isinstance(
+                                (
+                                    raw_data := _encode_data(
+                                        _id_m_,
+                                        _encoder,
+                                        _set_status,
+                                        prepper,
+                                    )
+                                ),
+                                bytes,
+                            ):
+                                if _state := _set_raw_data(
+                                    ac=ac,
+                                    iw=iw,
+                                    hsib=hsib,
+                                    dsib=dsib,
+                                    _id_m_=_id_m_,
+                                    _set_status=_set_status,
+                                    raw_buf=_raw_buf,
+                                    raw_data=raw_data,
                                 ):
-                                    if _state := _set_raw_data(
-                                        ac=ac,
-                                        iw=iw,
-                                        hsib=hsib,
-                                        dsib=dsib,
-                                        _id_m_=_id_m_,
-                                        _set_status=_set_status,
-                                        raw_buf=_raw_buf,
-                                        raw_data=raw_data,
-                                    ):
-                                        _release_parser.release()
+                                    _release_parser.release()
 
-                                    else:
-                                        if _state is False:
-                                            pass
                                 else:
-                                    if raw_data is False:
+                                    if _state is False:
                                         pass
                             else:
-                                sys.exit()
-
-                except FileNotFoundError:
-                    _set_status(_id_m_, 151)
-                    break
+                                if raw_data is False:
+                                    pass
+                        else:
+                            _set_status(self._id_m_, 151)
+                            print(prepper.error)  # Debug
+                            continue
+                    else:
+                        break
 
             except Exception:
                 traceback.print_exc()  # Debug

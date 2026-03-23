@@ -122,8 +122,6 @@ class MonitoringAgent:
 
             _value += 2  # next [index+status]
 
-        self.dgheaders = _dgheaders  # Update Headers
-
     def _reset_headers(
         self,
         _dgheaders: np.ndarray,
@@ -161,8 +159,6 @@ class MonitoringAgent:
                 if _oscode == 5:
                     _dgheaders[5, _col] = diff_wait_or_work
 
-            self.dgheaders = _dgheaders
-
         # Else: Don't update Headers
 
     def _profiling(
@@ -179,7 +175,8 @@ class MonitoringAgent:
             # - - -
             return
 
-        _send_udp(_dgheaders[4, 2], _dgheaders[4, 0], _dgheaders[4, 1])
+        # print(_dgheaders[5, 2], _dgheaders[5, 0], _dgheaders[5, 1])
+        _send_udp(_dgheaders[5, 2], _dgheaders[5, 0], _dgheaders[5, 1])
         _diff_wss_parser, _diff_parser_logic = (
             int((_times[0] - _times[2]) // 1000),
             int((_times[1] - _times[0]) // 1000),
@@ -227,7 +224,12 @@ class MonitoringAgent:
             try:
                 gc.collect()
                 _wait_main.wait()
-                _init_session(_dgcols, _dgheaders, _sems, profiling_buf)
+                _init_session(
+                    _dgcols,
+                    _dgheaders,
+                    _sems,
+                    profiling_buf,
+                )
                 _counter = 0
                 while True:
                     if any(_sem.get_value() > 0 for _sem in _sems.values()):
