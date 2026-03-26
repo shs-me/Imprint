@@ -8,6 +8,7 @@ from multiprocessing.synchronize import Event, Semaphore
 import numpy as np
 from loguru import logger
 
+from .. import Config
 from . import MonitorObj
 
 # Configuration
@@ -19,31 +20,30 @@ DELAY = 0.1  # 10ms interval
 class MonitoringAgent:
     def __init__(
         self,
+        backtesting: bool,
         mo: MonitorObj,
-        cfg: dict,
         general_event: Event,
         parser_monitor: Semaphore,
         logic_monitor: Semaphore,
         network_monitor: Semaphore,
-    ):
+    ) -> None:
         # Initialization
-        self.cfg = cfg
-        self.profiling_dump_path = self.cfg["profiling_dump_csv"]
-        self.pheaders_dump_path = self.cfg["pheaders_dump_csv"]
+        self.profiling_dump_path = Config.CorePath.profiling_csv
+        self.pheaders_dump_path = Config.CorePath.pheaders_csv
         self._mo = mo
-        self.wait_main: Event = general_event
-
-        # AgentsProfiling init
+        self.wait_main = general_event
         # Semaphore's
-        self.parser_monitor: Semaphore = parser_monitor
-        self.logic_monitor: Semaphore = logic_monitor
-        self.network_monitor: Semaphore = network_monitor
+        self.parser_monitor = parser_monitor
+        self.logic_monitor = logic_monitor
+        self.network_monitor = network_monitor
         # Index's on StatusShm
-        self._id_mp: int = self.cfg["status"]["parsing"]["m"]
-        self._id_ml: int = self.cfg["status"]["logic"]["m"]
-        self._id_mn: int = self.cfg["status"][
-            "network_sim" if self.cfg["backtesting"] else "network"
-        ]["m"]
+        self._id_mp = Config.CoreConfig.Status.parsing.id_m
+        self._id_ml = Config.CoreConfig.Status.logic.id_m
+        if backtesting:
+            self._id_mn = Config.CoreConfig.Status.network_sim.id_m
+        else:
+            self._id_mn = Config.CoreConfig.Status.network.id_m
+
         # Items: ID: Semaphore
         self.sems = {
             self._id_mp: parser_monitor,
@@ -52,8 +52,7 @@ class MonitoringAgent:
         }
 
         # SHMS
-        self.profiling_buf: memoryview = self._mo._profiling_buf
-
+        self.shm_buf: memoryview = self._mo._profiling_buf
         # ProfilingArray
         self.dglines: int = self._mo.dglines
         self.dgcols: int = self._mo.dgcols
@@ -64,7 +63,7 @@ class MonitoringAgent:
 
     @staticmethod
     def create(
-        config: dict,
+        backtesting: bool,
         general_event: Event,
         parser_monitor: Semaphore,
         logic_monitor: Semaphore,
@@ -72,15 +71,13 @@ class MonitoringAgent:
         warn_error_status: Semaphore,
     ) -> object | None:
         try:
-            # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
-                proc_name="profiling",
-                config=config,
+                proc_name=Config.CoreConfig.Profiling.__name__,
                 warn_error_status=warn_error_status,
             )
             return MonitoringAgent(
+                backtesting=backtesting,
                 mo=mo,
-                cfg=config,
                 general_event=general_event,
                 parser_monitor=parser_monitor,
                 logic_monitor=logic_monitor,
@@ -94,89 +91,72 @@ class MonitoringAgent:
 
     def _init_session(
         self,
-        _dgcols: int,
-        _dgheaders: np.ndarray,
-        _sems: dict[int, Semaphore],
-        profiling_buf: memoryview,
+        cols: int,
+        dgheaders: np.ndarray,
+        sems: dict[int, Semaphore],
+        shm_buf: memoryview,
     ) -> None:
-        _ids_scs = struct.unpack_from(
-            f"!{'i' * (_dgcols * 2)}", profiling_buf[: (_dgcols * 8)]
+        ids_scs = struct.unpack_from(
+            f"!{'i' * (cols * 2)}", shm_buf[: (cols * 8)]
         )  # index's and status code's
         # Example: (1000 # index in array, 4 status ping, 10001, 5, ...)
         _value = 1
-        for _col in range(_dgcols):
-            _m_id = int(profiling_buf[(64 + _col)])  # Get ID Module
-            _sems[_col] = _sems.pop(_m_id)  # Replaces ID_M, COL
+        for _col in range(cols):
+            m_id = int(shm_buf[(64 + _col)])  # Get ID Module
+            sems[_col] = sems.pop(m_id)  # Replaces ID_M, COL
 
             # Init Headers
-            _dgheaders[0, _col] = _ids_scs[_value - 1]  # set index line
-            _dgheaders[1, _col] = int(profiling_buf[(64 + _col)])  # set id module
-            _dgheaders[2, _col] = (
-                _ids_scs[_value] if _ids_scs[_value] != 0 else 4
+            dgheaders[0, _col] = ids_scs[_value - 1]  # set index line
+            dgheaders[1, _col] = int(shm_buf[(64 + _col)])  # set id module
+            dgheaders[2, _col] = (
+                ids_scs[_value] if ids_scs[_value] != 0 else 4
             )  # set status code ping
-            _dgheaders[3, _col] = self.dgarray[
-                _ids_scs[_value - 1], _col
+            dgheaders[3, _col] = self.dgarray[
+                ids_scs[_value - 1], _col
             ]  # set time nanosecond
-            _dgheaders[4, _col] = 0  # set diff_wait
-            _dgheaders[5, _col] = 0  # set diff_work
+            dgheaders[4, _col] = 0  # set diff_wait
+            dgheaders[5, _col] = 0  # set diff_work
 
             _value += 2  # next [index+status]
 
-    def _reset_headers(
-        self,
-        _dgheaders: np.ndarray,
-        _dgcols: int,
-    ) -> None:
+    def _reset_headers(self, _dgheaders: np.ndarray, _dgcols: int) -> None:
         for _col in range(_dgcols):
             _dgheaders[0, _col] = 0
             _dgheaders[2, _col] = 4
             _dgheaders[3, _col] = 0
 
-        self.dgheaders = _dgheaders
-
     def _read_profile(
-        self,
-        _col: int,
-        _dglines: int,
-        _dgarray: np.ndarray,
-        _dgheaders: np.ndarray,
+        self, _col: int, lines: int, dgarray: np.ndarray, dgheaders: np.ndarray
     ) -> None:
-        _oline, _oscode, _otimens = (
-            _dgheaders[0, _col],
-            _dgheaders[2, _col],
-            _dgheaders[3, _col],
-        )
-        _nline = (_oline + 1) % _dglines
+        oline: int = dgheaders[0, _col]
+        oscode: int = dgheaders[2, _col]
+        otimens: int = dgheaders[3, _col]
+        nline: int = (oline + 1) % lines
         # True: Update Headers
-        if (_ntimens := _dgarray[_nline, _col]) > _otimens:
-            _dgheaders[0, _col] = _nline
-            _dgheaders[2, _col] = (_oscode + 1) if (_oscode + 1) != 6 else 4
-            _dgheaders[3, _col] = _ntimens
-            if 0 < _otimens < _ntimens:
-                diff_wait_or_work: int = (_ntimens - _otimens) // 1000
-                if _oscode == 4:
-                    _dgheaders[4, _col] = diff_wait_or_work
-                if _oscode == 5:
-                    _dgheaders[5, _col] = diff_wait_or_work
+        if (ntimens := dgarray[nline, _col]) > otimens:
+            dgheaders[0, _col] = nline
+            dgheaders[2, _col] = (oscode + 1) if (oscode + 1) != 6 else 4
+            dgheaders[3, _col] = ntimens
+            if 0 < otimens < ntimens:
+                diff_wait_or_work: int = (ntimens - otimens) // 1000
+                if oscode == 4:
+                    dgheaders[4, _col] = diff_wait_or_work
+                if oscode == 5:
+                    dgheaders[5, _col] = diff_wait_or_work
 
         # Else: Don't update Headers
 
     def _profiling(
-        self,
-        _dglines: int,
-        _dgarray: np.ndarray,
-        _dgheaders: np.ndarray,
-        _send_udp,
+        self, lines: int, dgarray: np.ndarray, dgheaders: np.ndarray, send_udp
     ) -> None:
-        _times: np.ndarray = _dgheaders[3]  # Get last ping agents, time_ns
+        _times: np.ndarray = dgheaders[3]  # Get last ping agents, time_ns
         arr = np.where(_times == 0)[0]
 
         if len(arr) > 0:
             # - - -
             return
 
-        # print(_dgheaders[5, 2], _dgheaders[5, 0], _dgheaders[5, 1])
-        _send_udp(_dgheaders[5, 2], _dgheaders[5, 0], _dgheaders[5, 1])
+        send_udp(dgheaders[5, 2], dgheaders[5, 0], dgheaders[5, 1])
         _diff_wss_parser, _diff_parser_logic = (
             int((_times[0] - _times[2]) // 1000),
             int((_times[1] - _times[0]) // 1000),
@@ -185,38 +165,25 @@ class MonitoringAgent:
         # Diff microsecond > 5 second in microsecond == True
         if int((_max - _min) // 1000) > (5000 * 1000):
             _col = int(np.where(_times == _min)[0][0])  # Get index min on line
-            _id_m = _dgheaders[1, _col]  # Get min ID-module
+            id_m = dgheaders[1, _col]  # Get min ID-module
             # ID min not have status Warn & Error in StatusSHM == True
-            if self._mo.get_(_id_m) is not True:
-                if _dgheaders[2, _col] == 4:  # Sleep when other work
-                    self._mo.set_(_id_m, 50)  # Set Status Warn, Module min
+            if self._mo.get_(id_m) is not True:
+                if dgheaders[2, _col] == 4:  # Sleep when other work
+                    self._mo.set_(id_m, 50)  # Set Status Warn, Module min
                 else:  # Maybe stuck after "WakeUp"
-                    self._mo.set_(_id_m, 51)  # Set Status Warn, Module min
+                    self._mo.set_(id_m, 51)  # Set Status Warn, Module min
 
     def _send_udp(self, val1, val2, val3) -> None:
         data = struct.pack("!qqq", val1, val2, val3)
         self.sock.sendto(data, (UDP_IP, UDP_PORT))
 
-    def run_profilling_engine(
-        self,
-    ) -> None:
-        # Semaphore, Event - LocalLink
-        _sems, _wait_main = self.sems, self.wait_main
-        # profilingArray - LocalLinks
-        _dgarray, _dgheaders, _dglines, _dgcols, profiling_buf = (
-            self.dgarray,
-            self.dgheaders,
-            self.dglines,
-            self.dgcols,
-            self.profiling_buf,
-        )
-        # Methods - LocalLinks
-        _init_session, _reset_headers, _read_profile, _profiling = (
-            self._init_session,
-            self._reset_headers,
-            self._read_profile,
-            self._profiling,
-        )
+    def run_profilling_engine(self) -> None:
+        # LocalLink
+        _sems, _wait_main, _shm_buf = self.sems, self.wait_main, self.shm_buf
+        _dgarray, _dgheaders = self.dgarray, self.dgheaders
+        _dglines, _dgcols = self.dglines, self.dgcols
+        _init_session, _reset_headers = self._init_session, self._reset_headers
+        _read_profile, _profiling = self._read_profile, self._profiling
         # - - -
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         _send_udp = self._send_udp
@@ -225,10 +192,10 @@ class MonitoringAgent:
                 gc.collect()
                 _wait_main.wait()
                 _init_session(
-                    _dgcols,
-                    _dgheaders,
-                    _sems,
-                    profiling_buf,
+                    cols=_dgcols,
+                    dgheaders=_dgheaders,
+                    sems=_sems,
+                    shm_buf=_shm_buf,
                 )
                 _counter = 0
                 while True:
@@ -239,17 +206,17 @@ class MonitoringAgent:
                                 for _ in range(_count):
                                     _sem.acquire(block=False)
                                     _read_profile(
-                                        _col,
-                                        _dglines,
-                                        _dgarray,
-                                        _dgheaders,
+                                        _col=_col,
+                                        lines=_dglines,
+                                        dgarray=_dgarray,
+                                        dgheaders=_dgheaders,
                                     )
 
                         _profiling(
-                            _dglines,
-                            _dgarray,
-                            _dgheaders,
-                            _send_udp,
+                            lines=_dglines,
+                            dgarray=_dgarray,
+                            dgheaders=_dgheaders,
+                            send_udp=_send_udp,
                         )
 
                     else:
@@ -281,7 +248,7 @@ class MonitoringAgent:
 
 
 def run_monitoring(
-    config: dict,
+    backtesting: bool,
     general_event: Event,
     parser_monitor: Semaphore,
     logic_monitor: Semaphore,
@@ -298,7 +265,7 @@ def run_monitoring(
 
     gc.disable()
     agent = MonitoringAgent.create(
-        config=config,
+        backtesting=backtesting,
         general_event=general_event,
         parser_monitor=parser_monitor,
         logic_monitor=logic_monitor,

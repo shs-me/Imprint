@@ -7,7 +7,7 @@ from threading import Thread
 
 import msgspec
 
-from .. import MonitorObj
+from ... import Config, MonitorObj
 
 
 class AggTradeSim(msgspec.Struct):
@@ -24,27 +24,19 @@ class AggTradeSim(msgspec.Struct):
 
 
 class DataPrepper:
-    def __init__(
-        self,
-        config: dict,
-    ) -> None:
+    def __init__(self) -> None:
         # Initialization
-        self.cfg: dict = config
-        self.file_path = self.cfg["argg"]["data_path"]
-        self.symbol: str = str(self.cfg["argg"]["symbol"]).upper()
+        self.file_path = Config.CorePath.data_csv
+        self.symbol: str = Config.UserConfig.symbol.upper()
         self.queue = deque(maxlen=10000)
         self.is_running = True
         self.error = None
 
-    def start(
-        self,
-    ) -> None:
+    def start(self) -> None:
         "Run Daemon Thread"
         Thread(target=self._run, daemon=True).start()
 
-    def _run(
-        self,
-    ) -> None:
+    def _run(self) -> None:
         try:
             with open(self.file_path, "r") as f:
                 next(f)
@@ -78,19 +70,14 @@ class WssSimAgent:
     def __init__(
         self,
         mo: MonitorObj,
-        cfg: dict,
         sem_sleep_parsing: Semaphore,
         general_event: Event,
     ) -> None:
         # Initialization
+        core_cfg = Config.CoreConfig()
         self._mo = mo
-        self._get, self._set, self._id_m_ = (
-            self._mo.get_,
-            self._mo.set_,
-            self._mo._status(daughter=False),
-        )
-
-        self.cfg: dict = cfg
+        self._id_m_ = self._mo._id_m
+        self._set, self._get = self._mo.set_, self._mo.get_
         # Encoder, Variables
         self.encoder: msgspec.json.Encoder = msgspec.json.Encoder()
         self.ottrade: int = 0  # old time trade
@@ -99,35 +86,29 @@ class WssSimAgent:
         self.release_parser = sem_sleep_parsing
         self.wait_main = general_event
         # RawSHM.buf
-        self.raw_buf = self._mo.shms["raw"]["buf"]
-        # InitSetRawData
-        self.ac = self.cfg["argg"]["raw"]["ac"]  # Amount Cells
-        self.dsib = self.cfg["argg"]["raw"]["dsib"]  # Data size in bytes
-        self.hsib = self.cfg["argg"]["raw"]["hsib"]  # Headers size in bytes
-        self._iw = self._mo.shms["raw"]["shm"].size - 1  # Index, Write counter
-        self._sssd = self._mo.shms["raw"]["shm"].size - 3  # Index, Start Start Set Data
+        self.raw_buf = self._mo.shms[core_cfg.Raw.__name__]["buf"]
+        # InitGetRawData
+        self.cell_amount = core_cfg.Raw.cell_amount
+        self.data_size = core_cfg.Raw.data_size
+        self.header_size = core_cfg.Raw.header_size
+        self.flag = core_cfg.Raw.flag
+        self.flag_start = self.flag - 2
 
     @staticmethod
     def create(
-        cfg: dict,
         sem_sleep_parsing: Semaphore,
         network_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
     ) -> object | None:
         try:
-            # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
-                proc_name="network_sim",
-                config=cfg["argg"],
+                proc_name=Config.CoreConfig.Status.network_sim.__name__,
                 warn_error_status=warn_error_status,
                 _monitor=network_monitor,
             )
             return WssSimAgent(
-                mo=mo,
-                cfg=cfg,
-                general_event=general_event,
-                sem_sleep_parsing=sem_sleep_parsing,
+                mo=mo, general_event=general_event, sem_sleep_parsing=sem_sleep_parsing
             )
 
         except Exception:
@@ -135,15 +116,13 @@ class WssSimAgent:
             warn_error_status.release()
             return None
 
-    # Encode AggTradeSim Obj to Bytes Json structure
-    # Also set, new time trade
     def _encode_data(
-        self,
-        _id_m_: int,
-        encoder: msgspec.json.Encoder,
-        _set_status,
-        prepper,
+        self, prepper: DataPrepper, encoder: msgspec.json.Encoder, id_m: int, set_status
     ) -> bytes | bool:
+        """
+        Encode AggTradeSim Obj to Json Bytes.\n
+        Also set, new time trade.
+        """
         try:
             obj = prepper.queue.popleft()
             raw_data = encoder.encode(obj)
@@ -152,50 +131,47 @@ class WssSimAgent:
 
         except Exception:
             traceback.print_exc()  # Debug
-            _set_status(_id_m_, 153)  # Error in this func
+            set_status(id_m, 153)  # Error in this func
             return False
 
-    # Set Bytes to RawSHM
     def _set_raw_data(
         self,
-        ac: int,
-        iw: int,
-        hsib: int,
-        dsib: int,
-        _id_m_,
-        _set_status,
-        raw_buf: memoryview,
         raw_data: bytes,
+        flag: int,
+        cell_amount: int,
+        header_size: int,
+        data_size: int,
+        id_m: int,
+        set_status,
+        raw_buf: memoryview,
     ) -> bool:
+        """Set RawData[JSON Bytes] to RawSHM"""
         try:
             lrd = len(raw_data)  # lrd: Len Raw Data
-            if lrd < dsib:  # dsib: Data Size in Bytes
-                iwo = raw_buf[iw]  # iwo: Index Write Old
-                if (iwo + 1) >= (ac * hsib):  # ac: Amount Cells
-                    # hsib: Headers Size In Bytes
-                    iwn = raw_buf[iw] = hsib  # iwn: Index Write New
+            if lrd < data_size:
+                iwo = raw_buf[flag]  # iwo: Index Write Old
+                if (iwo + 1) >= (cell_amount * header_size):
+                    iwn = raw_buf[flag] = header_size  # iwn: Index Write New
                     iwo = 0
                 else:
-                    iwn = raw_buf[iw] = hsib + iwo
+                    iwn = raw_buf[flag] = iwo + header_size
 
-                # Set lrd To Next Cell Hsib
-                raw_buf[iwo] = lrd
+                raw_buf[iwo] = lrd  # Set lrd To Next Cell Hsib
                 # Set RawData To Next Cell Dsib
-                raw_buf[(iwn * ac) : ((iwn * ac) + lrd)] = raw_data
+                raw_buf[(iwn * cell_amount) : ((iwn * cell_amount) + lrd)] = raw_data
                 return True
+
             else:
-                _set_status(_id_m_, 100)  # Warn in this IF
+                set_status(id_m, 100)  # Warn in this IF
                 return False
 
         except Exception:
             traceback.print_exc()  # Debug
-            _set_status(_id_m_, 152)  # Error in this func
+            set_status(id_m, 152)  # Error in this func
             return False
 
-    # Return Base OR Sim Time To Sleep
-    def _time_to_sleep(
-        self,
-    ) -> float:
+    def _time_to_sleep(self) -> float:
+        """Return BaseTimeToSleep OR SimTimeToSleep"""
         # ott: Old Time Trade | ntt: New Time Trade
         ott, ntt = self.ottrade, self.nttrade
         # - - -
@@ -204,42 +180,38 @@ class WssSimAgent:
                 if ott < ntt:
                     self.ottrade = ntt
 
-                return (ntt - ott) / 1000  # tts: Time To Sleep
+                return (ntt - ott) / 1000  # Time To Sleep
 
         else:
             self.ottrade = ntt
 
-        return 0.01  # btts: Base Time To Sleep
+        return 0.01  # Base Time To Sleep
 
-    def run_wss_sim_engine(
-        self,
-    ) -> None:
+    def run_wss_sim_engine(self) -> None:
         # Local Links
         _release_parser = self.release_parser  # Semaphore
         _raw_buf = self.raw_buf  # RawShM.buf
         _encoder = self.encoder  # JSON msgspec Encoder
-        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
-        ac, iw, hsib, dsib, sssd = self.ac, self._iw, self.hsib, self.dsib, self._sssd
-        _set_raw_data, _encode_data, _time_to_sleep = (
-            self._set_raw_data,
-            self._encode_data,
-            self._time_to_sleep,
-        )
+        id_m, set_status, get_status = self._id_m_, self._set, self._get
+        _cell_amount, _header_size = self.cell_amount, self.header_size
+        _data_size, _flag, _flag_start = self.data_size, self.flag, self.flag_start
+        set_raw_data, encode_data = self._set_raw_data, self._encode_data
+        time_to_sleep = self._time_to_sleep
         # - - -
         while True:
             try:
                 gc.collect()
                 self.wait_main.wait()
-                _set_status(_id_m_, 4)  # IDLE
-                prepper = DataPrepper(config=self.cfg)
-                while _raw_buf[sssd] != 1:
+                set_status(id_m, 4)  # IDLE
+                prepper = DataPrepper()
+                while _raw_buf[_flag_start] != 1:
                     time.sleep(0.1)
 
                 prepper.start()
                 while True:
-                    if _get_status(_id_m_) is not True:
-                        _set_status(_id_m_, 4)  # Sleep
-                        if _get_status(_id_m_, proc=True):
+                    if get_status(id_m) is not True:
+                        set_status(id_m, 4)  # Sleep
+                        if get_status(id_m, proc=True):
                             _release_parser.release()
                             break
 
@@ -248,28 +220,28 @@ class WssSimAgent:
                                 time.sleep(0.0001)
                                 continue
 
-                            time.sleep(_time_to_sleep())
-                            _set_status(_id_m_, 5)  # WakeUp
+                            time.sleep(time_to_sleep())
+                            set_status(id_m, 5)  # WakeUp
                             if isinstance(
                                 (
-                                    raw_data := _encode_data(
-                                        _id_m_,
-                                        _encoder,
-                                        _set_status,
-                                        prepper,
+                                    raw_data := encode_data(
+                                        prepper=prepper,
+                                        encoder=_encoder,
+                                        id_m=id_m,
+                                        set_status=set_status,
                                     )
                                 ),
                                 bytes,
                             ):
-                                if _state := _set_raw_data(
-                                    ac=ac,
-                                    iw=iw,
-                                    hsib=hsib,
-                                    dsib=dsib,
-                                    _id_m_=_id_m_,
-                                    _set_status=_set_status,
-                                    raw_buf=_raw_buf,
+                                if _state := set_raw_data(
                                     raw_data=raw_data,
+                                    flag=_flag,
+                                    cell_amount=_cell_amount,
+                                    header_size=_header_size,
+                                    data_size=_data_size,
+                                    id_m=id_m,
+                                    set_status=set_status,
+                                    raw_buf=_raw_buf,
                                 ):
                                     _release_parser.release()
 
@@ -280,7 +252,7 @@ class WssSimAgent:
                                 if raw_data is False:
                                     pass
                         else:
-                            _set_status(self._id_m_, 151)
+                            set_status(id_m, 151)
                             print(prepper.error)  # Debug
                             continue
                     else:
@@ -288,12 +260,11 @@ class WssSimAgent:
 
             except Exception:
                 traceback.print_exc()  # Debug
-                _set_status(_id_m_, 150)
+                set_status(id_m, 150)
                 break
 
 
 def run_wss_sim(
-    config: dict,
     sem_sleep_parsing: Semaphore,
     network_monitor: Semaphore,
     general_event: Event,
@@ -302,7 +273,6 @@ def run_wss_sim(
     gc.disable()
 
     wss = WssSimAgent.create(
-        cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
         general_event=general_event,
         network_monitor=network_monitor,

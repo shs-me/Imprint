@@ -1,55 +1,37 @@
-import gc
 import struct
-import sys
 import time
 import traceback
 from multiprocessing import Event, Process, Semaphore
 from multiprocessing.shared_memory import SharedMemory
-from typing import TypedDict
 
-import tomllib
 from loguru import logger
 
-from .src import MonitorObj as mo
-from .src import WatchDog, run_logic, run_monitoring, run_parsing, run_wss, run_wss_sim
-
-PROCS = {
-    10: {"name": "PARSING", "func": run_parsing, "proc": None},
-    11: {"name": "LOGIC", "func": run_logic, "proc": None},
-    12: {"name": "NETWORK", "func": None, "proc": None},
-    13: {"name": "MONITORING", "func": run_monitoring, "proc": None},
-    # BACKTESTING False | 12: ... "func": run_wss ...}
-    # BACKTESTING True | 12: ... "func": run_wss_sim ...}
-}
-
-SHM_S = {
-    "grid": {"shm": None, "buf": None},
-    "raw": {"shm": None, "buf": None},
-    "status": {"shm": None, "buf": None},
-    "metrics": {"shm": None, "buf": None},
-    "profiling": {"shm": None, "buf": None},
-}
-
-
-class ShmType(TypedDict):
-    shm: SharedMemory
-    buf: memoryview
+from . import (
+    Config,
+    IDpm,
+    MonitorObj,
+    ProcsCfg,
+    ProcsDictTyping,
+    ShmType,
+    StatusCodes,
+    WatchDog,
+)
 
 
 class RunMain:
-    def __init__(
-        self,
-        cfg: dict,
-    ) -> None:
-        self.cfg: dict = cfg
-        self.sc_general: dict = {}
-        self.profiling_dump = cfg["argg"]["profiling_dump"]
-        self.status_file = cfg["argg"]["status_file"]
+    def __init__(self, backtesting: bool) -> None:
+        # Initialization
+        self.backtesting = backtesting
+        self.procs: dict[int, ProcsDictTyping] = {}
+        self.id_info = {}
+        self.core_cfg = Config.CoreConfig()
+        self.profiling_bin = Config.CorePath.profiling_bin
+        self.status_json = Config.CorePath.status_json
+        self.sc_general = {}
         # Event, Semaphores init
         # Module's sem's | Event's
         self.sem_sleep_parsing = Semaphore(0)
         self.sleep_logic = Event()
-        self.writer_sleep = Event()
         # Profiling sem's
         self._parser_monitor = Semaphore(0)
         self._logic_monitor = Semaphore(0)
@@ -57,64 +39,37 @@ class RunMain:
         # Admin sem's
         self.warn_error_status = Semaphore(0)
         self.general_event = Event()
-
         self.sem_s = [
             self.sem_sleep_parsing,
             self._parser_monitor,
             self._logic_monitor,
             self._network_monitor,
         ]
-
         # SharedMemory init
-        self.shms: dict[str, ShmType] = SHM_S  # type: ignore
-        self._shm_close()
-        if self._shm_create() is False:
-            # if true: shms get ShM obj | else: SysExit
-            sys.exit()
+        self.shms: dict[str, ShmType] = {  # type: ignore
+            self.core_cfg.Grid.__name__: {},
+            self.core_cfg.Raw.__name__: {},
+            self.core_cfg.Status.__name__: {},
+            self.core_cfg.Metrics.__name__: {},
+            self.core_cfg.Profiling.__name__: {},
+        }
 
-        self._status_buf = self.shms["status"]["buf"]
-
-        # self._procs init
-        self._procs = PROCS
-        self._procs[12]["func"] = (
-            run_wss_sim if self.cfg["argg"]["backtesting"] else run_wss
-        )
-
-    @staticmethod
-    def create(
-        backtesting: bool,
-        cfg_file: str,
-    ) -> object | None:
-        try:
-            with open(cfg_file, "rb") as f:
-                config = tomllib.load(f)
-
-            config["argg"]["backtesting"] = 1 if backtesting else 0
-            return RunMain(
-                cfg=config,
-            )
-
-        except Exception as e:
-            traceback.print_exc()  # Debug
-            logger.error(f"-- Core -- | Create | {e}")
-            return None
-
-    def _close_(
-        self,
-    ) -> None:
+    def _close_(self) -> None:
         try:
             logger.warning(
                 "-- Core -- | _Exit | Closing Processes, SaveprofilingArray, Clean SHM-s, Exit..."
             )
-            mo.dump_profile(
-                self.profiling_dump, self.shms["profiling"]["buf"], _bin=True
+            MonitorObj.dump_profile(
+                self.profiling_bin,
+                self.shms[Config.CoreConfig.Profiling.__name__]["buf"],
+                _bin=True,
             )
-            for id, data in self._procs.items():
+            for id, data in self.procs.items():
                 if data["proc"] is not None and data["proc"].is_alive():
                     data["proc"].terminate()
                     data["proc"].join()
                     logger.warning(
-                        f"-- Core -- | _Exit | Process {self._procs[id]['name']} closed"
+                        f"-- Core -- | _Exit | Process {self.procs[id]['name']} closed"
                     )
             self._shm_close()
 
@@ -122,39 +77,40 @@ class RunMain:
             traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | _Exit | {e}")
 
-    # Close SharedMemory
-    def _shm_close(
-        self,
-    ) -> None:
+    def _shm_close(self) -> None:
+        """Close SharedMemory's"""
         for name in self.shms.keys():
             try:
-                shm = SharedMemory(name=self.cfg["argg"][name]["shm"])
+                _obj = getattr(self.core_cfg, name)
+                shm = SharedMemory(name=_obj.shm_name)
                 shm.close()
                 shm.unlink()
 
             except FileNotFoundError:
                 pass
 
-    # Open & Create SharedMemory
-    def _shm_create(
-        self,
-    ) -> bool:
+    def _shm_create(self) -> bool:
+        """Open & Create SharedMemory's"""
         try:
             for name in self.shms.keys():
                 try:
+                    _obj = getattr(self.core_cfg, name)
                     shm = SharedMemory(
-                        name=self.cfg["argg"][name]["shm"],
-                        size=self.cfg["argg"][name]["bsize"],
+                        name=_obj.shm_name,
+                        size=_obj.shm_size,
                         create=True,
                     )
 
                 except FileExistsError:
-                    shm = SharedMemory(name=self.cfg["argg"][name]["shm"])
+                    _obj = getattr(self.core_cfg, name)
+                    shm = SharedMemory(name=_obj.shm_name)
 
-                self.shms[name]["shm"] = shm
-                if isinstance(shm.buf, memoryview):
+                if shm.buf is not None:
+                    self.shms[name]["shm"] = shm
                     self.shms[name]["buf"] = shm.buf
                     self.shms[name]["buf"][:] = b"\x00" * self.shms[name]["shm"].size
+                else:
+                    return False
 
             return True
         except Exception as e:
@@ -162,33 +118,31 @@ class RunMain:
             logger.error(f"-- Core -- | ShmControl | {e}")
             return False
 
-    # Init arg proc
-    def _proc_arg_init(
-        self,
-        proc_name,
-    ) -> tuple | None:
+    def _proc_arg_init(self, proc_name: str) -> tuple | None:
         if proc_name == "PARSING":
             return (
-                self.cfg["argg"],
                 self.sem_sleep_parsing,
                 self.sleep_logic,
                 self._parser_monitor,
                 self.general_event,
-                self.writer_sleep,
                 self.warn_error_status,
             )
         elif proc_name == "LOGIC":
             return (
-                self.cfg["argg"],
                 self.sleep_logic,
                 self._logic_monitor,
                 self.general_event,
-                self.writer_sleep,
                 self.warn_error_status,
             )
         elif proc_name == "NETWORK":
             return (
-                self.cfg,
+                self.sem_sleep_parsing,
+                self._network_monitor,
+                self.general_event,
+                self.warn_error_status,
+            )
+        elif proc_name == "NETWORK_SIM":
+            return (
                 self.sem_sleep_parsing,
                 self._network_monitor,
                 self.general_event,
@@ -196,7 +150,7 @@ class RunMain:
             )
         elif proc_name == "MONITORING":
             return (
-                self.cfg["argg"],
+                self.backtesting,
                 self.general_event,
                 self._parser_monitor,
                 self._logic_monitor,
@@ -206,31 +160,23 @@ class RunMain:
         else:
             return None
 
-    # Create & Run Procces's
-    def _run_proc(
-        self,
-        id_proc,
-    ) -> bool:
+    def _run_proc(self, id_proc: int) -> bool:
+        """Create & Run Procces's"""
         try:
-            if isinstance(id_proc, int):
-                _arg = self._proc_arg_init(self._procs[id_proc]["name"])
-                if isinstance(_arg, tuple):
-                    p = Process(
-                        target=self._procs[id_proc]["func"],
-                        args=_arg,
-                        name=self._procs[id_proc]["name"],
-                        daemon=True,
-                    )
-                    p.start()
-                    self._procs[id_proc]["proc"] = p
-                    return True
-
-                else:
-                    logger.warning("-- Core -- | RunProc | Arg for Proc is not tuple")
-                    return False
+            _arg = self._proc_arg_init(self.procs[id_proc]["name"])
+            if isinstance(_arg, tuple):
+                p = Process(
+                    target=self.procs[id_proc]["func"],
+                    args=_arg,
+                    name=self.procs[id_proc]["name"],
+                    daemon=True,
+                )
+                p.start()
+                self.procs[id_proc]["proc"] = p
+                return True
 
             else:
-                logger.warning("-- Core -- | RunProc | proc_id is not int")
+                logger.warning("-- Core -- | RunProc | Arg for Proc is not tuple")
                 return False
 
         except Exception as e:
@@ -238,52 +184,54 @@ class RunMain:
             logger.error(f"-- Core -- | RunProc | {e}")
             return False
 
-    # RunningCoreEngine
-    def run_core_engine(
-        self,
-    ) -> bool | None:
+    def run_core_engine(self) -> bool | None:
         try:
             logger.info("--- Core --- Started. Init...")
-            # Init Watchdog
+            self.procs, self.id_info = ProcsCfg.procs, StatusCodes.id_info
+            _key = IDpm.network if self.backtesting else IDpm.network_sim
+            self.procs.pop(_key)
+            self.id_info.pop(_key)
+            self._shm_close()
+            if self._shm_create() is False:
+                return False
+
             _watchdog = WatchDog.create(
-                self._procs,
-                self.shms,
-                self.sem_s,
-                self.general_event,
-                self.sleep_logic,
-                self.writer_sleep,
-                self.warn_error_status,
-                self.status_file,
+                procs=self.procs,
+                id_info=self.id_info,
+                shm_s=self.shms,
+                sem_s=self.sem_s,
+                general_event=self.general_event,
+                sleep_logic=self.sleep_logic,
+                warn_error_status=self.warn_error_status,
+                file_path=self.status_json,
             )
             # debug
-            _offset = self.cfg["argg"]["metrics"]["tick_size"]
-            self.shms["metrics"]["buf"][_offset : _offset + 8] = struct.pack("!d", 0.01)
+            _start, _end = self.core_cfg.Metrics.tick_size
+            self.shms[Config.CoreConfig.Metrics.__name__]["buf"][_start:_end] = (
+                struct.pack("!d", 0.01)
+            )
             # - - -
             if isinstance(_watchdog, WatchDog):
-                self._sc = _watchdog.sc
-                _run_watchdog_engine = _watchdog.run_watchdog_engine
                 logger.info("WatchDog | Started")
-                # Init Process's
-                for id_proc in self._procs:
+                for id_proc in self.procs:  # Init Process's
                     if self._run_proc(id_proc=id_proc) is False:
                         return False
 
                     time.sleep(0.5)
 
-                self.general_event.set()  # pass
+                self.general_event.set()
                 logger.info("--- Core --- Init Completed.")
                 try:
                     while True:
-                        gc.collect()
-                        if _run_watchdog_engine() is False:  # . . .
+                        if _watchdog.run_watchdog_engine() is False:
+                            logger.warning(
+                                "--- Core --- | RunCoreEngine | Closing because of the WatchDog"
+                            )
                             break
 
                 except KeyboardInterrupt:
                     logger.warning("-- Core -- | RunCoreEngine | Shutting down bot")
-                finally:
-                    logger.warning(
-                        "--- Core --- | RunCoreEngine | Closing because of the WatchDog"
-                    )
+
             else:
                 logger.warning(
                     "-- Core -- | RunCoreEngine | Create obj Watchdog failed"
@@ -296,11 +244,7 @@ class RunMain:
             self._close_()
 
 
-# Start Core Func
-def run_core(
-    backtesting=True,
-    cfg_path="core/config.toml",
-):
+def run_core(backtesting: bool = True) -> None:
     logger.remove()
     logger.add(
         "logs/__core__&_watchdog.log",
@@ -309,13 +253,7 @@ def run_core(
         format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
-    gc.disable()
-
-    state = RunMain.create(
-        backtesting=True,
-        cfg_file=cfg_path,
-    )
-    if isinstance(state, RunMain):
-        if state.run_core_engine() is False:
-            logger.warning("-- Core -- | RunCoreEngine | RunProc in start failed")
-            state._close_()
+    state = RunMain(backtesting=backtesting)
+    if state.run_core_engine() is False:
+        logger.warning("-- Core -- | RunCoreEngine | RunProc in start failed")
+        state._close_()

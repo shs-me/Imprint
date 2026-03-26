@@ -946,48 +946,6 @@
       "6": ""
     }
   },
-  "GENERAL": {
-    "0": "IDLE",
-    "1": "RUNNING",
-    "2": "STOPING",
-    "3": "SYSEXIT",
-    "4": "SLEEP",
-    "5": "WACK_UP"
-  },
-  "ID_INFO": {
-    "10": {
-      "0": {
-        "name": "ParsingAgent"
-      },
-      "1": {
-        "name": "FootprintEngine"
-      }
-    },
-    "11": {
-      "2": {
-        "name": "LogicAgent"
-      },
-      "3": {
-        "name": "FootprintReading"
-      }
-    },
-    "12": {
-      "4": {
-        "name": "WSSAgent"
-      },
-      "5": {
-        "name": "RESTAgent"
-      },
-      "6": {
-        "name": "WSSAgent Backtest"
-      }
-    }
-  },
-  "PROC_NAME": {
-    "10": "ParsingProc",
-    "11": "LogicProc",
-    "12": "NetworkProc"
-  },
   "WARN": {
     "50": {
       "0": "Profiling task for Watchdog: Check the module: Why? Module sleeps when others work",

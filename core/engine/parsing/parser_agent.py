@@ -5,7 +5,7 @@ from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
 
-from .. import MonitorObj
+from ... import Config, MonitorObj
 from . import GridEngine
 
 
@@ -20,64 +20,51 @@ class ParserAgent:
     def __init__(
         self,
         mo: MonitorObj,
-        cfg: dict,
         sem_sleep_parsing: Semaphore,
         sleep_logic: Event,
         general_event: Event,
-        writer_sleep: Event,
     ) -> None:
-        # initialization
+        # Initialization
+        core_cfg = Config.CoreConfig()
         self._mo = mo
-        self._get, self._set, self._id_m_ = (
-            self._mo.get_,
-            self._mo.set_,
-            self._mo._status(daughter=False),
-        )
-
-        self.cfg = cfg
+        self._id_m_ = self._mo._id_m
+        self._set, self._get = self._mo.set_, self._mo.get_
         self.acquire_wss = sem_sleep_parsing
         self.sleep_logic = sleep_logic
         self.wait_main = general_event
-        self.wait_reader = writer_sleep
         # variables
         self.decoder = msgspec.json.Decoder(type=AggTrade, strict=False)
         # RawSHM.buf
-        self.raw_buf = self._mo.shms["raw"]["buf"]
+        self.raw_buf = self._mo.shms[core_cfg.Raw.__name__]["buf"]
         # MetricsSHM.buf
-        self.metrics_buf = self._mo.shms["metrics"]["buf"]
+        self.metrics_buf = self._mo.shms[core_cfg.Metrics.__name__]["buf"]
         # InitGetRawData
-        self.ac = self.cfg["raw"]["ac"]  # Amount Cells
-        self.dsib = self.cfg["raw"]["dsib"]  # Data size in bytes
-        self.hsib = self.cfg["raw"]["hsib"]  # Headers size in bytes
-        self._ir = self._mo.shms["raw"]["shm"].size - 2  # Index, Write counter
-        self._sssd = self._mo.shms["raw"]["shm"].size - 3  # Index, Start Start Set Data
+        self.cell_amount = core_cfg.Raw.cell_amount
+        self.data_size = core_cfg.Raw.data_size
+        self.header_size = core_cfg.Raw.header_size
+        self.flag = core_cfg.Raw.flag - 1
+        self.flag_start = self.flag - 1
 
     @staticmethod
     def create(
-        cfg: dict,
         sem_sleep_parsing: Semaphore,
         sleep_logic: Event,
         parser_monitor: Semaphore,
         general_event: Event,
-        writer_sleep: Event,
         warn_error_status: Semaphore,
     ) -> object | None:
         try:
-            # Init SHM, profilingArray, StatusSHM
             mo = MonitorObj(
-                proc_name="parsing",
-                config=cfg,
+                proc_name=Config.CoreConfig.Status.parsing.__name__,
                 warn_error_status=warn_error_status,
                 _monitor=parser_monitor,
             )
 
             return ParserAgent(
                 mo=mo,
-                cfg=cfg,
                 sleep_logic=sleep_logic,
                 sem_sleep_parsing=sem_sleep_parsing,
                 general_event=general_event,
-                writer_sleep=writer_sleep,
             )
 
         except Exception:
@@ -85,45 +72,40 @@ class ParserAgent:
             warn_error_status.release()
             return None
 
-    # Get Bytes from RawSHM
     def _get_raw_data(
         self,
-        ir: int,
-        ac: int,
-        hsib: int,
-        _id_m_,
-        _set_status,
-        _raw_buf: memoryview,
+        flag: int,
+        cell_amount: int,
+        header_size: int,
+        id_m: int,
+        set_status,
+        raw_buf: memoryview,
     ) -> memoryview | bool:
+        """Get RawData[JSON] from RawSHM"""
         try:
-            iro = _raw_buf[ir]  # iro: Index Read Old
-            if (iro + 1) >= (ac * hsib):  # ac: Amount Cells
-                irn = _raw_buf[ir] = hsib  # hsib: Header Size In Byte
+            iro = raw_buf[flag]  # iro: Index Read Old
+            if (iro + 1) >= (cell_amount * header_size):
+                irn = raw_buf[flag] = header_size
                 iro = 0
             else:
-                irn = _raw_buf[ir] = hsib + iro  # irn: Index Read New
+                irn = raw_buf[flag] = iro + header_size  # irn: Index Read New
 
-            lrd = _raw_buf[iro]  # Get Len Raw Data
-            raw_data = _raw_buf[(irn * ac) : ((irn * ac) + lrd)]  # Get Raw Data
+            lrd = raw_buf[iro]  # Get Len Raw Data
+            raw_data = raw_buf[
+                (irn * cell_amount) : ((irn * cell_amount) + lrd)
+            ]  # Get Raw Data
             return raw_data
 
         except Exception:
             traceback.print_exc()
-            _set_status(_id_m_, 154)
+            set_status(id_m, 154)
             return False
 
-    # Decode RawData to Struct AggTrade
     def _decode_raw_data(
-        self,
-        _id_m_,
-        decoder,
-        _set_status,
-        raw_data: memoryview | None,
+        self, raw_data: memoryview, decoder, id_m_: int, set_status
     ) -> AggTrade | bool | None:
+        """Decode RawData[JSON] to Struct AggTrade"""
         try:
-            if raw_data is None:
-                return None
-
             trade = decoder(raw_data)
             if trade.p < 0 or trade.q < 0 or trade.T < 0:
                 return None
@@ -132,85 +114,67 @@ class ParserAgent:
 
         except Exception:
             traceback.print_exc()  # Debug
-            _set_status(_id_m_, 153)
+            set_status(id_m_, 153)
             return False
 
-    def run_parsing_engine(
-        self,
-    ) -> None:
-        # JSON Decoder, SHM.Buf - LocalLink
-        _raw_buf, _metrics_buf, _decoder = (
-            self.raw_buf,
-            self.metrics_buf,
-            self.decoder.decode,
-        )
-        # StatusAgents - LocalLink
-        _id_m_, _set_status, _get_status = (
-            self._id_m_,
-            self._set,
-            self._get,
-        )
-        # GetRawData - LocalLink
-        ac, ir, hsib, sssd = self.ac, self._ir, self.hsib, self._sssd
-        # SetRawMetrics
-        # Semaphore, Event - LocalLink
-        _wait_main, _sleep_logic, _acquire_wss = (
-            self.wait_main,
-            self.sleep_logic,
-            self.acquire_wss,
-        )
-        # Methods - LocalLinks
-        _get_raw_data, _decode_raw_data = (
-            self._get_raw_data,
-            self._decode_raw_data,
-        )
+    def run_parsing_engine(self) -> None:
+        # LocalLinks
+        _raw_buf, _metrics_buf = self.raw_buf, self.metrics_buf  # ShM.Buf's
+        _decoder = self.decoder.decode  # Msgspec Json Decoder
+        # MonitorObj
+        _id_m, set_status, get_status = self._id_m_, self._set, self._get
+        # GetRawData
+        _cell_amount, _header_size = self.cell_amount, self.header_size
+        _flag, _flag_start = self.flag, self.flag_start
+        # Semaphore, Event
+        _sleep_logic, _acquire_wss = self.sleep_logic, self.acquire_wss
+        # Methods
+        get_raw_data = self._get_raw_data
+        decode_raw_data = self._decode_raw_data
         #  - - -
         try:
-            engine = GridEngine.create(
-                _mo_=self._mo, cfg=self.cfg, wait_reader=self.wait_reader
-            )
+            engine = GridEngine.create(_mo_=self._mo)
             if isinstance(engine, GridEngine):
                 while True:
                     try:
                         gc.collect()
-                        _wait_main.wait()
-                        if _raw_buf[sssd] != 1:
+                        self.wait_main.wait()
+                        if _raw_buf[_flag_start] != 1:
                             while _acquire_wss.acquire(block=False):
                                 pass
 
-                            _raw_buf[ir] = _raw_buf[ir + 1]
-                            _raw_buf[sssd] = 1
+                            _raw_buf[_flag] = _raw_buf[_flag + 1]
+                            _raw_buf[_flag_start] = 1
 
                         while True:
-                            if _get_status(_id_m_) is not True:
-                                _set_status(_id_m_, 4)  # IDLE # TIME START
+                            if get_status(_id_m) is not True:
+                                set_status(_id_m, 4)  # IDLE # TIME START
                                 _acquire_wss.acquire()
-                                if _get_status(_id_m_, proc=True):
+                                if get_status(_id_m, proc=True):
                                     _sleep_logic.wait()
                                     break
 
-                                _set_status(_id_m_, 5)  # Running # TIME WAKE_UP
-
+                                set_status(_id_m, 5)  # Running # TIME WAKE_UP
                                 if isinstance(
                                     (
-                                        raw_data := _get_raw_data(
-                                            ir=ir,
-                                            ac=ac,
-                                            hsib=hsib,
-                                            _id_m_=_id_m_,
-                                            _set_status=_set_status,
-                                            _raw_buf=_raw_buf,
+                                        raw_data := get_raw_data(
+                                            flag=_flag,
+                                            cell_amount=_cell_amount,
+                                            header_size=_header_size,
+                                            id_m=_id_m,
+                                            set_status=set_status,
+                                            raw_buf=_raw_buf,
                                         )
                                     ),
                                     memoryview,
                                 ):
                                     if isinstance(
                                         (
-                                            trade := _decode_raw_data(
-                                                _id_m_=_id_m_,
-                                                decoder=_decoder,
-                                                _set_status=_set_status,
+                                            trade := decode_raw_data(
                                                 raw_data=raw_data,
+                                                decoder=_decoder,
+                                                id_m_=_id_m,
+                                                set_status=set_status,
                                             )
                                         ),
                                         AggTrade,
@@ -218,8 +182,8 @@ class ParserAgent:
                                         if engine.update(
                                             price=trade.p,
                                             qty=trade.q,
-                                            is_sell=trade.m,
                                             timestamp=trade.T,
+                                            is_sell=trade.m,
                                         ):
                                             _sleep_logic.set()
 
@@ -234,34 +198,30 @@ class ParserAgent:
 
                     except Exception:
                         traceback.print_exc()  # Debug
-                        _set_status(_id_m_, 150)  # Error in this func
+                        set_status(_id_m, 150)  # Error in this func
                         break
             else:
-                _set_status(_id_m_, 151)  # Error in engine
+                set_status(_id_m, 151)  # Error in engine
                 return
 
         except Exception:
             traceback.print_exc()  # Debug
-            _set_status(_id_m_, 150)  # Error in this func
+            set_status(_id_m, 150)  # Error in this func
 
 
 def run_parsing(
-    config: dict,
     sem_sleep_parsing: Semaphore,
     sleep_logic: Event,
     parser_monitor: Semaphore,
     general_event: Event,
-    writer_sleep: Event,
     warn_error_status: Semaphore,
 ) -> None:
     gc.disable()
     agent = ParserAgent.create(
-        cfg=config,
         sem_sleep_parsing=sem_sleep_parsing,
         sleep_logic=sleep_logic,
         parser_monitor=parser_monitor,
         general_event=general_event,
-        writer_sleep=writer_sleep,
         warn_error_status=warn_error_status,
     )
     if isinstance(agent, ParserAgent):
