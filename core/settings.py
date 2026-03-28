@@ -4,6 +4,8 @@ from multiprocessing.shared_memory import SharedMemory
 from types import FunctionType
 from typing import TypedDict
 
+from websockets.typing import Data
+
 
 class ProcsDictTyping(TypedDict):
     name: str
@@ -82,13 +84,22 @@ class Config:
 
         class Raw:
             # Double Buffer
-            cell_amount: int = 256
             data_size: int = 256
+            cell_amount: int = 1000
             header_size: int = 1
-            flag: int = -1
+            # index's
+            flag: int = 8
+            spare_flag: int = 9
+            offset_cell_start: int = 10
+            # offset's
+            last_update_cell_offset: tuple[int, int] = (0, 8)
             # ShM
             shm_size: int = (
-                (((cell_amount * data_size) + (cell_amount * header_size)) * 2 // 4096)
+                (
+                    ((cell_amount * data_size) + (cell_amount + header_size) + 10)
+                    * 2
+                    // 4096
+                )
                 + 1
             ) * 4096
             shm_name: str = "raw_data_shm_for_raw_data"
@@ -98,12 +109,14 @@ class Config:
             base_price_and_timestamp: tuple[int, int] = (0, 8 * 2)  # [a: a+b*2] int64=8
             price: tuple[int, int] = (16, 16 + (8 * 1))  # [a: a+b*1] float64=8
             tick_size: tuple[int, int] = (24, 24 + (8 * 1))  # [a: a+b*1] float64=8
-            coord_buf1: tuple[int, int] = (32, 32 + (2 * 6))  # [a: a+b*6] int16=2
-            coord_buf2: tuple[int, int] = (44, 44 + (2 * 6))  # [a: a+b*6] int16=2
+            coord_lines: int = 2
+            coord_cols: int = 6
+            coord_offset_start: int = 32
+            coord_offset_end: int = 56
             # Index's
-            flag: int = 56
+            flag: int = 57
             # ShM
-            shm_size: int = (coord_buf2[1] // 4096 + 1) * 4096
+            shm_size: int = (coord_offset_end // 4096 + 1) * 4096
             shm_name: str = "metrics_shm_for_different_metrics"
 
         class Status:

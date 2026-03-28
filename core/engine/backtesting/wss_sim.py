@@ -1,4 +1,5 @@
 import gc
+import struct
 import time
 import traceback
 from collections import deque
@@ -74,7 +75,7 @@ class WssSimAgent:
         general_event: Event,
     ) -> None:
         # Initialization
-        core_cfg = Config.CoreConfig()
+        cfg = Config.CoreConfig
         self._mo = mo
         self._id_m_ = self._mo._id_m
         self._set, self._get = self._mo.set_, self._mo.get_
@@ -86,13 +87,14 @@ class WssSimAgent:
         self.release_parser = sem_sleep_parsing
         self.wait_main = general_event
         # RawSHM.buf
-        self.raw_buf = self._mo.shms[core_cfg.Raw.__name__]["buf"]
+        self.raw_buf = self._mo.shms[cfg.Raw.__name__]["buf"]
         # InitGetRawData
-        self.cell_amount = core_cfg.Raw.cell_amount
-        self.data_size = core_cfg.Raw.data_size
-        self.header_size = core_cfg.Raw.header_size
-        self.flag = core_cfg.Raw.flag
-        self.flag_start = self.flag - 2
+        self.cell_amount = cfg.Raw.cell_amount
+        self.data_size = cfg.Raw.data_size
+        self.header_size = cfg.Raw.header_size
+        self.flag = cfg.Raw.flag
+        self.cell_start_offset = cfg.Raw.cell_start_offset
+        self.cell_end_slice = slice(*cfg.Raw.cell_end_offset)
 
     @staticmethod
     def create(
@@ -147,19 +149,26 @@ class WssSimAgent:
     ) -> bool:
         """Set RawData[JSON Bytes] to RawSHM"""
         try:
-            lrd = len(raw_data)  # lrd: Len Raw Data
+            lrd: int = len(raw_data)  # lrd: Len Raw Data
             if lrd < data_size:
-                iwo = raw_buf[flag]  # iwo: Index Write Old
-                if (iwo + 1) >= (cell_amount * header_size):
-                    iwn = raw_buf[flag] = header_size  # iwn: Index Write New
-                    iwo = 0
-                else:
-                    iwn = raw_buf[flag] = iwo + header_size
+                _counter: int = 0
+                while _counter < 2:
+                    flag_id: int = raw_buf[flag]
+                    # . . .
+                    cell_id: int = struct.unpack("!q", raw_buf[self.cell_end_slice])[0]
+                    if (cell_id + 1) >= (cell_amount * header_size):
+                        cell_id_new = self.cell_start_offset + header_size
+                        cell_id = self.cell_start_offset
+                    else:
+                        cell_id_new = cell_id + header_size
 
-                raw_buf[iwo] = lrd  # Set lrd To Next Cell Hsib
-                # Set RawData To Next Cell Dsib
-                raw_buf[(iwn * cell_amount) : ((iwn * cell_amount) + lrd)] = raw_data
-                return True
+                    raw_buf[self.cell_end_slice] = struct.pack("!q", cell_id)
+                    raw_buf[cell_id] = lrd  # Set lrd To Next Cell Hsib
+                    # Set RawData To Next Cell Dsib
+                    raw_buf[
+                        (cell_id_new * cell_amount) : ((iwn * cell_amount) + lrd)
+                    ] = raw_data
+                    return True
 
             else:
                 set_status(id_m, 100)  # Warn in this IF

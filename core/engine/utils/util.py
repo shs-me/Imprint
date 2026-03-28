@@ -17,16 +17,16 @@ class ConvertMetrics:
         self.lines: int = lines
         self.cols: int = cols
         self.ims: int = ims
-        # Init Session
-        self.precision: int = 0
+        self.precision: int = (
+            len(str(tick_size).split(sep=".")[-1]) if "." in str(tick_size) else 0
+        )
 
     def round_to_tick(
         self,
         price: float,
-    ) -> int | float:
-        tick_size = self.tick_size
-        precision = len(str(tick_size).split(".")[-1]) if "." in str(tick_size) else 0
-        clear_price = round(round(price / tick_size) * tick_size, precision)
+    ) -> float:
+        ts, pc = self.tick_size, self.precision
+        clear_price: float = round(number=(round(number=price / ts) * ts), ndigits=pc)
         return clear_price
 
     def to_idy(
@@ -34,11 +34,12 @@ class ConvertMetrics:
         price: float,
     ) -> int | None:
         """
-        IF 0 <= ID-Y < Lines, Return ID-Y | Else, Return None
+        IF 0 < ID-Y < Lines, Return ID-Y | Else, Return None
         """
-        idy = int((self.base_price - price) // self.tick_size) + self.center
-
-        if 0 <= idy < self.lines:
+        idy: int = (
+            round(number=(self.base_price - price) / self.tick_size) + self.center
+        )
+        if 0 < idy < self.lines:
             return idy
         else:
             return None
@@ -52,7 +53,7 @@ class ConvertMetrics:
         is_sell: True is bid, False ask.\n
         IF 0 <= ID-X < Cols, Return ID-X | Else, Return None.
         """
-        idx: int = int((timestamp - self.base_timestamp) // self.ims * 2) + (
+        idx: int = round(number=(timestamp - self.base_timestamp) / self.ims * 2) + (
             0 if is_sell else 1
         )
         if 0 <= idx < self.cols:
@@ -67,7 +68,7 @@ class ConvertMetrics:
         """
         Return Price.
         """
-        price: float = self.base_price + ((self.center - idy) * self.tick_size)
+        price: float = ((self.center - idy) * self.tick_size) + self.base_price
         return price
 
     def to_timestamp(
@@ -78,6 +79,7 @@ class ConvertMetrics:
         Return Timestamp.
         """
         timestamp: int = (
-            (idx - (0 if idx % 2 == 0 else 1)) // 2
-        ) * self.ims + self.base_timestamp
+            round(number=(idx - (0 if (idx % 2) == 0 else 1)) / 2) * self.ims
+            + self.base_timestamp
+        )
         return timestamp

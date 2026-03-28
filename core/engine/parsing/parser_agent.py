@@ -185,7 +185,8 @@ class ParserAgent:
                                             timestamp=trade.T,
                                             is_sell=trade.m,
                                         ):
-                                            _sleep_logic.set()
+                                            if _sleep_logic.is_set() is False:
+                                                _sleep_logic.set()
 
                                     elif trade is False:
                                         sys.exit()

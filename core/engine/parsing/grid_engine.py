@@ -8,17 +8,16 @@ from .. import ConvertMetrics
 
 
 class GridEngine:
-    def __init__(
-        self, _mo_: MonitorObj, grid: np.ndarray, lines: int, cols: int
-    ) -> None:
+    def __init__(self, _mo_: MonitorObj, grid: np.ndarray, coord: np.ndarray) -> None:
         # Initialization
-        cfg = Config.CoreConfig()
+        cfg = Config.CoreConfig
         self._mo_ = _mo_
         self._id_m_ = self._mo_._id_d
         self._set, self._get = self._mo_.set_, self._mo_.get_
         self.grid: np.ndarray = grid  # 2-D. Array DType Float64
-        self.lines: int = lines  # ID-Y in Array
-        self.cols: int = cols  # ID-X in Array
+        self.coord: np.ndarray = coord  # 2-D. Array DType uint16
+        self.lines: int = cfg.Grid.lines  # ID-Y in Array
+        self.cols: int = cfg.Grid.cols  # ID-X in Array
         self.ivl_m: int = cfg.Grid.interval_min
         self.tick_size: float = 0.0  # tick size SYMBOL
         self.OHLCV_T_D_CT = [
@@ -39,8 +38,6 @@ class GridEngine:
         # MetricsSHM
         self.bpat_slice = slice(*cfg.Metrics.base_price_and_timestamp)
         self.tick_size_slice = slice(*cfg.Metrics.tick_size)
-        self.coords_slice1 = slice(*cfg.Metrics.coord_buf1)
-        self.coords_slice2 = slice(*cfg.Metrics.coord_buf2)
         self.flag = cfg.Metrics.flag
         # SharedMemory
         self._metrics_buf = self._mo_.shms[cfg.Metrics.__name__]["buf"]
@@ -48,14 +45,23 @@ class GridEngine:
     @staticmethod
     def create(_mo_: MonitorObj) -> object | None:
         try:
-            lines = Config.CoreConfig.Grid.lines  # ID-Y in Array
-            cols = Config.CoreConfig.Grid.cols  # ID-X in Array
+            cfg = Config.CoreConfig
             grid = np.ndarray(
-                ((lines + 8), cols),
+                ((cfg.Grid.lines + 8), cfg.Grid.cols),
                 dtype=np.float64,
-                buffer=_mo_.shms[Config.CoreConfig.Grid.__name__]["buf"],
+                buffer=_mo_.shms[cfg.Grid.__name__]["buf"],
             )
-            return GridEngine(_mo_=_mo_, grid=grid, lines=lines, cols=cols)
+            coord = np.ndarray(
+                (
+                    cfg.Metrics.coord_lines,
+                    cfg.Metrics.coord_cols,
+                ),
+                dtype=np.uint16,
+                buffer=_mo_.shms[cfg.Metrics.__name__]["buf"][
+                    cfg.Metrics.coord_offset_start : cfg.Metrics.coord_offset_end
+                ],
+            )
+            return GridEngine(_mo_=_mo_, grid=grid, coord=coord)
 
         except Exception:
             traceback.print_exc()  # Debug
@@ -76,13 +82,8 @@ class GridEngine:
             self._metrics_buf[self.bpat_slice] = struct.pack(
                 "!dq", price, ((timestamp // self.ims) * self.ims)
             )
-            # coord buf's init
-            self._metrics_buf[self.coords_slice1] = struct.pack(
-                "!HHHHHH", 65535, 65535, 0, 0, 0, 0
-            )
-            self._metrics_buf[self.coords_slice2] = struct.pack(
-                "!HHHHHH", 65535, 65535, 0, 0, 0, 0
-            )
+            # coord init
+            self.coord[:] = 65535, 65535, 0, 0, 0, 0
             # Init Converter
             self.convert = ConvertMetrics(
                 tick_size=self.tick_size,
@@ -128,13 +129,10 @@ class GridEngine:
 
     def set_cords(self, idy: int, idx: int) -> bool | None:
         """Set Coordinates IDY:IDX on 2-D Array 'Cord'"""
-        while range(2):
+        _counter: int = 0
+        while _counter < 2:
             flag = self._metrics_buf[self.flag]
-            coord_slice = self.coords_slice1 if flag == 0 else self.coords_slice2
-            coords: tuple[int, int, int, int, int, int] = struct.unpack(
-                "!HHHHHH", self._metrics_buf[coord_slice]
-            )
-            idy_min, idx_min, idy_max, idx_max, __, _ = coords
+            idy_min, idx_min, idy_max, idx_max, __, _ = self.coord[flag, :]
             if idy < idy_min:  # True: Update IDY MIN
                 idy_min = idy
             if idy > idy_max:  # True: Update IDY MAX
@@ -144,14 +142,14 @@ class GridEngine:
             if idx > idx_max:  # True: Update IDX MAX
                 idx_max = idx
             if self._metrics_buf[self.flag] == flag:
-                self._metrics_buf[coord_slice] = struct.pack(
-                    "!HHHHHH", idy_min, idx_min, idy_max, idx_max, idy, idx
-                )
+                self.coord[flag:] = idy_min, idx_min, idy_max, idx_max, idy, idx
                 return True
+
+            else:
+                _counter += 1
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         """Update GridArray"""
-        # MonitorObj - LocalLink
         _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
         if _get_status(_id_m_):
             return False

@@ -137,7 +137,7 @@ class MonitoringAgent:
             dgheaders[0, _col] = nline
             dgheaders[2, _col] = (oscode + 1) if (oscode + 1) != 6 else 4
             dgheaders[3, _col] = ntimens
-            if 0 < otimens < ntimens:
+            if 0 < otimens:
                 diff_wait_or_work: int = (ntimens - otimens) // 1000
                 if oscode == 4:
                     dgheaders[4, _col] = diff_wait_or_work
@@ -156,7 +156,9 @@ class MonitoringAgent:
             # - - -
             return
 
-        send_udp(dgheaders[5, 2], dgheaders[5, 0], dgheaders[5, 1])
+        # print(dgheaders[0, 2], dgheaders[0, 0], dgheaders[0, 1], flush=True)
+        # print(dgheaders[4, 2], dgheaders[4, 0], dgheaders[4, 1], "\n", flush=True)
+        send_udp(dgheaders[4, 2], dgheaders[4, 0], dgheaders[4, 1])
         _diff_wss_parser, _diff_parser_logic = (
             int((_times[0] - _times[2]) // 1000),
             int((_times[1] - _times[0]) // 1000),
