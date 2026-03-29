@@ -58,7 +58,7 @@ def sems_clear(sems: list[Semaphore]) -> None:
 def check_proc(id_proc: int, procs_info: dict[int, ProcsDictTyping]) -> bool:
     _data = procs_info[id_proc]
     if _data["proc"] is not None:
-        if _data["proc"].is_alive() is not True:
+        if _data["proc"].is_alive() is False:
             logger.warning(f"WatchDog | CheckProc | Process {_data['name']} is dead.")
             return False
 

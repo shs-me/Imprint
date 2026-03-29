@@ -67,7 +67,7 @@ class BaseGridReader:
                 ),
                 dtype=np.uint16,
                 buffer=_mo_.shms[cfg.Metrics.__name__]["buf"][
-                    cfg.Metrics.coord_offset_start : cfg.Metrics.coord_offset_end
+                    cfg.Metrics.coord_offset[0] : cfg.Metrics.coord_offset[1]
                 ],
             )
             return BaseGridReader(_mo_=_mo_, grid=grid, _grid=_grid, _coord=_coord)
@@ -101,23 +101,31 @@ class BaseGridReader:
         """Get Coordinaties IDY:IDX from 2-D Array 'Cord'"""
         new_flag: int = 1 if (flag := self._metrics_buf[self.flag]) == 0 else 0
         self._metrics_buf[self.flag] = new_flag  # change buffer for writer
-        idy_min, idx_min, idy_max, idx_max, idy, idx = self._coord[flag, :]
-        np.copyto(  # update grid local
-            dst=self.grid[
-                min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
-                min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
-            ],
-            src=self._grid[
-                min(idy_min, idy_max) : max(idy_min, idy_max) + 1,
-                min(idx_min, idx_max) : max(idx_min, idx_max) + 1,
-            ],
-        )
-        self._coord[flag, :] = 65535, 65535, 0, 0, 0, 0  # reset
-        price, timestamp = (  # convert idy, idx to price, timestamp
-            self.convert.to_price(idy=int(idy)),
-            self.convert.to_timestamp(idx=int(idx)),
-        )
-        return (idy, idx, price, timestamp)
+        _counter: int = 0
+        while _counter < 2:
+            if (self._coord[flag, 6] % 2) == 0:  # data is not dirty
+                idy_min, idx_min, idy_max, idx_max, idy, idx = self._coord[flag, :6]
+                np.copyto(  # update grid local
+                    dst=self.grid[
+                        idy_min:idy_max,
+                        idx_min:idx_max,
+                    ],
+                    src=self._grid[
+                        idy_min:idy_max,
+                        idx_min:idx_max,
+                    ],
+                )
+                self._coord[flag, :] = 65535, 65535, 0, 0, 0, 0, 0  # reset
+                price, timestamp = (  # convert idy, idx to price, timestamp
+                    self.convert.to_price(idy=int(idy)),
+                    self.convert.to_timestamp(idx=int(idx)),
+                )
+                return (idy, idx, price, timestamp)
+
+            else:  # data maybe is dirty
+                _counter += 1
+
+        return None
 
     def _check_update(self) -> bool:
         if self.base_price == 0.0:
@@ -125,18 +133,12 @@ class BaseGridReader:
 
         if (data := self._get_cords()) is not None:
             self.check_patterns(
-                idy=data[0],
-                idx=data[1],
-                price=data[2],
-                timestamp=data[3],
-                grid=self.grid,
+                idy=data[0], idx=data[1], price=data[2], timestamp=data[3]
             )
             return True
 
         return False
 
-    def check_patterns(
-        self, idy: int, idx: int, price: float, timestamp: int, grid: np.ndarray
-    ) -> None:
+    def check_patterns(self, idy: int, idx: int, price: float, timestamp: int) -> None:
         _price: int | float = self.convert.round_to_tick(price)
         print(idy, idx, _price, timestamp, flush=True)  # debug

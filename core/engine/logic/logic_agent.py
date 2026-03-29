@@ -11,19 +11,19 @@ class LogicAgent:
     def __init__(
         self,
         mo: MonitorObj,
-        sleep_logic: Event,
+        pre_sleep_logic: Event,
         general_event: Event,
     ) -> None:
         # Initialization
         self._mo = mo
         self._id_m_ = self._mo._id_m
         self._set, self._get = self._mo.set_, self._mo.get_
-        self.wait_parser: Event = sleep_logic
+        self.pre_sleep_logic: Event = pre_sleep_logic
         self.wait_main: Event = general_event
 
     @staticmethod
     def create(
-        sleep_logic: Event,
+        pre_sleep_logic: Event,
         logic_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
@@ -35,7 +35,7 @@ class LogicAgent:
                 _monitor=logic_monitor,
             )
             return LogicAgent(
-                mo=mo, sleep_logic=sleep_logic, general_event=general_event
+                mo=mo, pre_sleep_logic=pre_sleep_logic, general_event=general_event
             )
 
         except Exception:
@@ -50,7 +50,7 @@ class LogicAgent:
     def run_logic_engine(self) -> None:
         # LocalLinks
         id_m, set_status, get_status = self._id_m_, self._set, self._get
-        wait_parser = self.wait_parser
+        pre_sleep_logic = self.pre_sleep_logic
         #  - - -
         try:
             reader = BaseGridReader.create(_mo_=self._mo)
@@ -62,13 +62,13 @@ class LogicAgent:
                         while True:
                             if get_status(id_m) is not True:
                                 set_status(id_m, 4)  # IDLE # TIME START
-                                wait_parser.wait()
+                                pre_sleep_logic.wait()
                                 if get_status(id_m, proc=True):
                                     break
 
                                 set_status(id_m, 5)  # Running # TIME WAKE_UP
                                 reader._check_update()
-                                wait_parser.clear()
+                                pre_sleep_logic.clear()
                             else:
                                 sys.exit()
 
@@ -86,7 +86,7 @@ class LogicAgent:
 
 
 def run_logic(
-    sleep_logic: Event,
+    pre_sleep_logic: Event,
     logic_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
@@ -94,7 +94,7 @@ def run_logic(
 
     gc.disable()
     agent = LogicAgent.create(
-        sleep_logic=sleep_logic,
+        pre_sleep_logic=pre_sleep_logic,
         logic_monitor=logic_monitor,
         general_event=general_event,
         warn_error_status=warn_error_status,

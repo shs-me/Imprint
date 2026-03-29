@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import struct
 import sys
 import traceback
 from multiprocessing.synchronize import Event, Semaphore
@@ -12,34 +13,33 @@ from ... import Config, MonitorObj
 
 class WSSAgent:
     def __init__(
-        self,
-        mo: MonitorObj,
-        sem_sleep_parsing: Semaphore,
-        general_event: Event,
+        self, mo: MonitorObj, wake_up_parser: Event, general_event: Event
     ) -> None:
-        # Initialization
+        __cfg = Config.CoreConfig
         self._mo = mo
         self._id_m_ = self._mo._id_m
         self._set, self._get = self._mo.set_, self._mo.get_
-        self.release_parser = sem_sleep_parsing
+        self.release_parser = wake_up_parser
         self.wait_main = general_event
         # Variables
         self.uri = f"{Config.UserConfig.wss}{Config.UserConfig.wss}@aggTrade"
         # Semaphore, Event
-        self.release_parser = sem_sleep_parsing
+        self.release_parser = wake_up_parser
         self.wait_main = general_event
         # RawSHM.buf
-        self.raw_buf = self._mo.shms[Config.CoreConfig.Raw.__name__]["buf"]
-        # InitGetRawData
-        self.cell_amount = Config.CoreConfig.Raw.cell_amount
-        self.data_size = Config.CoreConfig.Raw.data_size
-        self.header_size = Config.CoreConfig.Raw.header_size
-        self.flag = Config.CoreConfig.Raw.flag
-        self.flag_start = self.flag - 2
+        self.raw_buf = self._mo.shms[__cfg.Raw.__name__]["buf"]
+        # SetRawData
+        self.cell_amount = __cfg.Raw.cell_amount
+        self.data_size = __cfg.Raw.data_size
+        self.header_size = __cfg.Raw.header_size
+        self.flag, self.spare_flag = __cfg.Raw.flag, __cfg.Raw.spare_flag
+        self.header_offset = __cfg.Raw.header_offset
+        self.data_offset = __cfg.Raw.data_offset
+        self.last_cell_offset = __cfg.Raw.last_cell_offset
 
     @staticmethod
     def create(
-        sem_sleep_parsing: Semaphore,
+        wake_up_parser: Event,
         network_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
@@ -51,7 +51,7 @@ class WSSAgent:
                 warn_error_status=warn_error_status,
             )
             return WSSAgent(
-                mo=mo, general_event=general_event, sem_sleep_parsing=sem_sleep_parsing
+                mo=mo, general_event=general_event, wake_up_parser=wake_up_parser
             )
 
         except Exception:
@@ -66,24 +66,40 @@ class WSSAgent:
         cell_amount: int,
         header_size: int,
         data_size: int,
+        dto: tuple[int, int],
+        lco: tuple[int, int],
         id_m: int,
         set_status,
-        raw_buf: memoryview,
+        raw_buf,
     ) -> bool:
-        """Set RawData[JSON Bytes] to RawSHM"""
+        """
+        Set RawData[JSON Bytes] to RawSHM.\n
+        hro: Header Offset
+        dto: Data Offset
+        lco: Last Cell Offset
+        """
         try:
-            lrd = len(raw_data)  # lrd: Len Raw Data
+            lrd: int = len(raw_data)  # lrd: Len Raw Data
             if lrd < data_size:
-                iwo = raw_buf[flag]  # iwo: Index Write Old
-                if (iwo + 1) >= (cell_amount * header_size):
-                    iwn = raw_buf[flag] = header_size  # iwn: Index Write New
-                    iwo = 0
-                else:
-                    iwn = raw_buf[flag] = iwo + header_size
+                flag_id: int = self.raw_buf[flag]
+                _raw_buf = raw_buf[: dto[1]] if flag_id == 0 else raw_buf[dto[1] :]
+                _raw_buf[self.spare_flag] = 1  # data maybe is dirty
 
-                raw_buf[iwo] = lrd  # Set lrd To Next Cell Hsib
-                # Set RawData To Next Cell Dsib
-                raw_buf[(iwn * cell_amount) : ((iwn * cell_amount) + lrd)] = raw_data
+                cell_id: int = struct.unpack("!q", _raw_buf[lco[0] : lco[1]])[0]
+
+                if (cell_id + header_size) >= (cell_amount * header_size):
+                    cell_id_new = header_size
+                    cell_id = 0
+                else:
+                    cell_id_new = cell_id + header_size
+
+                _raw_buf[lco[0] : lco[1]] = struct.pack("!q", cell_id_new)
+                _raw_buf[cell_id_new] = lrd
+                start = cell_id * data_size + dto[0]
+                end = start + lrd
+                _raw_buf[start:end] = raw_data
+
+                _raw_buf[self.spare_flag] = 0  # data is not dirty
                 return True
 
             else:
@@ -92,30 +108,30 @@ class WSSAgent:
 
         except Exception:
             traceback.print_exc()  # Debug
-            set_status(id_m, 151)  # Error in this func
+            set_status(id_m, 152)  # Error in this func
             return False
 
     async def run_wss_engine(self) -> None:
         # Local Links
-        _release_parser = self.release_parser  # Semaphore
+        wake_up_parser = self.release_parser  # Semaphore
         _raw_buf = self.raw_buf  # RawShM.buf
         id_m, set_status, get_status = self._id_m_, self._set, self._get
-        _cell_amount, _header_size = self.cell_amount, self.header_size
-        _data_size, _flag, _flag_start = self.data_size, self.flag, self.flag_start
+        flag, header_size, data_size = self.flag, self.header_size, self.data_size
+        cell_amount, dto, hro = self.cell_amount, self.data_offset, self.header_offset
+        lco = self.last_cell_offset
         set_raw_data = self._set_raw_data
         # - - -
         while True:
             try:
                 gc.collect()
                 self.wait_main.wait()
-                while _raw_buf[_flag_start] != 1:
-                    await asyncio.sleep(0.1)
                 try:
                     async with connect(self.uri, ping_interval=20) as ws:
                         while True:
                             if get_status(id_m) is not True:
                                 if get_status(id_m, proc=True):
-                                    _release_parser.release()
+                                    if wake_up_parser.is_set() is False:
+                                        wake_up_parser.set()
                                     break
 
                                 set_status(id_m, 4)  # Sleep
@@ -124,15 +140,18 @@ class WSSAgent:
 
                                 if state := set_raw_data(
                                     raw_data=raw_data,
-                                    flag=_flag,
-                                    cell_amount=_cell_amount,
-                                    header_size=_header_size,
-                                    data_size=_data_size,
+                                    flag=flag,
+                                    cell_amount=cell_amount,
+                                    header_size=header_size,
+                                    data_size=data_size,
+                                    dto=dto,
+                                    lco=lco,
                                     id_m=id_m,
                                     set_status=set_status,
                                     raw_buf=_raw_buf,
                                 ):
-                                    _release_parser.release()
+                                    if wake_up_parser.is_set() is False:
+                                        wake_up_parser.set()
 
                                 else:
                                     if state is False:
@@ -152,7 +171,7 @@ class WSSAgent:
 
 
 def run_wss(
-    sem_sleep_parsing: Semaphore,
+    wake_up_parser: Event,
     network_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
@@ -160,7 +179,7 @@ def run_wss(
     gc.disable()
     winloop.install()
     wss = WSSAgent.create(
-        sem_sleep_parsing=sem_sleep_parsing,
+        wake_up_parser=wake_up_parser,
         network_monitor=network_monitor,
         general_event=general_event,
         warn_error_status=warn_error_status,

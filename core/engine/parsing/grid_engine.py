@@ -2,20 +2,22 @@ import struct
 import traceback
 
 import numpy as np
+from numpy.typing import NDArray
 
 from ... import Config, MonitorObj
 from .. import ConvertMetrics
 
 
 class GridEngine:
-    def __init__(self, _mo_: MonitorObj, grid: np.ndarray, coord: np.ndarray) -> None:
-        # Initialization
+    def __init__(
+        self, _mo_: MonitorObj, grid: NDArray[np.float64], coord: NDArray[np.uint16]
+    ) -> None:
         cfg = Config.CoreConfig
         self._mo_ = _mo_
         self._id_m_ = self._mo_._id_d
         self._set, self._get = self._mo_.set_, self._mo_.get_
-        self.grid: np.ndarray = grid  # 2-D. Array DType Float64
-        self.coord: np.ndarray = coord  # 2-D. Array DType uint16
+        self.grid = grid  # 2-D. Array DType Float64
+        self.coord = coord  # 2-D. Array DType uint16
         self.lines: int = cfg.Grid.lines  # ID-Y in Array
         self.cols: int = cfg.Grid.cols  # ID-X in Array
         self.ivl_m: int = cfg.Grid.interval_min
@@ -58,7 +60,7 @@ class GridEngine:
                 ),
                 dtype=np.uint16,
                 buffer=_mo_.shms[cfg.Metrics.__name__]["buf"][
-                    cfg.Metrics.coord_offset_start : cfg.Metrics.coord_offset_end
+                    cfg.Metrics.coord_offset[0] : cfg.Metrics.coord_offset[1]
                 ],
             )
             return GridEngine(_mo_=_mo_, grid=grid, coord=coord)
@@ -83,7 +85,7 @@ class GridEngine:
                 "!dq", price, ((timestamp // self.ims) * self.ims)
             )
             # coord init
-            self.coord[:] = 65535, 65535, 0, 0, 0, 0
+            self.coord[:] = 65535, 65535, 0, 0, 0, 0, 0
             # Init Converter
             self.convert = ConvertMetrics(
                 tick_size=self.tick_size,
@@ -127,26 +129,17 @@ class GridEngine:
         grid[OHLCV_T_D_CT[4], idx] += qty
         grid[OHLCV_T_D_CT[6], idx] += -qty if is_sell else qty
 
-    def set_cords(self, idy: int, idx: int) -> bool | None:
+    def set_cords(self, idy: int, idx: int) -> None:
         """Set Coordinates IDY:IDX on 2-D Array 'Cord'"""
-        _counter: int = 0
-        while _counter < 2:
-            flag = self._metrics_buf[self.flag]
-            idy_min, idx_min, idy_max, idx_max, __, _ = self.coord[flag, :]
-            if idy < idy_min:  # True: Update IDY MIN
-                idy_min = idy
-            if idy > idy_max:  # True: Update IDY MAX
-                idy_max = idy
-            if idx < idx_min:  # True: Update IDX MIN
-                idx_min = idx
-            if idx > idx_max:  # True: Update IDX MAX
-                idx_max = idx
-            if self._metrics_buf[self.flag] == flag:
-                self.coord[flag:] = idy_min, idx_min, idy_max, idx_max, idy, idx
-                return True
-
-            else:
-                _counter += 1
+        flag: int = self._metrics_buf[self.flag]
+        self.coord[flag, 6] = 1  # data maybe is dirty
+        coords = self.coord[flag, :4]
+        idy_min = idy if coords[0] > idy else coords[0]
+        idx_min = idx if coords[1] > idx else coords[1]
+        idy_max = idy + 1 if coords[2] < idy else coords[2]
+        idx_max = idy + 1 if coords[3] < idx else coords[3]
+        self.coord[flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
+        self.coord[flag, 6] = 1  # data is not dirty
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         """Update GridArray"""
@@ -178,8 +171,8 @@ class GridEngine:
                     timestamp=timestamp,
                     is_sell=is_sell,
                 )
-                if self.set_cords(idy, idx):
-                    return True
+                self.set_cords(idy, idx)
+                return True
 
             else:
                 _set_status(_id_m_, 102)  # Warn in this IF

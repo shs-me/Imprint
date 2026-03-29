@@ -20,7 +20,6 @@ from . import (
 
 class RunMain:
     def __init__(self, backtesting: bool) -> None:
-        # Initialization
         self.backtesting = backtesting
         self.procs: dict[int, ProcsDictTyping] = {}
         self.id_info = {}
@@ -30,7 +29,7 @@ class RunMain:
         self.sc_general = {}
         # Event, Semaphores init
         # Module's sem's | Event's
-        self.sem_sleep_parsing = Semaphore(0)
+        self.sleep_parsing = Event()
         self.sleep_logic = Event()
         # Profiling sem's
         self._parser_monitor = Semaphore(0)
@@ -40,7 +39,6 @@ class RunMain:
         self.warn_error_status = Semaphore(0)
         self.general_event = Event()
         self.sem_s = [
-            self.sem_sleep_parsing,
             self._parser_monitor,
             self._logic_monitor,
             self._network_monitor,
@@ -121,7 +119,7 @@ class RunMain:
     def _proc_arg_init(self, proc_name: str) -> tuple | None:
         if proc_name == "PARSING":
             return (
-                self.sem_sleep_parsing,
+                self.sleep_parsing,
                 self.sleep_logic,
                 self._parser_monitor,
                 self.general_event,
@@ -136,14 +134,14 @@ class RunMain:
             )
         elif proc_name == "NETWORK":
             return (
-                self.sem_sleep_parsing,
+                self.sleep_parsing,
                 self._network_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
         elif proc_name == "NETWORK_SIM":
             return (
-                self.sem_sleep_parsing,
+                self.sleep_parsing,
                 self._network_monitor,
                 self.general_event,
                 self.warn_error_status,

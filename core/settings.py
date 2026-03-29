@@ -4,8 +4,6 @@ from multiprocessing.shared_memory import SharedMemory
 from types import FunctionType
 from typing import TypedDict
 
-from websockets.typing import Data
-
 
 class ProcsDictTyping(TypedDict):
     name: str
@@ -83,23 +81,24 @@ class Config:
             shm_name: str = "profiling_shm_for_profiling"
 
         class Raw:
-            # Double Buffer
-            data_size: int = 256
             cell_amount: int = 1000
             header_size: int = 1
-            # index's
-            flag: int = 8
-            spare_flag: int = 9
-            offset_cell_start: int = 10
-            # offset's
-            last_update_cell_offset: tuple[int, int] = (0, 8)
+            data_size: int = 256
+            # Double Buffer
+            flag: int = 0
+            spare_flag: int = 1
+            last_cell_offset: tuple[int, int] = (2, 10)
+            header_offset: tuple[int, int] = (
+                last_cell_offset[1],
+                (cell_amount * header_size) + last_cell_offset[1],
+            )
+            data_offset: tuple[int, int] = (
+                header_offset[1],
+                (cell_amount * data_size) + header_offset[1],
+            )
             # ShM
             shm_size: int = (
-                (
-                    ((cell_amount * data_size) + (cell_amount + header_size) + 10)
-                    * 2
-                    // 4096
-                )
+                (((cell_amount * data_size) + (cell_amount + header_size) + 10) // 4096)
                 + 1
             ) * 4096
             shm_name: str = "raw_data_shm_for_raw_data"
@@ -110,13 +109,12 @@ class Config:
             price: tuple[int, int] = (16, 16 + (8 * 1))  # [a: a+b*1] float64=8
             tick_size: tuple[int, int] = (24, 24 + (8 * 1))  # [a: a+b*1] float64=8
             coord_lines: int = 2
-            coord_cols: int = 6
-            coord_offset_start: int = 32
-            coord_offset_end: int = 56
+            coord_cols: int = 7
+            coord_offset: tuple[int, int] = (32, 32 + ((7 * 2) * 2))
             # Index's
-            flag: int = 57
+            flag: int = coord_offset[1] + 1
             # ShM
-            shm_size: int = (coord_offset_end // 4096 + 1) * 4096
+            shm_size: int = (coord_offset[1] // 4096 + 1) * 4096
             shm_name: str = "metrics_shm_for_different_metrics"
 
         class Status:
@@ -147,3 +145,19 @@ class Config:
             # ShM
             shm_size: int = (4096 // 4096 + 1) * 4096
             shm_name: str = "status_shm_for_status_procs_and_modules"
+
+
+class ShMs:  # For Future Update
+    __cfg = Config.CoreConfig
+    shm_size = (
+        (
+            __cfg.Grid.shm_size
+            + __cfg.Profiling.shm_size
+            + __cfg.Raw.shm_size
+            + __cfg.Metrics.shm_size
+            + __cfg.Status.shm_size
+        )
+        // 4096
+        + 1
+    ) * 4096
+    shm_name = "GridCore"

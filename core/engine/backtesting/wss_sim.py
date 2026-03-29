@@ -71,11 +71,11 @@ class WssSimAgent:
     def __init__(
         self,
         mo: MonitorObj,
-        sem_sleep_parsing: Semaphore,
+        wake_up_parser: Event,
         general_event: Event,
     ) -> None:
         # Initialization
-        cfg = Config.CoreConfig
+        __cfg = Config.CoreConfig
         self._mo = mo
         self._id_m_ = self._mo._id_m
         self._set, self._get = self._mo.set_, self._mo.get_
@@ -84,21 +84,22 @@ class WssSimAgent:
         self.ottrade: int = 0  # old time trade
         self.nttrade: int = 0  # new time trade
         # Semaphore, Event
-        self.release_parser = sem_sleep_parsing
+        self.release_parser = wake_up_parser
         self.wait_main = general_event
         # RawSHM.buf
-        self.raw_buf = self._mo.shms[cfg.Raw.__name__]["buf"]
+        self.raw_buf = self._mo.shms[__cfg.Raw.__name__]["buf"]
         # InitGetRawData
-        self.cell_amount = cfg.Raw.cell_amount
-        self.data_size = cfg.Raw.data_size
-        self.header_size = cfg.Raw.header_size
-        self.flag = cfg.Raw.flag
-        self.cell_start_offset = cfg.Raw.cell_start_offset
-        self.cell_end_slice = slice(*cfg.Raw.cell_end_offset)
+        self.cell_amount = __cfg.Raw.cell_amount
+        self.data_size = __cfg.Raw.data_size
+        self.header_size = __cfg.Raw.header_size
+        self.flag, self.spare_flag = __cfg.Raw.flag, __cfg.Raw.spare_flag
+        self.header_offset = __cfg.Raw.header_offset
+        self.data_offset = __cfg.Raw.data_offset
+        self.last_cell_offset = __cfg.Raw.last_cell_offset
 
     @staticmethod
     def create(
-        sem_sleep_parsing: Semaphore,
+        wake_up_parser: Event,
         network_monitor: Semaphore,
         general_event: Event,
         warn_error_status: Semaphore,
@@ -110,7 +111,7 @@ class WssSimAgent:
                 _monitor=network_monitor,
             )
             return WssSimAgent(
-                mo=mo, general_event=general_event, sem_sleep_parsing=sem_sleep_parsing
+                mo=mo, general_event=general_event, wake_up_parser=wake_up_parser
             )
 
         except Exception:
@@ -143,32 +144,41 @@ class WssSimAgent:
         cell_amount: int,
         header_size: int,
         data_size: int,
+        dto: tuple[int, int],
+        lco: tuple[int, int],
         id_m: int,
         set_status,
         raw_buf: memoryview,
     ) -> bool:
-        """Set RawData[JSON Bytes] to RawSHM"""
+        """
+        Set RawData[JSON Bytes] to RawSHM.\n
+        hro: Header Offset
+        dto: Data Offset
+        lco: Last Cell Offset
+        """
         try:
             lrd: int = len(raw_data)  # lrd: Len Raw Data
             if lrd < data_size:
-                _counter: int = 0
-                while _counter < 2:
-                    flag_id: int = raw_buf[flag]
-                    # . . .
-                    cell_id: int = struct.unpack("!q", raw_buf[self.cell_end_slice])[0]
-                    if (cell_id + 1) >= (cell_amount * header_size):
-                        cell_id_new = self.cell_start_offset + header_size
-                        cell_id = self.cell_start_offset
-                    else:
-                        cell_id_new = cell_id + header_size
+                flag_id: int = self.raw_buf[flag]
+                _raw_buf = raw_buf[: dto[1]] if flag_id == 0 else raw_buf[dto[1] :]
+                _raw_buf[self.spare_flag] = 1  # data maybe is dirty
 
-                    raw_buf[self.cell_end_slice] = struct.pack("!q", cell_id)
-                    raw_buf[cell_id] = lrd  # Set lrd To Next Cell Hsib
-                    # Set RawData To Next Cell Dsib
-                    raw_buf[
-                        (cell_id_new * cell_amount) : ((iwn * cell_amount) + lrd)
-                    ] = raw_data
-                    return True
+                cell_id: int = struct.unpack("!q", _raw_buf[lco[0] : lco[1]])[0]
+
+                if cell_id >= (cell_amount * header_size):
+                    cell_id_new = header_size
+                    cell_id = 0
+                else:
+                    cell_id_new = cell_id + header_size
+
+                _raw_buf[lco[0] : lco[1]] = struct.pack("!q", cell_id_new)
+                _raw_buf[cell_id_new] = lrd
+                start = cell_id * data_size + dto[0]
+                end = start + lrd
+                _raw_buf[start:end] = raw_data
+
+                _raw_buf[self.spare_flag] = 0  # data is not dirty
+                return True
 
             else:
                 set_status(id_m, 100)  # Warn in this IF
@@ -198,12 +208,13 @@ class WssSimAgent:
 
     def run_wss_sim_engine(self) -> None:
         # Local Links
-        _release_parser = self.release_parser  # Semaphore
+        wake_up_parser = self.release_parser  # Semaphore
         _raw_buf = self.raw_buf  # RawShM.buf
         _encoder = self.encoder  # JSON msgspec Encoder
         id_m, set_status, get_status = self._id_m_, self._set, self._get
-        _cell_amount, _header_size = self.cell_amount, self.header_size
-        _data_size, _flag, _flag_start = self.data_size, self.flag, self.flag_start
+        flag, header_size, data_size = self.flag, self.header_size, self.data_size
+        cell_amount, dto, hro = self.cell_amount, self.data_offset, self.header_offset
+        lco = self.last_cell_offset
         set_raw_data, encode_data = self._set_raw_data, self._encode_data
         time_to_sleep = self._time_to_sleep
         # - - -
@@ -213,15 +224,13 @@ class WssSimAgent:
                 self.wait_main.wait()
                 set_status(id_m, 4)  # IDLE
                 prepper = DataPrepper()
-                while _raw_buf[_flag_start] != 1:
-                    time.sleep(0.1)
-
                 prepper.start()
                 while True:
                     if get_status(id_m) is not True:
                         set_status(id_m, 4)  # Sleep
                         if get_status(id_m, proc=True):
-                            _release_parser.release()
+                            if wake_up_parser.is_set() is False:
+                                wake_up_parser.set()
                             break
 
                         if prepper.error is None:
@@ -244,15 +253,18 @@ class WssSimAgent:
                             ):
                                 if _state := set_raw_data(
                                     raw_data=raw_data,
-                                    flag=_flag,
-                                    cell_amount=_cell_amount,
-                                    header_size=_header_size,
-                                    data_size=_data_size,
+                                    flag=flag,
+                                    cell_amount=cell_amount,
+                                    header_size=header_size,
+                                    data_size=data_size,
+                                    dto=dto,
+                                    lco=lco,
                                     id_m=id_m,
                                     set_status=set_status,
                                     raw_buf=_raw_buf,
                                 ):
-                                    _release_parser.release()
+                                    if wake_up_parser.is_set() is False:
+                                        wake_up_parser.set()
 
                                 else:
                                     if _state is False:
@@ -274,7 +286,7 @@ class WssSimAgent:
 
 
 def run_wss_sim(
-    sem_sleep_parsing: Semaphore,
+    wake_up_parser: Event,
     network_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
@@ -282,7 +294,7 @@ def run_wss_sim(
     gc.disable()
 
     wss = WssSimAgent.create(
-        sem_sleep_parsing=sem_sleep_parsing,
+        wake_up_parser=wake_up_parser,
         general_event=general_event,
         network_monitor=network_monitor,
         warn_error_status=warn_error_status,
