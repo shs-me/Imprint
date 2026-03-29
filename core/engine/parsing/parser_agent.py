@@ -1,6 +1,5 @@
 import gc
 import struct
-import sys
 import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
@@ -30,7 +29,7 @@ class ParserAgent:
         self._mo = mo
         self._id_m_ = self._mo._id_m
         self._set, self._get = self._mo.set_, self._mo.get_
-        self.acquire_wss = pre_sleep_wss
+        self.pre_sleep_wss = pre_sleep_wss
         self.wake_up_logic = wake_up_logic
         self.wait_main = general_event
         # variables
@@ -98,6 +97,7 @@ class ParserAgent:
             if last_cell == 0:
                 new_flag: int = 1 if (flag_id := raw_buf[flag]) == 0 else 0
                 raw_buf[flag] = new_flag  # change buffer for writer
+                self.pre_sleep_wss.clear()
                 _counter: int = 0
                 while _counter < 2:
                     if (raw_buf[self.spare_flag] % 2) == 0:  # data is not dirty
@@ -106,11 +106,16 @@ class ParserAgent:
                         )
                         cell_id: int = struct.unpack("!q", _raw_buf[lco[0] : lco[1]])[0]
                         last_cell, self._raw_buf = cell_id, _raw_buf
+                        break
 
                     else:  # data maybe is dirty
                         _counter += 1
+                        continue
+                else:
+                    set_status(id_m, 60)
+                    return False
 
-            lrd = self.raw_buf[last_cell]
+            lrd = self.raw_buf[last_cell + lco[1]]
             cell_id = last_cell - 1
             start = cell_id * data_size + dto[0]
             end = start + lrd
@@ -150,7 +155,7 @@ class ParserAgent:
         cell_amount, dto, hro = self.cell_amount, self.data_offset, self.header_offset
         lco = self.last_cell_offset
         # Semaphore, Event
-        wake_up_logic, pre_sleep_wss = self.wake_up_logic, self.acquire_wss
+        wake_up_logic, pre_sleep_wss = self.wake_up_logic, self.pre_sleep_wss
         # Methods
         get_raw_data = self._get_raw_data
         decode_raw_data = self._decode_raw_data
@@ -208,13 +213,13 @@ class ParserAgent:
                                                 wake_up_logic.set()
 
                                     elif trade is False:
-                                        sys.exit()
+                                        return
 
                                 elif raw_data is False:
-                                    sys.exit()
+                                    return
 
                             else:
-                                sys.exit()
+                                return
 
                     except Exception:
                         traceback.print_exc()  # Debug

@@ -172,7 +172,7 @@ class WssSimAgent:
                     cell_id_new = cell_id + header_size
 
                 _raw_buf[lco[0] : lco[1]] = struct.pack("!q", cell_id_new)
-                _raw_buf[cell_id_new] = lrd
+                _raw_buf[cell_id_new + lco[1]] = lrd
                 start = cell_id * data_size + dto[0]
                 end = start + lrd
                 _raw_buf[start:end] = raw_data
@@ -268,16 +268,16 @@ class WssSimAgent:
 
                                 else:
                                     if _state is False:
-                                        pass
+                                        return
                             else:
                                 if raw_data is False:
-                                    pass
+                                    return
                         else:
                             set_status(id_m, 151)
                             print(prepper.error)  # Debug
                             continue
                     else:
-                        break
+                        return
 
             except Exception:
                 traceback.print_exc()  # Debug
