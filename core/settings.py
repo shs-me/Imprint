@@ -97,7 +97,7 @@ class Config:
                 (cell_amount * data_size) + header_offset[1],
             )
             # ShM
-            shm_size: int = ((header_offset[1] * 2 // 4096) + 1) * 4096
+            shm_size: int = ((data_offset[1] * 2 // 4096) + 1) * 4096
             shm_name: str = "raw_data_shm_for_raw_data"
 
         class Metrics:
