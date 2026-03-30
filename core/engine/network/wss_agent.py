@@ -35,7 +35,7 @@ class WSSAgent:
         self.flag, self.spare_flag = __cfg.Raw.flag, __cfg.Raw.spare_flag
         self.header_offset = __cfg.Raw.header_offset
         self.data_offset = __cfg.Raw.data_offset
-        self.last_cell_offset = __cfg.Raw.last_cell_offset
+        self.cell_id = __cfg.Raw.cell_id_offset
 
     @staticmethod
     def create(
@@ -118,7 +118,7 @@ class WSSAgent:
         id_m, set_status, get_status = self._id_m_, self._set, self._get
         flag, header_size, data_size = self.flag, self.header_size, self.data_size
         cell_amount, dto, hro = self.cell_amount, self.data_offset, self.header_offset
-        lco = self.last_cell_offset
+        lco = self.cell_id
         set_raw_data = self._set_raw_data
         # - - -
         while True:

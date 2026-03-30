@@ -1398,7 +1398,7 @@
       "6": ""
     },
     "100": {
-      "0": "",
+      "0": "GetRawData: 100: data in buffer dirty long time",
       "1": "InitSession: 100 : amount ticks in price > 80% of lines",
       "2": "",
       "3": "",

@@ -46,8 +46,8 @@ class ParserAgent:
         self.flag, self.spare_flag = __cfg.Raw.flag, __cfg.Raw.spare_flag
         self.header_offset = __cfg.Raw.header_offset
         self.data_offset = __cfg.Raw.data_offset
-        self.last_cell_offset = __cfg.Raw.last_cell_offset
-        self.last_cell = 0
+        self.cell_id_offset = __cfg.Raw.cell_id_offset
+        self.cell_id_new = 0
 
     @staticmethod
     def create(
@@ -93,34 +93,37 @@ class ParserAgent:
         lco: Last Cell Offset
         """
         try:
-            last_cell = self.last_cell
-            if last_cell == 0:
+            cell_id_new = self.cell_id_new
+            if cell_id_new == 0:
                 new_flag: int = 1 if (flag_id := raw_buf[flag]) == 0 else 0
                 raw_buf[flag] = new_flag  # change buffer for writer
-                self.pre_sleep_wss.clear()
+
+                self._raw_buf = _raw_buf = (
+                    raw_buf[: dto[1]] if flag_id == 0 else raw_buf[dto[1] :]
+                )
                 _counter: int = 0
-                while _counter < 2:
-                    if (raw_buf[self.spare_flag] % 2) == 0:  # data is not dirty
-                        _raw_buf = (
-                            raw_buf[: dto[1]] if flag_id == 0 else raw_buf[dto[1] :]
-                        )
-                        cell_id: int = struct.unpack("!q", _raw_buf[lco[0] : lco[1]])[0]
-                        last_cell, self._raw_buf = cell_id, _raw_buf
+                while _counter < 100:
+                    if (_raw_buf[self.spare_flag] % 2) == 0:  # data is not dirty
+                        cell_id_new: int = struct.unpack(
+                            "!q", _raw_buf[lco[0] : lco[1]]
+                        )[0]
+                        _raw_buf[lco[0] : lco[1]] = struct.pack("!q", 0)
+                        _raw_buf[self.spare_flag] = 1
+                        self.pre_sleep_wss.clear()
                         break
 
                     else:  # data maybe is dirty
                         _counter += 1
                         continue
                 else:
-                    set_status(id_m, 60)
+                    set_status(id_m, 100)
+
                     return False
 
-            lrd = self.raw_buf[last_cell + lco[1]]
-            cell_id = last_cell - 1
+            self.cell_id_new = cell_id = cell_id_new - self.header_size
+            lrd = self._raw_buf[cell_id + lco[1]]
             start = cell_id * data_size + dto[0]
-            end = start + lrd
-            raw_data = self._raw_buf[start:end]
-            self.last_cell = cell_id
+            raw_data = self._raw_buf[start : start + lrd]
             return raw_data
 
         except Exception:
@@ -146,14 +149,14 @@ class ParserAgent:
 
     def run_parsing_engine(self) -> None:
         # LocalLinks
-        _raw_buf, _metrics_buf = self.raw_buf, self.metrics_buf  # ShM.Buf's
+        raw_buf, _metrics_buf = self.raw_buf, self.metrics_buf  # ShM.Buf's
         _decoder = self.decoder.decode  # Msgspec Json Decoder
         # MonitorObj
         _id_m, set_status, get_status = self._id_m_, self._set, self._get
         # GetRawData
         flag, header_size, data_size = self.flag, self.header_size, self.data_size
         cell_amount, dto, hro = self.cell_amount, self.data_offset, self.header_offset
-        lco = self.last_cell_offset
+        lco = self.cell_id_offset
         # Semaphore, Event
         wake_up_logic, pre_sleep_wss = self.wake_up_logic, self.pre_sleep_wss
         # Methods
@@ -170,12 +173,13 @@ class ParserAgent:
                         while True:
                             if get_status(_id_m) is not True:
                                 set_status(_id_m, 4)  # IDLE # TIME START
-                                if self.last_cell == 0:
+                                if self.cell_id_new == 0:
                                     pre_sleep_wss.wait()
 
                                 if get_status(_id_m, proc=True):
-                                    wake_up_logic.wait()
-                                    break
+                                    if self.cell_id_new == 0:
+                                        wake_up_logic.set()
+                                        break
 
                                 set_status(_id_m, 5)  # Running # TIME WAKE_UP
                                 if isinstance(
@@ -187,7 +191,7 @@ class ParserAgent:
                                             lco=lco,
                                             id_m=_id_m,
                                             set_status=set_status,
-                                            raw_buf=_raw_buf,
+                                            raw_buf=raw_buf,
                                         )
                                     ),
                                     memoryview,

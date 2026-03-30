@@ -87,10 +87,10 @@ class Config:
             # Double Buffer
             flag: int = 0
             spare_flag: int = 1
-            last_cell_offset: tuple[int, int] = (2, 10)
+            cell_id_offset: tuple[int, int] = (2, 10)
             header_offset: tuple[int, int] = (
-                last_cell_offset[1],
-                (cell_amount * header_size) + last_cell_offset[1],
+                cell_id_offset[1],
+                (cell_amount * header_size) + cell_id_offset[1],
             )
             data_offset: tuple[int, int] = (
                 header_offset[1],

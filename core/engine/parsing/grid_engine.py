@@ -139,7 +139,7 @@ class GridEngine:
         idy_max = idy + 1 if coords[2] < idy else coords[2]
         idx_max = idy + 1 if coords[3] < idx else coords[3]
         self.coord[flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
-        self.coord[flag, 6] = 1  # data is not dirty
+        self.coord[flag, 6] = 0  # data is not dirty
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         """Update GridArray"""

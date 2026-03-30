@@ -84,7 +84,7 @@ class WssSimAgent:
         self.ottrade: int = 0  # old time trade
         self.nttrade: int = 0  # new time trade
         # Semaphore, Event
-        self.release_parser = wake_up_parser
+        self.wake_up_parser = wake_up_parser
         self.wait_main = general_event
         # RawSHM.buf
         self.raw_buf = self._mo.shms[__cfg.Raw.__name__]["buf"]
@@ -95,7 +95,7 @@ class WssSimAgent:
         self.flag, self.spare_flag = __cfg.Raw.flag, __cfg.Raw.spare_flag
         self.header_offset = __cfg.Raw.header_offset
         self.data_offset = __cfg.Raw.data_offset
-        self.last_cell_offset = __cfg.Raw.last_cell_offset
+        self.cell_id = __cfg.Raw.cell_id_offset
 
     @staticmethod
     def create(
@@ -172,7 +172,7 @@ class WssSimAgent:
                     cell_id_new = cell_id + header_size
 
                 _raw_buf[lco[0] : lco[1]] = struct.pack("!q", cell_id_new)
-                _raw_buf[cell_id_new + lco[1]] = lrd
+                _raw_buf[cell_id + lco[1]] = lrd
                 start = cell_id * data_size + dto[0]
                 end = start + lrd
                 _raw_buf[start:end] = raw_data
@@ -208,13 +208,13 @@ class WssSimAgent:
 
     def run_wss_sim_engine(self) -> None:
         # Local Links
-        wake_up_parser = self.release_parser  # Semaphore
+        wake_up_parser = self.wake_up_parser  # Semaphore
         _raw_buf = self.raw_buf  # RawShM.buf
         _encoder = self.encoder  # JSON msgspec Encoder
         id_m, set_status, get_status = self._id_m_, self._set, self._get
         flag, header_size, data_size = self.flag, self.header_size, self.data_size
         cell_amount, dto, hro = self.cell_amount, self.data_offset, self.header_offset
-        lco = self.last_cell_offset
+        lco = self.cell_id
         set_raw_data, encode_data = self._set_raw_data, self._encode_data
         time_to_sleep = self._time_to_sleep
         # - - -
@@ -231,6 +231,7 @@ class WssSimAgent:
                         if get_status(id_m, proc=True):
                             if wake_up_parser.is_set() is False:
                                 wake_up_parser.set()
+
                             break
 
                         if prepper.error is None:
@@ -263,8 +264,8 @@ class WssSimAgent:
                                     set_status=set_status,
                                     raw_buf=_raw_buf,
                                 ):
-                                    if wake_up_parser.is_set() is False:
-                                        wake_up_parser.set()
+                                    if self.wake_up_parser.is_set() is False:
+                                        self.wake_up_parser.set()
 
                                 else:
                                     if _state is False:

@@ -102,7 +102,7 @@ class BaseGridReader:
         new_flag: int = 1 if (flag := self._metrics_buf[self.flag]) == 0 else 0
         self._metrics_buf[self.flag] = new_flag  # change buffer for writer
         _counter: int = 0
-        while _counter < 2:
+        while _counter < 100:
             if (self._coord[flag, 6] % 2) == 0:  # data is not dirty
                 idy_min, idx_min, idy_max, idx_max, idy, idx = self._coord[flag, :6]
                 np.copyto(  # update grid local
