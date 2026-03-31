@@ -114,7 +114,7 @@ class StatusCodes:
             "0": "",
             "1": "InitSession: 100 : amount ticks in price > 80% of lines",
             "2": "",
-            "3": "",
+            "3": "GetCoords: 100: data maybe is dirty, writer not update data",
             "4": "SetRawData: 100: size/len RawData > DataSizeInBuffer",
             "5": "",
             "6": "SetRawData: 100: size/len RawData > DataSizeInBuffer",

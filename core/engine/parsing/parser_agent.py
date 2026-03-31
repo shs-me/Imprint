@@ -25,7 +25,9 @@ class ParserAgent:
         general_event: Event,
     ) -> None:
         __cfg, self._mo, self.engine = Config.CoreConfig, mo, engine
-        self._set, self._get, self.id_m = self._mo.set_, self._mo.get_, self._mo.id_m
+
+        self.id_m = self._mo.id_m
+        self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.pre_sleep_wss, self.wake_up_logic = pre_sleep_wss, wake_up_logic
         self.wait_main = general_event
         self.decoder = msgspec.json.Decoder(type=AggTrade, strict=False)
@@ -66,7 +68,7 @@ class ParserAgent:
 
         except Exception:
             traceback.print_exc()
-            self._set(self.id_m, 154)
+            self.set_status(id_m=self.id_m, code=154)
             return None
 
     def _decode_raw_data(
@@ -78,20 +80,20 @@ class ParserAgent:
         try:
             trade = decoder.decode(raw_data)
             if trade.p < 0 or trade.q < 0 or trade.T < 0:
-                self._set(self.id_m, 60)
+                self.set_status(id_m=self.id_m, code=60)
                 return None
 
             return trade
 
         except Exception:
             traceback.print_exc()  # Debug
-            self._set(self.id_m, 153)
+            self.set_status(id_m=self.id_m, code=153)
             return None
 
     def run_parsing_engine(self) -> None:
         # LocalLinks
         decoder, engine = self.decoder, self.engine
-        id_m, set_status, get_status = self.id_m, self._set, self._get
+        id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
         raw_buf, ncell_wr, cell_amount = self.raw_buf, self.ncell_wr, self.cell_amount
@@ -104,13 +106,13 @@ class ParserAgent:
                     gc.collect()
                     self.wait_main.wait()
                     while True:
-                        if get_status(id_m) is not True:
+                        if have_problem(id_m=id_m, daugther=True) is not True:
                             set_status(id_m, 4)  # IDLE # TIME START
                             if ncell_wr[1] == ncell_wr[0]:
                                 pre_sleep_wss.clear()
                                 pre_sleep_wss.wait()
 
-                            if get_status(id_m, proc=True):
+                            if have_problem(id_m, proc=True):
                                 if wake_up_logic.is_set() is False:
                                     wake_up_logic.set()
                                     break
@@ -179,7 +181,7 @@ def run_parsing(
             gc.collect()
 
         else:
-            mo.set_(mo.id_m, 151)
+            mo.set_status(id_m=mo.id_m, code=151)
 
     finally:
         gc.collect()

@@ -18,6 +18,8 @@ class BaseGridReader:
         _coord: NDArray[np.uint16],
     ) -> None:
         __cfg, self._mo, self.guarantee = Config.CoreConfig, mo, guarantee
+        self.id_m = self._mo.id_d
+        self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.grid, self._grid, self._coord = grid, _grid, _coord
         self.lines, self.cols = __cfg.Grid.lines, __cfg.Grid.cols
         self.OHLCV_T_D_CT = [
@@ -57,6 +59,7 @@ class BaseGridReader:
                 shape=((__cfg.Grid.lines + 8), __cfg.Grid.cols),
                 dtype=np.float64,
             )
+            grid[:] = 0.0
             _coord: NDArray[np.uint16] = np.ndarray(
                 shape=(
                     __cfg.Metrics.coord_lines,
@@ -129,7 +132,9 @@ class BaseGridReader:
             else:  # data maybe is dirty
                 _counter += 1
 
-        return None
+        else:
+            self.set_status(id_m=self.id_m, code=100)
+            return None
 
     def _check_update(self) -> bool:
         if self.base_price == 0.0:
@@ -144,7 +149,5 @@ class BaseGridReader:
         return False
 
     def check_patterns(self, idy: int, idx: int, price: float, timestamp: int) -> None:
-        self.c += 1
-        print(self.c, flush=True)
-        # _price: int | float = self.convert.round_to_tick(price)
-        # print(idy, idx, _price, timestamp, flush=True)  # debug
+        _price: int | float = self.convert.round_to_tick(price)
+        print(idy, idx, _price, timestamp, flush=True)  # debug

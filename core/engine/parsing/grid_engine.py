@@ -17,7 +17,8 @@ class GridEngine:
         coord: NDArray[np.uint16],
     ) -> None:
         __cfg, self._mo, self.guarantee = Config.CoreConfig, mo, guarantee
-        self._set, self._get, self.id_m = self._mo.set_, self._mo.get_, self._mo.id_d
+        self.id_m = self._mo.id_d
+        self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.grid, self.coord = grid, coord
         self.lines, self.cols = __cfg.Grid.lines, __cfg.Grid.cols
         self.OHLCV_T_D_CT = [
@@ -67,7 +68,7 @@ class GridEngine:
 
         except Exception:
             traceback.print_exc()  # Debug
-            _mo_.set_(_mo_.id_d, 150)  # Error in this func
+            _mo_.set_status(id_m=_mo_.id_d, code=150)  # Error in this func
             return None
 
     def _init_session(self, price: float, timestamp: int) -> bool:
@@ -91,7 +92,7 @@ class GridEngine:
             return True
 
         else:
-            self._set(self.id_m, 100)  # Warn in this IF
+            self.set_status(self.id_m, 100)  # Warn in this IF
             return False
 
     def update_headers(
@@ -145,7 +146,7 @@ class GridEngine:
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         """Update GridArray"""
-        if self._get(self.id_m):
+        if self.have_problem(self.id_m):
             return False
 
         if self.base_price == 0.0:
@@ -168,8 +169,8 @@ class GridEngine:
                 return True
 
             else:
-                self._set(self.id_m, 102)  # Warn in this IF
+                self.set_status(id_m=self.id_m, code=102)  # Warn in this IF
         else:
-            self._set(self.id_m, 101)  # Warn in this IF
+            self.set_status(id_m=self.id_m, code=101)  # Warn in this IF
 
         return False

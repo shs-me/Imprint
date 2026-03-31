@@ -75,7 +75,7 @@ class MonitorObj:
             self.dgheaders = np.ndarray((6, self.cols), dtype=np.int64)
             self.dgheaders[:] = 0
 
-    def set_(self, id_m: int, code: int) -> bool | Exception:
+    def set_status(self, id_m: int, code: int) -> bool | Exception:
         """
         IF code > 49: set code on StatusShM.buf[ID_M].\n
         Else, called func "_profiling_" that set code+time_ns on ProfilingShM.\n
@@ -105,7 +105,7 @@ class MonitorObj:
         self.dgid = (dgid_m + 1) % self.lines
         self._monitor.release()
 
-    def get_(self, id_m: int, proc=False) -> bool | Exception:
+    def have_problem(self, id_m: int, proc=False, daugther=False) -> bool | Exception:
         """
         Get StatusCode Module|Proc.\n
         IF status_code == Warn|Error: return True. Else: return False
@@ -120,6 +120,10 @@ class MonitorObj:
             else:
                 if self.status_buf[id_m] > 49:
                     return True
+
+                if daugther:
+                    if self.status_buf[self.id_d] > 49:
+                        return True
 
                 return False
 

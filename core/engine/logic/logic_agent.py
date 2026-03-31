@@ -15,7 +15,9 @@ class LogicAgent:
         general_event: Event,
     ) -> None:
         self._mo, self.reader = mo, reader
-        self._set, self._get, self.id_m = self._mo.set_, self._mo.get_, self._mo.id_m
+
+        self.id_m = self._mo.id_m
+        self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
 
     def _resolve_reader(self) -> object:
@@ -24,7 +26,7 @@ class LogicAgent:
 
     def run_logic_engine(self) -> None:
         # LocalLinks
-        id_m, set_status, get_status = self.id_m, self._set, self._get
+        id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         pre_sleep_logic = self.pre_sleep_logic
         reader = self.reader
         #  - - -
@@ -34,15 +36,14 @@ class LogicAgent:
                     gc.collect()
                     self.wait_main.wait()
                     while True:
-                        if get_status(id_m) is not True:
+                        if have_problem(id_m=id_m, daugther=True) is not True:
                             set_status(id_m, 4)  # IDLE # TIME START
                             pre_sleep_logic.wait()
-                            if get_status(id_m, proc=True):
+                            if have_problem(id_m, proc=True):
                                 break
 
                             set_status(id_m, 5)  # Running # TIME WAKE_UP
-                            if reader._check_update() is False:
-                                set_status(id_m, 150)
+                            reader._check_update()
 
                         else:
                             return
@@ -87,7 +88,7 @@ def run_logic(
             gc.collect()
 
         else:
-            mo.set_(mo.id_m, 151)
+            mo.set_status(id_m=mo.id_m, code=151)
 
     finally:
         gc.collect()

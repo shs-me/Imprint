@@ -14,7 +14,8 @@ class WSSAgent:
         self, mo: MonitorObj, wake_up_parser: Event, general_event: Event
     ) -> None:
         __cfg, self._mo = Config.CoreConfig, mo
-        self._set, self._get, self.id_m = self._mo.set_, self._mo.get_, self._mo.id_m
+        self.id_m = self._mo.id_m
+        self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.uri = f"{Config.UserConfig.wss}{Config.UserConfig.wss}@aggTrade"
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         # InitGetRawData
@@ -48,7 +49,7 @@ class WSSAgent:
             if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
                 ncell_w, ncell_r = ncell_wr[0], ncell_wr[1]
                 if ((ncell_w - ncell_r + cell_amount) % cell_amount) > safe_lag:
-                    self._set(self.id_m, 101)  # Warn in this IF
+                    self.set_status(id_m=self.id_m, code=101)  # Warn in this IF
                     return False
 
                 raw_buf[ncell_w + header_offset] = lrd
@@ -60,18 +61,18 @@ class WSSAgent:
                 return True
 
             else:
-                self._set(self.id_m, 100)  # Warn in this IF
+                self.set_status(id_m=self.id_m, code=100)  # Warn in this IF
                 return False
 
         except Exception:
             traceback.print_exc()  # Debug
-            self._set(self.id_m, 151)  # Error in this func
+            self.set_status(id_m=self.id_m, code=151)  # Error in this func
             return False
 
     async def run_wss_engine(self) -> None:
         # Local Links
         wake_up_parser = self.wake_up_parser
-        id_m, set_status, get_status = self.id_m, self._set, self._get
+        id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
         raw_buf, ncell_wr, cell_amount = self.raw_buf, self.ncell_wr, self.cell_amount
@@ -85,8 +86,8 @@ class WSSAgent:
                 try:
                     async with connect(self.uri, ping_interval=20) as ws:
                         while True:
-                            if get_status(id_m) is not True:
-                                if get_status(id_m, proc=True):
+                            if have_problem(id_m=id_m, daugther=True) is not True:
+                                if have_problem(id_m, proc=True):
                                     if wake_up_parser.is_set() is False:
                                         wake_up_parser.set()
                                     break
