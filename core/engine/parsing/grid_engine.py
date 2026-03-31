@@ -129,7 +129,7 @@ class GridEngine:
         idy_min = idy if coords[0] > idy else coords[0]
         idx_min = idx if coords[1] > idx else coords[1]
         idy_max = idy + 1 if coords[2] < idy else coords[2]
-        idx_max = idy + 1 if coords[3] < idx else coords[3]
+        idx_max = idx + 1 if coords[3] < idx else coords[3]
         self.coord[flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
         self.coord[flag, 6] = 0  # data is not dirty
 
