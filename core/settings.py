@@ -64,6 +64,7 @@ class Config:
 
         class Raw:
             cell_amount, header_size, data_size = 1000, 1, 256
+            safe_lag = cell_amount * 0.1
             # Ring Buffer
             ncell_offset: tuple[int, int] = (0, 8 * 2)
             header_offset: tuple[int, int] = (

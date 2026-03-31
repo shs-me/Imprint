@@ -124,9 +124,9 @@ class StatusCodes:
             "1": "Update: 101: IDX > ArrayCols or IDX < 0",
             "2": "",
             "3": "",
-            "4": "",
+            "4": "SetRawData: 101: Reader lag > safe lag",
             "5": "",
-            "6": "",
+            "6": "SetRawData: 101: Reader lag > safe lag",
         },
         "102": {
             "0": "",

@@ -18,11 +18,10 @@ class WSSAgent:
         self.uri = f"{Config.UserConfig.wss}{Config.UserConfig.wss}@aggTrade"
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         # InitGetRawData
-        self.data_size = __cfg.Raw.data_size
-        self.header_size = __cfg.Raw.header_size
+        self.data_size, self.header_size = __cfg.Raw.data_size, __cfg.Raw.header_size
         self.data_offset = __cfg.Raw.data_offset[0]
         self.header_offset = __cfg.Raw.header_offset[0]
-        self.cell_amount = __cfg.Raw.cell_amount
+        self.cell_amount, self.safe_lag = __cfg.Raw.cell_amount, __cfg.Raw.safe_lag
         # SHM.buf
         self.raw_buf = self._mo.shms[__cfg.Raw.__name__]["buf"]
         self.ncell_wr = self.raw_buf[
@@ -39,6 +38,7 @@ class WSSAgent:
         header_offset: int,
         data_size: int,
         data_offset: int,
+        safe_lag: float,
     ) -> bool:
         """
         Set RawData[JSON Bytes] to RawSHM.\n
@@ -46,7 +46,11 @@ class WSSAgent:
         """
         try:
             if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-                ncell_w: int = ncell_wr[0]
+                ncell_w, ncell_r = ncell_wr[0], ncell_wr[1]
+                if ((ncell_w - ncell_r + cell_amount) % cell_amount) > safe_lag:
+                    self._set(self.id_m, 101)  # Warn in this IF
+                    return False
+
                 raw_buf[ncell_w + header_offset] = lrd
                 start = ncell_w * data_size + data_offset
                 raw_buf[start : start + lrd] = raw_data
@@ -71,6 +75,7 @@ class WSSAgent:
         header_size, data_size = self.header_size, self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
         raw_buf, ncell_wr, cell_amount = self.raw_buf, self.ncell_wr, self.cell_amount
+        safe_lag = self.safe_lag
         set_raw_data = self._set_raw_data
         # - - -
         while True:
@@ -99,6 +104,7 @@ class WSSAgent:
                                     header_offset=header_offset,
                                     data_size=data_size,
                                     data_offset=data_offset,
+                                    safe_lag=safe_lag,
                                 ):
                                     if wake_up_parser.is_set() is False:
                                         wake_up_parser.set()
