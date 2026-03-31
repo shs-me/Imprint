@@ -78,7 +78,7 @@ class GridEngine:
             self.center = atip if atip >= (self.lines - atip) else (self.lines - atip)
             self.base_price_buf[0] = self.base_price = price
             self.base_timestamp_buf[0] = self.base_timestamp = timestamp
-            self.coord[:] = 65535, 65535, 0, 0, 0, 0, 0
+            self.coord[:] = 65535, 65535, 0, 0, 0, 0, 1, 0
             self.convert = ConvertMetrics(
                 tick_size=self.tick_size,
                 base_price=self.base_price,
@@ -135,10 +135,10 @@ class GridEngine:
         coord[flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
         coord[flag, 6] = 0  # data is not dirty
 
-        if (new_flag := metrics_buf[self.flag]) != flag:
+        if (nflag := metrics_buf[self.flag]) != flag:
             if coord[flag, 7] == 0 and coord[flag, 0] != 65535:
-                self.coord[:] = 65535, 65535, 0, 0, 0, 0, 0
-                self.coord[new_flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
+                self.coord[flag, :7] = 65535, 65535, 0, 0, 0, 0, 1
+                self.coord[nflag, :7] = idy_min, idx_min, idy_max, idx_max, idy, idx, 0
 
         if self.guarantee.is_set() is False:
             self.guarantee.set()  # active buffer is not empty

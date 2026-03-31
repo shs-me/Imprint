@@ -119,9 +119,7 @@ class BaseGridReader:
                         idx_min:idx_max,
                     ],
                 )
-                coord[flag, :] = 65535, 65535, 0, 0, 0, 0, 0  # reset
-                coord[flag, 7] = 0
-
+                coord[flag, :8] = 65535, 65535, 0, 0, 0, 0, 1, 0
                 price, timestamp = (  # convert idy, idx to price, timestamp
                     self.convert.to_price(idy=int(idy)),
                     self.convert.to_timestamp(idx=int(idx)),
