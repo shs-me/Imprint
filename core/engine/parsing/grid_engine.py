@@ -136,7 +136,7 @@ class GridEngine:
         coord[flag, 6] = 0  # data is not dirty
 
         if (new_flag := metrics_buf[self.flag]) != flag:
-            if coord[flag, 7] == 0 and coord[flag, 0] != 65355:
+            if coord[flag, 7] == 0 and coord[flag, 0] != 65535:
                 self.coord[:] = 65535, 65535, 0, 0, 0, 0, 0
                 self.coord[new_flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
 
