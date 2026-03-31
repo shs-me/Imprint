@@ -1,4 +1,3 @@
-import struct
 import time
 import traceback
 from multiprocessing.shared_memory import SharedMemory
@@ -6,7 +5,7 @@ from multiprocessing.synchronize import Semaphore
 
 import numpy as np
 
-from .. import Config, ShmType
+from .. import Config, ShMs, ShmType
 
 
 class MonitorObj:
@@ -16,58 +15,42 @@ class MonitorObj:
         warn_error_status: Semaphore,
         _monitor: Semaphore | None = None,
     ):
-        # Initialization
-        self.core_cfg = Config.CoreConfig()
-        # ProfilingArray
-        self.dglines: int = self.core_cfg.Profiling.lines
-        self.dgcols: int = self.core_cfg.Profiling.cols
-        self.offset: int = self.core_cfg.Profiling.offset
-        # SharedMemory init
-        self.shms: dict[str, ShmType] = {  # type: ignore
-            self.core_cfg.Grid.__name__: {},
-            self.core_cfg.Raw.__name__: {},
-            self.core_cfg.Status.__name__: {},
-            self.core_cfg.Metrics.__name__: {},
-            self.core_cfg.Profiling.__name__: {},
-        }
-        # Semaphore, Event
+        self.__cfg = Config.CoreConfig
+        self.lines, self.cols = self.__cfg.Profiling.lines, self.__cfg.Profiling.cols
+        self.shms: dict[str, ShmType] = ShMs.shms
         self._warn_error_status: Semaphore = warn_error_status
         try:
-            # LoadShm-s
             self._shm_init()
-            # StatusSHM.buf
-            self._status_buf = self.shms[Config.CoreConfig.Status.__name__]["buf"]
-            # profilingSHM.buf
-            self._profiling_buf = self.shms[Config.CoreConfig.Profiling.__name__]["buf"]
+            self.status_buf = self.shms[self.__cfg.Status.__name__]["buf"]
+            self.profiling_buf = self.shms[self.__cfg.Profiling.__name__]["buf"]
             if proc_name != Config.CoreConfig.Profiling.__name__:  # StatusSHM init
                 if _monitor is not None:
                     self._monitor = _monitor
 
-                _obj = getattr(self.core_cfg.Status, proc_name)
-                self._id_p: int = _obj.id_p
-                self._id_m: int = _obj.id_m
-                self._id_d: int = _obj.id_d
-                self._dgc: int = _obj.id_dgc
+                _obj = getattr(self.__cfg.Status, proc_name)
+                self.id_p, self.id_m = _obj.id_p, _obj.id_m
+                self.id_d, self.dgc = _obj.id_d, _obj.id_dgc
                 self._profiling_array_init()
-                # Set ID Module on Headers ProfilingSHM
-                self._profiling_buf[(64 + self._dgc)] = self._id_m
-                # Get Index Line & Status code from Profiling SHM headers
-                self.dgid: int = struct.unpack_from(
-                    "!i", self._profiling_buf[(self._dgc * 8) : (self._dgc * 8 + 4)]
-                )[0]
+
+                self.profiling_buf[(64 + self.dgc)] = self.id_m
+                self.headers_buf = self.profiling_buf[
+                    (self.dgc * 8) : (self.dgc * 8 + 8)
+                ].cast("I")
+                # Get Index LineID from HeadersBuf[ProfilingShM.Buf]
+                self.dgid: int = self.headers_buf[0]
 
             else:
                 self._profiling_array_init(headers=True)
 
-        except Exception:
+        except Exception as e:
             traceback.print_exc()  # Debug
-            raise Exception
+            raise Exception(e)
 
     def _shm_init(self) -> None | Exception:
         """Load SharedMemory-s, IF SHM not found, raise FileNotFoundError"""
         try:
             for name in self.shms.keys():
-                _obj = getattr(self.core_cfg, name)
+                _obj = getattr(self.__cfg, name)
                 shm = SharedMemory(name=_obj.shm_name)
                 if shm.buf is not None:
                     self.shms[name]["shm"] = shm
@@ -83,13 +66,13 @@ class MonitorObj:
         IF headers True: Create 2-D Array without buf
         """
         self.dgarray = np.ndarray(
-            (self.dglines, self.dgcols),
+            (self.lines, self.cols),
             dtype=np.int64,
-            offset=self.offset,
-            buffer=self._profiling_buf,
+            offset=self.__cfg.Profiling.offset,
+            buffer=self.profiling_buf,
         )
         if headers:
-            self.dgheaders = np.ndarray((6, self.dgcols), dtype=np.int64)
+            self.dgheaders = np.ndarray((6, self.cols), dtype=np.int64)
             self.dgheaders[:] = 0
 
     def set_(self, id_m: int, code: int) -> bool | Exception:
@@ -99,12 +82,12 @@ class MonitorObj:
         """
         try:
             if code > 49:
-                self._status_buf[id_m] = code
+                self.status_buf[id_m] = code
                 self._warn_error_status.release()
-                return True
             else:
                 self._profiling_(code)
-                return True
+
+            return True
 
         except Exception as e:
             traceback.print_exc()  # Debug
@@ -115,17 +98,11 @@ class MonitorObj:
         Set TimeNS on 2-D Array, Buffer: Profiling ShM.\n
         Also set IndexLine & StatusCode on Headers Profiling ShM.
         """
-        # LocalLinks
-        dglines, dgarray = self.dglines, self.dgarray
-        dgid_m, dgc, buf = self.dgid, self._dgc, self._profiling_buf
+        dgid_m = self.dgid
         # - - -
-        dgarray[dgid_m, dgc] = time.time_ns()
-        buf[(dgc * 8) : (dgc * 8 + 8)] = struct.pack(
-            "!ii",
-            dgid_m,
-            code,
-        )
-        self.dgid = (dgid_m + 1) % dglines
+        self.dgarray[dgid_m, self.dgc] = time.time_ns()
+        self.headers_buf[0], self.headers_buf[1] = dgid_m, code
+        self.dgid = (dgid_m + 1) % self.lines
         self._monitor.release()
 
     def get_(self, id_m: int, proc=False) -> bool | Exception:
@@ -135,13 +112,13 @@ class MonitorObj:
         """
         try:
             if proc:
-                if self._status_buf[self._id_p] == 2:
+                if self.status_buf[self.id_p] == 2:
                     return True
 
                 return False
 
             else:
-                if self._status_buf[id_m] > 49:
+                if self.status_buf[id_m] > 49:
                     return True
 
                 return False

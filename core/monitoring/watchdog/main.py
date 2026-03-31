@@ -1,9 +1,10 @@
-import json
 import time
 import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 from loguru import logger
+
+from core.settings import IDpm
 
 from ... import Config, ProcsDictTyping, ShmType, StatusCodes
 from . import actions as act
@@ -12,65 +13,22 @@ from . import actions as act
 class WatchDog:
     def __init__(
         self,
-        sc: dict,
         procs: dict[int, ProcsDictTyping],
-        id_info: dict[int, dict[int, str]],
+        id_info: dict[IDpm, dict[IDpm, str]],
         shm_s: dict[str, ShmType],
         sem_s: list[Semaphore],
         general_event: Event,
-        sleep_logic: Event,
         warn_error_status: Semaphore,
     ) -> None:
-        # initialization
-        self.procs = procs  # Process's: Name, Func, ProcData, ID
-        self.shms = shm_s  # ShM's & Memoryview[int]
-        self.shm_buf = self.shms[Config.CoreConfig.Status.__name__]["buf"]
-        # Semaphore's, Event
-        self.all_sleep = general_event
-        self.sleep_logic = sleep_logic
-        self.calling = warn_error_status
-        self.sems = sem_s
+        self.procs, self.shm_s, self.sem_s = procs, shm_s, sem_s
+        self.shm_buf = self.shm_s[Config.CoreConfig.Status.__name__]["buf"]
+        self.all_sleep, self.calling = general_event, warn_error_status
         # Variable's
-        self._task: int = 0
-        self._id_proc = 0
+        self._task, self._id_proc = 0, 0
         self._check_proce_state: bool = False
         # StatusCodes
-        self.sc: dict = sc  # Status Codes
-        self.id_info = id_info
-        self.general_sc = StatusCodes.general_sc
-        self.warn: dict = self.sc["WARN"]
-        self.error: dict = self.sc["ERROR"]
-
-    @staticmethod
-    def create(
-        procs: dict[int, ProcsDictTyping],
-        id_info: dict[int, dict[int, str]],
-        shm_s: dict[str, ShmType],
-        sem_s: list[Semaphore],
-        general_event: Event,
-        sleep_logic: Event,
-        warn_error_status: Semaphore,
-        file_path: str,
-    ) -> object | None:
-        try:
-            with open(file_path, "rb") as f:
-                status_codes = json.load(f)
-
-            return WatchDog(
-                sc=status_codes,
-                procs=procs,
-                id_info=id_info,
-                shm_s=shm_s,
-                sem_s=sem_s,
-                general_event=general_event,
-                sleep_logic=sleep_logic,
-                warn_error_status=warn_error_status,
-            )
-
-        except Exception as e:
-            traceback.print_exc()  # Debug
-            logger.error(f"WatchDog | GetStatusDict | {e}")
-            return None
+        self.id_info, self.general = id_info, StatusCodes.GENERAL
+        self.warn, self.error = StatusCodes.WARN, StatusCodes.ERROR
 
     def run_watchdog_engine(self) -> bool:
         # LocalLinks
@@ -148,9 +106,8 @@ class WatchDog:
                 act.set_status_for_all_proc(  # All WeckUp
                     shm_buf=shm_buf, procs=self.procs, stoping=False
                 )
-                act.shms_zeros(self.shms)
-                act.sems_clear(self.sems)
-                self.sleep_logic.clear()
+                act.shms_zeros(self.shm_s)
+                act.sems_clear(self.sem_s)
                 self.all_sleep.set()
                 time.sleep(0.5)
                 self.all_sleep.clear()

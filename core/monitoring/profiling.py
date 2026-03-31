@@ -8,6 +8,8 @@ from multiprocessing.synchronize import Event, Semaphore
 import numpy as np
 from loguru import logger
 
+from core.settings import IDpm
+
 from .. import Config
 from . import MonitorObj
 
@@ -23,19 +25,13 @@ class MonitoringAgent:
         backtesting: bool,
         mo: MonitorObj,
         general_event: Event,
-        parser_monitor: Semaphore,
-        logic_monitor: Semaphore,
-        network_monitor: Semaphore,
+        sem_s: list[Semaphore],
     ) -> None:
-        # Initialization
+        # Path's
         self.profiling_dump_path = Config.CorePath.profiling_csv
         self.pheaders_dump_path = Config.CorePath.pheaders_csv
         self._mo = mo
         self.wait_main = general_event
-        # Semaphore's
-        self.parser_monitor = parser_monitor
-        self.logic_monitor = logic_monitor
-        self.network_monitor = network_monitor
         # Index's on StatusShm
         self._id_mp = Config.CoreConfig.Status.parsing.id_m
         self._id_ml = Config.CoreConfig.Status.logic.id_m
@@ -46,54 +42,26 @@ class MonitoringAgent:
 
         # Items: ID: Semaphore
         self.sems = {
-            self._id_mp: parser_monitor,
-            self._id_ml: logic_monitor,
-            self._id_mn: network_monitor,
+            self._id_mp: sem_s[0],
+            self._id_ml: sem_s[1],
+            self._id_mn: sem_s[2],
         }
 
         # SHMS
-        self.shm_buf: memoryview = self._mo._profiling_buf
+        self.shm_buf: memoryview = self._mo.profiling_buf
         # ProfilingArray
-        self.dglines: int = self._mo.dglines
-        self.dgcols: int = self._mo.dgcols
+        self.dglines: int = self._mo.lines
+        self.dgcols: int = self._mo.cols
         self.dgarray: np.ndarray = self._mo.dgarray
         self.dgheaders: np.ndarray = self._mo.dgheaders
         # HEADERS ROW[0]LINE, ROW[1]ID_MODULE, ROW[2]STATUSCODE, ROW[3]TIME_NS
         # ROW4[4]DIFF_WAIT, ROW[5]DIFF_WORK
 
-    @staticmethod
-    def create(
-        backtesting: bool,
-        general_event: Event,
-        parser_monitor: Semaphore,
-        logic_monitor: Semaphore,
-        network_monitor: Semaphore,
-        warn_error_status: Semaphore,
-    ) -> object | None:
-        try:
-            mo = MonitorObj(
-                proc_name=Config.CoreConfig.Profiling.__name__,
-                warn_error_status=warn_error_status,
-            )
-            return MonitoringAgent(
-                backtesting=backtesting,
-                mo=mo,
-                general_event=general_event,
-                parser_monitor=parser_monitor,
-                logic_monitor=logic_monitor,
-                network_monitor=network_monitor,
-            )
-
-        except Exception:
-            traceback.print_exc()  # Debug
-            warn_error_status.release()
-            return None
-
     def _init_session(
         self,
         cols: int,
         dgheaders: np.ndarray,
-        sems: dict[int, Semaphore],
+        sems: dict[IDpm, Semaphore],
         shm_buf: memoryview,
     ) -> None:
         ids_scs = struct.unpack_from(
@@ -252,9 +220,7 @@ class MonitoringAgent:
 def run_monitoring(
     backtesting: bool,
     general_event: Event,
-    parser_monitor: Semaphore,
-    logic_monitor: Semaphore,
-    network_monitor: Semaphore,
+    sem_s: list[Semaphore],
     warn_error_status: Semaphore,
 ) -> None:
     logger.remove()
@@ -266,13 +232,22 @@ def run_monitoring(
     )
 
     gc.disable()
-    agent = MonitoringAgent.create(
-        backtesting=backtesting,
-        general_event=general_event,
-        parser_monitor=parser_monitor,
-        logic_monitor=logic_monitor,
-        network_monitor=network_monitor,
-        warn_error_status=warn_error_status,
-    )
-    if isinstance(agent, MonitoringAgent):
+    try:
+        try:
+            mo = MonitorObj(
+                proc_name=Config.CoreConfig.Profiling.__name__,
+                warn_error_status=warn_error_status,
+            )
+
+        except Exception:
+            traceback.print_exc()  # Debug
+            return
+
+        agent = MonitoringAgent(
+            backtesting=backtesting, mo=mo, general_event=general_event, sem_s=sem_s
+        )
         agent.run_profilling_engine()
+        agent = None
+
+    finally:
+        gc.collect()

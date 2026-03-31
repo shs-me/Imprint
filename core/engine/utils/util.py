@@ -41,6 +41,7 @@ class ConvertMetrics:
         )
         if 0 < idy < self.lines:
             return idy
+
         else:
             return None
 

@@ -1,5 +1,5 @@
-import struct
 import traceback
+from multiprocessing.synchronize import Event
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,19 +11,15 @@ from .. import ConvertMetrics
 class BaseGridReader:
     def __init__(
         self,
-        _mo_: MonitorObj,
+        mo: MonitorObj,
+        guarantee: Event,
         grid: NDArray[np.float64],
         _grid: NDArray[np.float64],
         _coord: NDArray[np.uint16],
     ) -> None:
-        cfg = Config.CoreConfig
-        self._mo_ = _mo_
-        self.grid = grid
-        self._grid = _grid
-        self._coord = _coord
-        self.lines: int = cfg.Grid.lines  # ID-Y in Array
-        self.cols: int = cfg.Grid.cols  # ID-X in Array
-        self.ivl_m: int = cfg.Grid.interval_min
+        __cfg, self._mo, self.guarantee = Config.CoreConfig, mo, guarantee
+        self.grid, self._grid, self._coord = grid, _grid, _coord
+        self.lines, self.cols = __cfg.Grid.lines, __cfg.Grid.cols
         self.OHLCV_T_D_CT = [
             self.lines + 0,  # Open price
             self.lines + 1,  # High
@@ -34,43 +30,46 @@ class BaseGridReader:
             self.lines + 6,  # Delta
             self.lines + 7,  # Count Trade
         ]
-        # Init session
-        self.base_price: float = 0.0
-        self.base_timestamp: int = 0
-        self.tick_size: float = 0.0
-        self.center: int = 0  # Index, Center array for + -
-        self.ims: int = self.ivl_m * 60 * 1000  # Interval cluster in millisecond
-        # MetricsSHM
-        self.bpat_slice = slice(*cfg.Metrics.base_price_and_timestamp)
-        self.tick_size_slice = slice(*cfg.Metrics.tick_size)
-        self.flag = cfg.Metrics.flag
-        # SharedMemory
-        self._metrics_buf = self._mo_.shms[cfg.Metrics.__name__]["buf"]
+        self.tick_size, self.base_price, self.base_timestamp = 0.0, 0.0, 0
+        self.center, self.ims = 0, __cfg.Grid.interval_min * 60 * 1000
+        self.flag = __cfg.Metrics.flag
+        self.metrics_buf = self._mo.shms[__cfg.Metrics.__name__]["buf"]
+        self.tick_size_buf = self.metrics_buf[
+            __cfg.Metrics.tick_size[0] : __cfg.Metrics.tick_size[1]
+        ].cast("d")
+        self.base_price_buf = self.metrics_buf[
+            __cfg.Metrics.base_price[0] : __cfg.Metrics.base_price[1]
+        ].cast("d")
+        self.base_timestamp_buf = self.metrics_buf[
+            __cfg.Metrics.base_timestamp[0] : __cfg.Metrics.base_timestamp[1]
+        ].cast("q")
 
     @staticmethod
-    def create(_mo_: MonitorObj) -> object | None:
+    def create(_mo_: MonitorObj, guarantee: Event) -> object | None:
         try:
-            cfg: type[Config.CoreConfig] = Config.CoreConfig
+            __cfg: type[Config.CoreConfig] = Config.CoreConfig
             _grid: NDArray[np.float64] = np.ndarray(
-                shape=((cfg.Grid.lines + 8), cfg.Grid.cols),
+                shape=((__cfg.Grid.lines + 8), __cfg.Grid.cols),
                 dtype=np.float64,
-                buffer=_mo_.shms[cfg.Grid.__name__]["buf"],
+                buffer=_mo_.shms[__cfg.Grid.__name__]["buf"],
             )
             grid: NDArray[np.float64] = np.ndarray(
-                shape=((cfg.Grid.lines + 8), cfg.Grid.cols),
+                shape=((__cfg.Grid.lines + 8), __cfg.Grid.cols),
                 dtype=np.float64,
             )
             _coord: NDArray[np.uint16] = np.ndarray(
                 shape=(
-                    cfg.Metrics.coord_lines,
-                    cfg.Metrics.coord_cols,
+                    __cfg.Metrics.coord_lines,
+                    __cfg.Metrics.coord_cols,
                 ),
                 dtype=np.uint16,
-                buffer=_mo_.shms[cfg.Metrics.__name__]["buf"][
-                    cfg.Metrics.coord_offset[0] : cfg.Metrics.coord_offset[1]
+                buffer=_mo_.shms[__cfg.Metrics.__name__]["buf"][
+                    __cfg.Metrics.coord_offset[0] : __cfg.Metrics.coord_offset[1]
                 ],
             )
-            return BaseGridReader(_mo_=_mo_, grid=grid, _grid=_grid, _coord=_coord)
+            return BaseGridReader(
+                mo=_mo_, guarantee=guarantee, grid=grid, _grid=_grid, _coord=_coord
+            )
 
         except Exception:
             traceback.print_exc()  # Debug
@@ -78,11 +77,10 @@ class BaseGridReader:
 
     def _init_session(self) -> None:
         """Get BasePrice, BaseTimestamp, TickSize"""
-        self.tick_size = struct.unpack("!d", self._metrics_buf[self.tick_size_slice])[0]
-        temp: tuple[float, int] = struct.unpack(
-            "!dq", self._metrics_buf[self.bpat_slice]
-        )
-        self.base_price, self.base_timestamp = temp[0], temp[1]
+        self.tick_size = self.tick_size_buf[0]
+        self.base_price = self.base_price_buf[0]
+        self.base_timestamp = self.base_timestamp_buf[0]
+
         atip: int = round(  # Amount Ticks In Price
             number=self.base_price / self.tick_size
         )
@@ -99,10 +97,13 @@ class BaseGridReader:
 
     def _get_cords(self) -> tuple[int, int, float, int] | None:
         """Get Coordinaties IDY:IDX from 2-D Array 'Cord'"""
-        new_flag: int = 1 if (flag := self._metrics_buf[self.flag]) == 0 else 0
-        self._metrics_buf[self.flag] = new_flag  # change buffer for writer
-        _counter: int = 0
-        while _counter < 100:
+        new_flag: int = 1 if (flag := self.metrics_buf[self.flag]) == 0 else 0
+        self.metrics_buf[self.flag] = new_flag  # change active buffer for writer
+        if self.guarantee.is_set() is not False:
+            self.guarantee.clear()  # active buffer is empty
+
+        _counter, sim_time_ns = 0, 1000
+        while _counter < sim_time_ns:
             if (self._coord[flag, 6] % 2) == 0:  # data is not dirty
                 idy_min, idx_min, idy_max, idx_max, idy, idx = self._coord[flag, :6]
                 np.copyto(  # update grid local

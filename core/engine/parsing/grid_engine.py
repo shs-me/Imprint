@@ -1,5 +1,5 @@
-import struct
 import traceback
+from multiprocessing.synchronize import Event
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,18 +10,16 @@ from .. import ConvertMetrics
 
 class GridEngine:
     def __init__(
-        self, _mo_: MonitorObj, grid: NDArray[np.float64], coord: NDArray[np.uint16]
+        self,
+        mo: MonitorObj,
+        guarantee: Event,
+        grid: NDArray[np.float64],
+        coord: NDArray[np.uint16],
     ) -> None:
-        cfg = Config.CoreConfig
-        self._mo_ = _mo_
-        self._id_m_ = self._mo_._id_d
-        self._set, self._get = self._mo_.set_, self._mo_.get_
-        self.grid = grid  # 2-D. Array DType Float64
-        self.coord = coord  # 2-D. Array DType uint16
-        self.lines: int = cfg.Grid.lines  # ID-Y in Array
-        self.cols: int = cfg.Grid.cols  # ID-X in Array
-        self.ivl_m: int = cfg.Grid.interval_min
-        self.tick_size: float = 0.0  # tick size SYMBOL
+        __cfg, self._mo, self.guarantee = Config.CoreConfig, mo, guarantee
+        self._set, self._get, self.id_m = self._mo.set_, self._mo.get_, self._mo.id_d
+        self.grid, self.coord = grid, coord
+        self.lines, self.cols = __cfg.Grid.lines, __cfg.Grid.cols
         self.OHLCV_T_D_CT = [
             self.lines + 0,  # Open price
             self.lines + 1,  # High
@@ -32,61 +30,55 @@ class GridEngine:
             self.lines + 6,  # Delta
             self.lines + 7,  # Count Trade
         ]
-        # Init session
-        self.base_price = 0.0
-        self.base_timestamp = 0
-        self.center = 0  # Index, Center array for + -
-        self.ims = self.ivl_m * 60 * 1000  # Interval cluster in millisecond
-        # MetricsSHM
-        self.bpat_slice = slice(*cfg.Metrics.base_price_and_timestamp)
-        self.tick_size_slice = slice(*cfg.Metrics.tick_size)
-        self.flag = cfg.Metrics.flag
-        # SharedMemory
-        self._metrics_buf = self._mo_.shms[cfg.Metrics.__name__]["buf"]
+        self.tick_size, self.base_price, self.base_timestamp = 0.0, 0.0, 0
+        self.center, self.ims = 0, __cfg.Grid.interval_min * 60 * 1000
+        self.flag = __cfg.Metrics.flag
+        self.metrics_buf = self._mo.shms[__cfg.Metrics.__name__]["buf"]
+        self.tick_size_buf = self.metrics_buf[
+            __cfg.Metrics.tick_size[0] : __cfg.Metrics.tick_size[1]
+        ].cast("d")
+        self.base_price_buf = self.metrics_buf[
+            __cfg.Metrics.base_price[0] : __cfg.Metrics.base_price[1]
+        ].cast("d")
+        self.base_timestamp_buf = self.metrics_buf[
+            __cfg.Metrics.base_timestamp[0] : __cfg.Metrics.base_timestamp[1]
+        ].cast("q")
 
     @staticmethod
-    def create(_mo_: MonitorObj) -> object | None:
+    def create(_mo_: MonitorObj, guarantee: Event) -> object | None:
         try:
-            cfg = Config.CoreConfig
+            __cfg = Config.CoreConfig
             grid = np.ndarray(
-                ((cfg.Grid.lines + 8), cfg.Grid.cols),
+                ((__cfg.Grid.lines + 8), __cfg.Grid.cols),
                 dtype=np.float64,
-                buffer=_mo_.shms[cfg.Grid.__name__]["buf"],
+                buffer=_mo_.shms[__cfg.Grid.__name__]["buf"],
             )
             coord = np.ndarray(
                 (
-                    cfg.Metrics.coord_lines,
-                    cfg.Metrics.coord_cols,
+                    __cfg.Metrics.coord_lines,
+                    __cfg.Metrics.coord_cols,
                 ),
                 dtype=np.uint16,
-                buffer=_mo_.shms[cfg.Metrics.__name__]["buf"][
-                    cfg.Metrics.coord_offset[0] : cfg.Metrics.coord_offset[1]
+                buffer=_mo_.shms[__cfg.Metrics.__name__]["buf"][
+                    __cfg.Metrics.coord_offset[0] : __cfg.Metrics.coord_offset[1]
                 ],
             )
-            return GridEngine(_mo_=_mo_, grid=grid, coord=coord)
+            return GridEngine(mo=_mo_, guarantee=guarantee, grid=grid, coord=coord)
 
         except Exception:
             traceback.print_exc()  # Debug
-            _mo_.set_(_mo_._id_d, 150)  # Error in this func
+            _mo_.set_(_mo_.id_d, 150)  # Error in this func
             return None
 
-    def _init_session(
-        self, price: float, timestamp: int, id_m_: int, set_status
-    ) -> bool:
+    def _init_session(self, price: float, timestamp: int) -> bool:
         """Init Center, BasePrice, BaseTimestamp, TickSize"""
-        self.tick_size = struct.unpack("!d", self._metrics_buf[self.tick_size_slice])[
-            0
-        ]  # Get TickSize from Buffer
+        self.tick_size = self.tick_size_buf[0]
         atip = round(price / self.tick_size)  # amount_ticks_in_price
         if atip <= round(self.lines * 0.8):
             self.center = atip if atip >= (self.lines - atip) else (self.lines - atip)
-            self.base_price, self.base_timestamp = price, timestamp
-            self._metrics_buf[self.bpat_slice] = struct.pack(
-                "!dq", price, ((timestamp // self.ims) * self.ims)
-            )
-            # coord init
+            self.base_price_buf[0] = self.base_price = price
+            self.base_timestamp_buf[0] = self.base_timestamp = timestamp
             self.coord[:] = 65535, 65535, 0, 0, 0, 0, 0
-            # Init Converter
             self.convert = ConvertMetrics(
                 tick_size=self.tick_size,
                 base_price=self.base_price,
@@ -99,7 +91,7 @@ class GridEngine:
             return True
 
         else:
-            set_status(id_m_, 100)  # Warn in this IF
+            self._set(self.id_m, 100)  # Warn in this IF
             return False
 
     def update_headers(
@@ -131,7 +123,7 @@ class GridEngine:
 
     def set_cords(self, idy: int, idx: int) -> None:
         """Set Coordinates IDY:IDX on 2-D Array 'Cord'"""
-        flag: int = self._metrics_buf[self.flag]
+        flag: int = self.metrics_buf[self.flag]
         self.coord[flag, 6] = 1  # data maybe is dirty
         coords = self.coord[flag, :4]
         idy_min = idy if coords[0] > idy else coords[0]
@@ -141,22 +133,17 @@ class GridEngine:
         self.coord[flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
         self.coord[flag, 6] = 0  # data is not dirty
 
+        if self.metrics_buf[self.flag] == flag:
+            if self.guarantee.is_set() is False:
+                self.guarantee.set()  # active buffer is not empty
+
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         """Update GridArray"""
-        _id_m_, _set_status, _get_status = self._id_m_, self._set, self._get
-        if _get_status(_id_m_):
+        if self._get(self.id_m):
             return False
 
         if self.base_price == 0.0:
-            if (
-                self._init_session(
-                    price=price,
-                    timestamp=timestamp,
-                    id_m_=_id_m_,
-                    set_status=_set_status,
-                )
-                is False
-            ):
+            if self._init_session(price=price, timestamp=timestamp) is False:
                 return False
 
         idy: int | None = self.convert.to_idy(price=price)
@@ -175,8 +162,8 @@ class GridEngine:
                 return True
 
             else:
-                _set_status(_id_m_, 102)  # Warn in this IF
+                self._set(self.id_m, 102)  # Warn in this IF
         else:
-            _set_status(_id_m_, 101)  # Warn in this IF
+            self._set(self.id_m, 101)  # Warn in this IF
 
         return False

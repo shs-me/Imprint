@@ -1,4 +1,3 @@
-import struct
 import time
 import traceback
 from multiprocessing import Event, Process, Semaphore
@@ -12,6 +11,7 @@ from . import (
     MonitorObj,
     ProcsCfg,
     ProcsDictTyping,
+    ShMs,
     ShmType,
     StatusCodes,
     WatchDog,
@@ -20,37 +20,26 @@ from . import (
 
 class RunMain:
     def __init__(self, backtesting: bool) -> None:
-        self.backtesting = backtesting
+        self.backtesting, self.core_cfg = backtesting, Config.CoreConfig
         self.procs: dict[int, ProcsDictTyping] = {}
-        self.id_info = {}
-        self.core_cfg = Config.CoreConfig()
+        self.id_info, self.sc_general = {}, {}
+        # Path's
         self.profiling_bin = Config.CorePath.profiling_bin
         self.status_json = Config.CorePath.status_json
-        self.sc_general = {}
-        # Event, Semaphores init
-        # Module's sem's | Event's
-        self.sleep_parsing = Event()
-        self.sleep_logic = Event()
-        # Profiling sem's
-        self._parser_monitor = Semaphore(0)
-        self._logic_monitor = Semaphore(0)
-        self._network_monitor = Semaphore(0)
+        # SharedMemory's | Memoryview's
+        self.shms: dict[str, ShmType] = ShMs.shms
+        # Proc's Event's
+        self.sleep_parsing, self.sleep_logic = Event(), Event()
+        # For profiling Semaphore's
+        self.network_monitor, self.parser_monitor = Semaphore(0), Semaphore(0)
+        self.logic_monitor = Semaphore(0)
         # Admin sem's
-        self.warn_error_status = Semaphore(0)
-        self.general_event = Event()
+        self.warn_error_status, self.general_event = Semaphore(0), Event()
         self.sem_s = [
-            self._parser_monitor,
-            self._logic_monitor,
-            self._network_monitor,
+            self.parser_monitor,
+            self.logic_monitor,
+            self.network_monitor,
         ]
-        # SharedMemory init
-        self.shms: dict[str, ShmType] = {  # type: ignore
-            self.core_cfg.Grid.__name__: {},
-            self.core_cfg.Raw.__name__: {},
-            self.core_cfg.Status.__name__: {},
-            self.core_cfg.Metrics.__name__: {},
-            self.core_cfg.Profiling.__name__: {},
-        }
 
     def _close_(self) -> None:
         try:
@@ -121,28 +110,28 @@ class RunMain:
             return (
                 self.sleep_parsing,
                 self.sleep_logic,
-                self._parser_monitor,
+                self.parser_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
         elif proc_name == "LOGIC":
             return (
                 self.sleep_logic,
-                self._logic_monitor,
+                self.logic_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
         elif proc_name == "NETWORK":
             return (
                 self.sleep_parsing,
-                self._network_monitor,
+                self.network_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
         elif proc_name == "NETWORK_SIM":
             return (
                 self.sleep_parsing,
-                self._network_monitor,
+                self.network_monitor,
                 self.general_event,
                 self.warn_error_status,
             )
@@ -150,9 +139,7 @@ class RunMain:
             return (
                 self.backtesting,
                 self.general_event,
-                self._parser_monitor,
-                self._logic_monitor,
-                self._network_monitor,
+                self.sem_s,
                 self.warn_error_status,
             )
         else:
@@ -193,21 +180,21 @@ class RunMain:
             if self._shm_create() is False:
                 return False
 
-            _watchdog = WatchDog.create(
+            _watchdog = WatchDog(
                 procs=self.procs,
                 id_info=self.id_info,
                 shm_s=self.shms,
                 sem_s=self.sem_s,
                 general_event=self.general_event,
-                sleep_logic=self.sleep_logic,
                 warn_error_status=self.warn_error_status,
-                file_path=self.status_json,
             )
             # debug
             _start, _end = self.core_cfg.Metrics.tick_size
-            self.shms[Config.CoreConfig.Metrics.__name__]["buf"][_start:_end] = (
-                struct.pack("!d", 0.01)
-            )
+            __cfg = Config.CoreConfig
+            tick_size_buf = self.shms[__cfg.Metrics.__name__]["buf"][
+                __cfg.Metrics.tick_size[0] : __cfg.Metrics.tick_size[1]
+            ].cast("d")
+            tick_size_buf[0] = 0.01
             # - - -
             if isinstance(_watchdog, WatchDog):
                 logger.info("WatchDog | Started")

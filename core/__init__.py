@@ -1,4 +1,4 @@
-from .settings import Config, IDpm, ShmType, ProcsDictTyping  # noqa
+from .settings import Config, ShMs, IDpm, ShmType, ProcsDictTyping  # noqa
 from .sc_config import StatusCodes  # noqa
 from .monitoring import MonitorObj, WatchDog, run_monitoring  # noqa
 from .config import ProcsCfg  # noqa

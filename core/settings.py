@@ -20,25 +20,14 @@ class IDpm(IntEnum):
     """Index proc's & module's & daugther"""
 
     # proc's in status
-    parsing = 10
-    logic = 11
-    network = 12
-    network_sim = 14
-    monitoring = 13
+    parsing, logic, network, monitoring, network_sim = 10, 11, 12, 13, 14
     # module's in status
-    parsing_agent = 0
-    parsing_daugther = 1
-    logic_agent = 2
-    logic_daugther = 3
-    network_agent = 4
-    network_daugther = 5
-    network_sim_agent = 6
-    network_sim_daugther = 7
+    parsing_agent, parsing_daugther = 0, 1
+    logic_agent, logic_daugther = 2, 3
+    network_agent, network_daugther = 4, 5
+    network_sim_agent, network_sim_daugther = 6, 7
     # proc's col in profilling
-    parsing_col = 0
-    logic_col = 1
-    network_col = 2
-    network_sim_col = 2
+    parsing_col, logic_col, network_col, network_sim_col = 0, 1, 2, 2
 
 
 class Config:
@@ -61,92 +50,84 @@ class Config:
 
     class CoreConfig:
         class Grid:
-            interval_min: int = 1
-            # Array
-            lines: int = 10000  # 10000 # + 8 lines headers
-            cols: int = 4
-            type_size: int = 8  # Float64
-            # ShM
-            shm_size: int = (((lines * cols * type_size) // 4096) + 1) * 4096
+            lines, cols, interval_min = 10000, 10, 1
+            # ShM # TypeSize=float64=8
+            shm_size: int = (((lines * cols * 8) // 4096) + 1) * 4096
             shm_name: str = "footprint_shm_for_grid"
 
         class Profiling:
-            offset: int = 128  # for headers cols 0-64 & 64-128 other info
-            # Array
-            lines: int = 5000
-            cols: int = 3
-            type_size: int = 8
-            # ShM
-            shm_size: int = (((lines * cols * type_size + offset) // 4096) + 1) * 4096
+            # for headers cols 0-64 & 64-128 other info
+            lines, cols, offset = 5000, 3, 128
+            # ShM # TypeSize=int64=8
+            shm_size: int = (((lines * cols * 8 + offset) // 4096) + 1) * 4096
             shm_name: str = "profiling_shm_for_profiling"
 
         class Raw:
-            cell_amount: int = 1000
-            header_size: int = 1
-            data_size: int = 256
-            # Double Buffer
-            flag: int = 0
-            spare_flag: int = 1
-            cell_id_offset: tuple[int, int] = (2, 10)
+            cell_amount, header_size, data_size = 1000, 1, 256
+            # Ring Buffer
+            ncell_offset: tuple[int, int] = (0, 8 * 2)
             header_offset: tuple[int, int] = (
-                cell_id_offset[1],
-                (cell_amount * header_size) + cell_id_offset[1],
+                ncell_offset[1],
+                (cell_amount * header_size) + ncell_offset[1],
             )
             data_offset: tuple[int, int] = (
                 header_offset[1],
                 (cell_amount * data_size) + header_offset[1],
             )
             # ShM
-            shm_size: int = ((data_offset[1] * 2 // 4096) + 1) * 4096
+            shm_size: int = ((data_offset[1] // 4096) + 1) * 4096
             shm_name: str = "raw_data_shm_for_raw_data"
 
         class Metrics:
+            coord_lines, coord_cols = 2, 7
             # Offset's
-            base_price_and_timestamp: tuple[int, int] = (0, 8 * 2)  # [a: a+b*2] int64=8
-            price: tuple[int, int] = (16, 16 + (8 * 1))  # [a: a+b*1] float64=8
-            tick_size: tuple[int, int] = (24, 24 + (8 * 1))  # [a: a+b*1] float64=8
-            coord_lines: int = 2
-            coord_cols: int = 7
-            coord_offset: tuple[int, int] = (32, 32 + ((7 * 2) * 2))
+            base_price: tuple[int, int] = (0, 8)  # float64=8
+            base_timestamp: tuple[int, int] = (base_price[1], base_price[1] + 8)
+            tick_size: tuple[int, int] = (base_timestamp[1], base_timestamp[1] + 8)
+            price: tuple[int, int] = (tick_size[1], tick_size[1] + 8)  # float64=8
+            coord_offset: tuple[int, int] = (
+                price[1],
+                price[1] + ((coord_cols * coord_lines) * 2),  # uint16
+            )
             # Index's
             flag: int = coord_offset[1] + 1
             # ShM
-            shm_size: int = (coord_offset[1] // 4096 + 1) * 4096
+            shm_size: int = ((flag // 4096) + 1) * 4096
             shm_name: str = "metrics_shm_for_different_metrics"
 
         class Status:
             class parsing:
-                id_p: int = IDpm.parsing
-                id_m: int = IDpm.parsing_agent
-                id_d: int = IDpm.parsing_daugther
-                id_dgc: int = IDpm.parsing_col
+                id_p, id_m = IDpm.parsing, IDpm.parsing_agent
+                id_d, id_dgc = IDpm.parsing_daugther, IDpm.parsing_col
 
             class logic:
-                id_p: int = IDpm.logic
-                id_m: int = IDpm.logic_agent
-                id_d: int = IDpm.logic_daugther
-                id_dgc: int = IDpm.logic_col
+                id_p, id_m = IDpm.logic, IDpm.logic_agent
+                id_d, id_dgc = IDpm.logic_daugther, IDpm.logic_col
 
             class network:
-                id_p: int = IDpm.network
-                id_m: int = IDpm.network_agent
-                id_d: int = IDpm.network_daugther
-                id_dgc: int = IDpm.network_col
+                id_p, id_m = IDpm.network, IDpm.network_agent
+                id_d, id_dgc = IDpm.network_daugther, IDpm.network_col
 
             class network_sim:
-                id_p: int = IDpm.network_sim
-                id_m: int = IDpm.network_sim_agent
-                id_d: int = IDpm.network_sim_daugther
-                id_dgc: int = IDpm.network_sim_col
+                id_p, id_m = IDpm.network_sim, IDpm.network_sim_agent
+                id_d, id_dgc = IDpm.network_sim_daugther, IDpm.network_sim_col
 
             # ShM
             shm_size: int = (4096 // 4096 + 1) * 4096
             shm_name: str = "status_shm_for_status_procs_and_modules"
 
 
-class ShMs:  # For Future Update
+class ShMs:
     __cfg = Config.CoreConfig
-    shm_size = (
+    shms: dict[str, ShmType] = {  # type: ignore
+        __cfg.Grid.__name__: {},
+        __cfg.Raw.__name__: {},
+        __cfg.Status.__name__: {},
+        __cfg.Metrics.__name__: {},
+        __cfg.Profiling.__name__: {},
+    }
+    # For Future Update
+    __shm_size = (
         (
             __cfg.Grid.shm_size
             + __cfg.Profiling.shm_size
@@ -157,4 +138,4 @@ class ShMs:  # For Future Update
         // 4096
         + 1
     ) * 4096
-    shm_name = "GridCore"
+    __shm_name = "GridCore"
