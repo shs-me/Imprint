@@ -123,19 +123,25 @@ class GridEngine:
 
     def set_cords(self, idy: int, idx: int) -> None:
         """Set Coordinates IDY:IDX on 2-D Array 'Cord'"""
-        flag: int = self.metrics_buf[self.flag]
-        self.coord[flag, 6] = 1  # data maybe is dirty
-        coords = self.coord[flag, :4]
+        metrics_buf, coord = self.metrics_buf, self.coord
+        # - - -
+        flag: int = metrics_buf[self.flag]
+        coord[flag, 6] = 1  # data maybe is dirty
+        coords = coord[flag, :4]
         idy_min = idy if coords[0] > idy else coords[0]
         idx_min = idx if coords[1] > idx else coords[1]
         idy_max = idy + 1 if coords[2] < idy else coords[2]
         idx_max = idx + 1 if coords[3] < idx else coords[3]
-        self.coord[flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
-        self.coord[flag, 6] = 0  # data is not dirty
+        coord[flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
+        coord[flag, 6] = 0  # data is not dirty
 
-        if self.metrics_buf[self.flag] == flag:
-            if self.guarantee.is_set() is False:
-                self.guarantee.set()  # active buffer is not empty
+        if (new_flag := metrics_buf[self.flag]) != flag:
+            if coord[flag, 7] == 0 and coord[flag, 0] != 65355:
+                self.coord[:] = 65535, 65535, 0, 0, 0, 0, 0
+                self.coord[new_flag, :6] = idy_min, idx_min, idy_max, idx_max, idy, idx
+
+        if self.guarantee.is_set() is False:
+            self.guarantee.set()  # active buffer is not empty
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         """Update GridArray"""

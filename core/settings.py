@@ -79,7 +79,7 @@ class Config:
             shm_name: str = "raw_data_shm_for_raw_data"
 
         class Metrics:
-            coord_lines, coord_cols = 2, 7
+            coord_lines, coord_cols = 2, 8
             # Offset's
             base_price: tuple[int, int] = (0, 8)  # float64=8
             base_timestamp: tuple[int, int] = (base_price[1], base_price[1] + 8)

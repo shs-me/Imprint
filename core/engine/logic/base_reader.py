@@ -97,15 +97,18 @@ class BaseGridReader:
 
     def _get_cords(self) -> tuple[int, int, float, int] | None:
         """Get Coordinaties IDY:IDX from 2-D Array 'Cord'"""
-        new_flag: int = 1 if (flag := self.metrics_buf[self.flag]) == 0 else 0
-        self.metrics_buf[self.flag] = new_flag  # change active buffer for writer
+        metrics_buf, coord = self.metrics_buf, self._coord
+        # - - -
+        new_flag: int = 1 if (flag := metrics_buf[self.flag]) == 0 else 0
+        metrics_buf[self.flag] = new_flag  # change active buffer for writer
         if self.guarantee.is_set() is not False:
             self.guarantee.clear()  # active buffer is empty
 
         _counter, sim_time_ns = 0, 1000
         while _counter < sim_time_ns:
-            if (self._coord[flag, 6] % 2) == 0:  # data is not dirty
-                idy_min, idx_min, idy_max, idx_max, idy, idx = self._coord[flag, :6]
+            if (coord[flag, 6] % 2) == 0:  # data is not dirty
+                coord[flag, 7] = 1
+                idy_min, idx_min, idy_max, idx_max, idy, idx = coord[flag, :6]
                 np.copyto(  # update grid local
                     dst=self.grid[
                         idy_min:idy_max,
@@ -116,7 +119,9 @@ class BaseGridReader:
                         idx_min:idx_max,
                     ],
                 )
-                self._coord[flag, :] = 65535, 65535, 0, 0, 0, 0, 0  # reset
+                coord[flag, :] = 65535, 65535, 0, 0, 0, 0, 0  # reset
+                coord[flag, 7] = 0
+
                 price, timestamp = (  # convert idy, idx to price, timestamp
                     self.convert.to_price(idy=int(idy)),
                     self.convert.to_timestamp(idx=int(idx)),
@@ -141,5 +146,7 @@ class BaseGridReader:
         return False
 
     def check_patterns(self, idy: int, idx: int, price: float, timestamp: int) -> None:
-        _price: int | float = self.convert.round_to_tick(price)
-        print(idy, idx, _price, timestamp, flush=True)  # debug
+        self.c += 1
+        print(self.c, flush=True)
+        # _price: int | float = self.convert.round_to_tick(price)
+        # print(idy, idx, _price, timestamp, flush=True)  # debug
