@@ -1,4 +1,4 @@
-from .base_reader import BaseGridReader
+from .grid_reader import BaseGridReader, GridReader
 from .logic_agent import run_logic
 
 __all__ = [

@@ -5,7 +5,7 @@ from multiprocessing.synchronize import Event, Semaphore
 import msgspec
 
 from ... import Config, MonitorObj
-from . import GridEngine
+from . import GridWriter
 
 
 class AggTrade(msgspec.Struct):
@@ -19,13 +19,12 @@ class ParserAgent:
     def __init__(
         self,
         mo: MonitorObj,
-        engine: GridEngine,
+        engine: GridWriter,
         pre_sleep_wss: Event,
         wake_up_logic: Event,
         general_event: Event,
     ) -> None:
         __cfg, self._mo, self.engine = Config.CoreConfig, mo, engine
-
         self.id_m = self._mo.id_m
         self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.pre_sleep_wss, self.wake_up_logic = pre_sleep_wss, wake_up_logic
@@ -61,9 +60,8 @@ class ParserAgent:
             lrd = raw_buf[ncell_r + header_offset]
             start = ncell_r * data_size + data_offset
             raw_data = raw_buf[start : start + lrd]
-            ncell_wr[1] = (
-                ncell_w if (ncell_w := ncell_r + header_size) < cell_amount else 0
-            )
+            ncell_r_new = ncell_r + header_size
+            ncell_wr[1] = ncell_r_new if ncell_r_new < cell_amount else 0
             return raw_data
 
         except Exception:
@@ -92,6 +90,7 @@ class ParserAgent:
 
     def run_parsing_engine(self) -> None:
         # LocalLinks
+        SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
         decoder, engine = self.decoder, self.engine
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
@@ -106,18 +105,18 @@ class ParserAgent:
                     gc.collect()
                     self.wait_main.wait()
                     while True:
-                        if have_problem(id_m=id_m, daugther=True) is not True:
-                            set_status(id_m, 4)  # IDLE # TIME START
+                        if have_problem() is False:
+                            set_status(id_m, SLEEP)
                             if ncell_wr[1] == ncell_wr[0]:
                                 pre_sleep_wss.clear()
                                 pre_sleep_wss.wait()
 
-                            if have_problem(id_m, proc=True):
+                            if have_problem(proc=True):
                                 if wake_up_logic.is_set() is False:
                                     wake_up_logic.set()
                                     break
 
-                            set_status(id_m, 5)  # Running # TIME WAKE_UP
+                            set_status(id_m, WAKE_UP)  # Running # TIME WAKE_UP
                             if raw_data := get_raw_data(
                                 raw_buf=raw_buf,
                                 ncell_wr=ncell_wr,
@@ -167,8 +166,8 @@ def run_parsing(
         except Exception:
             return
 
-        engine = GridEngine.create(_mo_=mo, guarantee=wake_up_logic)
-        if isinstance(engine, GridEngine):
+        engine = GridWriter(mo=mo, guarantee=wake_up_logic)
+        if isinstance(engine, GridWriter):
             agent = ParserAgent(
                 mo=mo,
                 engine=engine,

@@ -132,7 +132,7 @@ class WssSimAgent:
         header_offset: int,
         data_size: int,
         data_offset: int,
-        safe_lag: float,
+        safe_lag: int,
     ) -> bool:
         """
         Set RawData[JSON Bytes] to RawSHM.\n
@@ -164,6 +164,7 @@ class WssSimAgent:
 
     def run_wss_sim_engine(self) -> None:
         # Local Links
+        SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
         wake_up_parser, encoder = self.wake_up_parser, self.encoder
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
@@ -177,13 +178,12 @@ class WssSimAgent:
             while True:
                 gc.collect()
                 self.wait_main.wait()
-                set_status(id_m, 4)  # IDLE
                 prepper = DataPrepper()
                 prepper.start()
                 while True:
-                    if have_problem(id_m=id_m, daugther=True) is not True:
-                        set_status(id_m, 4)  # Sleep
-                        if have_problem(id_m, proc=True):
+                    if have_problem() is not True:
+                        set_status(id_m, SLEEP)
+                        if have_problem(proc=True):
                             if wake_up_parser.is_set() is False:
                                 wake_up_parser.set()
 
@@ -195,7 +195,7 @@ class WssSimAgent:
                                 continue
 
                             time.sleep(time_to_sleep())
-                            set_status(id_m, 5)  # WakeUp
+                            set_status(id_m, WAKE_UP)
                             if raw_data := encode_data(
                                 prepper=prepper, encoder=encoder
                             ):

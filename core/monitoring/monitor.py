@@ -5,7 +5,7 @@ from multiprocessing.synchronize import Semaphore
 
 import numpy as np
 
-from .. import Config, ShMs, ShmType
+from .. import Config, ShMs, ShmType, StatusCodes
 
 
 class MonitorObj:
@@ -17,6 +17,7 @@ class MonitorObj:
     ):
         self.__cfg = Config.CoreConfig
         self.lines, self.cols = self.__cfg.Profiling.lines, self.__cfg.Profiling.cols
+        self._init_need_sc()
         self.shms: dict[str, ShmType] = ShMs.shms
         self._warn_error_status: Semaphore = warn_error_status
         try:
@@ -45,6 +46,11 @@ class MonitorObj:
         except Exception as e:
             traceback.print_exc()  # Debug
             raise Exception(e)
+
+    def _init_need_sc(self) -> None:
+        scg = StatusCodes.General
+        self.INFO_RANGE = Config.general_sc[1]
+        self.STOPING, self.SLEEP, self.WAKE_UP = scg.STOPING, scg.SLEEP, scg.WAKE_UP
 
     def _shm_init(self) -> None | Exception:
         """Load SharedMemory-s, IF SHM not found, raise FileNotFoundError"""
@@ -81,7 +87,7 @@ class MonitorObj:
         Else, called func "_profiling_" that set code+time_ns on ProfilingShM.\n
         """
         try:
-            if code > 49:
+            if code > self.INFO_RANGE:
                 self.status_buf[id_m] = code
                 self._warn_error_status.release()
             else:
@@ -105,27 +111,23 @@ class MonitorObj:
         self.dgid = (dgid_m + 1) % self.lines
         self._monitor.release()
 
-    def have_problem(self, id_m: int, proc=False, daugther=False) -> bool | Exception:
+    def have_problem(self, proc=False) -> bool | Exception | None:
         """
         Get StatusCode Module|Proc.\n
         IF status_code == Warn|Error: return True. Else: return False
         """
         try:
             if proc:
-                if self.status_buf[self.id_p] == 2:
+                if self.status_buf[self.id_p] == self.STOPING:
                     return True
 
-                return False
+            if self.status_buf[self.id_m] > self.INFO_RANGE:
+                return True
 
-            else:
-                if self.status_buf[id_m] > 49:
-                    return True
+            elif self.status_buf[self.id_d] > self.INFO_RANGE:
+                return True
 
-                if daugther:
-                    if self.status_buf[self.id_d] > 49:
-                        return True
-
-                return False
+            return False
 
         except Exception as e:
             traceback.print_exc()  # Debug

@@ -27,7 +27,7 @@ class WatchDog:
         self._task, self._id_proc = 0, 0
         self._check_proce_state: bool = False
         # StatusCodes
-        self.id_info, self.general = id_info, StatusCodes.GENERAL
+        self.id_info = id_info
         self.warn, self.error = StatusCodes.WARN, StatusCodes.ERROR
 
     def run_watchdog_engine(self) -> bool:
@@ -54,13 +54,15 @@ class WatchDog:
                     for id_m in id_info[id_p]:  # Get ID Modules
                         sc_code = shm_buf[id_m]  # Get Status Code Module
                         if 50 <= sc_code < 256:  # Warn & Error Range
-                            logger.warning(  # Logging Code Designaton
-                                f"{id_info[id_p][id_m]} | {
-                                    (warn if str(sc_code) in warn else error)[
-                                        str(sc_code)
-                                    ][str(id_m)]
-                                }"
-                            )
+                            _, __, ___ = str(id_m), str(sc_code), id_info[id_p][id_m]
+                            if __ in warn:
+                                # msg = warn(sc_code).get_msg(id_m)
+                                logger.warning(f"{___} | {warn[__][_]}")
+
+                            elif __ in error:
+                                # msg = error(sc_code).get_msg(id_m)
+                                logger.error(f"{___} | {error[__][_]}")
+
                             if (
                                 task_action(
                                     sc_code=sc_code,

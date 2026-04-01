@@ -13,7 +13,6 @@ from . import (
     ProcsDictTyping,
     ShMs,
     ShmType,
-    StatusCodes,
     WatchDog,
 )
 
@@ -172,7 +171,7 @@ class RunMain:
     def run_core_engine(self) -> bool | None:
         try:
             logger.info("--- Core --- Started. Init...")
-            self.procs, self.id_info = ProcsCfg.procs, StatusCodes.id_info
+            self.procs, self.id_info = ProcsCfg.procs, Config.id_info
             _key = IDpm.network if self.backtesting else IDpm.network_sim
             self.procs.pop(_key)
             self.id_info.pop(_key)

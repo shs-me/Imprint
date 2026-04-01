@@ -3,7 +3,7 @@ from multiprocessing.synchronize import Event, Semaphore
 
 from loguru import logger
 
-from ... import ProcsDictTyping, ShmType
+from ... import ProcsDictTyping, ShmType, StatusCodes
 
 
 def init_task(sc_code: int, last_task: int) -> int | None:
@@ -25,13 +25,10 @@ def init_task(sc_code: int, last_task: int) -> int | None:
 
 
 def set_status_for_all_proc(shm_buf: memoryview, procs: dict, stoping=True) -> None:
-    if stoping:
-        sc_code_for_all_procs = 2
-    else:
-        sc_code_for_all_procs = 1
-
+    sc_code_for_all_procs = 2 if stoping else 1
     for id_p, data in procs.items():
         shm_buf[id_p] = sc_code_for_all_procs
+        logger.success(StatusCodes.General(sc_code_for_all_procs).name)
 
 
 def sleep_untill_market_open(all_sleep: Event) -> None:

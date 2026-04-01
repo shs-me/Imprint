@@ -1,4 +1,5 @@
 import traceback
+from abc import ABC, abstractmethod
 from multiprocessing.synchronize import Event
 
 import numpy as np
@@ -8,19 +9,11 @@ from ... import Config, MonitorObj
 from .. import ConvertMetrics
 
 
-class BaseGridReader:
-    def __init__(
-        self,
-        mo: MonitorObj,
-        guarantee: Event,
-        grid: NDArray[np.float64],
-        _grid: NDArray[np.float64],
-        _coord: NDArray[np.uint16],
-    ) -> None:
+class GridReader(ABC):
+    def __init__(self, mo: MonitorObj, guarantee: Event) -> None:
         __cfg, self._mo, self.guarantee = Config.CoreConfig, mo, guarantee
         self.id_m = self._mo.id_d
         self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
-        self.grid, self._grid, self._coord = grid, _grid, _coord
         self.lines, self.cols = __cfg.Grid.lines, __cfg.Grid.cols
         self.OHLCV_T_D_CT = [
             self.lines + 0,  # Open price
@@ -46,37 +39,34 @@ class BaseGridReader:
             __cfg.Metrics.base_timestamp[0] : __cfg.Metrics.base_timestamp[1]
         ].cast("q")
 
-    @staticmethod
-    def create(_mo_: MonitorObj, guarantee: Event) -> object | None:
+        self._init_array()
+
+    def _init_array(self) -> None:
         try:
-            __cfg: type[Config.CoreConfig] = Config.CoreConfig
-            _grid: NDArray[np.float64] = np.ndarray(
-                shape=((__cfg.Grid.lines + 8), __cfg.Grid.cols),
-                dtype=np.float64,
-                buffer=_mo_.shms[__cfg.Grid.__name__]["buf"],
-            )
-            grid: NDArray[np.float64] = np.ndarray(
-                shape=((__cfg.Grid.lines + 8), __cfg.Grid.cols),
+            __cfg = Config.CoreConfig
+            self.grid: NDArray[np.float64] = np.ndarray(
+                shape=((self.lines + 8), self.cols),
                 dtype=np.float64,
             )
-            grid[:] = 0.0
-            _coord: NDArray[np.uint16] = np.ndarray(
-                shape=(
+            self.grid[:] = 0.0
+            self._grid: NDArray[np.float64] = np.ndarray(
+                ((self.lines + 8), self.cols),
+                dtype=np.float64,
+                buffer=self._mo.shms[__cfg.Grid.__name__]["buf"],
+            )
+            self._coord: NDArray[np.uint16] = np.ndarray(
+                (
                     __cfg.Metrics.coord_lines,
                     __cfg.Metrics.coord_cols,
                 ),
                 dtype=np.uint16,
-                buffer=_mo_.shms[__cfg.Metrics.__name__]["buf"][
+                buffer=self.metrics_buf[
                     __cfg.Metrics.coord_offset[0] : __cfg.Metrics.coord_offset[1]
                 ],
             )
-            return BaseGridReader(
-                mo=_mo_, guarantee=guarantee, grid=grid, _grid=_grid, _coord=_coord
-            )
-
         except Exception:
             traceback.print_exc()  # Debug
-            return None
+            self.set_status(id_m=self.id_m, code=150)  # Error in this func
 
     def _init_session(self) -> None:
         """Get BasePrice, BaseTimestamp, TickSize"""
@@ -102,39 +92,24 @@ class BaseGridReader:
         """Get Coordinaties IDY:IDX from 2-D Array 'Cord'"""
         metrics_buf, coord = self.metrics_buf, self._coord
         # - - -
-        new_flag: int = 1 if (flag := metrics_buf[self.flag]) == 0 else 0
-        metrics_buf[self.flag] = new_flag  # change active buffer for writer
-        if self.guarantee.is_set() is not False:
-            self.guarantee.clear()  # active buffer is empty
-
-        _counter, sim_time_ns = 0, 1000
-        while _counter < sim_time_ns:
-            if (coord[flag, 6] % 2) == 0:  # data is not dirty
-                coord[flag, 7] = 1
-                idy_min, idx_min, idy_max, idx_max, idy, idx = coord[flag, :6]
-                np.copyto(  # update grid local
-                    dst=self.grid[
-                        idy_min:idy_max,
-                        idx_min:idx_max,
-                    ],
-                    src=self._grid[
-                        idy_min:idy_max,
-                        idx_min:idx_max,
-                    ],
-                )
-                coord[flag, :8] = 65535, 65535, 0, 0, 0, 0, 1, 0
-                price, timestamp = (  # convert idy, idx to price, timestamp
-                    self.convert.to_price(idy=int(idy)),
-                    self.convert.to_timestamp(idx=int(idx)),
-                )
-                return (idy, idx, price, timestamp)
-
-            else:  # data maybe is dirty
-                _counter += 1
-
-        else:
-            self.set_status(id_m=self.id_m, code=100)
-            return None
+        old_flag: int = 1 if metrics_buf[self.flag] == 0 else 0
+        idy_min, idx_min, idy_max, idx_max, idy, idx = coord[old_flag, :]
+        np.copyto(  # update grid local
+            dst=self.grid[
+                idy_min:idy_max,
+                idx_min:idx_max,
+            ],
+            src=self._grid[
+                idy_min:idy_max,
+                idx_min:idx_max,
+            ],
+        )
+        coord[old_flag, :] = 65535, 65535, 0, 0, 0, 0  # reset
+        price, timestamp = (  # convert idy, idx to price, timestamp
+            self.convert.to_price(idy=int(idy)),
+            self.convert.to_timestamp(idx=int(idx)),
+        )
+        return (idy, idx, price, timestamp)
 
     def _check_update(self) -> bool:
         if self.base_price == 0.0:
@@ -148,6 +123,14 @@ class BaseGridReader:
 
         return False
 
+    @abstractmethod
+    def check_patterns(self, idy: int, idx: int, price: float, timestamp: int) -> None:
+        pass
+
+
+class BaseGridReader(GridReader):
     def check_patterns(self, idy: int, idx: int, price: float, timestamp: int) -> None:
         _price: int | float = self.convert.round_to_tick(price)
         print(idy, idx, _price, timestamp, flush=True)  # debug
+        if self.guarantee.is_set():
+            self.guarantee.set()

@@ -39,7 +39,7 @@ class WSSAgent:
         header_offset: int,
         data_size: int,
         data_offset: int,
-        safe_lag: float,
+        safe_lag: int,
     ) -> bool:
         """
         Set RawData[JSON Bytes] to RawSHM.\n
@@ -71,6 +71,7 @@ class WSSAgent:
 
     async def run_wss_engine(self) -> None:
         # Local Links
+        SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
         wake_up_parser = self.wake_up_parser
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
@@ -86,15 +87,15 @@ class WSSAgent:
                 try:
                     async with connect(self.uri, ping_interval=20) as ws:
                         while True:
-                            if have_problem(id_m=id_m, daugther=True) is not True:
-                                if have_problem(id_m, proc=True):
+                            if have_problem() is not True:
+                                if have_problem(proc=True):
                                     if wake_up_parser.is_set() is False:
                                         wake_up_parser.set()
                                     break
 
-                                set_status(id_m, 4)  # Sleep
+                                set_status(id_m, SLEEP)
                                 raw_data = await ws.recv(decode=False)
-                                set_status(id_m, 5)  # WakeUp
+                                set_status(id_m, WAKE_UP)
 
                                 if set_raw_data(
                                     raw_data=raw_data,

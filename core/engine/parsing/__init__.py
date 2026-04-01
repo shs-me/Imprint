@@ -1,7 +1,7 @@
-from .grid_engine import GridEngine
+from .grid_writer import GridWriter
 from .parser_agent import run_parsing
 
 __all__ = [
     "run_parsing",
-    "GridEngine",
+    "GridWriter",
 ]

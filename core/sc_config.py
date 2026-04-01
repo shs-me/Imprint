@@ -1,39 +1,10 @@
-from enum import UNIQUE, IntEnum, verify
+from enum import CONTINUOUS, UNIQUE, IntEnum, auto, verify
 
-from . import IDpm
+from . import Config, IDpm
 
 
 class StatusCodes:
     """StatusCode Config"""
-
-    id_info: dict[IDpm, dict[IDpm, str]] = {
-        IDpm.parsing: {
-            IDpm.parsing_agent: "ParsingAgent",
-            IDpm.parsing_daugther: "GridEngine",
-        },
-        IDpm.logic: {
-            IDpm.logic_agent: "LogicAgent",
-            IDpm.logic_daugther: "GridReader",
-        },
-        IDpm.network: {
-            IDpm.network_agent: "WSSAgent",
-            IDpm.network_daugther: "RESTAgent",
-            IDpm.network_sim_agent: "WSSAgent Backtest",
-        },
-        IDpm.network_sim: {
-            IDpm.network_sim_agent: "SimWSSAgent",
-            IDpm.network_sim_daugther: "SimRESTAgent",
-        },
-    }
-
-    GENERAL: dict[int, str] = {
-        0: "IDLE",
-        1: "RUNNING",
-        2: "STOPING",
-        3: "SYSEXIT",
-        4: "SLEEP",
-        5: "WACK_UP",
-    }
 
     WARN: dict[str, dict[str, str]] = {
         "50": {
@@ -191,7 +162,7 @@ class StatusCodes:
             "0": "RunParsingEngine: 150",
             "1": "InitArray: 150",
             "2": "RunLogicEngine: 150",
-            "3": "",
+            "3": "InitArray: 150",
             "4": "RunWssEngine: 150",
             "5": "",
             "6": "RunWssSimEngine: 150",
@@ -334,17 +305,63 @@ class StatusCodes:
         "254": {"0": "", "1": "", "2": "", "3": "", "4": "", "5": "", "6": ""},
     }
 
-    @verify(UNIQUE)
-    class GeneralCode(IntEnum):
-        start = 0
-        end = 49
+    @verify(UNIQUE, CONTINUOUS)
+    class General(IntEnum):
+        IDLE = 0
+        RUNNING = auto()
+        STOPING = auto()
+        EXIT = auto()
+        SLEEP = auto()
+        WAKE_UP = auto()
 
     @verify(UNIQUE)
-    class WarnCode(IntEnum):
-        start = 50
-        end = 149
+    class Warn(IntEnum):
+        label: dict[IDpm, str]
+
+        def __new__(cls, id_mapping: dict[IDpm, str]):
+            value = len(cls.__members__) + Config.warn_sc[0] + 1
+            obj = int.__new__(cls, value)
+            obj._value_ = value
+            obj.label = id_mapping
+            return obj
+
+        def get_msg(self, id_m: int) -> str:
+            return self.label.get(id_m)  # type: ignore
+
+        SC001 = {
+            IDpm.parsing_agent: "",
+            IDpm.parsing_daugther: "",
+            IDpm.logic_agent: "",
+            IDpm.logic_daugther: "",
+            IDpm.network_agent: "",
+            IDpm.network_daugther: "",
+            IDpm.network_sim_agent: "",
+            IDpm.network_sim_agent: "",
+            IDpm.network_sim_daugther: "",
+        }
 
     @verify(UNIQUE)
-    class ErrorCode(IntEnum):
-        start = 150
-        end = 249
+    class Error(IntEnum):
+        label: dict[IDpm, str]
+
+        def __new__(cls, id_mapping: dict[IDpm, str]):
+            value = len(cls.__members__) + Config.error_sc[0] + 1
+            obj = int.__new__(cls, value)
+            obj._value_ = value
+            obj.label = id_mapping
+            return obj
+
+        def get_msg(self, id_m: int) -> str:
+            return self.label.get(id_m)  # type: ignore
+
+        SC001 = {
+            IDpm.parsing_agent: "",
+            IDpm.parsing_daugther: "",
+            IDpm.logic_agent: "",
+            IDpm.logic_daugther: "",
+            IDpm.network_agent: "",
+            IDpm.network_daugther: "",
+            IDpm.network_sim_agent: "",
+            IDpm.network_sim_agent: "",
+            IDpm.network_sim_daugther: "",
+        }

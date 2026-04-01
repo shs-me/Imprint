@@ -35,6 +35,29 @@ class Config:
     Configs: User | ShM's | Proc's | Array's | Path's | Other's
     """
 
+    general_sc = (0, 49)
+    warn_sc = (general_sc[1] + 1, 149)
+    error_sc = (warn_sc[1] + 1, 249)
+    id_info: dict[IDpm, dict[IDpm, str]] = {
+        IDpm.parsing: {
+            IDpm.parsing_agent: "ParsingAgent",
+            IDpm.parsing_daugther: "GridEngine",
+        },
+        IDpm.logic: {
+            IDpm.logic_agent: "LogicAgent",
+            IDpm.logic_daugther: "GridReader",
+        },
+        IDpm.network: {
+            IDpm.network_agent: "WSSAgent",
+            IDpm.network_daugther: "RESTAgent",
+            IDpm.network_sim_agent: "WSSAgent Backtest",
+        },
+        IDpm.network_sim: {
+            IDpm.network_sim_agent: "SimWSSAgent",
+            IDpm.network_sim_daugther: "SimRESTAgent",
+        },
+    }
+
     class UserConfig:
         wss: str = "wss://fstream.binance.com/ws/"
         rest: str = "https://fapi.binance.com/"
@@ -42,6 +65,7 @@ class Config:
         backtesting: bool = True
 
     class CorePath:
+        plugin_path = "algorithm/plugin.py"
         profiling_bin = "dump/profiling.bin"
         profiling_csv = "dump/profiling.csv"
         pheaders_csv = "dump/pheaders.csv"
@@ -64,7 +88,7 @@ class Config:
 
         class Raw:
             cell_amount, header_size, data_size = 1000, 1, 256
-            safe_lag = cell_amount * 0.1
+            safe_lag = int(cell_amount * 0.1)
             # Ring Buffer
             ncell_offset: tuple[int, int] = (0, 8 * 2)
             header_offset: tuple[int, int] = (
@@ -80,7 +104,7 @@ class Config:
             shm_name: str = "raw_data_shm_for_raw_data"
 
         class Metrics:
-            coord_lines, coord_cols = 2, 8
+            coord_lines, coord_cols = 2, 6
             # Offset's
             base_price: tuple[int, int] = (0, 8)  # float64=8
             base_timestamp: tuple[int, int] = (base_price[1], base_price[1] + 8)
