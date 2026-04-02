@@ -3,7 +3,7 @@ from multiprocessing.synchronize import Event, Semaphore
 
 from loguru import logger
 
-from ... import ProcsDictTyping, ShmType, StatusCodes
+from ... import ProcsDictTyping, StatusCodes
 
 
 def init_task(sc_code: int, last_task: int) -> int | None:
@@ -24,11 +24,13 @@ def init_task(sc_code: int, last_task: int) -> int | None:
         return None  # Active Task
 
 
-def set_status_for_all_proc(shm_buf: memoryview, procs: dict, stoping=True) -> None:
-    sc_code_for_all_procs = 2 if stoping else 1
+def set_status_for_procs(
+    status_buf: memoryview, procs: dict[int, ProcsDictTyping], stoping=True
+) -> None:
+    sc_code = 2 if stoping else 1
     for id_p, data in procs.items():
-        shm_buf[id_p] = sc_code_for_all_procs
-        logger.success(StatusCodes.General(sc_code_for_all_procs).name)
+        status_buf[id_p] = sc_code
+        logger.success(f"{data['name']} | {StatusCodes.General(sc_code).name}")
 
 
 def sleep_untill_market_open(all_sleep: Event) -> None:
@@ -41,12 +43,8 @@ def sleep_untill_market_open(all_sleep: Event) -> None:
     all_sleep.wait(timeout=sleep_time)
 
 
-def shms_zeros(shms: dict[str, ShmType]) -> None:
-    for name in shms.keys():
-        shms[name]["buf"][:] = b"\x00" * shms[name]["shm"].size
-
-
-def sems_clear(sems: list[Semaphore]) -> None:
+def reset(buf: memoryview, sems: list[Semaphore]) -> None:
+    buf[:] = b"\x00" * len(buf)
     for sem in sems:
         while sem.acquire(block=False):
             pass

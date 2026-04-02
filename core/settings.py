@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import IntEnum
 from multiprocessing import Process
 from multiprocessing.shared_memory import SharedMemory
@@ -35,46 +36,27 @@ class Config:
     Configs: User | ShM's | Proc's | Array's | Path's | Other's
     """
 
-    general_sc = (0, 49)
-    warn_sc = (general_sc[1] + 1, 149)
-    error_sc = (warn_sc[1] + 1, 249)
-    id_info: dict[IDpm, dict[IDpm, str]] = {
-        IDpm.parsing: {
-            IDpm.parsing_agent: "ParsingAgent",
-            IDpm.parsing_daugther: "GridEngine",
-        },
-        IDpm.logic: {
-            IDpm.logic_agent: "LogicAgent",
-            IDpm.logic_daugther: "GridReader",
-        },
-        IDpm.network: {
-            IDpm.network_agent: "WSSAgent",
-            IDpm.network_daugther: "RESTAgent",
-            IDpm.network_sim_agent: "WSSAgent Backtest",
-        },
-        IDpm.network_sim: {
-            IDpm.network_sim_agent: "SimWSSAgent",
-            IDpm.network_sim_daugther: "SimRESTAgent",
-        },
-    }
-
     class UserConfig:
         wss: str = "wss://fstream.binance.com/ws/"
         rest: str = "https://fapi.binance.com/"
         symbol: str = "dashusdt"
+        tick_size: float = 0.01
+        interval_min: int = 1
         backtesting: bool = True
 
     class CorePath:
-        plugin_path = "algorithm/plugin.py"
+        dirs = ["plugins", "dump", "data"]
+        core_log = "logs/core_&_watchdog.log"
+        profiling_log = "logs/profiling.log"
+        data_csv = "data/aggtrades.csv"
+        algoritm_path = "plugins/algorithm.py"
         profiling_bin = "dump/profiling.bin"
         profiling_csv = "dump/profiling.csv"
         pheaders_csv = "dump/pheaders.csv"
-        status_json = "status_code.json"
-        data_csv = "data/aggtrades.csv"
 
     class CoreConfig:
         class Grid:
-            lines, cols, interval_min = 10000, 10, 1
+            lines, cols = 10000, 10
             # ShM # TypeSize=float64=8
             shm_size: int = (((lines * cols * 8) // 4096) + 1) * 4096
             shm_name: str = "footprint_shm_for_grid"
@@ -87,7 +69,7 @@ class Config:
             shm_name: str = "profiling_shm_for_profiling"
 
         class Raw:
-            cell_amount, header_size, data_size = 1000, 1, 256
+            cell_amount, header_size, data_size = 10000, 1, 256
             safe_lag = int(cell_amount * 0.1)
             # Ring Buffer
             ncell_offset: tuple[int, int] = (0, 8 * 2)
@@ -104,15 +86,16 @@ class Config:
             shm_name: str = "raw_data_shm_for_raw_data"
 
         class Metrics:
-            coord_lines, coord_cols = 2, 6
             # Offset's
             base_price: tuple[int, int] = (0, 8)  # float64=8
             base_timestamp: tuple[int, int] = (base_price[1], base_price[1] + 8)
             tick_size: tuple[int, int] = (base_timestamp[1], base_timestamp[1] + 8)
             price: tuple[int, int] = (tick_size[1], tick_size[1] + 8)  # float64=8
+            # Coord array
+            coord_lines, coord_cols = 2, 6
             coord_offset: tuple[int, int] = (
                 price[1],
-                price[1] + ((coord_cols * coord_lines) * 2),  # uint16
+                price[1] + ((coord_cols * coord_lines) * 4),  # int32=4
             )
             # Index's
             flag: int = coord_offset[1] + 1
@@ -141,26 +124,37 @@ class Config:
             shm_size: int = (4096 // 4096 + 1) * 4096
             shm_name: str = "status_shm_for_status_procs_and_modules"
 
+    general_sc = (0, 49)
+    warn_sc = (general_sc[1] + 1, 149)
+    error_sc = (warn_sc[1] + 1, 249)
+    id_info: dict[IDpm, dict[IDpm, str]] = {
+        IDpm.parsing: {
+            IDpm.parsing_agent: "ParsingAgent",
+            IDpm.parsing_daugther: "GridEngine",
+        },
+        IDpm.logic: {
+            IDpm.logic_agent: "LogicAgent",
+            IDpm.logic_daugther: "GridReader",
+        },
+        IDpm.network: {
+            IDpm.network_agent: "WSSAgent",
+            IDpm.network_daugther: "RESTAgent",
+            IDpm.network_sim_agent: "WSSAgent Backtest",
+        },
+        IDpm.network_sim: {
+            IDpm.network_sim_agent: "SimWSSAgent",
+            IDpm.network_sim_daugther: "SimRESTAgent",
+        },
+    }
 
+
+@dataclass
 class ShMs:
     __cfg = Config.CoreConfig
-    shms: dict[str, ShmType] = {  # type: ignore
-        __cfg.Grid.__name__: {},
-        __cfg.Raw.__name__: {},
-        __cfg.Status.__name__: {},
-        __cfg.Metrics.__name__: {},
-        __cfg.Profiling.__name__: {},
-    }
-    # For Future Update
-    __shm_size = (
-        (
-            __cfg.Grid.shm_size
-            + __cfg.Profiling.shm_size
-            + __cfg.Raw.shm_size
-            + __cfg.Metrics.shm_size
-            + __cfg.Status.shm_size
-        )
-        // 4096
-        + 1
-    ) * 4096
-    __shm_name = "GridCore"
+    grid_offset = (0, 0 + __cfg.Grid.shm_size)
+    profiling_offset = grid_offset[1], grid_offset[1] + __cfg.Profiling.shm_size
+    raw_offset = profiling_offset[1], profiling_offset[1] + __cfg.Raw.shm_size
+    metrics_offset = raw_offset[1], raw_offset[1] + __cfg.Metrics.shm_size
+    status_offset = metrics_offset[1], metrics_offset[1] + __cfg.Status.shm_size
+    shm_size = status_offset[1]
+    shm_name = "GridCore"

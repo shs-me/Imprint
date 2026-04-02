@@ -9,7 +9,6 @@ class ConvertMetrics:
         cols: int,
         ims: int,
     ) -> None:
-        # Initialization
         self.tick_size: float = tick_size
         self.base_price: float = base_price
         self.base_timestamp: int = base_timestamp
@@ -21,18 +20,12 @@ class ConvertMetrics:
             len(str(tick_size).split(sep=".")[-1]) if "." in str(tick_size) else 0
         )
 
-    def round_to_tick(
-        self,
-        price: float,
-    ) -> float:
+    def round_to_tick(self, price: float) -> float:
         ts, pc = self.tick_size, self.precision
         clear_price: float = round(number=(round(number=price / ts) * ts), ndigits=pc)
         return clear_price
 
-    def to_idy(
-        self,
-        price: float,
-    ) -> int | None:
+    def to_idy(self, price: float) -> int | None:
         """
         IF 0 < ID-Y < Lines, Return ID-Y | Else, Return None
         """
@@ -45,11 +38,7 @@ class ConvertMetrics:
         else:
             return None
 
-    def to_idx(
-        self,
-        timestamp: int,
-        is_sell: bool,
-    ) -> int | None:
+    def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
         """
         is_sell: True is bid, False ask.\n
         IF 0 <= ID-X < Cols, Return ID-X | Else, Return None.
@@ -62,22 +51,16 @@ class ConvertMetrics:
         else:
             return None
 
-    def to_price(
-        self,
-        idy: int,
-    ) -> float:
+    def to_price(self, idy: int) -> float:
         """
-        Return Price.
+        Return Price. !Not rounded !Not original accucary
         """
         price: float = ((self.center - idy) * self.tick_size) + self.base_price
         return price
 
-    def to_timestamp(
-        self,
-        idx: int,
-    ) -> int:
+    def to_timestamp(self, idx: int) -> int:
         """
-        Return Timestamp.
+        Return Timestamp. !Not original accucary
         """
         timestamp: int = (
             round(number=(idx - (0 if (idx % 2) == 0 else 1)) / 2) * self.ims

@@ -3,8 +3,10 @@ import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
+from msgspec.json import Decoder
 
 from ... import Config, MonitorObj
+from .. import shm_load
 from . import GridWriter
 
 
@@ -19,26 +21,24 @@ class ParserAgent:
     def __init__(
         self,
         mo: MonitorObj,
-        engine: GridWriter,
+        writer: GridWriter,
         pre_sleep_wss: Event,
         wake_up_logic: Event,
         general_event: Event,
     ) -> None:
-        __cfg, self._mo, self.engine = Config.CoreConfig, mo, engine
-        self.id_m = self._mo.id_m
+        __cfg, self._mo, self.writer = Config.CoreConfig, mo, writer
+        self.id_m, self.have_watchdog_task = self._mo.id_m, self._mo.have_watchdog_task
         self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.pre_sleep_wss, self.wake_up_logic = pre_sleep_wss, wake_up_logic
-        self.wait_main = general_event
-        self.decoder = msgspec.json.Decoder(type=AggTrade, strict=False)
+        self.wait_main: Event = general_event
+        self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
         # InitGetRawData
         self.data_size, self.header_size = __cfg.Raw.data_size, __cfg.Raw.header_size
-        self.data_offset = __cfg.Raw.data_offset[0]
-        self.header_offset = __cfg.Raw.header_offset[0]
-        self.cell_amount = __cfg.Raw.cell_amount
-        # SHM.buf
-        self.raw_buf = self._mo.shms[__cfg.Raw.__name__]["buf"]
-        self.ncell_wr = self.raw_buf[
-            __cfg.Raw.ncell_offset[0] : __cfg.Raw.ncell_offset[1]
+        self.data_offset: int = __cfg.Raw.data_offset[0]
+        self.header_offset: int = __cfg.Raw.header_offset[0]
+        self.cell_amount, self.safe_lag = __cfg.Raw.cell_amount, __cfg.Raw.safe_lag
+        self.ncell_wr: memoryview[int] = self._mo.raw_buf[
+            slice(*__cfg.Raw.ncell_offset)
         ].cast("q")
 
     def _get_raw_data(
@@ -46,7 +46,6 @@ class ParserAgent:
         raw_buf: memoryview,
         ncell_wr: memoryview,
         cell_amount: int,
-        header_size: int,
         header_offset: int,
         data_size: int,
         data_offset: int,
@@ -56,11 +55,11 @@ class ParserAgent:
         ncell_wr: number cell writer & reader
         """
         try:
-            ncell_r: int = ncell_wr[1]
-            lrd = raw_buf[ncell_r + header_offset]
+            ncell_r: int = ncell_wr[1]  # get cell where stopped
+            lrd: int = raw_buf[ncell_r + header_offset]  # get lrd from cell[header]
             start = ncell_r * data_size + data_offset
-            raw_data = raw_buf[start : start + lrd]
-            ncell_r_new = ncell_r + header_size
+            raw_data: memoryview = raw_buf[start : start + lrd]  # get mview cell[data]
+            ncell_r_new: int = ncell_r + 1  # set cell for next parsing
             ncell_wr[1] = ncell_r_new if ncell_r_new < cell_amount else 0
             return raw_data
 
@@ -70,13 +69,11 @@ class ParserAgent:
             return None
 
     def _decode_raw_data(
-        self,
-        raw_data: memoryview,
-        decoder: msgspec.json.Decoder[AggTrade],
+        self, raw_data: memoryview, decoder: Decoder[AggTrade]
     ) -> AggTrade | None:
         """Decode RawData[JSON] to Struct AggTrade"""
         try:
-            trade = decoder.decode(raw_data)
+            trade: AggTrade = decoder.decode(raw_data)
             if trade.p < 0 or trade.q < 0 or trade.T < 0:
                 self.set_status(id_m=self.id_m, code=60)
                 return None
@@ -88,16 +85,30 @@ class ParserAgent:
             self.set_status(id_m=self.id_m, code=153)
             return None
 
+    def _alarm_clock(self, ncells, acell, slag) -> bool:
+        ncell_w, ncell_r = ncells[0], ncells[1]
+        if ((ncell_w - ncell_r + acell) % acell) < slag:
+            if ncell_r == ncell_w:
+                return True
+
+            else:
+                return False
+        else:
+            print(ncell_r, ncell_w, acell, ((ncell_w - ncell_r + acell) % acell), slag)
+            self.set_status(id_m=self.id_m, code=100)
+            return False
+
     def run_parsing_engine(self) -> None:
         # LocalLinks
         SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
-        decoder, engine = self.decoder, self.engine
+        decoder, writer, raw_buf = self.decoder, self.writer, self._mo.raw_buf
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
-        raw_buf, ncell_wr, cell_amount = self.raw_buf, self.ncell_wr, self.cell_amount
+        slag, ncells, acell = self.safe_lag, self.ncell_wr, self.cell_amount
         wake_up_logic, pre_sleep_wss = self.wake_up_logic, self.pre_sleep_wss
         get_raw_data, decode_raw_data = self._get_raw_data, self._decode_raw_data
+        alarm_clock, have_watchdog_task = self._alarm_clock, self.have_watchdog_task
         #  - - -
         try:
             while True:
@@ -105,23 +116,22 @@ class ParserAgent:
                     gc.collect()
                     self.wait_main.wait()
                     while True:
-                        if have_problem() is False:
-                            set_status(id_m, SLEEP)
-                            if ncell_wr[1] == ncell_wr[0]:
-                                pre_sleep_wss.clear()
-                                pre_sleep_wss.wait()
+                        set_status(id_m=id_m, code=SLEEP)
+                        if alarm_clock(ncells=ncells, acell=acell, slag=slag):
+                            pre_sleep_wss.clear()
+                            pre_sleep_wss.wait()
 
-                            if have_problem(proc=True):
+                        if have_problem() is False:
+                            if have_watchdog_task():
                                 if wake_up_logic.is_set() is False:
                                     wake_up_logic.set()
                                     break
 
-                            set_status(id_m, WAKE_UP)  # Running # TIME WAKE_UP
+                            set_status(id_m=id_m, code=WAKE_UP)
                             if raw_data := get_raw_data(
                                 raw_buf=raw_buf,
-                                ncell_wr=ncell_wr,
-                                cell_amount=cell_amount,
-                                header_size=header_size,
+                                ncell_wr=ncells,
+                                cell_amount=acell,
                                 header_offset=header_offset,
                                 data_size=data_size,
                                 data_offset=data_offset,
@@ -129,7 +139,7 @@ class ParserAgent:
                                 if trade := decode_raw_data(
                                     raw_data=raw_data, decoder=decoder
                                 ):
-                                    engine.update(
+                                    writer.update(
                                         price=trade.p,
                                         qty=trade.q,
                                         timestamp=trade.T,
@@ -140,12 +150,12 @@ class ParserAgent:
 
                 except Exception:
                     traceback.print_exc()  # Debug
-                    set_status(id_m, 150)  # Error in this func
+                    set_status(id_m=id_m, code=150)  # Error in this func
                     break
 
         except Exception:
             traceback.print_exc()  # Debug
-            set_status(id_m, 150)  # Error in this func
+            set_status(id_m=id_m, code=150)  # Error in this func
 
 
 def run_parsing(
@@ -156,31 +166,31 @@ def run_parsing(
     warn_error_status: Semaphore,
 ) -> None:
     gc.disable()
+    if (data := shm_load()) is None:
+        return
+
+    shm, shm_buf = data
+    mo: MonitorObj = MonitorObj(
+        shm_buf=shm_buf,
+        proc_name=Config.CoreConfig.Status.parsing.__name__,
+        warn_error_status=warn_error_status,
+        monitor=parser_monitor,
+    )
+
+    writer: GridWriter = GridWriter(mo=mo, guarantee=wake_up_logic)
+    agent: ParserAgent = ParserAgent(
+        mo=mo,
+        writer=writer,
+        wake_up_logic=wake_up_logic,
+        pre_sleep_wss=pre_sleep_wss,
+        general_event=general_event,
+    )
     try:
-        try:
-            mo = MonitorObj(
-                proc_name=Config.CoreConfig.Status.parsing.__name__,
-                warn_error_status=warn_error_status,
-                _monitor=parser_monitor,
-            )
-        except Exception:
-            return
+        agent.run_parsing_engine()
+    except KeyboardInterrupt:
+        pass
 
-        engine = GridWriter(mo=mo, guarantee=wake_up_logic)
-        if isinstance(engine, GridWriter):
-            agent = ParserAgent(
-                mo=mo,
-                engine=engine,
-                wake_up_logic=wake_up_logic,
-                pre_sleep_wss=pre_sleep_wss,
-                general_event=general_event,
-            )
-            agent.run_parsing_engine()
-            agent, engine = None, None
-            gc.collect()
-
-        else:
-            mo.set_status(id_m=mo.id_m, code=151)
-
-    finally:
-        gc.collect()
+    del agent, writer, mo
+    shm_buf.release()
+    shm.close()
+    gc.collect()

@@ -1,23 +1,17 @@
 import httpx
 from loguru import logger
 
+from ... import Config
 
-class RestModule:
-    def __init__(
-        self,
-        cfg,
-    ):
-        self.cfg = cfg
 
+class RestEngine:
+    def __init__(self) -> None:
         self.client = httpx.AsyncClient(
-            base_url=cfg["urls"]["rest"],
-            timeout=5.0,
+            base_url=Config.UserConfig.rest,
             limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
         )
 
-    async def run_rest_engine(
-        self,
-    ):
+    async def run_rest_engine(self):
         pass
 
     async def get_exchange_info(self):
@@ -41,14 +35,3 @@ class RestModule:
 
     async def close(self):
         await self.client.aclose()
-
-
-def rest_run(cfg, sem):
-    logger.remove()
-
-    logger.add(
-        f"logs/{__name__}.log",
-        rotation="100 MB",
-        enqueue=True,
-        format="{time:HH:mm:ss.SSS} | {level} | {name}:{function}:{line} - {message}",
-    )

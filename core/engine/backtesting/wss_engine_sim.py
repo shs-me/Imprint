@@ -2,10 +2,11 @@ import gc
 import time
 import traceback
 from collections import deque
-from multiprocessing.synchronize import Event, Semaphore
+from multiprocessing.synchronize import Event
 from threading import Thread
 
 import msgspec
+from msgspec.json import Encoder
 
 from ... import Config, MonitorObj
 
@@ -25,12 +26,11 @@ class AggTradeSim(msgspec.Struct):
 
 class DataPrepper:
     def __init__(self) -> None:
-        # Initialization
-        self.file_path = Config.CorePath.data_csv
+        self.file_path: str = Config.CorePath.data_csv
         self.symbol: str = Config.UserConfig.symbol.upper()
-        self.queue = deque(maxlen=10000)
+        self.queue: deque = deque(maxlen=10000)
         self.is_running = True
-        self.error = None
+        self.error: None | str = None
 
     def start(self) -> None:
         "Run Daemon Thread"
@@ -38,13 +38,13 @@ class DataPrepper:
 
     def _run(self) -> None:
         try:
-            with open(self.file_path, "r") as f:
+            with open(file=self.file_path, mode="r") as f:
                 next(f)
                 for line in f:
                     if not self.is_running:
                         break
 
-                    d = line.strip().split(",")
+                    d: list[str] = line.strip().split(sep=",")
                     obj = AggTradeSim(
                         e="aggTrade",
                         E=int(d[5]),
@@ -66,25 +66,23 @@ class DataPrepper:
             self.is_running = False
 
 
-class WssSimAgent:
+class WSsSimEngine:
     def __init__(
         self, mo: MonitorObj, wake_up_parser: Event, general_event: Event
     ) -> None:
         __cfg, self._mo = Config.CoreConfig, mo
-        self.id_m = self._mo.id_m
+        self.id_m, self.have_watchdog_task = self._mo.id_m, self._mo.have_watchdog_task
         self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
-        self.encoder: msgspec.json.Encoder = msgspec.json.Encoder()
+        self.encoder: Encoder = Encoder()
         self.ottrade, self.nttrade = 0, 0  # new|old time trade
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         # InitGetRawData
         self.data_size, self.header_size = __cfg.Raw.data_size, __cfg.Raw.header_size
-        self.data_offset = __cfg.Raw.data_offset[0]
-        self.header_offset = __cfg.Raw.header_offset[0]
-        self.cell_amount, self.safe_lag = __cfg.Raw.cell_amount, __cfg.Raw.safe_lag
-        # SHM.buf
-        self.raw_buf = self._mo.shms[__cfg.Raw.__name__]["buf"]
-        self.ncell_wr = self.raw_buf[
-            __cfg.Raw.ncell_offset[0] : __cfg.Raw.ncell_offset[1]
+        self.data_offset: int = __cfg.Raw.data_offset[0]
+        self.header_offset: int = __cfg.Raw.header_offset[0]
+        self.cell_amount = __cfg.Raw.cell_amount
+        self.ncell_wr: memoryview[int] = self._mo.raw_buf[
+            slice(*__cfg.Raw.ncell_offset)
         ].cast("q")
 
     def _time_to_sleep(self) -> float:
@@ -112,9 +110,9 @@ class WssSimAgent:
         Also set, new time trade.
         """
         try:
-            obj = prepper.queue.popleft()
-            raw_data = encoder.encode(obj)
-            self.nttrade = obj.E
+            obj: AggTradeSim = prepper.queue.popleft()
+            raw_data: bytes = encoder.encode(obj)
+            self.nttrade: int = obj.E
             return raw_data
 
         except Exception:
@@ -128,11 +126,9 @@ class WssSimAgent:
         raw_buf: memoryview,
         ncell_wr: memoryview,
         cell_amount: int,
-        header_size: int,
         header_offset: int,
         data_size: int,
         data_offset: int,
-        safe_lag: int,
     ) -> bool:
         """
         Set RawData[JSON Bytes] to RawSHM.\n
@@ -140,17 +136,12 @@ class WssSimAgent:
         """
         try:
             if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-                ncell_w, ncell_r = ncell_wr[0], ncell_wr[1]
-                if ((ncell_w - ncell_r + cell_amount) % cell_amount) > safe_lag:
-                    self.set_status(id_m=self.id_m, code=101)  # Warn in this IF
-                    return False
-
-                raw_buf[ncell_w + header_offset] = lrd
-                start = ncell_w * data_size + data_offset
-                raw_buf[start : start + lrd] = raw_data
-                ncell_wr[0] = (
-                    ncell_w if (ncell_w := ncell_w + header_size) < cell_amount else 0
-                )
+                ncell_w: int = ncell_wr[0]  # get cell
+                raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
+                start: int = ncell_w * data_size + data_offset
+                raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
+                ncell_w_new = ncell_w + 1  # cell for next update
+                ncell_wr[0] = ncell_w_new if ncell_w_new < cell_amount else 0
                 return True
 
             else:
@@ -169,25 +160,23 @@ class WssSimAgent:
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
-        raw_buf, ncell_wr, cell_amount = self.raw_buf, self.ncell_wr, self.cell_amount
-        safe_lag = self.safe_lag
+        raw_buf, ncells, acell = self._mo.raw_buf, self.ncell_wr, self.cell_amount
         set_raw_data, encode_data = self._set_raw_data, self._encode_data
-        time_to_sleep = self._time_to_sleep
+        time_to_sleep, have_watchdog_task = self._time_to_sleep, self.have_watchdog_task
         # - - -
         try:
             while True:
                 gc.collect()
                 self.wait_main.wait()
-                prepper = DataPrepper()
+                prepper: DataPrepper = DataPrepper()
                 prepper.start()
                 while True:
-                    if have_problem() is not True:
-                        set_status(id_m, SLEEP)
-                        if have_problem(proc=True):
+                    set_status(id_m=id_m, code=SLEEP)
+                    if have_problem() is False:
+                        if have_watchdog_task():
                             if wake_up_parser.is_set() is False:
                                 wake_up_parser.set()
-
-                            break
+                                break
 
                         if prepper.error is None:
                             if not prepper.queue:
@@ -195,26 +184,24 @@ class WssSimAgent:
                                 continue
 
                             time.sleep(time_to_sleep())
-                            set_status(id_m, WAKE_UP)
+                            set_status(id_m=id_m, code=WAKE_UP)
                             if raw_data := encode_data(
                                 prepper=prepper, encoder=encoder
                             ):
                                 if set_raw_data(
                                     raw_data=raw_data,
                                     raw_buf=raw_buf,
-                                    ncell_wr=ncell_wr,
-                                    cell_amount=cell_amount,
-                                    header_size=header_size,
+                                    ncell_wr=ncells,
+                                    cell_amount=acell,
                                     header_offset=header_offset,
                                     data_size=data_size,
                                     data_offset=data_offset,
-                                    safe_lag=safe_lag,
                                 ):
                                     if wake_up_parser.is_set() is False:
                                         wake_up_parser.set()
 
                         else:
-                            set_status(id_m, 151)
+                            set_status(id_m=id_m, code=151)
                             print(prepper.error)  # Debug
                             continue
                     else:
@@ -222,31 +209,4 @@ class WssSimAgent:
 
         except Exception:
             traceback.print_exc()  # Debug
-            set_status(id_m, 150)
-
-
-def run_wss_sim(
-    wake_up_parser: Event,
-    network_monitor: Semaphore,
-    general_event: Event,
-    warn_error_status: Semaphore,
-) -> None:
-    gc.disable()
-    try:
-        try:
-            mo = MonitorObj(
-                proc_name=Config.CoreConfig.Status.network_sim.__name__,
-                warn_error_status=warn_error_status,
-                _monitor=network_monitor,
-            )
-        except Exception:
-            return
-
-        agent = WssSimAgent(
-            mo=mo, general_event=general_event, wake_up_parser=wake_up_parser
-        )
-        agent.run_wss_sim_engine()
-        agent = None
-
-    finally:
-        gc.collect()
+            set_status(id_m=id_m, code=150)

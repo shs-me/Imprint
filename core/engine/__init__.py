@@ -1,14 +1,14 @@
-from .utils import ConvertMetrics  # noqa
-from .backtesting import run_wss_sim
-from .logic import BaseGridReader, run_logic, GridReader
-from .network import run_wss
+from .utils import ConvertMetrics, shm_load  # noqa
+from .backtesting import run_network_sim
+from .logic import GridReader, run_logic
+from .network import run_network
 from .parsing import run_parsing
 
 __all__ = [
     "run_parsing",
     "run_logic",
-    "run_wss",
-    "run_wss_sim",
-    "BaseGridReader",
+    "run_network",
+    "run_network_sim",
     "ConvertMetrics",
+    "GridReader",
 ]

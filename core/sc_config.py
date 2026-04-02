@@ -82,7 +82,7 @@ class StatusCodes:
         "98": {"0": "", "1": "", "2": "", "3": "", "4": "", "5": "", "6": ""},
         "99": {"0": "", "1": "", "2": "", "3": "", "4": "", "5": "", "6": ""},
         "100": {
-            "0": "",
+            "0": "GetRawData: 100: reading lag > safe lag",
             "1": "InitSession: 100 : amount ticks in price > 80% of lines",
             "2": "",
             "3": "GetCoords: 100: data maybe is dirty, writer not update data",
@@ -95,9 +95,9 @@ class StatusCodes:
             "1": "Update: 101: IDX > ArrayCols or IDX < 0",
             "2": "",
             "3": "",
-            "4": "SetRawData: 101: Reader lag > safe lag",
+            "4": "",
             "5": "",
-            "6": "SetRawData: 101: Reader lag > safe lag",
+            "6": "",
         },
         "102": {
             "0": "",

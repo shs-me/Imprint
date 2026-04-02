@@ -1,3 +1,4 @@
+import os
 import time
 import traceback
 from multiprocessing import Event, Process, Semaphore
@@ -12,7 +13,6 @@ from . import (
     ProcsCfg,
     ProcsDictTyping,
     ShMs,
-    ShmType,
     WatchDog,
 )
 
@@ -24,9 +24,6 @@ class RunMain:
         self.id_info, self.sc_general = {}, {}
         # Path's
         self.profiling_bin = Config.CorePath.profiling_bin
-        self.status_json = Config.CorePath.status_json
-        # SharedMemory's | Memoryview's
-        self.shms: dict[str, ShmType] = ShMs.shms
         # Proc's Event's
         self.sleep_parsing, self.sleep_logic = Event(), Event()
         # For profiling Semaphore's
@@ -40,14 +37,29 @@ class RunMain:
             self.network_monitor,
         ]
 
+    def _init_session(self) -> bool:
+        if self._shm_control(create=True, close=False):
+            for _dir in Config.CorePath.dirs:
+                if not os.path.exists(_dir):
+                    os.mkdir(_dir)
+
+            id_p = IDpm.network if self.backtesting else IDpm.network_sim
+            self.procs, self.id_info = ProcsCfg.procs, Config.id_info
+            self.procs.pop(id_p)
+            self.id_info.pop(id_p)
+            return True
+
+        else:
+            return False
+
     def _close_(self) -> None:
         try:
             logger.warning(
-                "-- Core -- | _Exit | Closing Processes, SaveprofilingArray, Clean SHM-s, Exit..."
+                "-- Core -- | _Exit | Closing Processes, DampProfilingArray, Clean SHM-s, Exit..."
             )
             MonitorObj.dump_profile(
                 self.profiling_bin,
-                self.shms[Config.CoreConfig.Profiling.__name__]["buf"],
+                self.buf[slice(*ShMs.profiling_offset)],
                 _bin=True,
             )
             for id, data in self.procs.items():
@@ -57,48 +69,43 @@ class RunMain:
                     logger.warning(
                         f"-- Core -- | _Exit | Process {self.procs[id]['name']} closed"
                     )
-            self._shm_close()
+
+            self.buf.release()
+            self._shm_control(create=False, close=True)
 
         except Exception as e:
             traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | _Exit | {e}")
 
-    def _shm_close(self) -> None:
-        """Close SharedMemory's"""
-        for name in self.shms.keys():
-            try:
-                _obj = getattr(self.core_cfg, name)
-                shm = SharedMemory(name=_obj.shm_name)
-                shm.close()
-                shm.unlink()
-
-            except FileNotFoundError:
-                pass
-
-    def _shm_create(self) -> bool:
-        """Open & Create SharedMemory's"""
+    def _shm_control(self, create: bool, close: bool) -> bool:
+        """Open & Close & Create SharedMemory's"""
         try:
-            for name in self.shms.keys():
+            if create:
                 try:
-                    _obj = getattr(self.core_cfg, name)
-                    shm = SharedMemory(
-                        name=_obj.shm_name,
-                        size=_obj.shm_size,
-                        create=True,
+                    self.shm = SharedMemory(
+                        name=ShMs.shm_name, size=ShMs.shm_size, create=True
                     )
-
                 except FileExistsError:
-                    _obj = getattr(self.core_cfg, name)
-                    shm = SharedMemory(name=_obj.shm_name)
+                    self.shm = SharedMemory(name=ShMs.shm_name)
 
-                if shm.buf is not None:
-                    self.shms[name]["shm"] = shm
-                    self.shms[name]["buf"] = shm.buf
-                    self.shms[name]["buf"][:] = b"\x00" * self.shms[name]["shm"].size
-                else:
-                    return False
+                if self.shm.buf is not None:
+                    self.buf = self.shm.buf
+                    self.buf[:] = b"\x00" * self.shm.size
 
-            return True
+                return True
+
+            if close:
+                try:
+                    self.shm.close()
+                    self.shm.unlink()
+
+                except FileNotFoundError:
+                    pass
+
+                return True
+
+            return False
+
         except Exception as e:
             traceback.print_exc()  # Debug
             logger.error(f"-- Core -- | ShmControl | {e}")
@@ -171,55 +178,36 @@ class RunMain:
     def run_core_engine(self) -> bool | None:
         try:
             logger.info("--- Core --- Started. Init...")
-            self.procs, self.id_info = ProcsCfg.procs, Config.id_info
-            _key = IDpm.network if self.backtesting else IDpm.network_sim
-            self.procs.pop(_key)
-            self.id_info.pop(_key)
-            self._shm_close()
-            if self._shm_create() is False:
+            if self._init_session() is False:
                 return False
 
             _watchdog = WatchDog(
                 procs=self.procs,
                 id_info=self.id_info,
-                shm_s=self.shms,
+                shm_buf=self.buf,
                 sem_s=self.sem_s,
                 general_event=self.general_event,
                 warn_error_status=self.warn_error_status,
             )
-            # debug
-            _start, _end = self.core_cfg.Metrics.tick_size
-            __cfg = Config.CoreConfig
-            tick_size_buf = self.shms[__cfg.Metrics.__name__]["buf"][
-                __cfg.Metrics.tick_size[0] : __cfg.Metrics.tick_size[1]
-            ].cast("d")
-            tick_size_buf[0] = 0.01
-            # - - -
-            if isinstance(_watchdog, WatchDog):
-                logger.info("WatchDog | Started")
-                for id_proc in self.procs:  # Init Process's
-                    if self._run_proc(id_proc=id_proc) is False:
-                        return False
+            logger.info("WatchDog | Started")
+            for id_proc in self.procs:  # Init Process's
+                if self._run_proc(id_proc=id_proc) is False:
+                    return False
 
-                    time.sleep(0.5)
+                time.sleep(0.5)
 
-                self.general_event.set()
-                logger.info("--- Core --- Init Completed.")
-                try:
-                    while True:
-                        if _watchdog.run_watchdog_engine() is False:
-                            logger.warning(
-                                "--- Core --- | RunCoreEngine | Closing because of the WatchDog"
-                            )
-                            break
+            self.general_event.set()
+            logger.info("--- Core --- Init Completed.")
+            try:
+                while True:
+                    if _watchdog.run_watchdog_engine() is False:
+                        logger.warning(
+                            "--- Core --- | RunCoreEngine | Closing because of the WatchDog"
+                        )
+                        break
 
-                except KeyboardInterrupt:
-                    logger.warning("-- Core -- | RunCoreEngine | Shutting down bot")
-
-            else:
-                logger.warning(
-                    "-- Core -- | RunCoreEngine | Create obj Watchdog failed"
-                )
+            except KeyboardInterrupt:
+                logger.warning("-- Core -- | RunCoreEngine | Shutting down bot")
 
         except Exception as e:
             traceback.print_exc()  # Debug
@@ -231,7 +219,7 @@ class RunMain:
 def run_core(backtesting: bool = True) -> None:
     logger.remove()
     logger.add(
-        "logs/__core__&_watchdog.log",
+        Config.CorePath.core_log,
         rotation="100 MB",
         enqueue=True,
         format="{time:HH:mm:ss.SSS} | {level} | {message}",

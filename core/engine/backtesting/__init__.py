@@ -1,5 +1,4 @@
-from .wss_sim import run_wss_sim
+from .wss_engine_sim import WSsSimEngine  # noqa
+from .network_sim_agent import run_network_sim
 
-__all__ = [
-    "run_wss_sim",
-]
+__all__ = ["WSsSimEngine", "run_network_sim"]

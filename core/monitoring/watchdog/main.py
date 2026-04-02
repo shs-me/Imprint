@@ -6,7 +6,7 @@ from loguru import logger
 
 from core.settings import IDpm
 
-from ... import Config, ProcsDictTyping, ShmType, StatusCodes
+from ... import ProcsDictTyping, ShMs, StatusCodes
 from . import actions as act
 
 
@@ -15,13 +15,13 @@ class WatchDog:
         self,
         procs: dict[int, ProcsDictTyping],
         id_info: dict[IDpm, dict[IDpm, str]],
-        shm_s: dict[str, ShmType],
+        shm_buf: memoryview,
         sem_s: list[Semaphore],
         general_event: Event,
         warn_error_status: Semaphore,
     ) -> None:
-        self.procs, self.shm_s, self.sem_s = procs, shm_s, sem_s
-        self.shm_buf = self.shm_s[Config.CoreConfig.Status.__name__]["buf"]
+        self.procs, self.buf, self.sem_s = procs, shm_buf, sem_s
+        self.status_buf = self.buf[slice(*ShMs.status_offset)]
         self.all_sleep, self.calling = general_event, warn_error_status
         # Variable's
         self._task, self._id_proc = 0, 0
@@ -32,7 +32,7 @@ class WatchDog:
 
     def run_watchdog_engine(self) -> bool:
         # LocalLinks
-        calling, shm_buf = self.calling, self.shm_buf
+        calling, shm_buf = self.calling, self.status_buf
         error, warn, id_info = self.error, self.warn, self.id_info
         task_action = self._task_action
         #  - - -
@@ -44,7 +44,7 @@ class WatchDog:
                     counter += 1
                     if counter >= 3:
                         self._task = 1  # Check Live: Not Reason
-                        if task_action(sc_code=self._task, shm_buf=shm_buf) is False:
+                        if task_action(sc_code=self._task) is False:
                             return False
 
                 calling.acquire(timeout=60)
@@ -66,7 +66,6 @@ class WatchDog:
                             if (
                                 task_action(
                                     sc_code=sc_code,
-                                    shm_buf=shm_buf,
                                     id_m=id_m,
                                     id_p=id_p,
                                 )
@@ -82,7 +81,6 @@ class WatchDog:
     def _task_action(
         self,
         sc_code: int,
-        shm_buf: memoryview,
         id_m: int | None = None,
         id_p: int | None = None,
     ) -> bool:
@@ -101,15 +99,14 @@ class WatchDog:
                         return False
 
             elif task == 101:  # Sleep All Procs untill market open
-                act.set_status_for_all_proc(  # All Sleep
-                    shm_buf=shm_buf, procs=self.procs, stoping=True
+                act.set_status_for_procs(  # All Sleep
+                    status_buf=self.status_buf, procs=self.procs, stoping=True
                 )
                 act.sleep_untill_market_open(self.all_sleep)
-                act.set_status_for_all_proc(  # All WeckUp
-                    shm_buf=shm_buf, procs=self.procs, stoping=False
+                act.set_status_for_procs(  # All WeckUp
+                    status_buf=self.status_buf, procs=self.procs, stoping=False
                 )
-                act.shms_zeros(self.shm_s)
-                act.sems_clear(self.sem_s)
+                act.reset(self.buf, self.sem_s)
                 self.all_sleep.set()
                 time.sleep(0.5)
                 self.all_sleep.clear()
@@ -122,7 +119,7 @@ class WatchDog:
             # Reset Status
             self._task = 0
             if id_m:
-                shm_buf[id_m] = 0
+                self.status_buf[id_m] = 0
 
             return True
 

@@ -1,20 +1,18 @@
-import asyncio
 import gc
 import traceback
-from multiprocessing.synchronize import Event, Semaphore
+from multiprocessing.synchronize import Event
 
-import winloop
 from websockets.asyncio.client import connect
 
 from ... import Config, MonitorObj
 
 
-class WSSAgent:
+class WSsEngine:
     def __init__(
         self, mo: MonitorObj, wake_up_parser: Event, general_event: Event
     ) -> None:
         __cfg, self._mo = Config.CoreConfig, mo
-        self.id_m = self._mo.id_m
+        self.id_m, self.have_watchdog_task = self._mo.id_m, self._mo.have_watchdog_task
         self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
         self.uri = f"{Config.UserConfig.wss}{Config.UserConfig.wss}@aggTrade"
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
@@ -22,12 +20,9 @@ class WSSAgent:
         self.data_size, self.header_size = __cfg.Raw.data_size, __cfg.Raw.header_size
         self.data_offset = __cfg.Raw.data_offset[0]
         self.header_offset = __cfg.Raw.header_offset[0]
-        self.cell_amount, self.safe_lag = __cfg.Raw.cell_amount, __cfg.Raw.safe_lag
+        self.cell_amount = __cfg.Raw.cell_amount
         # SHM.buf
-        self.raw_buf = self._mo.shms[__cfg.Raw.__name__]["buf"]
-        self.ncell_wr = self.raw_buf[
-            __cfg.Raw.ncell_offset[0] : __cfg.Raw.ncell_offset[1]
-        ].cast("q")
+        self.ncell_wr = self._mo.raw_buf[slice(*__cfg.Raw.ncell_offset)].cast("q")
 
     def _set_raw_data(
         self,
@@ -35,11 +30,9 @@ class WSSAgent:
         raw_buf: memoryview,
         ncell_wr: memoryview,
         cell_amount: int,
-        header_size: int,
         header_offset: int,
         data_size: int,
         data_offset: int,
-        safe_lag: int,
     ) -> bool:
         """
         Set RawData[JSON Bytes] to RawSHM.\n
@@ -47,17 +40,12 @@ class WSSAgent:
         """
         try:
             if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-                ncell_w, ncell_r = ncell_wr[0], ncell_wr[1]
-                if ((ncell_w - ncell_r + cell_amount) % cell_amount) > safe_lag:
-                    self.set_status(id_m=self.id_m, code=101)  # Warn in this IF
-                    return False
-
-                raw_buf[ncell_w + header_offset] = lrd
-                start = ncell_w * data_size + data_offset
-                raw_buf[start : start + lrd] = raw_data
-                ncell_wr[0] = (
-                    ncell_w if (ncell_w := ncell_w + header_size) < cell_amount else 0
-                )
+                ncell_w: int = ncell_wr[0]  # get cell
+                raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
+                start: int = ncell_w * data_size + data_offset
+                raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
+                ncell_w_new = ncell_w + 1  # cell for next update
+                ncell_wr[0] = ncell_w_new if ncell_w_new < cell_amount else 0
                 return True
 
             else:
@@ -76,9 +64,8 @@ class WSSAgent:
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
         header_size, data_size = self.header_size, self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
-        raw_buf, ncell_wr, cell_amount = self.raw_buf, self.ncell_wr, self.cell_amount
-        safe_lag = self.safe_lag
-        set_raw_data = self._set_raw_data
+        raw_buf, ncells, acell = self._mo.raw_buf, self.ncell_wr, self.cell_amount
+        set_raw_data, have_watchdog_task = self._set_raw_data, self.have_watchdog_task
         # - - -
         while True:
             try:
@@ -87,26 +74,24 @@ class WSSAgent:
                 try:
                     async with connect(self.uri, ping_interval=20) as ws:
                         while True:
-                            if have_problem() is not True:
-                                if have_problem(proc=True):
+                            set_status(id_m=id_m, code=SLEEP)
+                            if have_problem() is False:
+                                if have_watchdog_task():
                                     if wake_up_parser.is_set() is False:
                                         wake_up_parser.set()
-                                    break
+                                        break
 
-                                set_status(id_m, SLEEP)
                                 raw_data = await ws.recv(decode=False)
-                                set_status(id_m, WAKE_UP)
+                                set_status(id_m=id_m, code=WAKE_UP)
 
                                 if set_raw_data(
                                     raw_data=raw_data,
                                     raw_buf=raw_buf,
-                                    ncell_wr=ncell_wr,
-                                    cell_amount=cell_amount,
-                                    header_size=header_size,
+                                    ncell_wr=ncells,
+                                    cell_amount=acell,
                                     header_offset=header_offset,
                                     data_size=data_size,
                                     data_offset=data_offset,
-                                    safe_lag=safe_lag,
                                 ):
                                     if wake_up_parser.is_set() is False:
                                         wake_up_parser.set()
@@ -116,38 +101,10 @@ class WSSAgent:
 
                 except Exception:
                     traceback.print_exc()  # Debug
-                    set_status(id_m, 150)  # Error in this func
+                    set_status(id_m=id_m, code=150)  # Error in this func
                     break
 
             except Exception:
                 traceback.print_exc()  # Debug
-                set_status(id_m, 150)  # Error in this func
+                set_status(id_m=id_m, code=150)  # Error in this func
                 break
-
-
-def run_wss(
-    wake_up_parser: Event,
-    network_monitor: Semaphore,
-    general_event: Event,
-    warn_error_status: Semaphore,
-) -> None:
-    gc.disable()
-    winloop.install()
-    try:
-        try:
-            mo = MonitorObj(
-                proc_name=Config.CoreConfig.Status.network.__name__,
-                _monitor=network_monitor,
-                warn_error_status=warn_error_status,
-            )
-        except Exception:
-            return
-
-        agent = WSSAgent(
-            mo=mo, general_event=general_event, wake_up_parser=wake_up_parser
-        )
-        asyncio.run(agent.run_wss_engine())
-        agent = None
-
-    finally:
-        gc.collect()
