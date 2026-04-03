@@ -1,4 +1,4 @@
-from .utils import ConvertMetrics, shm_load  # noqa
+from .utils import ConvertMetrics, shm_manager, error_action  # noqa
 from .backtesting import run_network_sim
 from .logic import GridReader, run_logic
 from .network import run_network
@@ -11,4 +11,6 @@ __all__ = [
     "run_network_sim",
     "ConvertMetrics",
     "GridReader",
+    "shm_manager",
+    "error_action",
 ]

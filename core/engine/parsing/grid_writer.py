@@ -1,10 +1,10 @@
-import traceback
 from multiprocessing.synchronize import Event
 
 import numpy as np
 from numpy.typing import NDArray
 
 from ... import Config, MonitorObj
+from ... import StatusCodes as sc
 from .. import ConvertMetrics
 
 
@@ -41,28 +41,24 @@ class GridWriter:
         self._init_array()
 
     def _init_array(self) -> None:
-        try:
-            __cfg: type[Config.CoreConfig] = Config.CoreConfig
-            self.grid: NDArray[np.float64] = np.ndarray(
-                shape=((self.lines + 8), self.cols),
-                dtype=np.float64,
-                buffer=self._mo.grid_buf,
-            )
-            self.coord: NDArray[np.int32] = np.ndarray(
-                shape=(__cfg.Metrics.coord_lines, __cfg.Metrics.coord_cols),
-                dtype=np.int32,
-                buffer=self._mo.metrics_buf[slice(*__cfg.Metrics.coord_offset)],
-            )
-        except Exception:
-            traceback.print_exc()  # Debug
-            self.set_status(id_m=self.id_m, code=150)  # Error in this func
+        __cfg: type[Config.CoreConfig] = Config.CoreConfig
+        self.grid: NDArray[np.float64] = np.ndarray(
+            shape=((self.lines + 8), self.cols),
+            dtype=np.float64,
+            buffer=self._mo.grid_buf,
+        )
+        self.coord: NDArray[np.int32] = np.ndarray(
+            shape=(__cfg.Metrics.coord_lines, __cfg.Metrics.coord_cols),
+            dtype=np.int32,
+            buffer=self._mo.metrics_buf[slice(*__cfg.Metrics.coord_offset)],
+        )
 
     def _init_session(self, price: float, timestamp: int) -> bool:
         """Init Center, BasePrice, BaseTimestamp, TickSize"""
         self.tick_size: float = self.tick_size_buf[0]
         atip: int = round(number=price / self.tick_size)  # amount_ticks_in_price
         if atip >= round(number=self.lines * 0.8):
-            self.set_status(id_m=self.id_m, code=100)  # Warn in this IF
+            self.set_status(id_m=self.id_m, code=sc.WARN0)  # Warn in this IF
             return False
 
         self.center: int = atip if atip >= (self.lines - atip) else (self.lines - atip)
@@ -140,8 +136,8 @@ class GridWriter:
                 return True
 
             else:
-                self.set_status(id_m=self.id_m, code=102)  # Warn in this IF
+                self.set_status(id_m=self.id_m, code=sc.WARN2)  # Warn in this IF
         else:
-            self.set_status(id_m=self.id_m, code=101)  # Warn in this IF
+            self.set_status(id_m=self.id_m, code=sc.WARN1)  # Warn in this IF
 
         return False

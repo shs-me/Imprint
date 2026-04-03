@@ -2,11 +2,11 @@ import gc
 import importlib.util
 import inspect
 import os
-import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 from ... import Config, MonitorObj
-from .. import shm_load
+from ... import StatusCodes as sc
+from .. import error_action, shm_manager
 from . import BaseGridReader, GridReader
 
 
@@ -21,6 +21,7 @@ class LogicAgent:
         self._mo, self.reader = mo, reader
         self.id_m, self.have_watchdog_task = self._mo.id_m, self._mo.have_watchdog_task
         self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
+        self.status_buf = self._mo.status_buf
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
 
     @staticmethod
@@ -28,11 +29,12 @@ class LogicAgent:
         """Create obj BaseReader or Plugin subclass BaseReader"""
         _path = Config.CorePath.algoritm_path
         if not os.path.exists(_path):
-            # for warn
             return BaseGridReader(mo=mo)
 
         else:
-            try:
+
+            @error_action()
+            def get_plugin():
                 module_name = os.path.splitext(os.path.basename(_path))[0]
                 spec = importlib.util.spec_from_file_location(module_name, _path)
                 if spec is not None and spec.loader is not None:
@@ -43,59 +45,57 @@ class LogicAgent:
                         if issubclass(obj, GridReader) and obj is not GridReader:
                             return obj(mo=mo)
 
-            except Exception:
-                traceback.print_exc()
+            result = get_plugin()
+            if result is not None:
+                return result
 
         return BaseGridReader(mo=mo)
 
+    def _alarm_clock(self, sleeper: Event) -> bool:
+        if sleeper.is_set() is False:
+            return True
+        else:
+            return False
+
+    @error_action(set_sc_code=True)
     def run_logic_engine(self) -> None:
         # LocalLinks
-        SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
+        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
-        pre_sleep_logic = self.pre_sleep_logic
+        pre_sleep_logic, alarm_clock = self.pre_sleep_logic, self._alarm_clock
         reader, have_watchdog_task = self.reader, self.have_watchdog_task
         #  - - -
-        try:
+        while True:
+            gc.collect()
+            self.wait_main.wait()
             while True:
-                try:
-                    gc.collect()
-                    self.wait_main.wait()
-                    while True:
-                        set_status(id_m=id_m, code=SLEEP)
+                set_status(id_m=id_m, code=SLEEP)
+                if have_problem() is False:
+                    if have_watchdog_task():
+                        break
+
+                    if alarm_clock(sleeper=pre_sleep_logic):
                         pre_sleep_logic.wait()
-                        if have_problem() is False:
-                            if have_watchdog_task():
-                                break
+                        continue
 
-                            set_status(id_m=id_m, code=WAKE_UP)
-                            reader._check_update()
-                            if pre_sleep_logic.is_set():
-                                pre_sleep_logic.clear()
+                    set_status(id_m=id_m, code=WAKE_UP)
+                    reader._check_update()
+                    if pre_sleep_logic.is_set():
+                        pre_sleep_logic.clear()
 
-                        else:
-                            return
-
-                except Exception:
-                    traceback.print_exc()  # Debug
-                    set_status(id_m=id_m, code=150)  # Error in this func
-                    break
-
-        except Exception:
-            traceback.print_exc()  # Debug
-            set_status(id_m=id_m, code=150)  # Error in this func
+                else:
+                    return
 
 
+@shm_manager(create=False)
 def run_logic(
     pre_sleep_logic: Event,
     logic_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
+    shm_buf: memoryview,
 ) -> None:
     gc.disable()
-    if (data := shm_load()) is None:
-        return
-
-    shm, shm_buf = data
     mo: MonitorObj = MonitorObj(
         shm_buf=shm_buf,
         proc_name=Config.CoreConfig.Status.logic.__name__,
@@ -110,11 +110,5 @@ def run_logic(
         pre_sleep_logic=pre_sleep_logic,
         general_event=general_event,
     )
-    try:
-        agent.run_logic_engine()
-    except KeyboardInterrupt:
-        pass
-    del agent, reader, mo
-    shm_buf.release()
-    shm.close()
+    agent.run_logic_engine()
     gc.collect()

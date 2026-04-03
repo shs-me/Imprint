@@ -1,4 +1,3 @@
-import traceback
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -47,29 +46,25 @@ class GridReader(ABC):
         self._init_array()
 
     def _init_array(self) -> None:
-        try:
-            __cfg: type[Config.CoreConfig] = Config.CoreConfig
-            self.footprint: NDArray[np.float64] = np.ndarray(
-                shape=((self.lines + 8), self.cols),
-                dtype=np.float64,
-            )
-            self.footprint[:] = 0.0
-            self.grid: NDArray[np.float64] = np.ndarray(
-                shape=((self.lines + 8), self.cols),
-                dtype=np.float64,
-                buffer=self._mo.grid_buf,
-            )
-            self.coord: NDArray[np.int32] = np.ndarray(
-                shape=(
-                    __cfg.Metrics.coord_lines,
-                    __cfg.Metrics.coord_cols,
-                ),
-                dtype=np.int32,
-                buffer=self._mo.metrics_buf[slice(*__cfg.Metrics.coord_offset)],
-            )
-        except Exception:
-            traceback.print_exc()  # Debug
-            self.set_status(id_m=self.id_m, code=150)  # Error in this func
+        __cfg: type[Config.CoreConfig] = Config.CoreConfig
+        self.footprint: NDArray[np.float64] = np.ndarray(
+            shape=((self.lines + 8), self.cols),
+            dtype=np.float64,
+        )
+        self.footprint[:] = 0.0
+        self.grid: NDArray[np.float64] = np.ndarray(
+            shape=((self.lines + 8), self.cols),
+            dtype=np.float64,
+            buffer=self._mo.grid_buf,
+        )
+        self.coord: NDArray[np.int32] = np.ndarray(
+            shape=(
+                __cfg.Metrics.coord_lines,
+                __cfg.Metrics.coord_cols,
+            ),
+            dtype=np.int32,
+            buffer=self._mo.metrics_buf[slice(*__cfg.Metrics.coord_offset)],
+        )
 
     def _init_session(self) -> None:
         """Get BasePrice, BaseTimestamp, TickSize"""

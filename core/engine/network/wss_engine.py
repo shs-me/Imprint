@@ -1,10 +1,11 @@
 import gc
-import traceback
 from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
 
 from ... import Config, MonitorObj
+from ... import StatusCodes as sc
+from .. import error_action
 
 
 class WSsEngine:
@@ -38,73 +39,57 @@ class WSsEngine:
         Set RawData[JSON Bytes] to RawSHM.\n
         ncell_wr: number cell writer & reader
         """
-        try:
-            if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-                ncell_w: int = ncell_wr[0]  # get cell
-                raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
-                start: int = ncell_w * data_size + data_offset
-                raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
-                ncell_w_new = ncell_w + 1  # cell for next update
-                ncell_wr[0] = ncell_w_new if ncell_w_new < cell_amount else 0
-                return True
 
-            else:
-                self.set_status(id_m=self.id_m, code=100)  # Warn in this IF
-                return False
+        if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
+            ncell_w: int = ncell_wr[0]  # get cell
+            raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
+            start: int = ncell_w * data_size + data_offset
+            raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
+            ncell_w_new = ncell_w + 1  # cell for next update
+            ncell_wr[0] = ncell_w_new if ncell_w_new < cell_amount else 0
+            return True
 
-        except Exception:
-            traceback.print_exc()  # Debug
-            self.set_status(id_m=self.id_m, code=151)  # Error in this func
+        else:
+            self.set_status(id_m=self.id_m, code=sc.WARN0)  # Warn in this IF
             return False
 
+    @error_action(set_sc_code=True)
     async def run_wss_engine(self) -> None:
         # Local Links
-        SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
+        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         wake_up_parser = self.wake_up_parser
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
-        header_size, data_size = self.header_size, self.data_size
+        data_size = self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
         raw_buf, ncells, acell = self._mo.raw_buf, self.ncell_wr, self.cell_amount
         set_raw_data, have_watchdog_task = self._set_raw_data, self.have_watchdog_task
         # - - -
         while True:
-            try:
-                gc.collect()
-                self.wait_main.wait()
-                try:
-                    async with connect(self.uri, ping_interval=20) as ws:
-                        while True:
-                            set_status(id_m=id_m, code=SLEEP)
-                            if have_problem() is False:
-                                if have_watchdog_task():
-                                    if wake_up_parser.is_set() is False:
-                                        wake_up_parser.set()
-                                        break
+            gc.collect()
+            self.wait_main.wait()
+            async with connect(self.uri, ping_interval=20) as ws:
+                while True:
+                    set_status(id_m=id_m, code=SLEEP)
+                    if have_problem() is False:
+                        if have_watchdog_task():
+                            if wake_up_parser.is_set() is False:
+                                wake_up_parser.set()
+                                break
 
-                                raw_data = await ws.recv(decode=False)
-                                set_status(id_m=id_m, code=WAKE_UP)
+                        raw_data = await ws.recv(decode=False)
+                        set_status(id_m=id_m, code=WAKE_UP)
 
-                                if set_raw_data(
-                                    raw_data=raw_data,
-                                    raw_buf=raw_buf,
-                                    ncell_wr=ncells,
-                                    cell_amount=acell,
-                                    header_offset=header_offset,
-                                    data_size=data_size,
-                                    data_offset=data_offset,
-                                ):
-                                    if wake_up_parser.is_set() is False:
-                                        wake_up_parser.set()
+                        if set_raw_data(
+                            raw_data=raw_data,
+                            raw_buf=raw_buf,
+                            ncell_wr=ncells,
+                            cell_amount=acell,
+                            header_offset=header_offset,
+                            data_size=data_size,
+                            data_offset=data_offset,
+                        ):
+                            if wake_up_parser.is_set() is False:
+                                wake_up_parser.set()
 
-                            else:
-                                return
-
-                except Exception:
-                    traceback.print_exc()  # Debug
-                    set_status(id_m=id_m, code=150)  # Error in this func
-                    break
-
-            except Exception:
-                traceback.print_exc()  # Debug
-                set_status(id_m=id_m, code=150)  # Error in this func
-                break
+                    else:
+                        return

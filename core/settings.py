@@ -45,7 +45,8 @@ class Config:
         backtesting: bool = True
 
     class CorePath:
-        dirs = ["plugins", "dump", "data"]
+        dirs = ["plugins", "dump", "data", "logs"]
+        traceback_log = "logs/exc_info.log"
         core_log = "logs/core_&_watchdog.log"
         profiling_log = "logs/profiling.log"
         data_csv = "data/aggtrades.csv"
@@ -120,13 +121,11 @@ class Config:
                 id_p, id_m = IDpm.network_sim, IDpm.network_sim_agent
                 id_d, id_dgc = IDpm.network_sim_daugther, IDpm.network_sim_col
 
+            id_error = -1
             # ShM
             shm_size: int = (4096 // 4096 + 1) * 4096
             shm_name: str = "status_shm_for_status_procs_and_modules"
 
-    general_sc = (0, 49)
-    warn_sc = (general_sc[1] + 1, 149)
-    error_sc = (warn_sc[1] + 1, 249)
     id_info: dict[IDpm, dict[IDpm, str]] = {
         IDpm.parsing: {
             IDpm.parsing_agent: "ParsingAgent",

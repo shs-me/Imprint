@@ -1,10 +1,10 @@
 import time
-import traceback
 from multiprocessing.synchronize import Semaphore
 
 import numpy as np
 
-from .. import Config, ShMs, StatusCodes
+from .. import Config, ShMs
+from .. import StatusCodes as sc
 
 
 class MonitorObj:
@@ -30,10 +30,7 @@ class MonitorObj:
         self.dgid: int = self.headers_buf[0]
 
     def _init_session(self) -> None:
-        scg = StatusCodes.General
-        self.INFO_RANGE = Config.general_sc[1]
-        self.STOPING, self.SLEEP, self.WAKE_UP = scg.STOPING, scg.SLEEP, scg.WAKE_UP
-
+        self.ERR_RANGE, self.STOP = sc.ERR_RE, sc.STOP
         self.raw_buf = self.shm_buf[slice(*ShMs.raw_offset)]
         self.grid_buf = self.shm_buf[slice(*ShMs.grid_offset)]
         self.metrics_buf = self.shm_buf[slice(*ShMs.metrics_offset)]
@@ -46,23 +43,18 @@ class MonitorObj:
             buffer=self.profiling_buf[self.__cfg.Profiling.offset :],
         )
 
+    def _for_error_action(self) -> None:
+        self.status_buf[self.__cfg.Status.id_error] = sc.ERROR
+        self._warn_error_status.release()
+
     def set_status(self, id_m: int, code: int) -> bool:
-        """
-        IF code > 49: set code on StatusShM.buf[ID_M].\n
-        Else, called func "_profiling_" that set code+time_ns on ProfilingShM.\n
-        """
-        try:
-            if code > self.INFO_RANGE:
-                self.status_buf[id_m] = code
-                self._warn_error_status.release()
-            else:
-                self._profiling_(code)
+        if code >= self.ERR_RANGE:
+            self.status_buf[id_m] = code
+            self._warn_error_status.release()
+        else:
+            self._profiling_(code)
 
-            return True
-
-        except Exception as e:
-            traceback.print_exc()  # Debug
-            raise Exception(e)
+        return True
 
     def _profiling_(self, code: int) -> None:
         """
@@ -80,21 +72,16 @@ class MonitorObj:
         """
         Get StatusCode Module. IF status_code == Warn|Error: return True. Else: return False
         """
-        try:
-            if self.status_buf[self.id_m] > self.INFO_RANGE:
-                return True
+        if self.status_buf[self.id_m] > self.ERR_RANGE:
+            return True
 
-            elif self.status_buf[self.id_d] > self.INFO_RANGE:
-                return True
+        elif self.status_buf[self.id_d] > self.ERR_RANGE:
+            return True
 
-            return False
-
-        except Exception as e:
-            traceback.print_exc()  # Debug
-            raise Exception(e)
+        return False
 
     def have_watchdog_task(self) -> bool:
-        if self.status_buf[self.id_p] == self.STOPING:
+        if self.status_buf[self.id_p] == self.STOP:
             return True
 
         return False
@@ -102,19 +89,14 @@ class MonitorObj:
     @staticmethod
     def dump_profile(file_path: str, _X_: np.ndarray | memoryview, _bin=False) -> None:
         """Save ShMemory/NDarray to .bin/.csv"""
-        try:
-            if _bin:
-                with open(file_path, "wb") as f:
-                    f.write(_X_[:])
-            else:
-                if isinstance(_X_, np.ndarray):
-                    np.savetxt(
-                        file_path,
-                        _X_,
-                        fmt="%d",
-                        delimiter=",",
-                    )
-
-        except Exception as e:
-            traceback.print_exc()  # Debug
-            raise Exception(e)
+        if _bin:
+            with open(file_path, "wb") as f:
+                f.write(_X_[:])
+        else:
+            if isinstance(_X_, np.ndarray):
+                np.savetxt(
+                    file_path,
+                    _X_,
+                    fmt="%d",
+                    delimiter=",",
+                )

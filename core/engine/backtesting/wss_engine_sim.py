@@ -9,6 +9,8 @@ import msgspec
 from msgspec.json import Encoder
 
 from ... import Config, MonitorObj
+from ... import StatusCodes as sc
+from .. import error_action
 
 
 class AggTradeSim(msgspec.Struct):
@@ -73,9 +75,10 @@ class WSsSimEngine:
         __cfg, self._mo = Config.CoreConfig, mo
         self.id_m, self.have_watchdog_task = self._mo.id_m, self._mo.have_watchdog_task
         self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
+        self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         self.encoder: Encoder = Encoder()
         self.ottrade, self.nttrade = 0, 0  # new|old time trade
-        self.wake_up_parser, self.wait_main = wake_up_parser, general_event
+        self.count_delta, self.sum_delta, self.ma = 0, 0, 1
         # InitGetRawData
         self.data_size, self.header_size = __cfg.Raw.data_size, __cfg.Raw.header_size
         self.data_offset: int = __cfg.Raw.data_offset[0]
@@ -102,6 +105,11 @@ class WSsSimEngine:
 
         return 0.01  # Base Time To Sleep
 
+    def _alarm_clock(self, start_time: int, end_time: int) -> None:
+        self.sum_delta += end_time - start_time
+        self.count_delta += 1
+        self.ma = self.sum_delta // self.count_delta
+
     def _encode_data(
         self, prepper: DataPrepper, encoder: msgspec.json.Encoder
     ) -> bytes | None:
@@ -109,16 +117,11 @@ class WSsSimEngine:
         Encode AggTradeSim Obj to Json Bytes.\n
         Also set, new time trade.
         """
-        try:
-            obj: AggTradeSim = prepper.queue.popleft()
-            raw_data: bytes = encoder.encode(obj)
-            self.nttrade: int = obj.E
-            return raw_data
 
-        except Exception:
-            traceback.print_exc()  # Debug
-            self.set_status(id_m=self.id_m, code=153)  # Error in this func
-            return None
+        obj: AggTradeSim = prepper.queue.popleft()
+        raw_data: bytes = encoder.encode(obj)
+        self.nttrade: int = obj.E
+        return raw_data
 
     def _set_raw_data(
         self,
@@ -134,79 +137,70 @@ class WSsSimEngine:
         Set RawData[JSON Bytes] to RawSHM.\n
         ncell_wr: number cell writer & reader
         """
-        try:
-            if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-                ncell_w: int = ncell_wr[0]  # get cell
-                raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
-                start: int = ncell_w * data_size + data_offset
-                raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
-                ncell_w_new = ncell_w + 1  # cell for next update
-                ncell_wr[0] = ncell_w_new if ncell_w_new < cell_amount else 0
-                return True
+        if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
+            ncell_w: int = ncell_wr[0]  # get cell
+            raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
+            start: int = ncell_w * data_size + data_offset
+            raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
+            ncell_w_new = ncell_w + 1  # cell for next update
+            ncell_wr[0] = ncell_w_new if ncell_w_new < cell_amount else 0
+            return True
 
-            else:
-                self.set_status(id_m=self.id_m, code=100)  # Warn in this IF
-                return False
-
-        except Exception:
-            traceback.print_exc()  # Debug
-            self.set_status(id_m=self.id_m, code=152)  # Error in this func
+        else:
+            self.set_status(id_m=self.id_m, code=sc.WARN0)  # Warn in this IF
             return False
 
+    @error_action(set_sc_code=True)
     def run_wss_sim_engine(self) -> None:
         # Local Links
-        SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
+        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         wake_up_parser, encoder = self.wake_up_parser, self.encoder
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
-        header_size, data_size = self.header_size, self.data_size
+        data_size, alarm_clock = self.data_size, self._alarm_clock
         data_offset, header_offset = self.data_offset, self.header_offset
         raw_buf, ncells, acell = self._mo.raw_buf, self.ncell_wr, self.cell_amount
         set_raw_data, encode_data = self._set_raw_data, self._encode_data
         time_to_sleep, have_watchdog_task = self._time_to_sleep, self.have_watchdog_task
         # - - -
-        try:
+        while True:
+            gc.collect()
+            self.wait_main.wait()
+            prepper: DataPrepper = DataPrepper()
+            prepper.start()
             while True:
-                gc.collect()
-                self.wait_main.wait()
-                prepper: DataPrepper = DataPrepper()
-                prepper.start()
-                while True:
-                    set_status(id_m=id_m, code=SLEEP)
-                    if have_problem() is False:
-                        if have_watchdog_task():
-                            if wake_up_parser.is_set() is False:
-                                wake_up_parser.set()
-                                break
+                stime = time.perf_counter_ns() // 1000
+                set_status(id_m=id_m, code=SLEEP)
+                if have_problem() is False:
+                    if have_watchdog_task():
+                        if wake_up_parser.is_set() is False:
+                            wake_up_parser.set()
+                            break
 
-                        if prepper.error is None:
-                            if not prepper.queue:
-                                time.sleep(0.0001)
-                                continue
-
-                            time.sleep(time_to_sleep())
-                            set_status(id_m=id_m, code=WAKE_UP)
-                            if raw_data := encode_data(
-                                prepper=prepper, encoder=encoder
-                            ):
-                                if set_raw_data(
-                                    raw_data=raw_data,
-                                    raw_buf=raw_buf,
-                                    ncell_wr=ncells,
-                                    cell_amount=acell,
-                                    header_offset=header_offset,
-                                    data_size=data_size,
-                                    data_offset=data_offset,
-                                ):
-                                    if wake_up_parser.is_set() is False:
-                                        wake_up_parser.set()
-
-                        else:
-                            set_status(id_m=id_m, code=151)
-                            print(prepper.error)  # Debug
+                    if prepper.error is None:
+                        if not prepper.queue:
+                            time.sleep(0.0001)
                             continue
-                    else:
-                        return
 
-        except Exception:
-            traceback.print_exc()  # Debug
-            set_status(id_m=id_m, code=150)
+                        time.sleep(time_to_sleep())
+                        set_status(id_m=id_m, code=WAKE_UP)
+                        etime = time.perf_counter_ns() // 1000
+                        alarm_clock(stime, etime)
+                        if raw_data := encode_data(prepper=prepper, encoder=encoder):
+                            if set_raw_data(
+                                raw_data=raw_data,
+                                raw_buf=raw_buf,
+                                ncell_wr=ncells,
+                                cell_amount=acell,
+                                header_offset=header_offset,
+                                data_size=data_size,
+                                data_offset=data_offset,
+                            ):
+                                if wake_up_parser.is_set() is False:
+                                    wake_up_parser.set()
+
+                    else:
+                        set_status(id_m=id_m, code=151)
+                        print(prepper.error)  # Debug
+                        continue
+                else:
+                    return

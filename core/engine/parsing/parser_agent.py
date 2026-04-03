@@ -1,12 +1,12 @@
 import gc
-import traceback
 from multiprocessing.synchronize import Event, Semaphore
 
 import msgspec
 from msgspec.json import Decoder
 
 from ... import Config, MonitorObj
-from .. import shm_load
+from ... import StatusCodes as sc
+from .. import error_action, shm_manager
 from . import GridWriter
 
 
@@ -54,36 +54,24 @@ class ParserAgent:
         Get RawData[JSON Bytes] from RawSHM.\n
         ncell_wr: number cell writer & reader
         """
-        try:
-            ncell_r: int = ncell_wr[1]  # get cell where stopped
-            lrd: int = raw_buf[ncell_r + header_offset]  # get lrd from cell[header]
-            start = ncell_r * data_size + data_offset
-            raw_data: memoryview = raw_buf[start : start + lrd]  # get mview cell[data]
-            ncell_r_new: int = ncell_r + 1  # set cell for next parsing
-            ncell_wr[1] = ncell_r_new if ncell_r_new < cell_amount else 0
-            return raw_data
-
-        except Exception:
-            traceback.print_exc()
-            self.set_status(id_m=self.id_m, code=154)
-            return None
+        ncell_r: int = ncell_wr[1]  # get cell where stopped
+        lrd: int = raw_buf[ncell_r + header_offset]  # get lrd from cell[header]
+        start = ncell_r * data_size + data_offset
+        raw_data: memoryview = raw_buf[start : start + lrd]  # get mview cell[data]
+        ncell_r_new: int = ncell_r + 1  # set cell for next parsing
+        ncell_wr[1] = ncell_r_new if ncell_r_new < cell_amount else 0
+        return raw_data
 
     def _decode_raw_data(
         self, raw_data: memoryview, decoder: Decoder[AggTrade]
     ) -> AggTrade | None:
         """Decode RawData[JSON] to Struct AggTrade"""
-        try:
-            trade: AggTrade = decoder.decode(raw_data)
-            if trade.p < 0 or trade.q < 0 or trade.T < 0:
-                self.set_status(id_m=self.id_m, code=60)
-                return None
-
-            return trade
-
-        except Exception:
-            traceback.print_exc()  # Debug
-            self.set_status(id_m=self.id_m, code=153)
+        trade: AggTrade = decoder.decode(raw_data)
+        if trade.p < 0 or trade.q < 0 or trade.T < 0:
+            self.set_status(id_m=self.id_m, code=sc.WARN1)
             return None
+
+        return trade
 
     def _alarm_clock(self, ncells, acell, slag) -> bool:
         ncell_w, ncell_r = ncells[0], ncells[1]
@@ -94,82 +82,68 @@ class ParserAgent:
             else:
                 return False
         else:
-            print(ncell_r, ncell_w, acell, ((ncell_w - ncell_r + acell) % acell), slag)
-            self.set_status(id_m=self.id_m, code=100)
+            self.set_status(id_m=self.id_m, code=sc.WARN0)
             return False
 
+    @error_action(set_sc_code=True)
     def run_parsing_engine(self) -> None:
         # LocalLinks
-        SLEEP, WAKE_UP = self._mo.SLEEP, self._mo.WAKE_UP
+        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         decoder, writer, raw_buf = self.decoder, self.writer, self._mo.raw_buf
         id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
-        header_size, data_size = self.header_size, self.data_size
+        data_size = self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
         slag, ncells, acell = self.safe_lag, self.ncell_wr, self.cell_amount
         wake_up_logic, pre_sleep_wss = self.wake_up_logic, self.pre_sleep_wss
         get_raw_data, decode_raw_data = self._get_raw_data, self._decode_raw_data
         alarm_clock, have_watchdog_task = self._alarm_clock, self.have_watchdog_task
         #  - - -
-        try:
+        while True:
+            gc.collect()
+            self.wait_main.wait()
             while True:
-                try:
-                    gc.collect()
-                    self.wait_main.wait()
-                    while True:
-                        set_status(id_m=id_m, code=SLEEP)
-                        if alarm_clock(ncells=ncells, acell=acell, slag=slag):
-                            pre_sleep_wss.clear()
-                            pre_sleep_wss.wait()
+                set_status(id_m=id_m, code=SLEEP)
+                if have_problem() is False:
+                    if have_watchdog_task():
+                        if wake_up_logic.is_set() is False:
+                            wake_up_logic.set()
+                            break
 
-                        if have_problem() is False:
-                            if have_watchdog_task():
-                                if wake_up_logic.is_set() is False:
-                                    wake_up_logic.set()
-                                    break
+                    if alarm_clock(ncells=ncells, acell=acell, slag=slag):
+                        pre_sleep_wss.clear()
+                        pre_sleep_wss.wait()
+                        continue
 
-                            set_status(id_m=id_m, code=WAKE_UP)
-                            if raw_data := get_raw_data(
-                                raw_buf=raw_buf,
-                                ncell_wr=ncells,
-                                cell_amount=acell,
-                                header_offset=header_offset,
-                                data_size=data_size,
-                                data_offset=data_offset,
-                            ):
-                                if trade := decode_raw_data(
-                                    raw_data=raw_data, decoder=decoder
-                                ):
-                                    writer.update(
-                                        price=trade.p,
-                                        qty=trade.q,
-                                        timestamp=trade.T,
-                                        is_sell=trade.m,
-                                    )
-                        else:
-                            return
-
-                except Exception:
-                    traceback.print_exc()  # Debug
-                    set_status(id_m=id_m, code=150)  # Error in this func
-                    break
-
-        except Exception:
-            traceback.print_exc()  # Debug
-            set_status(id_m=id_m, code=150)  # Error in this func
+                    set_status(id_m=id_m, code=WAKE_UP)
+                    if raw_data := get_raw_data(
+                        raw_buf=raw_buf,
+                        ncell_wr=ncells,
+                        cell_amount=acell,
+                        header_offset=header_offset,
+                        data_size=data_size,
+                        data_offset=data_offset,
+                    ):
+                        if trade := decode_raw_data(raw_data=raw_data, decoder=decoder):
+                            writer.update(
+                                price=trade.p,
+                                qty=trade.q,
+                                timestamp=trade.T,
+                                is_sell=trade.m,
+                            )
+                else:
+                    return
 
 
+@shm_manager(create=False)
 def run_parsing(
     pre_sleep_wss: Event,
     wake_up_logic: Event,
     parser_monitor: Semaphore,
     general_event: Event,
     warn_error_status: Semaphore,
+    shm_buf: memoryview,
 ) -> None:
     gc.disable()
-    if (data := shm_load()) is None:
-        return
-
-    shm, shm_buf = data
     mo: MonitorObj = MonitorObj(
         shm_buf=shm_buf,
         proc_name=Config.CoreConfig.Status.parsing.__name__,
@@ -185,12 +159,5 @@ def run_parsing(
         pre_sleep_wss=pre_sleep_wss,
         general_event=general_event,
     )
-    try:
-        agent.run_parsing_engine()
-    except KeyboardInterrupt:
-        pass
-
-    del agent, writer, mo
-    shm_buf.release()
-    shm.close()
+    agent.run_parsing_engine()
     gc.collect()
