@@ -1,6 +1,10 @@
+import inspect
 import os
 import time
 from multiprocessing import Event, Process, Semaphore
+from multiprocessing.synchronize import Event as _Event
+from multiprocessing.synchronize import Semaphore as _Semaphore
+from typing import Protocol
 
 from loguru import logger
 
@@ -9,7 +13,14 @@ from . import error_action as err_action
 from . import shm_manager as shm_m
 
 
-class RunMain:
+class CoreResources(Protocol):
+    parsing_event: _Event
+    logic_event: _Event
+    general_event: _Event
+    sc_sem: _Semaphore
+
+
+class RunMain(CoreResources):
     def __init__(self, backtesting: bool, shm_buf: memoryview) -> None:
         self.backtesting, self.core_cfg = backtesting, Config.CoreConfig
         self.shm_buf = shm_buf
@@ -17,18 +28,9 @@ class RunMain:
         self.id_info, self.sc_general = {}, {}
         # Path's
         self.profiling_bin = Config.CorePath.profiling_bin
-        # Proc's Event's
-        self.sleep_parsing, self.sleep_logic = Event(), Event()
-        # For profiling Semaphore's
-        self.network_monitor, self.parser_monitor = Semaphore(0), Semaphore(0)
-        self.logic_monitor = Semaphore(0)
-        # Admin sem's
-        self.warn_error_status, self.general_event = Semaphore(0), Event()
-        self.sem_s = [
-            self.parser_monitor,
-            self.logic_monitor,
-            self.network_monitor,
-        ]
+        # CoreResources
+        self.parsing_event, self.logic_event = Event(), Event()
+        self.sc_sem, self.general_event = Semaphore(0), Event()
 
     def _init_session(self) -> None:
         for _dir in Config.CorePath.dirs:
@@ -52,49 +54,25 @@ class RunMain:
                     f"-- Core -- | _Exit | Process {self.procs[id]['name']} closed"
                 )
 
-    def _proc_arg_init(self, proc_name: str) -> tuple | None:
-        if proc_name == "PARSING":
-            return (
-                self.sleep_parsing,
-                self.sleep_logic,
-                self.parser_monitor,
-                self.general_event,
-                self.warn_error_status,
-            )
-        elif proc_name == "LOGIC":
-            return (
-                self.sleep_logic,
-                self.logic_monitor,
-                self.general_event,
-                self.warn_error_status,
-            )
-        elif proc_name == "NETWORK":
-            return (
-                self.sleep_parsing,
-                self.network_monitor,
-                self.general_event,
-                self.warn_error_status,
-            )
-        elif proc_name == "NETWORK_SIM":
-            return (
-                self.sleep_parsing,
-                self.network_monitor,
-                self.general_event,
-                self.warn_error_status,
-            )
-        elif proc_name == "MONITORING":
-            return (
-                self.backtesting,
-                self.general_event,
-                self.sem_s,
-                self.warn_error_status,
-            )
-        else:
-            return None
+    def _proc_arg_init(self, func) -> tuple | None:
+        sig = inspect.signature(func)
+        args_to_pass = []
+        for param_name in sig.parameters:
+            if hasattr(self, param_name):
+                val = getattr(self, param_name)
+                args_to_pass.append(val)
+            else:
+                if param_name == "kwargs":
+                    pass
+                else:
+                    logger.error(f"Missing arg: {param_name} for {func.__name__}")
+                    return None
+
+        return tuple(args_to_pass)
 
     def _run_proc(self, id_proc: int) -> bool:
         """Create & Run Procces's"""
-        _arg = self._proc_arg_init(self.procs[id_proc]["name"])
+        _arg = self._proc_arg_init(self.procs[id_proc]["func"])
         if isinstance(_arg, tuple):
             p = Process(
                 target=self.procs[id_proc]["func"],
@@ -118,9 +96,8 @@ class RunMain:
             procs=self.procs,
             id_info=self.id_info,
             shm_buf=self.shm_buf,
-            sem_s=self.sem_s,
             general_event=self.general_event,
-            warn_error_status=self.warn_error_status,
+            sc_sem=self.sc_sem,
         )
         logger.info("WatchDog | Started")
         for id_proc in self.procs:  # Init Process's
@@ -140,7 +117,7 @@ class RunMain:
 
 
 @shm_m(create=True)
-def run_core(backtesting: bool, shm_buf: memoryview) -> None:
+def run_core(backtesting: bool, **kwargs) -> None:
     logger.remove()
     logger.add(
         Config.CorePath.core_log,
@@ -149,6 +126,6 @@ def run_core(backtesting: bool, shm_buf: memoryview) -> None:
         format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
-    state = RunMain(backtesting=backtesting, shm_buf=shm_buf)
+    state = RunMain(backtesting=backtesting, shm_buf=kwargs["shm_buf"])
     if state.run_core_engine() is False:
         state._close_()

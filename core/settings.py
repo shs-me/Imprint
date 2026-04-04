@@ -46,11 +46,11 @@ class Config:
 
     class CorePath:
         dirs = ["plugins", "dump", "data", "logs"]
-        traceback_log = "logs/exc_info.log"
         core_log = "logs/core_&_watchdog.log"
         profiling_log = "logs/profiling.log"
         data_csv = "data/aggtrades.csv"
         algoritm_path = "plugins/algorithm.py"
+        exc_info = "dump/exc_info.log"
         profiling_bin = "dump/profiling.bin"
         profiling_csv = "dump/profiling.csv"
         pheaders_csv = "dump/pheaders.csv"

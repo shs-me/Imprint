@@ -1,4 +1,3 @@
-import gc
 from multiprocessing.synchronize import Event, Semaphore
 
 from ... import Config, MonitorObj
@@ -29,22 +28,18 @@ class NetworkSimAgent:
 
 @shm_manager(create=False)
 def run_network_sim(
-    wake_up_parser: Event,
-    network_monitor: Semaphore,
+    parsing_event: Event,
     general_event: Event,
-    warn_error_status: Semaphore,
-    shm_buf: memoryview,
+    sc_sem: Semaphore,
+    **kwargs,
 ) -> None:
-    gc.disable()
     mo: MonitorObj = MonitorObj(
-        shm_buf=shm_buf,
+        shm_buf=kwargs["shm_buf"],
         proc_name=Config.CoreConfig.Status.network_sim.__name__,
-        warn_error_status=warn_error_status,
-        monitor=network_monitor,
+        sc_sem=sc_sem,
     )
     wss: WSsSimEngine = WSsSimEngine(
-        mo=mo, general_event=general_event, wake_up_parser=wake_up_parser
+        mo=mo, general_event=general_event, wake_up_parser=parsing_event
     )
     agent = NetworkSimAgent(wss=wss, mo=mo)
     agent.run_network_engine()
-    gc.collect()

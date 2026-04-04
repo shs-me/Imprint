@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from multiprocessing.synchronize import Event, Semaphore
+from multiprocessing.synchronize import Event
 
 from loguru import logger
 
@@ -44,11 +44,8 @@ def sleep_untill_market_open(all_sleep: Event) -> None:
     all_sleep.wait(timeout=sleep_time)
 
 
-def reset(buf: memoryview, sems: list[Semaphore]) -> None:
+def reset(buf: memoryview) -> None:
     buf[:] = b"\x00" * len(buf)
-    for sem in sems:
-        while sem.acquire(block=False):
-            pass
 
 
 def check_proc(id_proc: int, procs_info: dict[int, ProcsDictTyping]) -> bool:

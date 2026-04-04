@@ -10,14 +10,13 @@ from .. import StatusCodes as sc
 class MonitorObj:
     def __init__(
         self,
-        shm_buf: memoryview,
         proc_name: str,
-        warn_error_status: Semaphore,
-        monitor: Semaphore,
+        shm_buf: memoryview,
+        sc_sem: Semaphore,
     ):
         self.__cfg, self.proc_name, self.shm_buf = Config.CoreConfig, proc_name, shm_buf
         self.lines, self.cols = self.__cfg.Profiling.lines, self.__cfg.Profiling.cols
-        self._warn_error_status, self._monitor = warn_error_status, monitor
+        self.sc_sem = sc_sem
         self._init_session()
         _obj = getattr(self.__cfg.Status, proc_name)
         self.id_p, self.id_m = _obj.id_p, _obj.id_m
@@ -45,12 +44,12 @@ class MonitorObj:
 
     def _for_error_action(self) -> None:
         self.status_buf[self.__cfg.Status.id_error] = sc.ERROR
-        self._warn_error_status.release()
+        self.sc_sem.release()
 
     def set_status(self, id_m: int, code: int) -> bool:
         if code >= self.ERR_RANGE:
             self.status_buf[id_m] = code
-            self._warn_error_status.release()
+            self.sc_sem.release()
         else:
             self._profiling_(code)
 
@@ -66,7 +65,6 @@ class MonitorObj:
         self.dgarray[dgid_m, self.dgc] = time.time_ns()
         self.headers_buf[0], self.headers_buf[1] = dgid_m, code
         self.dgid = (dgid_m + 1) % self.lines
-        self._monitor.release()
 
     def have_problem(self) -> bool | None:
         """

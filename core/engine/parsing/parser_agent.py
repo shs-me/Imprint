@@ -136,28 +136,23 @@ class ParserAgent:
 
 @shm_manager(create=False)
 def run_parsing(
-    pre_sleep_wss: Event,
-    wake_up_logic: Event,
-    parser_monitor: Semaphore,
+    parsing_event: Event,
+    logic_event: Event,
     general_event: Event,
-    warn_error_status: Semaphore,
-    shm_buf: memoryview,
+    sc_sem: Semaphore,
+    **kwargs,
 ) -> None:
-    gc.disable()
     mo: MonitorObj = MonitorObj(
-        shm_buf=shm_buf,
         proc_name=Config.CoreConfig.Status.parsing.__name__,
-        warn_error_status=warn_error_status,
-        monitor=parser_monitor,
+        shm_buf=kwargs["shm_buf"],
+        sc_sem=sc_sem,
     )
-
-    writer: GridWriter = GridWriter(mo=mo, guarantee=wake_up_logic)
+    writer: GridWriter = GridWriter(mo=mo, guarantee=logic_event)
     agent: ParserAgent = ParserAgent(
         mo=mo,
         writer=writer,
-        wake_up_logic=wake_up_logic,
-        pre_sleep_wss=pre_sleep_wss,
+        wake_up_logic=logic_event,
+        pre_sleep_wss=parsing_event,
         general_event=general_event,
     )
     agent.run_parsing_engine()
-    gc.collect()

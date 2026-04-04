@@ -1,3 +1,4 @@
+import gc
 import json
 import sys
 import traceback
@@ -20,8 +21,8 @@ def error_action(set_sc_code=False, except_return: bool | None = None):
             except KeyboardInterrupt:
                 pass
 
-            except Exception as e:
-                dump_exeption(exc=e)
+            except Exception:
+                dump_exception()
                 if set_sc_code and len(args) > 0:
                     args[0].__dict__.get("_mo")._for_error_action()
 
@@ -32,7 +33,7 @@ def error_action(set_sc_code=False, except_return: bool | None = None):
     return decorator
 
 
-def dump_exeption(exc: Exception) -> None:
+def dump_exception() -> None:
     exc_type, exc_value, exc_tb = sys.exc_info()
     data = {
         "timestamp": datetime.now().isoformat(),
@@ -49,7 +50,7 @@ def dump_exeption(exc: Exception) -> None:
         for var, val in tb.tb_frame.f_locals.items():
             data["locals"][var] = repr(val) if var != "self" else repr(val.__dict__)
 
-    with open(file=Config.CorePath.traceback_log, mode="a", encoding="utf-8") as f:
+    with open(file=Config.CorePath.exc_info, mode="a", encoding="utf-8") as f:
         json.dump(obj=data, fp=f, ensure_ascii=False, indent=4)
         f.write("\n---\n")
 
@@ -63,6 +64,7 @@ def shm_manager(create: bool):
             else:
                 shm, shm_buf = temp
             try:
+                gc.disable()
 
                 @error_action()
                 def _() -> None:
@@ -75,6 +77,7 @@ def shm_manager(create: bool):
                 shm.close()
                 if create:
                     shm.unlink()
+                gc.collect()
 
         return wrapper
 
@@ -86,6 +89,7 @@ def _shm_init(create: bool) -> tuple[SharedMemory, memoryview] | None:
         try:
             shm = SharedMemory(name=ShMs.shm_name, size=ShMs.shm_size, create=True)
         except FileExistsError:
+            dump_exception()
             shm = SharedMemory(name=ShMs.shm_name)
 
         if shm.buf is not None:
@@ -101,4 +105,4 @@ def _shm_init(create: bool) -> tuple[SharedMemory, memoryview] | None:
                 return shm, shm_buf
 
         except FileNotFoundError:
-            pass
+            dump_exception()

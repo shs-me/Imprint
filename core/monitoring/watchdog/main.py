@@ -14,14 +14,13 @@ class WatchDog:
         procs: dict[int, ProcsDictTyping],
         id_info: dict[IDpm, dict[IDpm, str]],
         shm_buf: memoryview,
-        sem_s: list[Semaphore],
         general_event: Event,
-        warn_error_status: Semaphore,
+        sc_sem: Semaphore,
     ) -> None:
-        self.procs, self.buf, self.sem_s = procs, shm_buf, sem_s
+        self.procs, self.buf = procs, shm_buf
         self.status_buf = self.buf[slice(*ShMs.status_offset)]
         self.error_id = Config.CoreConfig.Status.id_error
-        self.all_sleep, self.calling = general_event, warn_error_status
+        self.sleep_all, self.sc_sem = general_event, sc_sem
         # Variable's
         self._task, self._id_proc = 0, 0
         self._check_proce_state: bool = False
@@ -30,22 +29,22 @@ class WatchDog:
 
     def run_watchdog_engine(self) -> bool:
         # LocalLinks
-        calling, shm_buf = self.calling, self.status_buf
+        sc_sem, shm_buf = self.sc_sem, self.status_buf
         id_info = self.id_info
         task_action = self._task_action
         err_id = self.error_id
         #  - - -
-        self.all_sleep.clear()
+        self.sleep_all.clear()
         counter = 0
         while True:
-            if calling.get_value() == 0:
+            if sc_sem.get_value() == 0:
                 counter += 1
                 if counter >= 3:
                     self._task = 1  # Check Live: Not Reason
                     if task_action(sc_code=self._task) is False:
                         return False
 
-            calling.acquire(timeout=60)
+            sc_sem.acquire(timeout=60)
 
             # Check Status Module's
             if shm_buf[err_id] == sc.ERROR:
@@ -91,14 +90,14 @@ class WatchDog:
             act.set_status_for_procs(  # All Sleep
                 status_buf=self.status_buf, procs=self.procs, stoping=True
             )
-            act.sleep_untill_market_open(self.all_sleep)
+            act.sleep_untill_market_open(self.sleep_all)
             act.set_status_for_procs(  # All WeckUp
                 status_buf=self.status_buf, procs=self.procs, stoping=False
             )
-            act.reset(self.buf, self.sem_s)
-            self.all_sleep.set()
+            act.reset(self.buf)
+            self.sleep_all.set()
             time.sleep(0.5)
-            self.all_sleep.clear()
+            self.sleep_all.clear()
 
         elif task == 150 or task == 50 or task == 51:
             if id_p:  # Check Proc Live or Died

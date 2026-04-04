@@ -19,4 +19,4 @@ class FootprintReader(GridReader):
         # - - -
         price, timestamp = to_price(idy), to_timestamp(idx)  # noqa
         _price, _qty = round_to_tick(price), footprint[idy, idx]
-        print(_price, _qty)
+        print(_price, _qty, flush=True)

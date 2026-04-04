@@ -1,5 +1,4 @@
 import asyncio
-import gc
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.synchronize import Event, Semaphore
 
@@ -25,22 +24,18 @@ class NetworkAgent:
 
 @shm_manager(create=False)
 def run_network(
-    wake_up_parser: Event,
-    network_monitor: Semaphore,
+    parsing_event: Event,
     general_event: Event,
-    warn_error_status: Semaphore,
-    shm_buf: memoryview,
+    sc_sem: Semaphore,
+    **kwargs,
 ) -> None:
-    gc.disable()
     winloop.install()
     mo: MonitorObj = MonitorObj(
-        shm_buf=shm_buf,
+        shm_buf=kwargs["shm_buf"],
         proc_name=Config.CoreConfig.Status.network.__name__,
-        warn_error_status=warn_error_status,
-        monitor=network_monitor,
+        sc_sem=sc_sem,
     )
-    wss = WSsEngine(mo=mo, wake_up_parser=wake_up_parser, general_event=general_event)
+    wss = WSsEngine(mo=mo, wake_up_parser=parsing_event, general_event=general_event)
     rest = RestEngine()
     agent = NetworkAgent(wss=wss, rest=rest)
     asyncio.run(agent.run_network_engine())
-    gc.collect()

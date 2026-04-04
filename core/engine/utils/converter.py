@@ -26,9 +26,7 @@ class ConvertMetrics:
         return clear_price
 
     def to_idy(self, price: float) -> int | None:
-        """
-        IF 0 < ID-Y < Lines, Return ID-Y | Else, Return None
-        """
+        """IF 0 < ID-Y < Lines, Return ID-Y | Else, Return None"""
         idy: int = (
             round(number=(self.base_price - price) / self.tick_size) + self.center
         )
@@ -52,16 +50,12 @@ class ConvertMetrics:
             return None
 
     def to_price(self, idy: int) -> float:
-        """
-        Return Price. !Not rounded !Not original accucary
-        """
+        """Return Price. !Not rounded !Not original accucary"""
         price: float = ((self.center - idy) * self.tick_size) + self.base_price
         return price
 
     def to_timestamp(self, idx: int) -> int:
-        """
-        Return Timestamp. !Not original accucary
-        """
+        """Return Timestamp. !Not original accucary"""
         timestamp: int = (
             round(number=(idx - (0 if (idx % 2) == 0 else 1)) / 2) * self.ims
             + self.base_timestamp

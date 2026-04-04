@@ -89,26 +89,21 @@ class LogicAgent:
 
 @shm_manager(create=False)
 def run_logic(
-    pre_sleep_logic: Event,
-    logic_monitor: Semaphore,
+    logic_event: Event,
     general_event: Event,
-    warn_error_status: Semaphore,
-    shm_buf: memoryview,
+    sc_sem: Semaphore,
+    **kwargs,
 ) -> None:
-    gc.disable()
     mo: MonitorObj = MonitorObj(
-        shm_buf=shm_buf,
         proc_name=Config.CoreConfig.Status.logic.__name__,
-        warn_error_status=warn_error_status,
-        monitor=logic_monitor,
+        shm_buf=kwargs["shm_buf"],
+        sc_sem=sc_sem,
     )
-
     reader = LogicAgent.resolve_reader(mo=mo)
     agent = LogicAgent(
         mo=mo,
         reader=reader,
-        pre_sleep_logic=pre_sleep_logic,
+        pre_sleep_logic=logic_event,
         general_event=general_event,
     )
     agent.run_logic_engine()
-    gc.collect()
