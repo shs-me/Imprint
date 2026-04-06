@@ -1,9 +1,7 @@
-from .monitor import MonitorObj
-from .profiling import run_monitoring
+from .manager_agent import ManagerAgent
 from .watchdog import WatchDog
 
 __all__ = [
-    "run_monitoring",
-    "MonitorObj",
+    "ManagerAgent",
     "WatchDog",
 ]

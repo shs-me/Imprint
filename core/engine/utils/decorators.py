@@ -7,10 +7,11 @@ from functools import wraps
 from multiprocessing.shared_memory import SharedMemory
 from types import TracebackType
 
-from ... import Config, ShMs
+from ... import Config, ManagerAgent
+from ... import ShmBufOffset as sbo
 
 
-def error_action(set_sc_code=False, except_return: bool | None = None):
+def error_action(set_sc: bool = False):
     def decorator(func):
         @wraps(wrapped=func)
         def wrapper(*args, **kwargs):
@@ -23,10 +24,8 @@ def error_action(set_sc_code=False, except_return: bool | None = None):
 
             except Exception:
                 dump_exception()
-                if set_sc_code and len(args) > 0:
-                    args[0].__dict__.get("_mo")._for_error_action()
-
-            return except_return
+                if set_sc and len(args) > 0:
+                    args[0].__dict__.get("manager")._for_error_action()
 
         return wrapper
 
@@ -36,7 +35,7 @@ def error_action(set_sc_code=False, except_return: bool | None = None):
 def dump_exception() -> None:
     exc_type, exc_value, exc_tb = sys.exc_info()
     data = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "type": exc_type.__name__ if exc_type is not None else exc_type,
         "message": str(exc_value),
         "traceback": traceback.format_exception(exc_type, exc_value, exc_tb),
@@ -55,11 +54,11 @@ def dump_exception() -> None:
         f.write("\n---\n")
 
 
-def shm_manager(create: bool):
+def manager_office(head_of_office: bool):
     def decorator(func):
         @wraps(wrapped=func)
-        def wrapper(*args, **kwargs) -> None:
-            if (temp := _shm_init(create)) is None:
+        def wrapper(**kwargs) -> None:
+            if (temp := _shm_init(head_of_office)) is None:
                 return
             else:
                 shm, shm_buf = temp
@@ -67,30 +66,44 @@ def shm_manager(create: bool):
                 gc.disable()
 
                 @error_action()
-                def _() -> None:
-                    func(*args, shm_buf=shm_buf, **kwargs)
+                def run() -> None:
+                    agent = _agent_init(buf=shm_buf, head=head_of_office, **kwargs)
+                    func(manager=agent, **kwargs)
 
-                _()
+                run()
 
             finally:
+                gc.collect()
                 shm_buf.release()
                 shm.close()
-                if create:
+                if head_of_office:
                     shm.unlink()
-                gc.collect()
 
         return wrapper
 
     return decorator
 
 
+def _agent_init(buf, head: bool, **kwargs):
+    if head:
+        return buf
+
+    agent: ManagerAgent = ManagerAgent(
+        proc_id=kwargs["proc_id"],
+        task_id=kwargs["task_id"],
+        shm_buf=buf,
+        sc_sem=kwargs["sc_sem"],
+    )
+    return agent
+
+
 def _shm_init(create: bool) -> tuple[SharedMemory, memoryview] | None:
     if create:
         try:
-            shm = SharedMemory(name=ShMs.shm_name, size=ShMs.shm_size, create=True)
+            shm = SharedMemory(name=sbo.shm_name, size=sbo.shm_size, create=True)
         except FileExistsError:
             dump_exception()
-            shm = SharedMemory(name=ShMs.shm_name)
+            shm = SharedMemory(name=sbo.shm_name)
 
         if shm.buf is not None:
             shm_buf = shm.buf
@@ -99,7 +112,7 @@ def _shm_init(create: bool) -> tuple[SharedMemory, memoryview] | None:
 
     else:
         try:
-            shm = SharedMemory(name=ShMs.shm_name)
+            shm = SharedMemory(name=sbo.shm_name)
             if shm.buf is not None:
                 shm_buf = shm.buf
                 return shm, shm_buf

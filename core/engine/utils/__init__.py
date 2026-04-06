@@ -1,4 +1,4 @@
 from .converter import ConvertMetrics
-from .decorators import error_action, shm_manager
+from .decorators import error_action, manager_office
 
-__all__ = ["ConvertMetrics", "shm_manager", "error_action"]
+__all__ = ["ConvertMetrics", "manager_office", "error_action"]

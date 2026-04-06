@@ -1,47 +1,68 @@
+from datetime import datetime, timezone
+
+from ... import Config
+
+
 class ConvertMetrics:
     def __init__(
         self,
-        tick_size: float,
-        base_price: float,
-        base_timestamp: int,
-        center: int,
-        lines: int,
-        cols: int,
-        ims: int,
+        trade_param: memoryview,
+        nBasePrice: int,
+        nBaseTimestamp: int,
     ) -> None:
-        self.tick_size: float = tick_size
-        self.base_price: float = base_price
-        self.base_timestamp: int = base_timestamp
-        self.center: int = center
-        self.lines: int = lines
-        self.cols: int = cols
-        self.ims: int = ims
-        self.precision: int = (
-            len(str(tick_size).split(sep=".")[-1]) if "." in str(tick_size) else 0
+        __cfg = Config.ShmSharing
+        self.trade_par = trade_param
+        self.nBasePrice, self.nBaseTimestamp = nBasePrice, nBaseTimestamp
+        self.ims = Config.UserConfig.interval_min * 60 * 1000
+        self.lines, self.cols = __cfg.Footprint.lines, __cfg.Footprint.cols
+        self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
+        self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
+        self.cluster_id = 0
+        self.headers, self.headers_count = (
+            __cfg.Footprint.Headers,
+            __cfg.Footprint.headers_count,
         )
 
-    def round_to_tick(self, price: float) -> float:
-        ts, pc = self.tick_size, self.precision
-        clear_price: float = round(number=(round(number=price / ts) * ts), ndigits=pc)
-        return clear_price
+    def init_center(self):
+        if self.nBasePrice >= round(number=self.lines * 0.8):
+            return False
 
-    def to_idy(self, price: float) -> int | None:
+        else:
+            self.center: int = (
+                self.nBasePrice
+                if self.nBasePrice >= (self.lines - self.nBasePrice)
+                else (self.lines - self.nBasePrice)
+            )
+            return True
+
+    def to_nPrice(self, price: float) -> int:
+        return round(price * self.priceMult)
+
+    def to_nQty(self, qty: float) -> int:
+        return round(qty * self.qtyMult)
+
+    def to_price(self, nPrice: int) -> float:
+        return nPrice / self.priceMult
+
+    def to_qty(self, nQty: int) -> float:
+        return nQty / self.qtyMult
+
+    def to_strftime(self, timestamp: int):
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+    def get_idy(self, nPrice: int) -> int | None:
         """IF 0 < ID-Y < Lines, Return ID-Y | Else, Return None"""
-        idy: int = (
-            round(number=(self.base_price - price) / self.tick_size) + self.center
-        )
+        idy: int = self.nBasePrice - nPrice + self.center
         if 0 < idy < self.lines:
             return idy
 
         else:
             return None
 
-    def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
-        """
-        is_sell: True is bid, False ask.\n
-        IF 0 <= ID-X < Cols, Return ID-X | Else, Return None.
-        """
-        idx: int = round(number=(timestamp - self.base_timestamp) / self.ims * 2) + (
+    def get_idx(self, timestamp: int, is_sell: bool) -> int | None:
+        idx: int = round(number=(timestamp - self.nBaseTimestamp) / self.ims * 2) + (
             0 if is_sell else 1
         )
         if 0 <= idx < self.cols:
@@ -49,15 +70,19 @@ class ConvertMetrics:
         else:
             return None
 
-    def to_price(self, idy: int) -> float:
-        """Return Price. !Not rounded !Not original accucary"""
-        price: float = ((self.center - idy) * self.tick_size) + self.base_price
-        return price
+    def get_nPrice(self, idy: int) -> int:
+        return self.center - idy + self.nBasePrice
 
-    def to_timestamp(self, idx: int) -> int:
-        """Return Timestamp. !Not original accucary"""
+    def get_nTimestamp(self, idx: int) -> int:
         timestamp: int = (
-            round(number=(idx - (0 if (idx % 2) == 0 else 1)) / 2) * self.ims
-            + self.base_timestamp
-        )
+            idx - (0 if (idx % 2) == 0 else 1)
+        ) // 2 * self.ims + self.nBaseTimestamp
         return timestamp
+
+    def get_cluster_id(self, idx: int | None = None) -> int:
+        hrc = self.headers_count
+        if idx is None:
+            return self.cluster_id
+        else:
+            self.cluster_id = ((idx - 1) // 2) if (idx % 2) != 0 else (idx // 2) * hrc
+            return self.cluster_id

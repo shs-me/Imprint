@@ -8,7 +8,7 @@ from threading import Thread
 import msgspec
 from msgspec.json import Encoder
 
-from ... import Config, MonitorObj
+from ... import Config, ManagerAgent
 from ... import StatusCodes as sc
 from .. import error_action
 
@@ -35,7 +35,6 @@ class DataPrepper:
         self.error: None | str = None
 
     def start(self) -> None:
-        "Run Daemon Thread"
         Thread(target=self._run, daemon=True).start()
 
     def _run(self) -> None:
@@ -70,13 +69,17 @@ class DataPrepper:
 
 class WSsSimEngine:
     def __init__(
-        self, mo: MonitorObj, wake_up_parser: Event, general_event: Event
+        self, manager: ManagerAgent, wake_up_parser: Event, general_event: Event
     ) -> None:
-        __cfg, self._mo = Config.CoreConfig, mo
-        self.id_m, self.have_watchdog_task = self._mo.id_m, self._mo.have_watchdog_task
-        self.set_status, self.have_problem = self._mo.set_status, self._mo.have_problem
+        __cfg, self.manager = Config.ShmSharing, manager
+        self.have_task = self.manager.have_task
+        self.set_status, self.have_problem = (
+            self.manager.set_status,
+            self.manager.have_problem,
+        )
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         self.encoder: Encoder = Encoder()
+        self.prepper: DataPrepper = DataPrepper()
         self.ottrade, self.nttrade = 0, 0  # new|old time trade
         self.count_delta, self.sum_delta, self.ma = 0, 0, 1
         # InitGetRawData
@@ -84,7 +87,7 @@ class WSsSimEngine:
         self.data_offset: int = __cfg.Raw.data_offset[0]
         self.header_offset: int = __cfg.Raw.header_offset[0]
         self.cell_amount = __cfg.Raw.cell_amount
-        self.ncell_wr: memoryview[int] = self._mo.raw_buf[
+        self.ncell_wr: memoryview[int] = self.manager.raw_buf[
             slice(*__cfg.Raw.ncell_offset)
         ].cast("q")
 
@@ -133,10 +136,6 @@ class WSsSimEngine:
         data_size: int,
         data_offset: int,
     ) -> bool:
-        """
-        Set RawData[JSON Bytes] to RawSHM.\n
-        ncell_wr: number cell writer & reader
-        """
         if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
             ncell_w: int = ncell_wr[0]  # get cell
             raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
@@ -147,31 +146,30 @@ class WSsSimEngine:
             return True
 
         else:
-            self.set_status(id_m=self.id_m, code=sc.WARN0)  # Warn in this IF
+            self.set_status(code=sc.WARN0)
             return False
 
-    @error_action(set_sc_code=True)
+    @error_action(set_sc=True)
     def run_wss_sim_engine(self) -> None:
         # Local Links
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         wake_up_parser, encoder = self.wake_up_parser, self.encoder
-        id_m, set_status, have_problem = self.id_m, self.set_status, self.have_problem
-        data_size, alarm_clock = self.data_size, self._alarm_clock
+        set_status, have_problem = self.set_status, self.have_problem
+        data_size = self.data_size
         data_offset, header_offset = self.data_offset, self.header_offset
-        raw_buf, ncells, acell = self._mo.raw_buf, self.ncell_wr, self.cell_amount
+        raw_buf, ncells, acell = self.manager.raw_buf, self.ncell_wr, self.cell_amount
         set_raw_data, encode_data = self._set_raw_data, self._encode_data
-        time_to_sleep, have_watchdog_task = self._time_to_sleep, self.have_watchdog_task
+        time_to_sleep, have_task = self._time_to_sleep, self.have_task
+        prepper = self.prepper
         # - - -
         while True:
             gc.collect()
             self.wait_main.wait()
-            prepper: DataPrepper = DataPrepper()
             prepper.start()
             while True:
-                stime = time.perf_counter_ns() // 1000
-                set_status(id_m=id_m, code=SLEEP)
+                set_status(code=SLEEP)
                 if have_problem() is False:
-                    if have_watchdog_task():
+                    if have_task():
                         if wake_up_parser.is_set() is False:
                             wake_up_parser.set()
                             break
@@ -182,9 +180,7 @@ class WSsSimEngine:
                             continue
 
                         time.sleep(time_to_sleep())
-                        set_status(id_m=id_m, code=WAKE_UP)
-                        etime = time.perf_counter_ns() // 1000
-                        alarm_clock(stime, etime)
+                        set_status(code=WAKE_UP)
                         if raw_data := encode_data(prepper=prepper, encoder=encoder):
                             if set_raw_data(
                                 raw_data=raw_data,
@@ -198,9 +194,8 @@ class WSsSimEngine:
                                 if wake_up_parser.is_set() is False:
                                     wake_up_parser.set()
 
+                                print(2)
                     else:
-                        set_status(id_m=id_m, code=151)
-                        print(prepper.error)  # Debug
-                        continue
+                        raise RuntimeError(prepper.error)
                 else:
                     return

@@ -1,22 +1,24 @@
 from enum import IntEnum
 
-from . import IDpm
-
 
 class StatusCodes(IntEnum):
-    label: dict[IDpm, str] | str
+    label: dict[str, str] | str
 
-    def __new__(cls, id_mapping: dict[IDpm, str] | str):
-        last_value = len(cls.__members__)
-        value = last_value + 1 if last_value != 0 else 0
+    def __new__(cls, id_mapping: dict[str, str] | str):
+        value = len(cls.__members__)
         obj = int.__new__(cls, value)
         obj._value_ = value
         obj.label = id_mapping
         return obj
 
-    def get_msg(self, id_m: IDpm = IDpm.logic) -> str:
+    def get_msg(self, proc_name: str = "run_parsing") -> str:
         label = self.label
-        msg = label.get(id_m, "") if isinstance(label, dict) else label
+        if isinstance(label, dict):
+            proc_name = proc_name.removeprefix("run_")
+            msg = label.get(proc_name, "")
+        else:
+            msg = label
+
         return msg
 
     IDLE = "IDLE"
@@ -28,52 +30,32 @@ class StatusCodes(IntEnum):
     ERROR = "Error, for more info check exc_info.log"
     WARN_RE = "> this value, warn sc"
     WARN0 = {
-        IDpm.parsing_agent: "AlarmClock: reading lag > safe lag",
-        IDpm.parsing_daugther: "InitSession: amount ticks in price > 80% of lines",
-        IDpm.logic_agent: "",
-        IDpm.logic_daugther: "",
-        IDpm.network_agent: "SetRawData: size/len RawData > DataSizeInBuffer",
-        IDpm.network_daugther: "",
-        IDpm.network_sim_agent: "SetRawData: size/len RawData > DataSizeInBuffer",
-        IDpm.network_sim_daugther: "",
+        "parsing": "ParserAgent: AlarmClock: reading lag > safe lag",
+        "logic": "",
+        "network": "WssEngine: SetRawData: size/len RawData > DataSizeInBuffer",
+        "network_sim": "WssSimEngine: SetRawData: size/len RawData > DataSizeInBuffer",
     }
     WARN1 = {
-        IDpm.parsing_agent: "DecodeRawData: data < 0",
-        IDpm.parsing_daugther: "Update: IDX > ArrayCols or IDX < 0",
-        IDpm.logic_agent: "",
-        IDpm.logic_daugther: "",
-        IDpm.network_agent: "",
-        IDpm.network_daugther: "",
-        IDpm.network_sim_agent: "",
-        IDpm.network_sim_daugther: "",
+        "parsing": "ParserAgent: GetDecodeRawData: aggTrade data < 0",
+        "logic": "",
+        "network": "",
+        "network_sim": "",
     }
     WARN2 = {
-        IDpm.parsing_agent: "",
-        IDpm.parsing_daugther: "InitSession: 102 : IDY > ArrayLines or IDY < 0",
-        IDpm.logic_agent: "",
-        IDpm.logic_daugther: "",
-        IDpm.network_agent: "",
-        IDpm.network_daugther: "",
-        IDpm.network_sim_agent: "",
-        IDpm.network_sim_daugther: "",
+        "parsing": "FootprintWriter: InitSession: amount tick in price > 80% array lines",
+        "logic": "",
+        "network": "",
+        "network_sim": "",
     }
     WARN3 = {
-        IDpm.parsing_agent: "",
-        IDpm.parsing_daugther: "",
-        IDpm.logic_agent: "",
-        IDpm.logic_daugther: "",
-        IDpm.network_agent: "",
-        IDpm.network_daugther: "",
-        IDpm.network_sim_agent: "",
-        IDpm.network_sim_daugther: "",
+        "parsing": "FootprintWriter: Update: array cols < idx or idx < 0",
+        "logic": "",
+        "network": "",
+        "network_sim": "",
     }
     WARN4 = {
-        IDpm.parsing_agent: "",
-        IDpm.parsing_daugther: "",
-        IDpm.logic_agent: "",
-        IDpm.logic_daugther: "",
-        IDpm.network_agent: "",
-        IDpm.network_daugther: "",
-        IDpm.network_sim_agent: "",
-        IDpm.network_sim_daugther: "",
+        "parsing": "FootprintWriter: Update: array lines < idy or idy < 0",
+        "logic": "",
+        "network": "",
+        "network_sim": "",
     }

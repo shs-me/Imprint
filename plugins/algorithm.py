@@ -1,22 +1,17 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from core import GridReader, MonitorObj
+from core import FootprintReader, ManagerAgent
 
 
-class FootprintReader(GridReader):
-    def __init__(self, mo: MonitorObj) -> None:
-        super().__init__(mo)
-        print(FootprintReader.__name__)
+class IntraDay(FootprintReader):
+    def __init__(self, manager: ManagerAgent) -> None:
+        super().__init__(manager)
 
-    def check_patterns(
-        self, idy: int, idx: int, footprint: NDArray[np.float64]
-    ) -> None:
-        # LocalLinks
-        to_idy, to_idx = self.convert.to_idy, self.convert.to_idx  # noqa: F841
-        to_price, to_timestamp = self.convert.to_price, self.convert.to_timestamp
-        round_to_tick = self.convert.round_to_tick
+    def check_patterns(self, idy: int, idx: int, footprint: NDArray[np.int64]) -> None:
+        convert = self.convert
+        get_nPice = convert.get_nPrice
+        to_price, to_qty = convert.to_price, convert.to_qty
         # - - -
-        price, timestamp = to_price(idy), to_timestamp(idx)  # noqa
-        _price, _qty = round_to_tick(price), footprint[idy, idx]
-        print(_price, _qty, flush=True)
+        price, qty = to_price(get_nPice(idy)), to_qty(footprint[idy, idx])
+        print(price, qty, flush=True)

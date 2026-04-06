@@ -1,31 +1,21 @@
 import inspect
 import os
-import time
 from multiprocessing import Event, Process, Semaphore
-from multiprocessing.synchronize import Event as _Event
-from multiprocessing.synchronize import Semaphore as _Semaphore
-from typing import Protocol
+from types import FunctionType
 
 from loguru import logger
 
-from . import Config, IDpm, ProcsCfg, ProcsDictTyping, WatchDog
-from . import error_action as err_action
-from . import shm_manager as shm_m
-
-
-class CoreResources(Protocol):
-    parsing_event: _Event
-    logic_event: _Event
-    general_event: _Event
-    sc_sem: _Semaphore
+from . import Config, CoreResources, WatchDog, error_action, manager_office
+from .engine import run_logic, run_network, run_network_sim, run_parsing
 
 
 class RunMain(CoreResources):
     def __init__(self, backtesting: bool, shm_buf: memoryview) -> None:
-        self.backtesting, self.core_cfg = backtesting, Config.CoreConfig
+        self.backtesting, self.cfg = backtesting, Config.ShmSharing
         self.shm_buf = shm_buf
-        self.procs: dict[int, ProcsDictTyping] = {}
-        self.id_info, self.sc_general = {}, {}
+
+        self.procs = {}
+        self.sc_general = {}
         # Path's
         self.profiling_bin = Config.CorePath.profiling_bin
         # CoreResources
@@ -37,86 +27,71 @@ class RunMain(CoreResources):
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
 
-        id_p = IDpm.network if self.backtesting else IDpm.network_sim
-        self.procs, self.id_info = ProcsCfg.procs, Config.id_info
-        self.procs.pop(id_p)
-        self.id_info.pop(id_p)
+        self.funcs = [
+            run_network_sim if self.backtesting else run_network,
+            run_parsing,
+            run_logic,
+        ]
 
-    def _close_(self) -> None:
-        logger.warning(
-            "-- Core -- | _Exit | Closing Processes, DampProfilingArray, Clean SHM-s, Exit..."
-        )
-        for id, data in self.procs.items():
-            if data["proc"] is not None and data["proc"].is_alive():
-                data["proc"].terminate()
-                data["proc"].join()
-                logger.warning(
-                    f"-- Core -- | _Exit | Process {self.procs[id]['name']} closed"
-                )
-
-    def _proc_arg_init(self, func) -> tuple | None:
+    def _get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)
-        args_to_pass = []
+        proc_id, proc_name = len(self.procs), func.__name__
+        kwargs = {}
         for param_name in sig.parameters:
             if hasattr(self, param_name):
                 val = getattr(self, param_name)
-                args_to_pass.append(val)
+                kwargs[param_name] = val
+            elif param_name == "kwargs":
+                kwargs["proc_id"], kwargs["task_id"] = proc_id, proc_id + 10
+                kwargs["sc_sem"] = self.sc_sem
             else:
-                if param_name == "kwargs":
-                    pass
-                else:
-                    logger.error(f"Missing arg: {param_name} for {func.__name__}")
-                    return None
+                logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
+                return None
 
-        return tuple(args_to_pass)
+        self.procs[proc_id] = {"proc_name": proc_name, "task_id": proc_id + 10}
+        return kwargs
 
-    def _run_proc(self, id_proc: int) -> bool:
+    def _run_proc(self, func) -> bool:
         """Create & Run Procces's"""
-        _arg = self._proc_arg_init(self.procs[id_proc]["func"])
-        if isinstance(_arg, tuple):
+        kwargs = self._get_kwargs_for_func(func)
+        if isinstance(kwargs, dict):
             p = Process(
-                target=self.procs[id_proc]["func"],
-                args=_arg,
-                name=self.procs[id_proc]["name"],
+                target=func,
+                kwargs=kwargs,
+                name=func.__name__,
                 daemon=True,
             )
             p.start()
-            self.procs[id_proc]["proc"] = p
+            self.procs[kwargs["proc_id"]]["proc"] = p
+            logger.success(f"-- Core -- | Process [{func.__name__}], started.")
             return True
 
         else:
-            logger.warning("-- Core -- | RunProc | Arg for Proc is not tuple")
+            logger.warning("-- Core -- | RunProc | Arg for Proc is not dict")
             return False
 
-    @err_action()
-    def run_core_engine(self) -> bool | None:
-        logger.info("--- Core --- Started. Init...")
+    @error_action()
+    def run_core_engine(self) -> None:
+        logger.info("-- Core -- | Started | Init...")
         self._init_session()
-        _watchdog = WatchDog(
+        for func in self.funcs:
+            if self._run_proc(func=func) is False:
+                return
+
+        watchdog = WatchDog(
             procs=self.procs,
-            id_info=self.id_info,
             shm_buf=self.shm_buf,
             general_event=self.general_event,
             sc_sem=self.sc_sem,
         )
-        logger.info("WatchDog | Started")
-        for id_proc in self.procs:  # Init Process's
-            if self._run_proc(id_proc=id_proc) is False:
-                logger.warning(
-                    "--- Core --- | RunCoreEngine | Closing because of the WatchDog"
-                )
-                return False
-
-            time.sleep(0.5)
-
         self.general_event.set()
-        logger.info("--- Core --- Init Completed.")
+        logger.info("-- Core -- | Init Completed.")
         while True:
-            if _watchdog.run_watchdog_engine() is False:
-                return False
+            if watchdog.run_watchdog_engine() is False:
+                return
 
 
-@shm_m(create=True)
+@manager_office(head_of_office=True)
 def run_core(backtesting: bool, **kwargs) -> None:
     logger.remove()
     logger.add(
@@ -126,6 +101,6 @@ def run_core(backtesting: bool, **kwargs) -> None:
         format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
-    state = RunMain(backtesting=backtesting, shm_buf=kwargs["shm_buf"])
-    if state.run_core_engine() is False:
-        state._close_()
+    state = RunMain(backtesting=backtesting, shm_buf=kwargs["manager"])
+    state.run_core_engine()
+    logger.info("-- Core -- | Close")

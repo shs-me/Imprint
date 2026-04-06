@@ -1,34 +1,13 @@
-from dataclasses import dataclass
 from enum import IntEnum
-from multiprocessing import Process
-from multiprocessing.shared_memory import SharedMemory
-from types import FunctionType
-from typing import TypedDict
+from multiprocessing.synchronize import Event, Semaphore
+from typing import Protocol
 
 
-class ProcsDictTyping(TypedDict):
-    name: str
-    func: FunctionType
-    proc: Process | None
-
-
-class ShmType(TypedDict):
-    shm: SharedMemory
-    buf: memoryview
-
-
-class IDpm(IntEnum):
-    """Index proc's & module's & daugther"""
-
-    # proc's in status
-    parsing, logic, network, monitoring, network_sim = 10, 11, 12, 13, 14
-    # module's in status
-    parsing_agent, parsing_daugther = 0, 1
-    logic_agent, logic_daugther = 2, 3
-    network_agent, network_daugther = 4, 5
-    network_sim_agent, network_sim_daugther = 6, 7
-    # proc's col in profilling
-    parsing_col, logic_col, network_col, network_sim_col = 0, 1, 2, 2
+class CoreResources(Protocol):
+    parsing_event: Event
+    logic_event: Event
+    general_event: Event
+    sc_sem: Semaphore
 
 
 class Config:
@@ -40,7 +19,8 @@ class Config:
         wss: str = "wss://fstream.binance.com/ws/"
         rest: str = "https://fapi.binance.com/"
         symbol: str = "dashusdt"
-        tick_size: float = 0.01
+        tick_size: str = "0.01"
+        lot_size: str = "0.001"
         interval_min: int = 1
         backtesting: bool = True
 
@@ -55,20 +35,7 @@ class Config:
         profiling_csv = "dump/profiling.csv"
         pheaders_csv = "dump/pheaders.csv"
 
-    class CoreConfig:
-        class Grid:
-            lines, cols = 10000, 10
-            # ShM # TypeSize=float64=8
-            shm_size: int = (((lines * cols * 8) // 4096) + 1) * 4096
-            shm_name: str = "footprint_shm_for_grid"
-
-        class Profiling:
-            # for headers cols 0-64 & 64-128 other info
-            lines, cols, offset = 5000, 3, 128
-            # ShM # TypeSize=int64=8
-            shm_size: int = (((lines * cols * 8 + offset) // 4096) + 1) * 4096
-            shm_name: str = "profiling_shm_for_profiling"
-
+    class ShmSharing:
         class Raw:
             cell_amount, header_size, data_size = 10000, 1, 256
             safe_lag = int(cell_amount * 0.1)
@@ -82,78 +49,51 @@ class Config:
                 header_offset[1],
                 (cell_amount * data_size) + header_offset[1],
             )
-            # ShM
             shm_size: int = ((data_offset[1] // 4096) + 1) * 4096
-            shm_name: str = "raw_data_shm_for_raw_data"
+
+        class Footprint:
+            int64, float64 = 8, 8
+            lines, cols = 10000, 10
+            footprint: tuple[int, int] = 0, (lines * cols * int64)
+            headers_count = 8
+            headers = footprint[1], footprint[1] + (headers_count * int64 * (cols // 2))
+
+            class Headers(IntEnum):
+                Open, High, Low, Close = 0, 1, 2, 3
+                Time, Volume, Delta, CountTrade = 4, 5, 6, 7
+
+            coords_count = 6
+            """idy_min, idx_min, idy_max, idx_max, idy, idx"""
+            coord1: tuple[int, int] = headers[1], headers[1] + (coords_count * int64)
+            coord2: tuple[int, int] = coord1[1], coord1[1] + (coords_count * int64)
+            nBasePrice: tuple[int, int] = coord2[1], coord2[1] + int64
+            nBaseTimestamp: tuple[int, int] = nBasePrice[1], nBasePrice[1] + int64
+            # Index's
+            flag: int = nBaseTimestamp[1]
+            shm_size: int = ((flag // 4096) + 1) * 4096
 
         class Metrics:
-            # Offset's
-            base_price: tuple[int, int] = (0, 8)  # float64=8
-            base_timestamp: tuple[int, int] = (base_price[1], base_price[1] + 8)
-            tick_size: tuple[int, int] = (base_timestamp[1], base_timestamp[1] + 8)
-            price: tuple[int, int] = (tick_size[1], tick_size[1] + 8)  # float64=8
-            # Coord array
-            coord_lines, coord_cols = 2, 6
-            coord_offset: tuple[int, int] = (
-                price[1],
-                price[1] + ((coord_cols * coord_lines) * 4),  # int32=4
-            )
-            # Index's
-            flag: int = coord_offset[1] + 1
-            # ShM
-            shm_size: int = ((flag // 4096) + 1) * 4096
-            shm_name: str = "metrics_shm_for_different_metrics"
+            int64, float64 = 8, 8
+            tick_size: tuple[int, int] = 0, int64
+            lot_size: tuple[int, int] = tick_size[1], tick_size[1] + int64
+            pricePrecision: tuple[int, int] = lot_size[1], lot_size[1] + int64
+            qtyPrecision: tuple[int, int] = pricePrecision[1], pricePrecision[1] + int64
+            shm_size: int = ((qtyPrecision[1] // 4096) + 1) * 4096
 
-        class Status:
-            class parsing:
-                id_p, id_m = IDpm.parsing, IDpm.parsing_agent
-                id_d, id_dgc = IDpm.parsing_daugther, IDpm.parsing_col
-
-            class logic:
-                id_p, id_m = IDpm.logic, IDpm.logic_agent
-                id_d, id_dgc = IDpm.logic_daugther, IDpm.logic_col
-
-            class network:
-                id_p, id_m = IDpm.network, IDpm.network_agent
-                id_d, id_dgc = IDpm.network_daugther, IDpm.network_col
-
-            class network_sim:
-                id_p, id_m = IDpm.network_sim, IDpm.network_sim_agent
-                id_d, id_dgc = IDpm.network_sim_daugther, IDpm.network_sim_col
-
+        class Monitoring:
+            lines, cols, offset, int64 = 5000, 3, 256, 8
+            status = 0, offset
+            profiling = status[1], status[1] + (lines * cols * int64)
             id_error = -1
-            # ShM
-            shm_size: int = (4096 // 4096 + 1) * 4096
-            shm_name: str = "status_shm_for_status_procs_and_modules"
-
-    id_info: dict[IDpm, dict[IDpm, str]] = {
-        IDpm.parsing: {
-            IDpm.parsing_agent: "ParsingAgent",
-            IDpm.parsing_daugther: "GridEngine",
-        },
-        IDpm.logic: {
-            IDpm.logic_agent: "LogicAgent",
-            IDpm.logic_daugther: "GridReader",
-        },
-        IDpm.network: {
-            IDpm.network_agent: "WSSAgent",
-            IDpm.network_daugther: "RESTAgent",
-            IDpm.network_sim_agent: "WSSAgent Backtest",
-        },
-        IDpm.network_sim: {
-            IDpm.network_sim_agent: "SimWSSAgent",
-            IDpm.network_sim_daugther: "SimRESTAgent",
-        },
-    }
+            shm_size: int = (profiling[1] // 4096 + 1) * 4096
 
 
-@dataclass
-class ShMs:
-    __cfg = Config.CoreConfig
-    grid_offset = (0, 0 + __cfg.Grid.shm_size)
-    profiling_offset = grid_offset[1], grid_offset[1] + __cfg.Profiling.shm_size
-    raw_offset = profiling_offset[1], profiling_offset[1] + __cfg.Raw.shm_size
-    metrics_offset = raw_offset[1], raw_offset[1] + __cfg.Metrics.shm_size
-    status_offset = metrics_offset[1], metrics_offset[1] + __cfg.Status.shm_size
-    shm_size = status_offset[1]
+class ShmBufOffset:
+    __cfg = Config.ShmSharing
+    raw = 0, __cfg.Raw.shm_size
+    footprint = raw[1], raw[1] + __cfg.Footprint.shm_size
+    metrics = footprint[1], footprint[1] + __cfg.Metrics.shm_size
+    monitoring = metrics[1], metrics[1] + __cfg.Monitoring.shm_size
+
+    shm_size = monitoring[1]
     shm_name = "GridCore"
