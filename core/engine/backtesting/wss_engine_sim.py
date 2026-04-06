@@ -194,7 +194,6 @@ class WSsSimEngine:
                                 if wake_up_parser.is_set() is False:
                                     wake_up_parser.set()
 
-                                print(2)
                     else:
                         raise RuntimeError(prepper.error)
                 else:
