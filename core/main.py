@@ -35,7 +35,8 @@ class RunMain(CoreResources):
 
     def _get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)
-        proc_id, proc_name = len(self.procs), func.__name__
+        proc_id = len(self.procs)
+        proc_name = func.__name__.removeprefix("run_").upper()
         kwargs = {}
         for param_name in sig.parameters:
             if hasattr(self, param_name):
@@ -52,27 +53,27 @@ class RunMain(CoreResources):
         return kwargs
 
     def _run_proc(self, func) -> bool:
-        """Create & Run Procces's"""
         kwargs = self._get_kwargs_for_func(func)
         if isinstance(kwargs, dict):
+            name: str = self.procs[kwargs["proc_id"]]["proc_name"]
             p = Process(
                 target=func,
                 kwargs=kwargs,
-                name=func.__name__,
+                name=name,
                 daemon=True,
             )
             p.start()
             self.procs[kwargs["proc_id"]]["proc"] = p
-            logger.success(f"-- Core -- | Process [{func.__name__}], started.")
+            logger.success(f"-- Core -- | Process [{name}], started.")
             return True
 
         else:
-            logger.warning("-- Core -- | RunProc | Arg for Proc is not dict")
+            logger.warning("-- Core -- | RunProc | kwargs is not dict")
             return False
 
     @error_action()
     def run_core_engine(self) -> None:
-        logger.info("-- Core -- | Started | Init...")
+        logger.info("-- Core -- | Started, init...")
         self._init_session()
         for func in self.funcs:
             if self._run_proc(func=func) is False:
@@ -85,7 +86,7 @@ class RunMain(CoreResources):
             sc_sem=self.sc_sem,
         )
         self.general_event.set()
-        logger.info("-- Core -- | Init Completed.")
+        logger.info("-- Core -- | Init completed.")
         while True:
             if watchdog.run_watchdog_engine() is False:
                 return
@@ -103,4 +104,4 @@ def run_core(backtesting: bool, **kwargs) -> None:
 
     state = RunMain(backtesting=backtesting, shm_buf=kwargs["manager"])
     state.run_core_engine()
-    logger.info("-- Core -- | Close")
+    logger.info("-- Core -- | Close the Core.")

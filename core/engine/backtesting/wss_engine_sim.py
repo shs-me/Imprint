@@ -73,10 +73,7 @@ class WSsSimEngine:
     ) -> None:
         __cfg, self.manager = Config.ShmSharing, manager
         self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = (
-            self.manager.set_status,
-            self.manager.have_problem,
-        )
+        self.set_status, self.have_problem = manager.set_status, manager.have_problem
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         self.encoder: Encoder = Encoder()
         self.prepper: DataPrepper = DataPrepper()
@@ -92,7 +89,6 @@ class WSsSimEngine:
         ].cast("q")
 
     def _time_to_sleep(self) -> float:
-        """Return BaseTimeToSleep OR SimTimeToSleep"""
         # ott: Old Time Trade | ntt: New Time Trade
         ott, ntt = self.ottrade, self.nttrade
         # - - -
@@ -116,11 +112,6 @@ class WSsSimEngine:
     def _encode_data(
         self, prepper: DataPrepper, encoder: msgspec.json.Encoder
     ) -> bytes | None:
-        """
-        Encode AggTradeSim Obj to Json Bytes.\n
-        Also set, new time trade.
-        """
-
         obj: AggTradeSim = prepper.queue.popleft()
         raw_data: bytes = encoder.encode(obj)
         self.nttrade: int = obj.E
@@ -172,11 +163,11 @@ class WSsSimEngine:
                     if have_task():
                         if wake_up_parser.is_set() is False:
                             wake_up_parser.set()
-                            break
+                        break
 
                     if prepper.error is None:
                         if not prepper.queue:
-                            time.sleep(0.0001)
+                            time.sleep(0)
                             continue
 
                         time.sleep(time_to_sleep())
@@ -193,7 +184,6 @@ class WSsSimEngine:
                             ):
                                 if wake_up_parser.is_set() is False:
                                     wake_up_parser.set()
-
                     else:
                         raise RuntimeError(prepper.error)
                 else:

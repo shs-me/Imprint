@@ -86,6 +86,7 @@ class LogicAgent:
                     reader._check_update()
                     if pre_sleep_logic.is_set():
                         pre_sleep_logic.clear()
+
                 else:
                     return
 

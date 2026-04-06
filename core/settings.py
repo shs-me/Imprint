@@ -81,11 +81,10 @@ class Config:
             shm_size: int = ((qtyPrecision[1] // 4096) + 1) * 4096
 
         class Monitoring:
-            lines, cols, offset, int64 = 5000, 3, 256, 8
+            offset, int64 = 256, 8
             status = 0, offset
-            profiling = status[1], status[1] + (lines * cols * int64)
-            id_error = -1
-            shm_size: int = (profiling[1] // 4096 + 1) * 4096
+            id_error = 255
+            shm_size: int = (status[1] // 4096 + 1) * 4096
 
 
 class ShmBufOffset:

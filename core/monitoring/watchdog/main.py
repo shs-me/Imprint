@@ -1,4 +1,3 @@
-import time
 from multiprocessing.synchronize import Event, Semaphore
 
 from loguru import logger
@@ -29,7 +28,6 @@ class WatchDog:
         error_check, warn_check = self._error_check, self._warn_check
         check_procs = self._check_procs
         #  - - -
-        self.sleep_all.clear()
         while True:
             sc_sem.acquire(timeout=60)
             if error_check(status_buf) is not False:
@@ -65,7 +63,8 @@ class WatchDog:
         sc_code: int,
         procs: dict,
     ) -> bool:
-        if sc.WARN0 <= sc_code <= sc.WARN1:
+        if sc.WARN0 <= sc_code <= sc.WARN4:
+            self.sleep_all.clear()
             act.set_status_for_procs(  # All Sleep
                 status_buf=self.status_buf, procs=procs, stoping=True
             )
@@ -75,7 +74,5 @@ class WatchDog:
             )
             act.reset(self.buf)
             self.sleep_all.set()
-            time.sleep(0.5)
-            self.sleep_all.clear()
 
         return True

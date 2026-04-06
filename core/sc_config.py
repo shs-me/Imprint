@@ -13,13 +13,7 @@ class StatusCodes(IntEnum):
 
     def get_msg(self, proc_name: str = "run_parsing") -> str:
         label = self.label
-        if isinstance(label, dict):
-            proc_name = proc_name.removeprefix("run_")
-            msg = label.get(proc_name, "")
-        else:
-            msg = label
-
-        return msg
+        return label.get(proc_name, "") if isinstance(label, dict) else label
 
     IDLE = "IDLE"
     RUN = "RUNNING"
@@ -30,32 +24,32 @@ class StatusCodes(IntEnum):
     ERROR = "Error, for more info check exc_info.log"
     WARN_RE = "> this value, warn sc"
     WARN0 = {
-        "parsing": "ParserAgent: AlarmClock: reading lag > safe lag",
-        "logic": "",
-        "network": "WssEngine: SetRawData: size/len RawData > DataSizeInBuffer",
-        "network_sim": "WssSimEngine: SetRawData: size/len RawData > DataSizeInBuffer",
+        "PARSING": "ParserAgent: AlarmClock: reading lag > safe lag",
+        "LOGIC": "",
+        "NETWORK": "WssEngine: SetRawData: size/len RawData > DataSizeInBuffer",
+        "NETWORK_SIM": "WssSimEngine: SetRawData: size/len RawData > DataSizeInBuffer",
     }
     WARN1 = {
-        "parsing": "ParserAgent: GetDecodeRawData: aggTrade data < 0",
-        "logic": "",
-        "network": "",
-        "network_sim": "",
+        "PARSING": "ParserAgent: GetDecodeRawData: aggTrade data < 0",
+        "LOGIC": "",
+        "NETWORK": "",
+        "NETWORK_SIM": "",
     }
     WARN2 = {
-        "parsing": "FootprintWriter: InitSession: amount tick in price > 80% array lines",
-        "logic": "",
-        "network": "",
-        "network_sim": "",
+        "PARSING": "FootprintWriter: InitSession: amount tick in price > 80% array lines",
+        "LOGIC": "",
+        "NETWORK": "",
+        "NETWORK_SIM": "",
     }
     WARN3 = {
-        "parsing": "FootprintWriter: Update: array cols < idx or idx < 0",
-        "logic": "",
-        "network": "",
-        "network_sim": "",
+        "PARSING": "FootprintWriter: Update: array cols < idx or idx < 0",
+        "LOGIC": "",
+        "NETWORK": "",
+        "NETWORK_SIM": "",
     }
     WARN4 = {
-        "parsing": "FootprintWriter: Update: array lines < idy or idy < 0",
-        "logic": "",
-        "network": "",
-        "network_sim": "",
+        "PARSING": "FootprintWriter: Update: array lines < idy or idy < 0",
+        "LOGIC": "",
+        "NETWORK": "",
+        "NETWORK_SIM": "",
     }

@@ -16,10 +16,7 @@ class FootprintReader(ABC):
 
     def __init__(self, manager: ManagerAgent) -> None:
         __cfg, self.manager = Config.ShmSharing, manager
-        self.set_status, self.have_problem = (
-            self.manager.set_status,
-            self.manager.have_problem,
-        )
+        self.set_status = manager.set_status
 
         # Footprint
         _flag: int = __cfg.Footprint.flag

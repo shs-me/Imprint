@@ -98,7 +98,7 @@ class ParserAgent:
                     if have_task():
                         if wake_up_logic.is_set() is False:
                             wake_up_logic.set()
-                            break
+                        break
 
                     if alarm_clock(ncells=ncells, acell=acell, slag=slag):
                         pre_sleep_wss.clear()
