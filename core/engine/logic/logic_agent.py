@@ -50,9 +50,12 @@ class LogicAgent:
 
         return BaseFootprintReader(manager=manager)
 
-    def _alarm_clock(self, sleeper: Event) -> bool:
-        if sleeper.is_set() is False:
-            return True
+    def _alarm_clock(self, tts: memoryview, active_buffer: memoryview) -> bool:
+        counter = 1
+        while not active_buffer[0]:
+            counter += 1
+            if counter >= tts[0]:
+                return True
         else:
             return False
 
@@ -61,6 +64,8 @@ class LogicAgent:
         # LocalLinks
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         set_status, have_problem = self.set_status, self.have_problem
+        tts_buf = self.manager.time_to_sleep_buf
+        active_buffer = self.reader.active_buffer
         pre_sleep_logic, alarm_clock = self.pre_sleep_logic, self._alarm_clock
         reader, have_task = self.reader, self.have_task
         #  - - -
@@ -74,8 +79,9 @@ class LogicAgent:
                     if have_task():
                         break
 
-                    if alarm_clock(sleeper=pre_sleep_logic):
-                        pre_sleep_logic.wait()
+                    if alarm_clock(tts_buf, active_buffer):
+                        if pre_sleep_logic.is_set():
+                            pre_sleep_logic.wait()
                         continue
 
                     set_status(code=WAKE_UP)

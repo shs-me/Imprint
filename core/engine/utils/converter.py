@@ -7,23 +7,22 @@ class ConvertMetrics:
     def __init__(
         self,
         trade_param: memoryview,
-        nBasePrice: int,
-        nBaseTimestamp: int,
     ) -> None:
         __cfg = Config.ShmSharing
         self.trade_par = trade_param
-        self.nBasePrice, self.nBaseTimestamp = nBasePrice, nBaseTimestamp
         self.ims = Config.UserConfig.interval_min * 60 * 1000
         self.lines, self.cols = __cfg.Footprint.lines, __cfg.Footprint.cols
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
         self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
         self.cluster_id = 0
         self.headers, self.headers_count = (
-            __cfg.Footprint.Headers,
+            __cfg.Footprint.HeadersInt,
             __cfg.Footprint.headers_count,
         )
 
-    def init_center(self):
+    def init_session(self, price: float | int, timestamp: int):
+        self.nBasePrice = self.to_nPrice(price) if isinstance(price, float) else price
+        self.baseTimestamp = timestamp
         if self.nBasePrice >= round(number=self.lines * 0.8):
             return False
 
@@ -62,7 +61,7 @@ class ConvertMetrics:
             return None
 
     def get_idx(self, timestamp: int, is_sell: bool) -> int | None:
-        idx: int = round(number=(timestamp - self.nBaseTimestamp) / self.ims * 2) + (
+        idx: int = round(number=(timestamp - self.baseTimestamp) / self.ims * 2) + (
             0 if is_sell else 1
         )
         if 0 <= idx < self.cols:
@@ -76,7 +75,7 @@ class ConvertMetrics:
     def get_nTimestamp(self, idx: int) -> int:
         timestamp: int = (
             idx - (0 if (idx % 2) == 0 else 1)
-        ) // 2 * self.ims + self.nBaseTimestamp
+        ) // 2 * self.ims + self.baseTimestamp
         return timestamp
 
     def get_cluster_id(self, idx: int | None = None) -> int:

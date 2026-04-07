@@ -14,12 +14,16 @@ class FootprintWriter:
         self.set_status = manager.set_status
 
         # Footprint
-        self.nBasePrice, self.nBaseTimestamp = 0, 0
-        _flag: int = __cfg.Footprint.flag
-        self.flag_buf: memoryview[int] = self.manager.footprint_buf[_flag : _flag + 1]
-        self.headers = __cfg.Footprint.Headers
+        self.crdInt = __cfg.Footprint.CoordsInt
+        self.headersInt = __cfg.Footprint.HeadersInt
         self.lines, self.cols = __cfg.Footprint.lines, __cfg.Footprint.cols
-        self.nBasePrice_and_Timestamp_buf: memoryview[int] = self.manager.footprint_buf[
+        self.flag_buf: memoryview[int] = self.manager.footprint_buf[
+            __cfg.Footprint.flag : __cfg.Footprint.flag + 1
+        ]
+        self.active_buffer: memoryview[int] = self.manager.footprint_buf[
+            __cfg.Footprint.flag_spare : __cfg.Footprint.flag_spare + 1
+        ]
+        self.nBasePrice_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
             __cfg.Footprint.nBasePrice[0] : __cfg.Footprint.nBaseTimestamp[1]
         ].cast("q")
 
@@ -38,45 +42,43 @@ class FootprintWriter:
             buffer=self.manager.footprint_buf[slice(*__cfg.Footprint.footprint)],
         )
 
-        self.headers_buf: memoryview[int] = self.manager.footprint_buf[
+        self.headers: memoryview[int] = self.manager.footprint_buf[
             slice(*__cfg.Footprint.headers)
         ].cast("q")
 
-        self.coord1_buf: memoryview[int] = self.manager.footprint_buf[
+        self.coord1: memoryview[int] = self.manager.footprint_buf[
             slice(*__cfg.Footprint.coord1)
         ].cast("q")
-        self.coord2_buf: memoryview[int] = self.manager.footprint_buf[
+        self.coord2: memoryview[int] = self.manager.footprint_buf[
             slice(*__cfg.Footprint.coord2)
         ].cast("q")
 
     def init_session(self, price: float, timestamp: int) -> bool:
-        self.pricePrec, self.qtyPrec = self.trade_par[2:4]
-        self.nBasePrice: int = round(price * (10**self.pricePrec))
-        self.nBaseTimestamp: int = timestamp
-        self.convert: ConvertMetrics = ConvertMetrics(
-            trade_param=self.trade_par,
-            nBasePrice=self.nBasePrice,
-            nBaseTimestamp=self.nBaseTimestamp,
-        )
+        crdInt, coord1, coord2 = self.crdInt, self.coord1, self.coord2
+        bpat = self.nBasePrice_and_timestamp_buf
+        # - - -
+        self.convert: ConvertMetrics = ConvertMetrics(trade_param=self.trade_par)
+        if bpat[0] != 0:
+            price, timestamp = bpat[:]
+        else:
+            coord1[crdInt.idy_min] = coord2[crdInt.idy_min] = self.lines
+            coord1[crdInt.idx_min] = coord2[crdInt.idx_min] = self.cols
+            coord1[crdInt.idy_max] = coord2[crdInt.idy_max] = 0
+            coord1[crdInt.idx_max] = coord2[crdInt.idx_max] = 0
+            coord1[crdInt.idy] = coord2[crdInt.idy] = 0
+            coord1[crdInt.idx] = coord2[crdInt.idx] = 0
 
-        if self.convert.init_center() is False:
+        if self.convert.init_session(price, timestamp) is False:
             self.set_status(code=sc.WARN2)
             return False
 
-        self.nBasePrice_and_Timestamp_buf[0] = self.nBasePrice
-        self.nBasePrice_and_Timestamp_buf[1] = self.nBaseTimestamp
-        self.coord1_buf[0] = self.coord2_buf[0] = self.lines  # default coord idy_min
-        self.coord1_buf[1] = self.coord2_buf[1] = self.cols  # default coord idx_min
-        self.coord1_buf[2] = self.coord2_buf[2] = 0  # default coord idy_max
-        self.coord1_buf[3] = self.coord2_buf[3] = 0  # default coord idx_max
-        self.coord1_buf[4] = self.coord2_buf[4] = 0  # default coord idy
-        self.coord1_buf[5] = self.coord2_buf[5] = 0  # default coord idx
+        bpat[0], bpat[1] = self.convert.nBasePrice, self.convert.baseTimestamp
         return True
 
     def _update_headers(
         self, idx: int, nPrice: int, nQty: int, timestamp: int, is_sell: bool
     ) -> None:
-        hr_buf, hr = self.headers_buf, self.headers
+        hr_buf, hr = self.headers, self.headersInt
         # - - -
         cid = self.convert.get_cluster_id(idx)
         if hr_buf[cid + hr.CountTrade] == 0:
@@ -95,16 +97,21 @@ class FootprintWriter:
         hr_buf[cid + hr.CountTrade] += 1
 
     def _set_cords(self, idy: int, idx: int) -> None:
+        idy_min, idx_min = self.crdInt.idy_min, self.crdInt.idx_min
+        idy_max, idx_max = self.crdInt.idy_max, self.crdInt.idx_max
+        _idy, _idx = self.crdInt.idy, self.crdInt.idx
+        # - - -
         new_flag: int = 1 if (flag := self.flag_buf[0]) == 0 else 0
-        coord = self.coord1_buf if flag == 0 else self.coord2_buf
-        coord[0] = idy if coord[0] > idy else coord[0]  # idy_min
-        coord[1] = idx if coord[1] > idx else coord[1]  # idx_min
-        coord[2] = idy + 1 if coord[2] <= idy else coord[2]  # idy_max
-        coord[3] = idx + 1 if coord[3] <= idx else coord[3]  # idx_max
-        coord[4] = idy
-        coord[5] = idx
+        coord = self.coord1 if flag == 0 else self.coord2
+        coord[idy_min] = idy if coord[idy_min] > idy else coord[idy_min]
+        coord[idx_min] = idx if coord[idx_min] > idx else coord[idx_min]
+        coord[idy_max] = idy + 1 if coord[idy_max] <= idy else coord[idy_max]
+        coord[idx_max] = idx + 1 if coord[idx_max] <= idx else coord[idx_max]
+        coord[_idy], coord[_idx] = idy, idx
+
         if self.guarantee.is_set() is False:
             self.flag_buf[0] = new_flag
+            self.active_buffer[0] = 1
             self.guarantee.set()
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
@@ -114,7 +121,7 @@ class FootprintWriter:
         idx: int | None = convert.get_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
-                self.footprint_shm[idy, idx] += nQty  # update bid|ask
+                self.footprint_shm[idy, idx] += nQty
                 self._update_headers(
                     idx=idx,
                     nPrice=nPrice,

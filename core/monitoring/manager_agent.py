@@ -27,6 +27,9 @@ class ManagerAgent:
         self.monitoring_buf = self.shm_buf[slice(*sbo.monitoring)]
 
         self.status_buf = self.monitoring_buf[slice(*self.cfg.status)]
+        self.time_to_sleep_buf = self.metrics_buf[
+            slice(*Config.ShmSharing.Metrics.time_to_sleep)
+        ].cast("q")
 
     def _for_error_action(self) -> None:
         self.status_buf[self.cfg.id_error] = sc.ERROR

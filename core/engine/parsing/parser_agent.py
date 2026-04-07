@@ -63,12 +63,15 @@ class ParserAgent:
         else:
             return trade
 
-    def _alarm_clock(self, ncells, acell, slag) -> bool:
-        ncell_w, ncell_r = ncells[0], ncells[1]
-        if ((ncell_w - ncell_r + acell) % acell) < slag:
-            if ncell_r == ncell_w:
-                return True
-
+    def _alarm_clock(
+        self, tts: memoryview, ncells: memoryview, acell: int, slag: int
+    ) -> bool:
+        if (ncells[0] - ncells[1] + acell) % acell < slag:
+            counter = 1
+            while ncells[0] == ncells[1]:
+                counter += 1
+                if counter >= tts[0]:
+                    return True
             else:
                 return False
         else:
@@ -79,14 +82,15 @@ class ParserAgent:
     def run_parsing_engine(self) -> None:
         # LocalLinks
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
-        decoder, writer, raw_buf = self.decoder, self.writer, self.manager.raw_buf
-        set_status, have_problem = self.set_status, self.have_problem
-        data_size = self.data_size
-        data_offset, header_offset = self.data_offset, self.header_offset
-        slag, ncells, acell = self.safe_lag, self.ncell_wr, self.cell_amount
+        decoder, writer = self.decoder, self.writer
         wake_up_logic, pre_sleep_wss = self.wake_up_logic, self.pre_sleep_wss
-        get_decode_raw_data = self._get_decode_raw_data
-        alarm_clock, have_task = self._alarm_clock, self.have_task
+        set_status, have_problem = self.set_status, self.have_problem
+        have_task = self.have_task
+        tts_buf = self.manager.time_to_sleep_buf
+        raw_buf, ncells = self.manager.raw_buf, self.ncell_wr
+        data_size, data_offset = self.data_size, self.data_offset
+        header_offset, slag, acell = self.header_offset, self.safe_lag, self.cell_amount
+        get_decode_raw_data, alarm_clock = self._get_decode_raw_data, self._alarm_clock
         #  - - -
         while True:
             gc.collect()
@@ -100,7 +104,7 @@ class ParserAgent:
                             wake_up_logic.set()
                         break
 
-                    if alarm_clock(ncells=ncells, acell=acell, slag=slag):
+                    if alarm_clock(tts=tts_buf, ncells=ncells, acell=acell, slag=slag):
                         pre_sleep_wss.clear()
                         pre_sleep_wss.wait()
                         continue
@@ -138,7 +142,6 @@ def run_parsing(
     general_event: Event,
     **kwargs,
 ) -> None:
-
     writer: FootprintWriter = FootprintWriter(kwargs["manager"], guarantee=logic_event)
     agent: ParserAgent = ParserAgent(
         kwargs["manager"],

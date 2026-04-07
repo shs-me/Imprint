@@ -78,7 +78,7 @@ class WSsSimEngine:
         self.encoder: Encoder = Encoder()
         self.prepper: DataPrepper = DataPrepper()
         self.ottrade, self.nttrade = 0, 0  # new|old time trade
-        self.count_delta, self.sum_delta, self.ma = 0, 0, 1
+        self.min_delta = 0
         # InitGetRawData
         self.data_size, self.header_size = __cfg.Raw.data_size, __cfg.Raw.header_size
         self.data_offset: int = __cfg.Raw.data_offset[0]
@@ -104,10 +104,13 @@ class WSsSimEngine:
 
         return 0.01  # Base Time To Sleep
 
-    def _alarm_clock(self, start_time: int, end_time: int) -> None:
-        self.sum_delta += end_time - start_time
-        self.count_delta += 1
-        self.ma = self.sum_delta // self.count_delta
+    def _alarm_clock(self, tts: memoryview, start_time: int, end_time: int) -> None:
+        if self.min_delta > (delta := (end_time - start_time)):
+            self.min_delta = delta
+        else:
+            self.min_delta = delta if self.min_delta == 0 else self.min_delta
+
+        tts[0] = self.min_delta
 
     def _encode_data(
         self, prepper: DataPrepper, encoder: msgspec.json.Encoder
@@ -146,18 +149,21 @@ class WSsSimEngine:
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         wake_up_parser, encoder = self.wake_up_parser, self.encoder
         set_status, have_problem = self.set_status, self.have_problem
-        data_size = self.data_size
-        data_offset, header_offset = self.data_offset, self.header_offset
-        raw_buf, ncells, acell = self.manager.raw_buf, self.ncell_wr, self.cell_amount
+        have_task = self.have_task
+        tts_buf = self.manager.time_to_sleep_buf
+        raw_buf, ncells = self.manager.raw_buf, self.ncell_wr
+        data_size, data_offset = self.data_size, self.data_offset
+        header_offset, acell = self.header_offset, self.cell_amount
         set_raw_data, encode_data = self._set_raw_data, self._encode_data
         time_to_sleep, have_task = self._time_to_sleep, self.have_task
-        prepper = self.prepper
+        prepper, alarm_clock = self.prepper, self._alarm_clock
         # - - -
         while True:
             gc.collect()
             self.wait_main.wait()
             prepper.start()
             while True:
+                stime = time.perf_counter_ns()
                 set_status(code=SLEEP)
                 if have_problem() is False:
                     if have_task():
@@ -171,6 +177,7 @@ class WSsSimEngine:
                             continue
 
                         time.sleep(time_to_sleep())
+                        alarm_clock(tts_buf, stime, time.perf_counter_ns())
                         set_status(code=WAKE_UP)
                         if raw_data := encode_data(prepper=prepper, encoder=encoder):
                             if set_raw_data(

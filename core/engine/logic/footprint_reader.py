@@ -19,9 +19,14 @@ class FootprintReader(ABC):
         self.set_status = manager.set_status
 
         # Footprint
-        _flag: int = __cfg.Footprint.flag
-        self.flag_buf: memoryview[int] = self.manager.footprint_buf[_flag : _flag + 1]
+        self.crdInt = __cfg.Footprint.CoordsInt
         self.lines, self.cols = __cfg.Footprint.lines, __cfg.Footprint.cols
+        self.flag_buf: memoryview[int] = self.manager.footprint_buf[
+            __cfg.Footprint.flag : __cfg.Footprint.flag + 1
+        ]
+        self.active_buffer: memoryview[int] = self.manager.footprint_buf[
+            __cfg.Footprint.flag_spare : __cfg.Footprint.flag_spare + 1
+        ]
         self.nBasePrice_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
             __cfg.Footprint.nBasePrice[0] : __cfg.Footprint.nBaseTimestamp[1]
         ].cast("q")
@@ -35,7 +40,7 @@ class FootprintReader(ABC):
 
     def _init_array(self) -> None:
         __cfg: type[Config.ShmSharing] = Config.ShmSharing
-
+        # - - -
         self.footprint_shm: NDArray[np.int64] = np.ndarray(
             shape=(self.lines, self.cols),
             dtype=np.int64,
@@ -55,34 +60,30 @@ class FootprintReader(ABC):
         ].cast("q")
 
     def init_session(self) -> None:
-        self.nBasePrice, self.nBaseTimestamp = self.nBasePrice_and_timestamp_buf[:]
-        self.convert: ConvertMetrics = ConvertMetrics(
-            trade_param=self.trade_par,
-            nBasePrice=self.nBasePrice,
-            nBaseTimestamp=self.nBaseTimestamp,
-        )
-        self.convert.init_center()
+        nBasePrice, baseTimestamp = self.nBasePrice_and_timestamp_buf[:]
+        self.convert: ConvertMetrics = ConvertMetrics(trade_param=self.trade_par)
+        self.convert.init_session(price=nBasePrice, timestamp=baseTimestamp)
 
     def _get_cords(self) -> tuple[int, int]:
+        crdInt = self.crdInt
         old_flag: int = 1 if self.flag_buf[0] == 0 else 0
         coord = self.coord1 if old_flag == 0 else self.coord2
-        idy_min, idx_min, idy_max, idx_max, idy, idx = coord[:]
-        np.copyto(  # update grid local
+        np.copyto(
             dst=self.footprint[
-                idy_min:idy_max,
-                idx_min:idx_max,
+                coord[crdInt.idy_min] : coord[crdInt.idy_max],
+                coord[crdInt.idx_min] : coord[crdInt.idx_max],
             ],
             src=self.footprint_shm[
-                idy_min:idy_max,
-                idx_min:idx_max,
+                coord[crdInt.idy_min] : coord[crdInt.idy_max],
+                coord[crdInt.idx_min] : coord[crdInt.idx_max],
             ],
         )
-        coord[0] = self.lines  # default coord idy_min
-        coord[1] = self.cols  # default coord idx_min
-        coord[2] = 0  # default coord idy_max
-        coord[3] = 0  # default coord idx_max
-        coord[4] = 0  # default coord idy
-        coord[5] = 0  # default coord idx
+        idy, idx = coord[crdInt.idy :]
+        # reset
+        coord[crdInt.idy_min], coord[crdInt.idx_min] = self.lines, self.cols
+        coord[crdInt.idy_max], coord[crdInt.idx_max] = 0, 0
+        coord[crdInt.idy], coord[crdInt.idx] = 0, 0
+        self.active_buffer[0] = 0
         return idy, idx
 
     def _check_update(self) -> None:
