@@ -1,11 +1,11 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from core import FootprintReader, ManagerAgent
+from core import AgentManager, FootprintReader
 
 
 class IntraDay(FootprintReader):
-    def __init__(self, manager: ManagerAgent) -> None:
+    def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager)
 
     def check_patterns(self, idy: int, idx: int, footprint: NDArray[np.int64]) -> None:

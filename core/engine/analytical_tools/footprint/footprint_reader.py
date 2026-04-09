@@ -3,7 +3,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 from numpy.typing import NDArray
 
-from ... import Config, ManagerAgent
+from .... import AgentManager
+from ....settings import SpaceCoords as spc
 from .. import ConvertMetrics
 
 
@@ -14,37 +15,34 @@ class FootprintReader(ABC):
     Index ax 0/Lines/Level/IDY is converted price. Index ax 1/Cols/IDX is converted timestamp.\
     """
 
-    def __init__(self, manager: ManagerAgent) -> None:
-        __cfg, self.manager = Config.ShmSharing, manager
+    def __init__(self, manager: AgentManager) -> None:
+        self.manager = manager
         self.set_status = manager.set_status
-
         # Footprint
-        self.crdInt = __cfg.Footprint.CoordsInt
-        self.lines, self.cols = __cfg.Footprint.lines, __cfg.Footprint.cols
+        self.cfgFootprint = self.manager.cfgFootprint
+        self.lines, self.cols = self.cfgFootprint.lines, self.cfgFootprint.cols
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
-            __cfg.Footprint.flag : __cfg.Footprint.flag + 1
+            self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
         self.active_buffer: memoryview[int] = self.manager.footprint_buf[
-            __cfg.Footprint.flag_spare : __cfg.Footprint.flag_spare + 1
+            self.cfgFootprint.flag_spare : self.cfgFootprint.flag_spare + 1
         ]
-        self.nBasePrice_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
-            __cfg.Footprint.nBasePrice[0] : __cfg.Footprint.nBaseTimestamp[1]
+        self.base_price_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
+            self.cfgFootprint.basePrice[0] : self.cfgFootprint.baseTimestamp[1]
         ].cast("q")
-
         # Metrics
+        self.cfgMetrics = self.manager.cfgMetrics
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
-            __cfg.Metrics.tick_size[0] : __cfg.Metrics.qtyPrecision[1]
+            self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
         ].cast("q")
         """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
         self._init_array()
 
     def _init_array(self) -> None:
-        __cfg: type[Config.ShmSharing] = Config.ShmSharing
-        # - - -
         self.footprint_shm: NDArray[np.int64] = np.ndarray(
             shape=(self.lines, self.cols),
             dtype=np.int64,
-            buffer=self.manager.footprint_buf[slice(*__cfg.Footprint.footprint)],
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         self.footprint: NDArray[np.int64] = np.ndarray(
             shape=(self.lines, self.cols),
@@ -52,37 +50,43 @@ class FootprintReader(ABC):
         )
         self.footprint[:] = 0.0
 
-        self.coord1: memoryview[int] = self.manager.footprint_buf[
-            slice(*__cfg.Footprint.coord1)
+        self.headers_buf: memoryview[int] = self.manager.footprint_buf[
+            slice(*self.cfgFootprint.headers)
         ].cast("q")
-        self.coord2: memoryview[int] = self.manager.footprint_buf[
-            slice(*__cfg.Footprint.coord2)
+
+        self.space_1: memoryview[int] = self.manager.footprint_buf[
+            slice(*self.cfgFootprint.space_1)
+        ].cast("q")
+        self.space_2: memoryview[int] = self.manager.footprint_buf[
+            slice(*self.cfgFootprint.space_2)
         ].cast("q")
 
     def init_session(self) -> None:
-        nBasePrice, baseTimestamp = self.nBasePrice_and_timestamp_buf[:]
-        self.convert: ConvertMetrics = ConvertMetrics(trade_param=self.trade_par)
+        nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
+        self.convert: ConvertMetrics = ConvertMetrics(
+            trade_param=self.trade_par, cfgFootprint=self.cfgFootprint
+        )
         self.convert.init_session(price=nBasePrice, timestamp=baseTimestamp)
 
     def _get_cords(self) -> tuple[int, int]:
-        crdInt = self.crdInt
         old_flag: int = 1 if self.flag_buf[0] == 0 else 0
-        coord = self.coord1 if old_flag == 0 else self.coord2
+        space = self.space_1 if old_flag == 0 else self.space_2
         np.copyto(
             dst=self.footprint[
-                coord[crdInt.idy_min] : coord[crdInt.idy_max],
-                coord[crdInt.idx_min] : coord[crdInt.idx_max],
+                space[spc.IDYmin] : space[spc.IDYmax],
+                space[spc.IDXmin] : space[spc.IDXmax],
             ],
             src=self.footprint_shm[
-                coord[crdInt.idy_min] : coord[crdInt.idy_max],
-                coord[crdInt.idx_min] : coord[crdInt.idx_max],
+                space[spc.IDYmin] : space[spc.IDYmax],
+                space[spc.IDXmin] : space[spc.IDXmax],
             ],
         )
-        idy, idx = coord[crdInt.idy :]
+        idy, idx = space[spc.IDY], space[spc.IDX]
+
         # reset
-        coord[crdInt.idy_min], coord[crdInt.idx_min] = self.lines, self.cols
-        coord[crdInt.idy_max], coord[crdInt.idx_max] = 0, 0
-        coord[crdInt.idy], coord[crdInt.idx] = 0, 0
+        space[spc.IDYmin], space[spc.IDXmin] = self.lines, self.cols
+        space[spc.IDYmax], space[spc.IDXmax] = 0, 0
+        space[spc.IDY], space[spc.IDX] = 0, 0
         self.active_buffer[0] = 0
         return idy, idx
 

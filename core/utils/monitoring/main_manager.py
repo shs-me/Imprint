@@ -1,30 +1,67 @@
 from multiprocessing.synchronize import Event, Semaphore
+from typing import Any
 
 from loguru import logger
 
-from ... import Config, ShmBufOffset
-from ... import StatusCodes as sc
+from ... import configurations as cfg
+from . import StatusCodes as sc
 from . import actions as act
 
 
-class WatchDog:
+class MainManager:
     def __init__(
         self,
-        procs: dict[int, dict],
+        segments: dict[str, Any],
+        configs: dict[str, Any],
         shm_buf: memoryview,
+    ) -> None:
+        self.shm_buf = shm_buf
+        self.segments_init(segments)
+        self.configs_init(configs)
+        self.local_segments_init()
+
+    def segments_init(self, segments: dict[str, Any]) -> None:
+        _slice: slice
+        segments_subclasses: list[str] = segments["subclasses"]
+        for name, _slice in segments.items():
+            if isinstance(_slice, list):
+                continue
+
+            if name not in segments_subclasses:
+                raise ValueError(
+                    f"{name} not subclass {cfg.ConfigurationSHMSegments.__name__}"
+                )
+
+            if name == cfg.ConfigurationMonitoring.__name__:
+                self.monitoring_buf = self.shm_buf[_slice]
+
+    def configs_init(self, configs: dict[str, Any]) -> None:
+        config_subclasses: list[str] = configs["subclasses"]
+        for name, obj in configs.items():
+            if isinstance(obj, list):
+                continue
+
+            if name not in config_subclasses:
+                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
+
+            if isinstance(obj, cfg.ConfigurationMonitoring):
+                self.cfgMonitoring = obj
+
+    def local_segments_init(self) -> None:
+        self.status_buf = self.monitoring_buf[slice(*self.cfgMonitoring.status)]
+        self.id_err = self.cfgMonitoring.id_error
+
+    def run(
+        self,
+        procs: dict[int, dict],
         general_event: Event,
         sc_sem: Semaphore,
-    ) -> None:
-        __cfg = Config.ShmSharing
-        self.procs, self.buf = procs, shm_buf
-        self.monitoring_buf = self.buf[slice(*ShmBufOffset.monitoring)]
-        self.status_buf = self.monitoring_buf[slice(*__cfg.Monitoring.status)]
-        self.error_id: int = __cfg.Monitoring.id_error
-        self.sleep_all, self.sc_sem = general_event, sc_sem
-
-    def run_watchdog_engine(self) -> bool:
+    ) -> bool:
+        self.procs = _procs = procs
+        self.sc_sem = _sc_sem = sc_sem
+        self.sleep_all = _sleep_all = general_event
         # LocalLinks
-        procs, sc_sem, status_buf = self.procs, self.sc_sem, self.status_buf
+        status_buf = self.status_buf
         error_check, warn_check = self._error_check, self._warn_check
         check_procs = self._check_procs
         #  - - -
@@ -45,8 +82,8 @@ class WatchDog:
                 return False
 
     def _error_check(self, status_buf: memoryview):
-        if status_buf[self.error_id] == sc.ERROR:
-            logger.error(f"WatchDog | {sc.ERROR.get_msg()}")
+        if status_buf[self.id_err] == sc.ERROR:
+            logger.error(f"MainManager | {sc.ERROR.get_msg()}")
             return False
 
     def _warn_check(self, status_buf: memoryview, procs: dict[int, dict]):
@@ -72,7 +109,7 @@ class WatchDog:
             act.set_status_for_procs(  # All WeckUp
                 status_buf=self.status_buf, procs=procs, stoping=False
             )
-            act.reset(self.buf)
+            act.reset(self.shm_buf)
             self.sleep_all.set()
 
         return True

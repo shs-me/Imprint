@@ -4,16 +4,15 @@ import inspect
 import os
 from multiprocessing.synchronize import Event
 
-from ... import Config, ManagerAgent
-from ... import StatusCodes as sc
-from .. import error_action, manager_office
+from .. import AgentManager, CorePath, error_handler, manager_office
+from .. import StatusCodes as sc
 from . import BaseFootprintReader, FootprintReader
 
 
 class LogicAgent:
     def __init__(
         self,
-        manager: ManagerAgent,
+        manager: AgentManager,
         reader: FootprintReader,
         pre_sleep_logic: Event,
         general_event: Event,
@@ -21,17 +20,16 @@ class LogicAgent:
         self.manager, self.reader = manager, reader
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
-        self.status_buf = self.manager.status_buf
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
 
     @staticmethod
-    def resolve_reader(manager: ManagerAgent):
-        path = Config.CorePath.algoritm_path
+    def resolve_reader(manager: AgentManager):
+        path = CorePath.algoritm_path
         if not os.path.exists(path):
             return BaseFootprintReader(manager=manager)
         else:
 
-            @error_action()
+            @error_handler()
             def get_plugin():
                 module_name = os.path.splitext(os.path.basename(path))[0]
                 spec = importlib.util.spec_from_file_location(module_name, path)
@@ -59,7 +57,7 @@ class LogicAgent:
         else:
             return False
 
-    @error_action(set_sc=True)
+    @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
         # LocalLinks
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
@@ -97,7 +95,7 @@ class LogicAgent:
                     return
 
 
-@manager_office(head_of_office=False)
+@manager_office()
 def run_logic(
     logic_event: Event,
     general_event: Event,

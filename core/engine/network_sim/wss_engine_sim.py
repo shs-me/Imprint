@@ -8,9 +8,8 @@ from threading import Thread
 import msgspec
 from msgspec.json import Encoder
 
-from ... import Config, ManagerAgent
+from ... import AgentManager, CorePath, error_handler
 from ... import StatusCodes as sc
-from .. import error_action
 
 
 class AggTradeSim(msgspec.Struct):
@@ -27,9 +26,9 @@ class AggTradeSim(msgspec.Struct):
 
 
 class DataPrepper:
-    def __init__(self) -> None:
-        self.file_path: str = Config.CorePath.data_csv
-        self.symbol: str = Config.UserConfig.symbol.upper()
+    def __init__(self, symbol: str) -> None:
+        self.file_path: str = CorePath.data_csv
+        self.symbol: str = symbol.upper()
         self.queue: deque = deque(maxlen=10000)
         self.is_running = True
         self.error: None | str = None
@@ -69,23 +68,31 @@ class DataPrepper:
 
 class WSsSimEngine:
     def __init__(
-        self, manager: ManagerAgent, wake_up_parser: Event, general_event: Event
+        self, manager: AgentManager, wake_up_parser: Event, general_event: Event
     ) -> None:
-        __cfg, self.manager = Config.ShmSharing, manager
+        self.manager = manager
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
+
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         self.encoder: Encoder = Encoder()
-        self.prepper: DataPrepper = DataPrepper()
+        self.prepper: DataPrepper = DataPrepper(self.manager.cfgBacktesting.symbol)
+
         self.ottrade, self.nttrade = 0, 0  # new|old time trade
         self.min_delta = 0
         # InitGetRawData
-        self.data_size, self.header_size = __cfg.Raw.data_size, __cfg.Raw.header_size
-        self.data_offset: int = __cfg.Raw.data_offset[0]
-        self.header_offset: int = __cfg.Raw.header_offset[0]
-        self.cell_amount = __cfg.Raw.cell_amount
-        self.ncell_wr: memoryview[int] = self.manager.raw_buf[
-            slice(*__cfg.Raw.ncell_offset)
+        self.cfgRaw = self.manager.cfgRaw
+        self.data_size = self.cfgRaw.data_size
+        self.header_size = self.cfgRaw.header_size
+        self.data_offset: int = self.cfgRaw.data[0]
+        self.dataHeader_offset: int = self.cfgRaw.dataHeader[0]
+        self.cell_amount = self.cfgRaw.cell_amount
+        self.safe_lag = self.cfgRaw.safe_lag
+        self.WriterCellCounter: memoryview[int] = self.manager.raw_buf[
+            slice(*self.cfgRaw.WriterCellCounter)
+        ].cast("q")
+        self.ReaderCellCounter: memoryview[int] = self.manager.raw_buf[
+            slice(*self.cfgRaw.ReaderCellCounter)
         ].cast("q")
 
     def _time_to_sleep(self) -> float:
@@ -124,36 +131,38 @@ class WSsSimEngine:
         self,
         raw_data: bytes,
         raw_buf: memoryview,
-        ncell_wr: memoryview,
+        WCellC: memoryview,
         cell_amount: int,
-        header_offset: int,
         data_size: int,
         data_offset: int,
+        dataHeader_offset: int,
     ) -> bool:
         if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-            ncell_w: int = ncell_wr[0]  # get cell
-            raw_buf[ncell_w + header_offset] = lrd  # set lrd on cell[header]
-            start: int = ncell_w * data_size + data_offset
+            cell: int = WCellC[0]  # get cell
+            raw_buf[cell + dataHeader_offset] = lrd  # set lrd on cell[header]
+            start: int = cell * data_size + data_offset
             raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
-            ncell_w_new = ncell_w + 1  # cell for next update
-            ncell_wr[0] = ncell_w_new if ncell_w_new < cell_amount else 0
+            new_cell = cell + 1  # cell for next update
+            WCellC[0] = new_cell if new_cell < cell_amount else 0
             return True
 
         else:
             self.set_status(code=sc.WARN0)
             return False
 
-    @error_action(set_sc=True)
+    @error_handler(set_status_code=True)
     def run_wss_sim_engine(self) -> None:
         # Local Links
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         wake_up_parser, encoder = self.wake_up_parser, self.encoder
         set_status, have_problem = self.set_status, self.have_problem
         have_task = self.have_task
+        raw_buf = self.manager.raw_buf
         tts_buf = self.manager.time_to_sleep_buf
-        raw_buf, ncells = self.manager.raw_buf, self.ncell_wr
-        data_size, data_offset = self.data_size, self.data_offset
-        header_offset, acell = self.header_offset, self.cell_amount
+        WCellC = self.WriterCellCounter
+        data_size = self.data_size
+        data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
+        cell_amount = self.cell_amount
         set_raw_data, encode_data = self._set_raw_data, self._encode_data
         time_to_sleep, have_task = self._time_to_sleep, self.have_task
         prepper, alarm_clock = self.prepper, self._alarm_clock
@@ -183,11 +192,11 @@ class WSsSimEngine:
                             if set_raw_data(
                                 raw_data=raw_data,
                                 raw_buf=raw_buf,
-                                ncell_wr=ncells,
-                                cell_amount=acell,
-                                header_offset=header_offset,
+                                WCellC=WCellC,
+                                cell_amount=cell_amount,
                                 data_size=data_size,
                                 data_offset=data_offset,
+                                dataHeader_offset=dataHeader_offset,
                             ):
                                 if wake_up_parser.is_set() is False:
                                     wake_up_parser.set()

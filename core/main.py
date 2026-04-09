@@ -5,25 +5,22 @@ from types import FunctionType
 
 from loguru import logger
 
-from . import Config, CoreResources, WatchDog, error_action, manager_office
+from . import CorePath, CoreResources, MainManager, manager_office
 from .engine import run_logic, run_network, run_network_sim, run_parsing
 
 
 class RunMain(CoreResources):
-    def __init__(self, backtesting: bool, shm_buf: memoryview) -> None:
-        self.backtesting, self.cfg = backtesting, Config.ShmSharing
-        self.shm_buf = shm_buf
-
+    def __init__(self, backtesting: bool, **kwargs) -> None:
+        self.manager: MainManager = kwargs.pop("manager")
+        self.baseKwargs = kwargs
+        self.backtesting = backtesting
         self.procs = {}
-        self.sc_general = {}
-        # Path's
-        self.profiling_bin = Config.CorePath.profiling_bin
         # CoreResources
         self.parsing_event, self.logic_event = Event(), Event()
         self.sc_sem, self.general_event = Semaphore(0), Event()
 
     def _init_session(self) -> None:
-        for _dir in Config.CorePath.dirs:
+        for _dir in CorePath.dirs:
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
 
@@ -49,6 +46,7 @@ class RunMain(CoreResources):
                 logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
                 return None
 
+        kwargs = kwargs | self.baseKwargs
         self.procs[proc_id] = {"proc_name": proc_name, "task_id": proc_id + 10}
         return kwargs
 
@@ -71,7 +69,6 @@ class RunMain(CoreResources):
             logger.warning("-- Core -- | RunProc | kwargs is not dict")
             return False
 
-    @error_action()
     def run_core_engine(self) -> None:
         logger.info("-- Core -- | Started, init...")
         self._init_session()
@@ -79,29 +76,30 @@ class RunMain(CoreResources):
             if self._run_proc(func=func) is False:
                 return
 
-        watchdog = WatchDog(
-            procs=self.procs,
-            shm_buf=self.shm_buf,
-            general_event=self.general_event,
-            sc_sem=self.sc_sem,
-        )
         self.general_event.set()
         logger.info("-- Core -- | Init completed.")
         while True:
-            if watchdog.run_watchdog_engine() is False:
+            if (
+                self.manager.run(
+                    procs=self.procs,
+                    general_event=self.general_event,
+                    sc_sem=self.sc_sem,
+                )
+                is False
+            ):
                 return
 
 
-@manager_office(head_of_office=True)
+@manager_office(main=True)
 def run_core(backtesting: bool, **kwargs) -> None:
     logger.remove()
     logger.add(
-        Config.CorePath.core_log,
+        CorePath.core_log,
         rotation="100 MB",
         enqueue=True,
         format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
-    state = RunMain(backtesting=backtesting, shm_buf=kwargs["manager"])
+    state = RunMain(backtesting=backtesting, **kwargs)
     state.run_core_engine()
     logger.info("-- Core -- | Close the Core.")

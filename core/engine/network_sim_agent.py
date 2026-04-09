@@ -1,23 +1,21 @@
 from multiprocessing.synchronize import Event
 
-from ... import Config, ManagerAgent
-from .. import manager_office
+from .. import AgentManager, manager_office
 from . import WSsSimEngine
 
 
 class NetworkSimAgent:
-    def __init__(self, wss: WSsSimEngine, manager: ManagerAgent) -> None:
-        __cfg, self.manager, self.wss = Config.ShmSharing, manager, wss
+    def __init__(self, wss: WSsSimEngine, manager: AgentManager) -> None:
+        self.manager, self.wss = manager, wss
         self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = (
-            self.manager.set_status,
-            self.manager.have_problem,
-        )
-        self.tick_size = Config.UserConfig.tick_size
-        self.lot_size = Config.UserConfig.lot_size
-        self.pricePrec, self.qtyPrec = 0, 0
+        self.set_status, self.have_problem = manager.set_status, manager.have_problem
+
+        self.cfgBT = self.manager.cfgBacktesting
+        self.cfgMetrics = self.manager.cfgMetrics
+        self.tick_size = self.cfgBT.tick_size
+        self.lot_size = self.cfgBT.lot_size
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
-            __cfg.Metrics.tick_size[0] : __cfg.Metrics.qtyPrecision[1]
+            self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
         ].cast("q")
         """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
 
@@ -38,7 +36,7 @@ class NetworkSimAgent:
         self.wss.run_wss_sim_engine()
 
 
-@manager_office(head_of_office=False)
+@manager_office()
 def run_network_sim(
     parsing_event: Event,
     general_event: Event,

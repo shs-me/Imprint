@@ -1,24 +1,20 @@
 from datetime import datetime, timezone
 
-from ... import Config
+from ...configurations import ConfigurationFootprint
+from ...settings import ClusterHeaders
 
 
 class ConvertMetrics:
     def __init__(
-        self,
-        trade_param: memoryview,
+        self, trade_param: memoryview, cfgFootprint: ConfigurationFootprint
     ) -> None:
-        __cfg = Config.ShmSharing
         self.trade_par = trade_param
-        self.ims = Config.UserConfig.interval_min * 60 * 1000
-        self.lines, self.cols = __cfg.Footprint.lines, __cfg.Footprint.cols
+        self.lines, self.cols = cfgFootprint.lines, cfgFootprint.cols
+        self.ims = cfgFootprint.intervalMs
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
         self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
+        self.headers, self.headers_count = ClusterHeaders, ClusterHeaders._HeadersCount
         self.cluster_id = 0
-        self.headers, self.headers_count = (
-            __cfg.Footprint.HeadersInt,
-            __cfg.Footprint.headers_count,
-        )
 
     def init_session(self, price: float | int, timestamp: int):
         self.nBasePrice = self.to_nPrice(price) if isinstance(price, float) else price

@@ -3,7 +3,7 @@ from multiprocessing.synchronize import Event
 
 from loguru import logger
 
-from ... import StatusCodes as sc
+from . import StatusCodes as sc
 
 
 def set_status_for_procs(
@@ -32,7 +32,9 @@ def reset(buf: memoryview) -> None:
 def check_proc(id_proc: int, procs: dict[int, dict]) -> bool:
     data = procs[id_proc]
     if data["proc"].is_alive() is False:
-        logger.warning(f"WatchDog | CheckProc | Process {data['proc_name']} is dead.")
+        logger.warning(
+            f"MainManager | CheckProc | Process {data['proc_name']} is dead."
+        )
         return False
 
     else:

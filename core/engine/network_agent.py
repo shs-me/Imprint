@@ -4,13 +4,12 @@ from multiprocessing.synchronize import Event
 
 import winloop
 
-from ... import ManagerAgent
-from .. import manager_office
+from .. import AgentManager, manager_office
 from . import RestEngine, WSsEngine
 
 
 class NetworkAgent:
-    def __init__(self, wss: WSsEngine, rest: RestEngine, manager: ManagerAgent) -> None:
+    def __init__(self, wss: WSsEngine, rest: RestEngine, manager: AgentManager) -> None:
         self.wss, self.rest = wss, rest
         self.executor = ThreadPoolExecutor()
 
@@ -22,7 +21,7 @@ class NetworkAgent:
         await self.wss.run_wss_engine()
 
 
-@manager_office(head_of_office=False)
+@manager_office()
 def run_network(
     parsing_event: Event,
     general_event: Event,
