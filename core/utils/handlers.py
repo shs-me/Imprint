@@ -44,9 +44,18 @@ def dump_exception() -> None:
             tb = tb.tb_next
 
         for var, val in tb.tb_frame.f_locals.items():
-            data["locals"][var] = (
-                repr(val.__dict__) if hasattr(val, "__dict__") else repr(val)
-            )
+            if hasattr(val, "__dict__"):
+                for name, _data in val.__dict__.items():
+                    if isinstance(_data, memoryview):
+                        data["name"] = {
+                            "format": _data.format,
+                            "shape": _data.shape,
+                            "nbytes": _data.nbytes,
+                        }
+                    else:
+                        data["name"] = _data
+            else:
+                data["locals"][var] = repr(val)
 
     with open(file=CorePath.exc_dump, mode="a", encoding="utf-8") as f:
         json.dump(obj=data, fp=f, ensure_ascii=False, indent=4)

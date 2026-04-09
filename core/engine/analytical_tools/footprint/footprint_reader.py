@@ -10,7 +10,7 @@ from .. import ConvertMetrics
 
 class FootprintReader(ABC):
     """
-    Footprint is 2DArray[float64]. Each even col is BID, odd ASK.\
+    Footprint is 2DArray[int64]. Each even col is BID, odd ASK.\
     Each such pair is a time interval cluster, more than one cluster is Footprint.\
     Index ax 0/Lines/Level/IDY is converted price. Index ax 1/Cols/IDX is converted timestamp.\
     """

@@ -78,7 +78,7 @@ class LogicAgent:
                         break
 
                     if alarm_clock(tts_buf, active_buffer):
-                        if pre_sleep_logic.is_set():
+                        if pre_sleep_logic.is_set() is False:
                             pre_sleep_logic.wait()
                         continue
 
