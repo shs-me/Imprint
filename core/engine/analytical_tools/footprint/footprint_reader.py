@@ -20,7 +20,12 @@ class FootprintReader(ABC):
         self.set_status = manager.set_status
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
-        self.lines, self.cols = self.cfgFootprint.lines, self.cfgFootprint.cols
+        self.idxVP = self.cfgFootprint.colVP
+        self.idxBidVP = self.cfgFootprint.colBidVP
+        self.idxAskVP = self.cfgFootprint.colAskVP
+        self.lines = self.cfgFootprint.lines
+        self.footprintCols = self.cfgFootprint.footprintCols
+        self.panelCols = self.cfgFootprint.panelCols
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
@@ -40,12 +45,12 @@ class FootprintReader(ABC):
 
     def _init_array(self) -> None:
         self.footprint_shm: NDArray[np.int64] = np.ndarray(
-            shape=(self.lines, self.cols),
+            shape=(self.lines, self.panelCols),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         self.footprint: NDArray[np.int64] = np.ndarray(
-            shape=(self.lines, self.cols),
+            shape=(self.lines, self.panelCols),
             dtype=np.int64,
         )
         self.footprint[:] = 0.0
@@ -71,7 +76,7 @@ class FootprintReader(ABC):
     def _get_cords(self) -> tuple[int, int]:
         old_flag: int = 1 if self.flag_buf[0] == 0 else 0
         space = self.space_1 if old_flag == 0 else self.space_2
-        np.copyto(
+        np.copyto(  # update footprint
             dst=self.footprint[
                 space[spc.IDYmin] : space[spc.IDYmax],
                 space[spc.IDXmin] : space[spc.IDXmax],
@@ -81,10 +86,13 @@ class FootprintReader(ABC):
                 space[spc.IDXmin] : space[spc.IDXmax],
             ],
         )
+        np.copyto(  # update indicators
+            dst=self.footprint[space[spc.IDYmin] : space[spc.IDYmax], self.idxVP :],
+            src=self.footprint_shm[space[spc.IDYmin] : space[spc.IDYmax], self.idxVP :],
+        )
         idy, idx = space[spc.IDY], space[spc.IDX]
-
         # reset
-        space[spc.IDYmin], space[spc.IDXmin] = self.lines, self.cols
+        space[spc.IDYmin], space[spc.IDXmin] = self.lines, self.footprintCols
         space[spc.IDYmax], space[spc.IDXmax] = 0, 0
         space[spc.IDY], space[spc.IDX] = 0, 0
         self.active_buffer[0] = 0
@@ -101,9 +109,12 @@ class FootprintReader(ABC):
 
 class BaseFootprintReader(FootprintReader):
     def check_patterns(self, idy: int, idx: int, footprint: NDArray[np.int64]) -> None:
+        idxVP, idxBidVP, idxAskVP = self.idxVP, self.idxBidVP, self.idxAskVP  # noqa
         convert = self.convert
         get_nPice = convert.get_nPrice
         to_price, to_qty = convert.to_price, convert.to_qty
         # - - -
         price, qty = to_price(get_nPice(idy)), to_qty(footprint[idy, idx])
-        print(price, qty)
+        vp = to_qty(footprint[idy, idxVP:])
+        temp = {"price": price, "qty": qty, "vp_s": vp}
+        print(temp, flush=True)

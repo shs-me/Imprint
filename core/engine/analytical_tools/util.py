@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 
+import numpy as np
+from numpy.typing import NDArray
+
 from ...configurations import ConfigurationFootprint
 from ...settings import ClusterHeaders
 
@@ -9,7 +12,9 @@ class ConvertMetrics:
         self, trade_param: memoryview, cfgFootprint: ConfigurationFootprint
     ) -> None:
         self.trade_par = trade_param
-        self.lines, self.cols = cfgFootprint.lines, cfgFootprint.cols
+        self.lines = cfgFootprint.lines
+        self.footprintCols = cfgFootprint.footprintCols
+        self.panelCols = cfgFootprint.panelCols
         self.ims = cfgFootprint.intervalMs
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
         self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
@@ -39,7 +44,7 @@ class ConvertMetrics:
     def to_price(self, nPrice: int) -> float:
         return nPrice / self.priceMult
 
-    def to_qty(self, nQty: int) -> float:
+    def to_qty(self, nQty: int | NDArray[np.int64]) -> float | NDArray[np.float64]:
         return nQty / self.qtyMult
 
     def to_strftime(self, timestamp: int):
@@ -60,7 +65,7 @@ class ConvertMetrics:
         idx: int = round(number=(timestamp - self.baseTimestamp) / self.ims * 2) + (
             0 if is_sell else 1
         )
-        if 0 <= idx < self.cols:
+        if 0 <= idx < self.footprintCols:
             return idx
         else:
             return None

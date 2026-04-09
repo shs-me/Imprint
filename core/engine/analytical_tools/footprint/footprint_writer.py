@@ -16,7 +16,12 @@ class FootprintWriter:
         self.set_status = manager.set_status
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
-        self.lines, self.cols = self.cfgFootprint.lines, self.cfgFootprint.cols
+        self.idxVP = self.cfgFootprint.colVP
+        self.idxBidVP = self.cfgFootprint.colBidVP
+        self.idxAskVP = self.cfgFootprint.colAskVP
+        self.lines = self.cfgFootprint.lines
+        self.footprintCols = self.cfgFootprint.footprintCols
+        self.panelCols = self.cfgFootprint.panelCols
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
@@ -36,7 +41,7 @@ class FootprintWriter:
 
     def _init_array(self) -> None:
         self.footprint_shm: NDArray[np.int64] = np.ndarray(
-            shape=(self.lines, self.cols),
+            shape=(self.lines, self.panelCols),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
@@ -62,7 +67,7 @@ class FootprintWriter:
             price, timestamp = bpat[:]
         else:
             self.space_1[spc.IDYmin] = self.space_2[spc.IDYmin] = self.lines
-            self.space_1[spc.IDXmin] = self.space_2[spc.IDXmin] = self.cols
+            self.space_1[spc.IDXmin] = self.space_2[spc.IDXmin] = self.footprintCols
             self.space_1[spc.IDYmax] = self.space_2[spc.IDYmax] = 0
             self.space_1[spc.IDXmax] = self.space_2[spc.IDXmax] = 0
             self.space_1[spc.IDY] = self.space_2[spc.IDY] = 0
@@ -96,7 +101,15 @@ class FootprintWriter:
         hr_buf[cid + chs.Delta] += -nQty if is_sell else nQty
         hr_buf[cid + chs.CountTrade] += 1
 
-    def _set_cords(self, idy: int, idx: int) -> None:
+    def _update_indicators(self, idy: int, idx: int, nQty: int) -> None:
+        if (idx % 2) == 0:
+            self.footprint_shm[idy, self.idxBidVP] += nQty
+        else:
+            self.footprint_shm[idy, self.idxAskVP] += nQty
+
+        self.footprint_shm[idy, self.idxVP] += nQty
+
+    def _set_coords(self, idy: int, idx: int) -> None:
         IDYmin, IDXmin = spc.IDYmin, spc.IDXmin
         IDYmax, IDXmax = spc.IDYmax, spc.IDXmax
         # - - -
@@ -121,6 +134,7 @@ class FootprintWriter:
         if idx is not None:
             if idy is not None:
                 self.footprint_shm[idy, idx] += nQty
+                self._update_indicators(idy=idy, idx=idx, nQty=nQty)
                 self._update_headers(
                     idx=idx,
                     nPrice=nPrice,
@@ -128,7 +142,7 @@ class FootprintWriter:
                     timestamp=timestamp,
                     is_sell=is_sell,
                 )
-                self._set_cords(idy, idx)
+                self._set_coords(idy, idx)
                 return True
 
             else:

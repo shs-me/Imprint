@@ -2,12 +2,22 @@ from abc import ABC
 
 from .settings import ChartInterval, ClusterHeaders, SpaceCoords
 
+UBYTE = 1
 INT64 = 8
 FLOAT64 = 8
 OFFSET = 0
 
 
 class Configuration(ABC):
+    pass
+
+
+# Configuration Subclasses
+class ConfigurationStrategies(Configuration):
+    pass
+
+
+class ConfigurationSHMSegments(Configuration):
     pass
 
 
@@ -25,10 +35,7 @@ class ConfigurationBacktesting(Configuration):
         self.backtesting: bool = backtesting
 
 
-class ConfigurationSHMSegments(Configuration):
-    pass
-
-
+# ShmSegmentsSubclasses
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
@@ -38,15 +45,20 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.intervalMs = chart_interval
         self.cluster_count = self.get_cluster_count(day=chart_range)
         self.lines = 10000
-        self.cols = self.cluster_count * 2
+        self.footprintCols = self.cluster_count * 2
+        self.panelCols = self.footprintCols + self.get_panel_count_cols()
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+
+    def get_panel_count_cols(self) -> int:
+        self.colVP, self.colBidVP, self.colAskVP = -3, -2, -1
+        return 3
 
     def get_cluster_count(self, day: int) -> int:
         dayMs, ivlMs = (day if day >= 1 else 1) * 24 * 60 * 60 * 1000, self.intervalMs
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
     def get_need_shm_size(self) -> int:
-        self.footprint: tuple[int, int] = OFFSET, (self.lines * self.cols * INT64)
+        self.footprint: tuple[int, int] = OFFSET, (self.lines * self.panelCols * INT64)
         self.headers = (
             self.footprint[1],
             self.footprint[1]
@@ -66,6 +78,27 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.flag = self.baseTimestamp[1]
         self.flag_spare = self.flag
         return self.flag_spare
+
+
+class ConfigurationExecution(ConfigurationSHMSegments):
+    def __init__(self, count_symbols: int = 1) -> None:
+        self.countSymbols = count_symbols
+        self.countSignals = 100
+        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+
+    def get_need_shm_size(self) -> int:
+        # every signals buf size
+        self.signalsSize = (UBYTE + UBYTE + INT64) * self.countSignals
+        # Signals data
+        self.sellSide = OFFSET
+        self.buySide = self.sellSide + UBYTE
+        self.nPrice = self.buySide, self.buySide + INT64
+        # sum signals buf each symbols
+        self.signals = (
+            OFFSET,
+            OFFSET + (self.signalsSize * self.countSymbols),
+        )
+        return self.signals[1]
 
 
 class ConfigurationRingRawBuf(ConfigurationSHMSegments):
