@@ -16,7 +16,7 @@ class CorePath:
     core_log = "logs/_core_.log"
     profiling_log = "logs/profiling.log"
     data_csv = "data/aggtrades.csv"
-    algoritm_path = "plugins/algorithm.py"
+    plugins_dir = "plugins"
     exc_dump = "dump/exc_dump.json"
     profiling_bin = "dump/profiling.bin"
     profiling_csv = "dump/profiling.csv"

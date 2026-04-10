@@ -1,21 +1,22 @@
-import numpy as np
-from numpy.typing import NDArray
-
 from core import AgentManager, FootprintReader
-from core.configurations import ConfigurationStrategies
+from core.settings import ClusterHeaders as chs
 
 
 class IntraDay(FootprintReader):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager)
+        self.temp_poc = 0
 
-    def check_patterns(self, idy: int, idx: int, footprint: NDArray[np.int64]) -> None:
-        idxVP, idxBidVP, idxAskVP = self.idxVP, self.idxBidVP, self.idxAskVP  # noqa
-        convert = self.convert
-        get_nPice = convert.get_nPrice
-        to_price, to_qty = convert.to_price, convert.to_qty
+    def check_patterns(self, idy: int, idx: int) -> None:
+        cv, footprint = self.convert, self.footprint
+        ic = self.indicators
         # - - -
-        price, qty = to_price(get_nPice(idy)), to_qty(footprint[idy, idx])
-        vp = to_qty(footprint[idy, idxVP:])
-        temp = {"price": price, "qty": qty, "vp_s": vp}
-        print(temp, flush=True)
+        price = cv.to_price(cv.get_nPrice(idy))
+        qtyInLevel = cv.to_qty(footprint[idy, idx])
+        cid = self.convert.get_cluster_id(idx)
+        hr = self.headers[cid : cid + chs._HeadersCount].tolist()
+        VPpocId, VPpocValue = ic.poc(), ic.poc(index=False)
+        vwap, cvd = ic.vwap(), ic.cvd()
+        if VPpocValue > self.temp_poc:
+            self.temp_poc = VPpocValue
+            print(cv.to_qty(self.temp_poc), vwap, cvd)

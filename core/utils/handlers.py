@@ -47,13 +47,13 @@ def dump_exception() -> None:
             if hasattr(val, "__dict__"):
                 for name, _data in val.__dict__.items():
                     if isinstance(_data, memoryview):
-                        data["name"] = {
+                        data["locals"][name] = {
                             "format": _data.format,
                             "shape": _data.shape,
                             "nbytes": _data.nbytes,
                         }
                     else:
-                        data["name"] = _data
+                        data["locals"][name] = _data
             else:
                 data["locals"][var] = repr(val)
 

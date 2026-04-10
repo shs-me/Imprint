@@ -10,7 +10,8 @@ class SegmentsType(TypedDict):
 @verify(CONTINUOUS, UNIQUE)
 class ClusterHeaders(IntEnum):
     Open, High, Low, Close, Volume = 0, 1, 2, 3, 4
-    Time, Delta, CountTrade, _HeadersCount = 5, 6, 7, 8
+    CountTrade, Delta, CVD, VWAP, VWAP_Weights, VWAP_PWeights = 5, 6, 7, 8, 9, 10
+    Time, _HeadersCount = 11, 12
 
 
 @verify(CONTINUOUS, UNIQUE)

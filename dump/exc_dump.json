@@ -1,0 +1,52 @@
+{
+    "timestamp": "2026-04-10 20:41:00",
+    "type": "ZeroDivisionError",
+    "message": "Weights sum to zero, can't be normalized",
+    "traceback": [
+        "Traceback (most recent call last):\n",
+        "  File \"D:\\projects\\GridCore\\core\\utils\\handlers.py\", line 16, in wrapper\n    result = func(*args, **kwargs)\n",
+        "  File \"D:\\projects\\GridCore\\core\\engine\\logic_agent.py\", line 64, in run_logic_engine\n    reader._check_update()\n    ~~~~~~~~~~~~~~~~~~~~^^\n",
+        "  File \"D:\\projects\\GridCore\\core\\engine\\analytical_tools\\footprint\\footprint_reader.py\", line 112, in _check_update\n    self.check_patterns(idy=idy, idx=idx)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n",
+        "  File \"D:\\projects\\GridCore\\plugins/algorithm.py\", line 19, in check_patterns\n    vwap = ic.vwap()\n",
+        "  File \"D:\\projects\\GridCore\\core\\engine\\analytical_tools\\util.py\", line 139, in vwap\n    return np.average(\n           ~~~~~~~~~~^\n        self.headers[chs.Close, :last_cluster],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        weights=self.headers[chs.Volume, :last_cluster],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n",
+        "  File \"D:\\projects\\tradingbot\\.venv\\Lib\\site-packages\\numpy\\lib\\_function_base_impl.py\", line 589, in average\n    raise ZeroDivisionError(\n        \"Weights sum to zero, can't be normalized\")\n",
+        "ZeroDivisionError: Weights sum to zero, can't be normalized\n"
+    ],
+    "locals": {
+        "a": "array([], dtype=int64)",
+        "axis": "None",
+        "weights": "array([], dtype=int64)",
+        "returned": "False",
+        "keepdims_kw": "{}",
+        "scl": "np.float64(0.0)",
+        "wgt": "array([], dtype=int64)",
+        "result_dtype": "dtype('float64')"
+    }
+}
+---
+{
+    "timestamp": "2026-04-10 20:44:14",
+    "type": "ZeroDivisionError",
+    "message": "Weights sum to zero, can't be normalized",
+    "traceback": [
+        "Traceback (most recent call last):\n",
+        "  File \"D:\\projects\\GridCore\\core\\utils\\handlers.py\", line 16, in wrapper\n    result = func(*args, **kwargs)\n",
+        "  File \"D:\\projects\\GridCore\\core\\engine\\logic_agent.py\", line 64, in run_logic_engine\n    reader._check_update()\n    ~~~~~~~~~~~~~~~~~~~~^^\n",
+        "  File \"D:\\projects\\GridCore\\core\\engine\\analytical_tools\\footprint\\footprint_reader.py\", line 112, in _check_update\n    self.check_patterns(idy=idy, idx=idx)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n",
+        "  File \"D:\\projects\\GridCore\\plugins/algorithm.py\", line 19, in check_patterns\n    vwap = ic.vwap()\n",
+        "  File \"D:\\projects\\GridCore\\core\\engine\\analytical_tools\\util.py\", line 138, in vwap\n    return np.average(\n           ~~~~~~~~~~^\n        self.headers[chs.Close, :last_cluster],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        weights=self.headers[chs.Volume, :last_cluster],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n",
+        "  File \"D:\\projects\\tradingbot\\.venv\\Lib\\site-packages\\numpy\\lib\\_function_base_impl.py\", line 589, in average\n    raise ZeroDivisionError(\n        \"Weights sum to zero, can't be normalized\")\n",
+        "ZeroDivisionError: Weights sum to zero, can't be normalized\n"
+    ],
+    "locals": {
+        "a": "array([0])",
+        "axis": "None",
+        "weights": "array([0])",
+        "returned": "False",
+        "keepdims_kw": "{}",
+        "scl": "np.float64(0.0)",
+        "wgt": "array([0])",
+        "result_dtype": "dtype('float64')"
+    }
+}
+---

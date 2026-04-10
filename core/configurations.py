@@ -39,7 +39,7 @@ class ConfigurationBacktesting(Configuration):
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
-        chart_interval: ChartInterval = ChartInterval._H,
+        chart_interval: ChartInterval = ChartInterval._30S,
         chart_range: int = 1,
     ) -> None:
         self.intervalMs = chart_interval
@@ -59,14 +59,19 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
 
     def get_need_shm_size(self) -> int:
         self.footprint: tuple[int, int] = OFFSET, (self.lines * self.panelCols * INT64)
-        self.headers = (
+        self.headers_1 = (
             self.footprint[1],
             self.footprint[1]
             + (ClusterHeaders._HeadersCount * self.cluster_count * INT64),
         )
+        self.headers_2 = (
+            self.headers_1[1],
+            self.headers_1[1]
+            + (ClusterHeaders._HeadersCount * self.cluster_count * INT64),
+        )
         self.space_1 = (
-            self.headers[1],
-            self.headers[1] + (SpaceCoords._CoordsCount * INT64),
+            self.headers_2[1],
+            self.headers_2[1] + (SpaceCoords._CoordsCount * INT64),
         )
         self.space_2 = (
             self.space_1[1],

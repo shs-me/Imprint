@@ -22,32 +22,6 @@ class LogicAgent:
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
 
-    @staticmethod
-    def resolve_reader(manager: AgentManager):
-        path = CorePath.algoritm_path
-        if not os.path.exists(path):
-            return BaseFootprintReader(manager=manager)
-        else:
-
-            @error_handler()
-            def get_plugin():
-                module_name = os.path.splitext(os.path.basename(path))[0]
-                spec = importlib.util.spec_from_file_location(module_name, path)
-                if spec is not None and spec.loader is not None:
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-
-                    for name, obj in inspect.getmembers(module, inspect.isclass):
-                        if issubclass(obj, FootprintReader):
-                            if obj is not FootprintReader:
-                                return obj(manager=manager)
-
-            result = get_plugin()
-            if result is not None:
-                return result
-
-        return BaseFootprintReader(manager=manager)
-
     def _alarm_clock(self, tts: memoryview, active_buffer: memoryview) -> bool:
         counter = 1
         while not active_buffer[0]:
@@ -95,13 +69,40 @@ class LogicAgent:
                     return
 
 
+def resolve_reader(manager: AgentManager):
+    paths = []
+    for p in os.listdir(CorePath.plugins_dir):
+        if p.endswith(".py"):
+            paths.append(f"{CorePath.plugins_dir}/{p}")
+
+    for path in paths:
+        result = get_plugin(path, manager)
+        if result:
+            return result
+
+    return BaseFootprintReader(manager=manager)
+
+
+@error_handler()
+def get_plugin(path: str, manager: AgentManager):
+    module_name = os.path.splitext(os.path.basename(path))[0]
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is not None and spec.loader is not None:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if issubclass(obj, FootprintReader):
+                if obj is not FootprintReader:
+                    return obj(manager=manager)
+
+
 @manager_office()
 def run_logic(
     logic_event: Event,
     general_event: Event,
     **kwargs,
 ) -> None:
-    reader = LogicAgent.resolve_reader(kwargs["manager"])
+    reader = resolve_reader(kwargs["manager"])
     agent = LogicAgent(
         kwargs["manager"],
         reader=reader,

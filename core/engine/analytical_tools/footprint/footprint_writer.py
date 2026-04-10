@@ -16,17 +16,11 @@ class FootprintWriter:
         self.set_status = manager.set_status
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
-        self.idxVP = self.cfgFootprint.colVP
-        self.idxBidVP = self.cfgFootprint.colBidVP
-        self.idxAskVP = self.cfgFootprint.colAskVP
         self.lines = self.cfgFootprint.lines
         self.footprintCols = self.cfgFootprint.footprintCols
         self.panelCols = self.cfgFootprint.panelCols
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
-        ]
-        self.active_buffer: memoryview[int] = self.manager.footprint_buf[
-            self.cfgFootprint.flag_spare : self.cfgFootprint.flag_spare + 1
         ]
         self.base_price_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.basePrice[0] : self.cfgFootprint.baseTimestamp[1]
@@ -47,7 +41,11 @@ class FootprintWriter:
         )
 
         self.headers_buf: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.headers)
+            slice(*self.cfgFootprint.headers_1)
+        ].cast("q")
+
+        self.headers_middleman_buf: memoryview[int] = self.manager.footprint_buf[
+            slice(*self.cfgFootprint.headers_2)
         ].cast("q")
 
         self.space_1: memoryview[int] = self.manager.footprint_buf[
@@ -61,7 +59,8 @@ class FootprintWriter:
         bpat = self.base_price_and_timestamp_buf
         # - - -
         self.convert: ConvertMetrics = ConvertMetrics(
-            trade_param=self.trade_par, cfgFootprint=self.cfgFootprint
+            trade_param=self.trade_par,
+            cfgFootprint=self.cfgFootprint,
         )
         if bpat[0] != 0:
             price, timestamp = bpat[:]
@@ -83,33 +82,49 @@ class FootprintWriter:
     def _update_headers(
         self, idx: int, nPrice: int, nQty: int, timestamp: int, is_sell: bool
     ) -> None:
-        hr_buf = self.headers_buf
+        hr = self.headers_buf
         # - - -
-        cid = self.convert.get_cluster_id(idx)
-        if hr_buf[cid + chs.CountTrade] == 0:
-            hr_buf[cid + chs.Open] = nPrice
-            hr_buf[cid + chs.Time] = timestamp
+        cid = self.convert.get_cluster_id(idx) * chs._HeadersCount
+        if hr[cid + chs.CountTrade] == 0:
+            hr[cid + chs.Open] = nPrice
+            hr[cid + chs.Time] = timestamp
+            hr[cid + chs.Low] = nPrice
 
-        if nPrice > hr_buf[cid + chs.High]:
-            hr_buf[cid + chs.High] = nPrice
+        if nPrice > hr[cid + chs.High]:
+            hr[cid + chs.High] = nPrice
 
-        if nPrice < hr_buf[cid + chs.Low]:
-            hr_buf[cid + chs.Low] = nPrice
+        if nPrice < hr[cid + chs.Low]:
+            hr[cid + chs.Low] = nPrice
 
-        hr_buf[cid + chs.Close] = nPrice
-        hr_buf[cid + chs.Volume] += nQty
-        hr_buf[cid + chs.Delta] += -nQty if is_sell else nQty
-        hr_buf[cid + chs.CountTrade] += 1
+        hr[cid + chs.Close] = nPrice
+        hr[cid + chs.Volume] += nQty
+        hr[cid + chs.Delta] += -nQty if is_sell else nQty
+        hr[cid + chs.CountTrade] += 1
+        if cid == 0:
+            hr[cid + chs.CVD] = hr[cid + chs.Delta]
+            hr[cid + chs.VWAP_PWeights] = nPrice * hr[cid + chs.Volume]
+            hr[cid + chs.VWAP_Weights] = hr[cid + chs.Volume]
+        else:
+            oldCid = cid - 1
+            hr[cid + chs.CVD] = hr[cid + chs.Delta] + hr[oldCid + chs.Delta]
+            hr[cid + chs.VWAP_PWeights] = (nPrice * hr[cid + chs.Volume]) + hr[
+                oldCid + chs.VWAP_PWeights
+            ]
+            hr[cid + chs.VWAP_Weights] = (
+                hr[cid + chs.Volume] + hr[cid + chs.VWAP_Weights]
+            )
+
+        hr[cid + chs.VWAP] = hr[cid + chs.VWAP_PWeights] // hr[cid + chs.VWAP_Weights]
 
     def _update_indicators(self, idy: int, idx: int, nQty: int) -> None:
         if (idx % 2) == 0:
-            self.footprint_shm[idy, self.idxBidVP] += nQty
+            self.footprint_shm[idy, self.convert.idxBidVP] += nQty
         else:
-            self.footprint_shm[idy, self.idxAskVP] += nQty
+            self.footprint_shm[idy, self.convert.idxAskVP] += nQty
 
-        self.footprint_shm[idy, self.idxVP] += nQty
+        self.footprint_shm[idy, self.convert.idxVP] += nQty
 
-    def _set_coords(self, idy: int, idx: int) -> None:
+    def _update_coords(self, idy: int, idx: int) -> None:
         IDYmin, IDXmin = spc.IDYmin, spc.IDXmin
         IDYmax, IDXmax = spc.IDYmax, spc.IDXmax
         # - - -
@@ -123,14 +138,14 @@ class FootprintWriter:
 
         if self.guarantee.is_set() is False:
             self.flag_buf[0] = new_flag
-            self.active_buffer[0] = 1
+            self.headers_middleman_buf[:] = self.headers_buf[:]
             self.guarantee.set()
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         convert = self.convert
         nPrice, nQty = convert.to_nPrice(price), convert.to_nQty(qty)
-        idy: int | None = convert.get_idy(nPrice=nPrice)
-        idx: int | None = convert.get_idx(timestamp=timestamp, is_sell=is_sell)
+        idy: int | None = convert.to_idy(nPrice=nPrice)
+        idx: int | None = convert.to_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
                 self.footprint_shm[idy, idx] += nQty
@@ -142,7 +157,7 @@ class FootprintWriter:
                     timestamp=timestamp,
                     is_sell=is_sell,
                 )
-                self._set_coords(idy, idx)
+                self._update_coords(idy, idx)
                 return True
 
             else:
