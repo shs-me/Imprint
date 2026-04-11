@@ -61,6 +61,7 @@ class FootprintWriter:
         self.convert: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
             footprint=self.footprint_shm,
+            headers_buf=self.headers_buf,
             cfgFootprint=self.cfgFootprint,
         )
         if bpat[0] != 0:

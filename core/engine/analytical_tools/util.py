@@ -12,10 +12,12 @@ class ConvertMetrics:
         self,
         trade_param: memoryview,
         footprint: NDArray[np.int64],
+        headers_buf: memoryview,
         cfgFootprint: ConfigurationFootprint,
     ) -> None:
         self.trade_par = trade_param
         self.footprint = footprint
+        self.headers_buf = headers_buf
         self.lines = cfgFootprint.lines
         self.footprintCols = cfgFootprint.footprintCols
         self.panelCols = cfgFootprint.panelCols
@@ -28,6 +30,13 @@ class ConvertMetrics:
         self.idxVP = cfgFootprint.colVP
         self.idxBidVP = cfgFootprint.colBidVP
         self.idxAskVP = cfgFootprint.colAskVP
+
+    def _init_array(self):
+        self.headers: NDArray[np.int64] = np.ndarray(
+            shape=(self.clusterCount, chs._HeadersCount),
+            dtype=np.int64,
+            buffer=self.headers_buf,
+        )
 
     def init_session(self, price: float | int, timestamp: int):
         self.nBasePrice = self.to_nPrice(price) if isinstance(price, float) else price
@@ -43,22 +52,25 @@ class ConvertMetrics:
             )
             return True
 
-    def to_idy(self, nPrice: int) -> int | None:
-        idy: int = self.nBasePrice - nPrice + self.center
+    def check_bound_idy(self, idy: int) -> int | None:
         if 0 < idy < self.lines:
             return idy
-
         else:
             return None
 
-    def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
-        idx: int = (timestamp - self.baseTimestamp) // self.ims * 2 + (
-            0 if is_sell else 1
-        )
+    def check_bound_idx(self, idx: int) -> int | None:
         if 0 <= idx < self.footprintCols:
             return idx
         else:
             return None
+
+    def to_idy(self, nPrice: int) -> int | None:
+        return self.check_bound_idy(self.nBasePrice - nPrice + self.center)
+
+    def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
+        return self.check_bound_idx(
+            (timestamp - self.baseTimestamp) // self.ims * 2 + (0 if is_sell else 1)
+        )
 
     def to_nPrice(self, price: float) -> int:
         return round(price * self.priceMult)
@@ -107,27 +119,17 @@ class ConvertMetrics:
 class Indicators:
     def __init__(
         self,
-        headers_buf: memoryview,
         converter: ConvertMetrics,
     ) -> None:
         self.cv = converter
-        self.headers_buf = headers_buf
-        self._init_array()
-
-    def _init_array(self):
-        self.headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.cv.clusterCount, chs._HeadersCount),
-            dtype=np.int64,
-            buffer=self.headers_buf,
-        )
 
     def _get_data(self, header: chs, idx: int | None) -> int:
         if idx:
             cid = self.cv.get_cluster_id(idx) * chs._HeadersCount
-            return self.headers_buf[cid + header]
+            return self.cv.headers_buf[cid + header]
         else:
-            cid = (self.headers[:, chs.Open].argmin() - 1) * chs._HeadersCount
-            return self.headers_buf[cid + header]
+            cid = (self.cv.headers[:, chs.Open].argmin() - 1) * chs._HeadersCount
+            return self.cv.headers_buf[cid + header]
 
     def _get_header(
         self, idx: int | None, norm: bool, price: bool, header: chs

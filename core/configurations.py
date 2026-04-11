@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from .settings import ChartInterval, ClusterHeaders, SpaceCoords
 
@@ -13,10 +13,6 @@ class Configuration(ABC):
 
 
 # Configuration Subclasses
-class ConfigurationStrategies(Configuration):
-    pass
-
-
 class ConfigurationSHMSegments(Configuration):
     pass
 
@@ -36,6 +32,22 @@ class ConfigurationBacktesting(Configuration):
 
 
 # ShmSegmentsSubclasses
+class ConfigurationStrategies(ConfigurationSHMSegments):
+    def __init__(self) -> None:
+        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+
+    def get_need_shm_size(self) -> int:
+        self.price = OFFSET, OFFSET + INT64
+        self.side = self.price
+        self.action = self.side[1] + UBYTE
+        self.typeOrder = self.action + UBYTE
+        return self.action
+
+    @abstractmethod
+    def strategy(self, price, side, action, typeOrder):
+        pass
+
+
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
@@ -137,4 +149,4 @@ class ConfigurationMonitoring(ConfigurationSHMSegments):
     def get_need_shm_size(self) -> int:
         self.status = 0, 256
         self.id_error = 255
-        return self.id_error
+        return self.status[1]

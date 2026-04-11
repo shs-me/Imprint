@@ -71,9 +71,10 @@ class FootprintReader(ABC):
         self.convert: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
             footprint=self.footprint,
+            headers_buf=self.headers,
             cfgFootprint=self.cfgFootprint,
         )
-        self.indicators = Indicators(headers_buf=self.headers, converter=self.convert)
+        self.indicators = Indicators(converter=self.convert)
         self.convert.init_session(price=nBasePrice, timestamp=baseTimestamp)
 
     def _update_local_footprint(self) -> tuple[int, int]:

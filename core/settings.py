@@ -7,6 +7,12 @@ class SegmentsType(TypedDict):
     subclasses: str
 
 
+class SignalSetup(IntEnum):
+    BUY, SELL = 0, 1
+    OPEN, CLOSE = 0, 1
+    MARKET, LIMIT = 0, 1
+
+
 @verify(CONTINUOUS, UNIQUE)
 class ClusterHeaders(IntEnum):
     Open, High, Low, Close, Time = 0, auto(), auto(), auto(), auto()
