@@ -81,29 +81,15 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64
 
         self.flag = self.baseTimestamp[1]
-        self.flag_spare = self.flag
-        return self.flag_spare
+        return self.flag
 
 
 class ConfigurationExecution(ConfigurationSHMSegments):
-    def __init__(self, count_symbols: int = 1) -> None:
-        self.countSymbols = count_symbols
-        self.countSignals = 100
+    def __init__(self) -> None:
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
-        # every signals buf size
-        self.signalsSize = (UBYTE + UBYTE + INT64) * self.countSignals
-        # Signals data
-        self.sellSide = OFFSET
-        self.buySide = self.sellSide + UBYTE
-        self.nPrice = self.buySide, self.buySide + INT64
-        # sum signals buf each symbols
-        self.signals = (
-            OFFSET,
-            OFFSET + (self.signalsSize * self.countSymbols),
-        )
-        return self.signals[1]
+        return 1
 
 
 class ConfigurationRingRawBuf(ConfigurationSHMSegments):

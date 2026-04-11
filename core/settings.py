@@ -1,4 +1,4 @@
-from enum import CONTINUOUS, UNIQUE, IntEnum, verify
+from enum import CONTINUOUS, UNIQUE, IntEnum, auto, verify
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Protocol, TypedDict
 
@@ -9,14 +9,18 @@ class SegmentsType(TypedDict):
 
 @verify(CONTINUOUS, UNIQUE)
 class ClusterHeaders(IntEnum):
-    Open, High, Low, Close, Volume = 0, 1, 2, 3, 4
-    CountTrade, Delta, CVD, VWAP, VWAP_Weights, VWAP_PWeights = 5, 6, 7, 8, 9, 10
-    Time, _HeadersCount = 11, 12
+    Open, High, Low, Close, Time = 0, auto(), auto(), auto(), auto()
+    Volume, Delta, CVD = auto(), auto(), auto()
+    VWAP, VWAP_Weights, VWAP_PWeights = auto(), auto(), auto()
+    CountTrade = auto()
+    _HeadersCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
 class SpaceCoords(IntEnum):
-    IDYmin, IDXmin, IDYmax, IDXmax, IDY, IDX, _CoordsCount = 0, 1, 2, 3, 4, 5, 6
+    IDYmin, IDXmin, IDYmax, IDXmax = 0, auto(), auto(), auto()
+    IDY, IDX = auto(), auto()
+    _CoordsCount = auto()
 
 
 class ChartInterval(IntEnum):

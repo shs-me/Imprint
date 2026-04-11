@@ -60,6 +60,7 @@ class FootprintWriter:
         # - - -
         self.convert: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
+            footprint=self.footprint_shm,
             cfgFootprint=self.cfgFootprint,
         )
         if bpat[0] != 0:
@@ -80,7 +81,7 @@ class FootprintWriter:
         return True
 
     def _update_headers(
-        self, idx: int, nPrice: int, nQty: int, timestamp: int, is_sell: bool
+        self, idy: int, idx: int, nPrice: int, nQty: int, timestamp: int, is_sell: bool
     ) -> None:
         hr = self.headers_buf
         # - - -
@@ -100,29 +101,40 @@ class FootprintWriter:
         hr[cid + chs.Volume] += nQty
         hr[cid + chs.Delta] += -nQty if is_sell else nQty
         hr[cid + chs.CountTrade] += 1
-        if cid == 0:
+        self._update_indicators(cid=cid, idy=idy, idx=idx, nPrice=nPrice, nQty=nQty)
+
+    def _update_indicators(
+        self, cid: int, idy: int, idx: int, nPrice: int, nQty: int
+    ) -> None:
+        hr, footprint = self.headers_buf, self.footprint_shm
+        # - - -
+        if cid == 8:
+            # CVD
             hr[cid + chs.CVD] = hr[cid + chs.Delta]
+            # Vwap settings
             hr[cid + chs.VWAP_PWeights] = nPrice * hr[cid + chs.Volume]
             hr[cid + chs.VWAP_Weights] = hr[cid + chs.Volume]
         else:
-            oldCid = cid - 1
-            hr[cid + chs.CVD] = hr[cid + chs.Delta] + hr[oldCid + chs.Delta]
+            oldCid = cid - chs._HeadersCount
+            # CVD
+            hr[cid + chs.CVD] = hr[cid + chs.Delta] + hr[oldCid + chs.CVD]
+            # Vwap settings
             hr[cid + chs.VWAP_PWeights] = (nPrice * hr[cid + chs.Volume]) + hr[
                 oldCid + chs.VWAP_PWeights
             ]
             hr[cid + chs.VWAP_Weights] = (
-                hr[cid + chs.Volume] + hr[cid + chs.VWAP_Weights]
+                hr[cid + chs.Volume] + hr[oldCid + chs.VWAP_Weights]
             )
 
+        # Vwap
         hr[cid + chs.VWAP] = hr[cid + chs.VWAP_PWeights] // hr[cid + chs.VWAP_Weights]
-
-    def _update_indicators(self, idy: int, idx: int, nQty: int) -> None:
+        # VolumeProfile
         if (idx % 2) == 0:
-            self.footprint_shm[idy, self.convert.idxBidVP] += nQty
+            footprint[idy, self.convert.idxBidVP] += nQty
         else:
-            self.footprint_shm[idy, self.convert.idxAskVP] += nQty
+            footprint[idy, self.convert.idxAskVP] += nQty
 
-        self.footprint_shm[idy, self.convert.idxVP] += nQty
+        footprint[idy, self.convert.idxVP] += nQty
 
     def _update_coords(self, idy: int, idx: int) -> None:
         IDYmin, IDXmin = spc.IDYmin, spc.IDXmin
@@ -149,8 +161,8 @@ class FootprintWriter:
         if idx is not None:
             if idy is not None:
                 self.footprint_shm[idy, idx] += nQty
-                self._update_indicators(idy=idy, idx=idx, nQty=nQty)
                 self._update_headers(
+                    idy=idy,
                     idx=idx,
                     nPrice=nPrice,
                     nQty=nQty,

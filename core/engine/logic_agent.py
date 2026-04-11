@@ -22,9 +22,11 @@ class LogicAgent:
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
 
-    def _alarm_clock(self, tts: memoryview, active_buffer: memoryview) -> bool:
+    def _alarm_clock(self, tts: memoryview) -> bool:
         counter = 1
-        while not active_buffer[0]:
+        last_box = self.reader.last_box
+        box_id = self.reader.flag_buf
+        while last_box == box_id[0]:
             counter += 1
             if counter >= tts[0]:
                 return True
@@ -37,7 +39,6 @@ class LogicAgent:
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         set_status, have_problem = self.set_status, self.have_problem
         tts_buf = self.manager.time_to_sleep_buf
-        active_buffer = self.reader.active_buffer
         pre_sleep_logic, alarm_clock = self.pre_sleep_logic, self._alarm_clock
         reader, have_task = self.reader, self.have_task
         #  - - -
@@ -51,7 +52,7 @@ class LogicAgent:
                     if have_task():
                         break
 
-                    if alarm_clock(tts_buf, active_buffer):
+                    if alarm_clock(tts_buf):
                         if pre_sleep_logic.is_set() is False:
                             pre_sleep_logic.wait()
                         continue

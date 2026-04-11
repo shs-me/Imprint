@@ -22,17 +22,13 @@ class FootprintReader(ABC):
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
         self.idxVP = self.cfgFootprint.colVP
-        self.idxBidVP = self.cfgFootprint.colBidVP
-        self.idxAskVP = self.cfgFootprint.colAskVP
         self.lines = self.cfgFootprint.lines
         self.footprintCols = self.cfgFootprint.footprintCols
         self.panelCols = self.cfgFootprint.panelCols
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
-        self.active_buffer: memoryview[int] = self.manager.footprint_buf[
-            self.cfgFootprint.flag_spare : self.cfgFootprint.flag_spare + 1
-        ]
+        self.last_box = 0
         self.base_price_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.basePrice[0] : self.cfgFootprint.baseTimestamp[1]
         ].cast("q")
@@ -74,15 +70,15 @@ class FootprintReader(ABC):
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
         self.convert: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
+            footprint=self.footprint,
             cfgFootprint=self.cfgFootprint,
         )
-        self.indicators = Indicators(
-            footprint=self.footprint, headers_buf=self.headers, converter=self.convert
-        )
+        self.indicators = Indicators(headers_buf=self.headers, converter=self.convert)
         self.convert.init_session(price=nBasePrice, timestamp=baseTimestamp)
 
     def _update_local_footprint(self) -> tuple[int, int]:
         old_flag: int = 1 if self.flag_buf[0] == 0 else 0
+        self.last_box = self.flag_buf[0]
         space = self.space_1 if old_flag == 0 else self.space_2
         np.copyto(  # update footprint
             dst=self.footprint[
@@ -104,7 +100,6 @@ class FootprintReader(ABC):
         space[spc.IDYmin], space[spc.IDXmin] = self.lines, self.footprintCols
         space[spc.IDYmax], space[spc.IDXmax] = 0, 0
         space[spc.IDY], space[spc.IDX] = 0, 0
-        self.active_buffer[0] = 0
         return idy, idx
 
     def _check_update(self) -> None:

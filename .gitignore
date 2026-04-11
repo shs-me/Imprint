@@ -1,10 +1,9 @@
 # Project gitignore
-archive
-# algorithm.py
-*.log
-*.zip
-*.bin
-*.csv
+/archive
+/logs
+/plugins
+/data
+/dump
 
 # Base gitignore
 # Byte-compiled / optimized / DLL files
