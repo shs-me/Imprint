@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 
 from .... import AgentManager
 from .... import StatusCodes as sc
-from ....settings import ClusterHeaders as chs
+from ....settings import BarHeaders as chs
 from ....settings import SpaceCoords as spc
 from .. import ConvertMetrics
 
@@ -16,9 +16,6 @@ class FootprintWriter:
         self.set_status = manager.set_status
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
-        self.lines = self.cfgFootprint.lines
-        self.footprintCols = self.cfgFootprint.footprintCols
-        self.panelCols = self.cfgFootprint.panelCols
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
@@ -34,20 +31,24 @@ class FootprintWriter:
         self._init_array()
 
     def _init_array(self) -> None:
-        self.footprint_shm: NDArray[np.int64] = np.ndarray(
-            shape=(self.lines, self.panelCols),
+        self.footprint_1: NDArray[np.int64] = np.ndarray(
+            shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
             dtype=np.int64,
-            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint_1)],
         )
-
-        self.headers_buf: memoryview[int] = self.manager.footprint_buf[
+        self.footprint_2: NDArray[np.int64] = np.ndarray(
+            shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
+            dtype=np.int64,
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint_2)],
+        )
+        # - - -
+        self.headers_1: memoryview[int] = self.manager.footprint_buf[
             slice(*self.cfgFootprint.headers_1)
         ].cast("q")
-
-        self.headers_middleman_buf: memoryview[int] = self.manager.footprint_buf[
+        self.headers_2: memoryview[int] = self.manager.footprint_buf[
             slice(*self.cfgFootprint.headers_2)
         ].cast("q")
-
+        # - - -
         self.space_1: memoryview[int] = self.manager.footprint_buf[
             slice(*self.cfgFootprint.space_1)
         ].cast("q")
@@ -58,35 +59,59 @@ class FootprintWriter:
     def init_session(self, price: float, timestamp: int) -> bool:
         bpat = self.base_price_and_timestamp_buf
         # - - -
-        self.convert: ConvertMetrics = ConvertMetrics(
+        self.con: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
-            footprint=self.footprint_shm,
-            headers_buf=self.headers_buf,
+            footprint=self.footprint_1,
+            headers_buf=self.headers_1,
             cfgFootprint=self.cfgFootprint,
         )
         if bpat[0] != 0:
             price, timestamp = bpat[:]
         else:
-            self.space_1[spc.IDYmin] = self.space_2[spc.IDYmin] = self.lines
-            self.space_1[spc.IDXmin] = self.space_2[spc.IDXmin] = self.footprintCols
+            self.space_1[spc.IDYmin] = self.space_2[spc.IDYmin] = self.con.lines
+            self.space_1[spc.IDXmin] = self.space_2[spc.IDXmin] = self.con.footprintCols
             self.space_1[spc.IDYmax] = self.space_2[spc.IDYmax] = 0
             self.space_1[spc.IDXmax] = self.space_2[spc.IDXmax] = 0
-            self.space_1[spc.IDY] = self.space_2[spc.IDY] = 0
-            self.space_1[spc.IDX] = self.space_2[spc.IDX] = 0
 
-        if self.convert.init_session(price, timestamp) is False:
+        if self.con.init_session(price, timestamp) is False:
             self.set_status(code=sc.WARN2)
             return False
 
-        bpat[0], bpat[1] = self.convert.nBasePrice, self.convert.baseTimestamp
+        bpat[0], bpat[1] = self.con.nBasePrice, self.con.baseTimestamp
         return True
+
+    def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
+        con = self.con
+        nPrice, nQty = con.to_nPrice(price), con.to_nQty(qty)
+        idy: int | None = con.to_idy(nPrice=nPrice)
+        idx: int | None = con.to_idx(timestamp=timestamp, is_sell=is_sell)
+        if idx is not None:
+            if idy is not None:
+                self.footprint_1[idy, idx] += nQty
+                self._update_headers(
+                    idy=idy,
+                    idx=idx,
+                    nPrice=nPrice,
+                    nQty=nQty,
+                    timestamp=timestamp,
+                    is_sell=is_sell,
+                )
+                self._update_coords(idy, idx)
+                return True
+
+            else:
+                self.set_status(code=sc.WARN4)
+        else:
+            self.set_status(code=sc.WARN3)
+
+        return False
 
     def _update_headers(
         self, idy: int, idx: int, nPrice: int, nQty: int, timestamp: int, is_sell: bool
     ) -> None:
-        hr = self.headers_buf
+        hr = self.headers_1
         # - - -
-        cid = self.convert.get_cluster_id(idx) * chs._HeadersCount
+        cid = self.con.get_Bar_id(idx) * chs._HeadersCount
         if hr[cid + chs.CountTrade] == 0:
             hr[cid + chs.Open] = nPrice
             hr[cid + chs.Time] = timestamp
@@ -105,9 +130,9 @@ class FootprintWriter:
         self._update_indicators(cid=cid, idy=idy, idx=idx, nPrice=nPrice, nQty=nQty)
 
     def _update_indicators(
-        self, cid: int, idy: int, idx: int, nPrice: int, nQty: int
+        self, cid: int | np.intp, idy: int, idx: int, nPrice: int, nQty: int
     ) -> None:
-        hr, footprint = self.headers_buf, self.footprint_shm
+        hr, footprint = self.headers_1, self.footprint_1
         # - - -
         if cid == 8:
             # CVD
@@ -130,12 +155,9 @@ class FootprintWriter:
         # Vwap
         hr[cid + chs.VWAP] = hr[cid + chs.VWAP_PWeights] // hr[cid + chs.VWAP_Weights]
         # VolumeProfile
-        if (idx % 2) == 0:
-            footprint[idy, self.convert.idxBidVP] += nQty
-        else:
-            footprint[idy, self.convert.idxAskVP] += nQty
-
-        footprint[idy, self.convert.idxVP] += nQty
+        footprint[idy, self.con.idxVP] += nQty
+        # DeltaProfile
+        footprint[idy, self.con.idxVP] += hr[cid + chs.Delta]
 
     def _update_coords(self, idy: int, idx: int) -> None:
         IDYmin, IDXmin = spc.IDYmin, spc.IDXmin
@@ -147,35 +169,22 @@ class FootprintWriter:
         space[IDXmin] = idx if space[IDXmin] > idx else space[IDXmin]
         space[IDYmax] = idy + 1 if space[IDYmax] <= idy else space[IDYmax]
         space[IDXmax] = idx + 1 if space[IDXmax] <= idx else space[IDXmax]
-        space[spc.IDY], space[spc.IDX] = idy, idx
 
         if self.guarantee.is_set() is False:
+            self.headers_2[:] = self.headers_1[:]
+            np.copyto(
+                dst=self.footprint_2[
+                    space[IDYmin] : space[IDYmax],
+                    space[IDXmin] : space[IDXmax],
+                ],
+                src=self.footprint_1[
+                    space[IDYmin] : space[IDYmax],
+                    space[IDXmin] : space[IDXmax],
+                ],
+            )
+            np.copyto(
+                dst=self.footprint_2[space[IDYmin] : space[IDYmax], self.con.idxVP :],
+                src=self.footprint_1[space[IDYmin] : space[IDYmax], self.con.idxVP :],
+            )
             self.flag_buf[0] = new_flag
-            self.headers_middleman_buf[:] = self.headers_buf[:]
             self.guarantee.set()
-
-    def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
-        convert = self.convert
-        nPrice, nQty = convert.to_nPrice(price), convert.to_nQty(qty)
-        idy: int | None = convert.to_idy(nPrice=nPrice)
-        idx: int | None = convert.to_idx(timestamp=timestamp, is_sell=is_sell)
-        if idx is not None:
-            if idy is not None:
-                self.footprint_shm[idy, idx] += nQty
-                self._update_headers(
-                    idy=idy,
-                    idx=idx,
-                    nPrice=nPrice,
-                    nQty=nQty,
-                    timestamp=timestamp,
-                    is_sell=is_sell,
-                )
-                self._update_coords(idy, idx)
-                return True
-
-            else:
-                self.set_status(code=sc.WARN4)
-        else:
-            self.set_status(code=sc.WARN3)
-
-        return False

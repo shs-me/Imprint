@@ -1,6 +1,7 @@
+from .. import AgentManager
 from . import FootprintReader
 
 
 class BaseFootprintReader(FootprintReader):
-    def check_patterns(self, idy: int, idx: int) -> None:
-        pass
+    def __init__(self, manager: AgentManager) -> None:
+        super().__init__(manager)

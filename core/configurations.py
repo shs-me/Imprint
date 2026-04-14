@@ -1,6 +1,6 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 
-from .settings import ChartInterval, ClusterHeaders, SpaceCoords
+from .settings import BarHeaders, ChartInterval, SpaceCoords
 
 UBYTE = 1
 INT64 = 8
@@ -32,22 +32,6 @@ class ConfigurationBacktesting(Configuration):
 
 
 # ShmSegmentsSubclasses
-class ConfigurationStrategies(ConfigurationSHMSegments):
-    def __init__(self) -> None:
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
-
-    def get_need_shm_size(self) -> int:
-        self.price = OFFSET, OFFSET + INT64
-        self.side = self.price
-        self.action = self.side[1] + UBYTE
-        self.typeOrder = self.action + UBYTE
-        return self.action
-
-    @abstractmethod
-    def strategy(self, price, side, action, typeOrder):
-        pass
-
-
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
@@ -55,31 +39,33 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         chart_range: int = 1,
     ) -> None:
         self.intervalMs = chart_interval
-        self.cluster_count = self.get_cluster_count(day=chart_range)
-        self.lines = 10000
-        self.footprintCols = self.cluster_count * 2
+        self.Bar_count = self.get_Bar_count(day=chart_range)
+        self.lines = 10001
+        self.footprintCols = self.Bar_count * 2
         self.panelCols = self.footprintCols + self.get_panel_count_cols()
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_panel_count_cols(self) -> int:
-        self.colVP, self.colBidVP, self.colAskVP = -3, -2, -1
-        return 3
+        self.colVP, self.colDP = -2, -1
+        return 2
 
-    def get_cluster_count(self, day: int) -> int:
+    def get_Bar_count(self, day: int) -> int:
         dayMs, ivlMs = (day if day >= 1 else 1) * 24 * 60 * 60 * 1000, self.intervalMs
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
     def get_need_shm_size(self) -> int:
-        self.footprint: tuple[int, int] = OFFSET, (self.lines * self.panelCols * INT64)
+        self.footprint_1 = OFFSET, OFFSET + (self.lines * self.panelCols * INT64)
+        self.footprint_2 = (
+            self.footprint_1[1],
+            self.footprint_1[1] + (self.lines * self.panelCols * INT64),
+        )
         self.headers_1 = (
-            self.footprint[1],
-            self.footprint[1]
-            + (ClusterHeaders._HeadersCount * self.cluster_count * INT64),
+            self.footprint_2[1],
+            self.footprint_2[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
         )
         self.headers_2 = (
             self.headers_1[1],
-            self.headers_1[1]
-            + (ClusterHeaders._HeadersCount * self.cluster_count * INT64),
+            self.headers_1[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
         )
         self.space_1 = (
             self.headers_2[1],
@@ -98,10 +84,21 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
 
 class ConfigurationExecution(ConfigurationSHMSegments):
     def __init__(self) -> None:
+        self.signal_size = 32  # 8 байт (ID) + 8 (Price) + 8 (Qty) + 1 (Side) + 1 (Type) + 6 (Резерв/Status)
+        self.cell_amount = 128  # Больше не нужно, так как ордера исполняются быстро
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
-        return 1
+        self.ReaderCellCounter = OFFSET, OFFSET + INT64
+        self.WriterCellCounter = (
+            self.ReaderCellCounter[1],
+            self.ReaderCellCounter[1] + INT64,
+        )
+        self.signals = (
+            self.WriterCellCounter[1],
+            (self.cell_amount * self.signal_size) + self.WriterCellCounter[1],
+        )
+        return self.signals[1]
 
 
 class ConfigurationRingRawBuf(ConfigurationSHMSegments):

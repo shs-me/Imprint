@@ -62,7 +62,7 @@ class LogicAgent:
                         reader.init_session()
                         init_session = False
 
-                    reader._check_update()
+                    reader.check_update()
                     if pre_sleep_logic.is_set():
                         pre_sleep_logic.clear()
 

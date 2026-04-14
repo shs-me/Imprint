@@ -1,2 +1,2 @@
-from .util import ConvertMetrics, Indicators  # noqa
+from .util import ConvertMetrics, HeadersGet  # noqa
 from .footprint import FootprintWriter, FootprintReader  # noqa

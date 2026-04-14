@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+from types import MethodType
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
 from ...configurations import ConfigurationFootprint
-from ...settings import ClusterHeaders as chs
+from ...settings import BarHeaders as chs
 
 
 class ConvertMetrics:
@@ -21,19 +23,17 @@ class ConvertMetrics:
         self.lines = cfgFootprint.lines
         self.footprintCols = cfgFootprint.footprintCols
         self.panelCols = cfgFootprint.panelCols
-        self.clusterCount = cfgFootprint.cluster_count
+        self.BarCount = cfgFootprint.Bar_count
         self.ims = cfgFootprint.intervalMs
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
         self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
-        self.cluster_id = 0
-
         self.idxVP = cfgFootprint.colVP
-        self.idxBidVP = cfgFootprint.colBidVP
-        self.idxAskVP = cfgFootprint.colAskVP
+        self.idxDP = cfgFootprint.colDP
+        self._init_array()
 
     def _init_array(self):
         self.headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.clusterCount, chs._HeadersCount),
+            shape=(self.BarCount, chs._HeadersCount),
             dtype=np.int64,
             buffer=self.headers_buf,
         )
@@ -89,13 +89,13 @@ class ConvertMetrics:
             "%Y-%m-%d %H:%M:%S"
         )
 
-    def get_price(self, idy: int, normalized: bool = True) -> int | float:
+    def get_price(self, idy: int, normalized: bool = True) -> Any:
         if normalized:
             return self.center - idy + self.nBasePrice
         else:
             return self.to_price(self.center - idy + self.nBasePrice)
 
-    def get_qty(self, idy: int, idx: int, normalized: bool = True) -> int | float:
+    def get_qty(self, idy: int, idx: int, normalized: bool = True) -> Any:
         if normalized:
             return self.footprint[idy, idx]
         else:
@@ -112,81 +112,83 @@ class ConvertMetrics:
                 idx - (0 if (idx % 2) == 0 else 1)
             ) // 2 * self.ims + self.baseTimestamp
 
-    def get_cluster_id(self, idx: int) -> int:
-        return ((idx - 1) // 2) if (idx % 2) != 0 else (idx // 2)
+    def get_Bar_id(self, idx: int | None = None) -> int | np.intp:
+        if idx:
+            return ((idx - 1) // 2) if (idx % 2) != 0 else (idx // 2)
+        else:
+            return self.headers[:, chs.Open].argmin() - 1
 
 
-class Indicators:
+class HeadersGet:
     def __init__(
         self,
         converter: ConvertMetrics,
     ) -> None:
         self.cv = converter
 
-    def _get_data(self, header: chs, idx: int | None) -> int:
-        if idx:
-            cid = self.cv.get_cluster_id(idx) * chs._HeadersCount
-            return self.cv.headers_buf[cid + header]
-        else:
-            cid = (self.cv.headers[:, chs.Open].argmin() - 1) * chs._HeadersCount
-            return self.cv.headers_buf[cid + header]
-
     def _get_header(
-        self, idx: int | None, norm: bool, price: bool, header: chs
-    ) -> int | float:
-        func = self.cv.to_price if price else self.cv.to_qty
+        self, idx: int | None, norm: bool, typeNorm: MethodType, header: chs
+    ) -> Any:
         if norm:
-            return self._get_data(header=header, idx=idx)
+            return self.cv.headers_buf[
+                self.cv.get_Bar_id(idx) * chs._HeadersCount + header
+            ]
         else:
-            return func(self._get_data(header=header, idx=idx))
+            return typeNorm(
+                self.cv.headers_buf[
+                    self.cv.get_Bar_id(idx) * chs._HeadersCount + header
+                ]
+            )
 
     # OHLC
-    def openPrice(self, idx: int | None = None, normalized: bool = True) -> int | float:
-        return self._get_header(idx=idx, norm=normalized, price=False, header=chs.Open)
+    def openPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.Open
+        )
 
-    def highPrice(self, idx: int | None = None, normalized: bool = True) -> int | float:
-        return self._get_header(idx=idx, norm=normalized, price=False, header=chs.High)
+    def highPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.High
+        )
 
-    def lowPrice(self, idx: int | None = None, normalized: bool = True) -> int | float:
-        return self._get_header(idx=idx, norm=normalized, price=False, header=chs.Low)
+    def lowPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.Low
+        )
 
-    def closePrice(
-        self, idx: int | None = None, normalized: bool = True
-    ) -> int | float:
-        return self._get_header(idx=idx, norm=normalized, price=False, header=chs.Close)
+    def closePrice(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.Close
+        )
 
     # BaseMetrics
     def openTime(self, idx: int | None = None, strftime: bool = False) -> int | str:
-        if strftime:
-            return self.cv.to_strftime(self._get_data(header=chs.Time, idx=idx))
-        else:
-            return self._get_data(header=chs.Time, idx=idx)
+        return self._get_header(
+            idx=idx, norm=strftime, typeNorm=self.cv.to_strftime, header=chs.Time
+        )
 
     def countTrade(self, idx: int | None = None) -> int:
-        return self._get_data(header=chs.CountTrade, idx=idx)
-
-    def volume(self, idx: int | None = None, normalized: bool = True) -> int | float:
         return self._get_header(
-            idx=idx, norm=normalized, price=False, header=chs.Volume
+            idx=idx, norm=True, typeNorm=self.cv.to_price, header=chs.CountTrade
+        )
+
+    def volume(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.Volume
         )
 
     # Indicators
-    def cvd(self, idx: int | None = None, normalized: bool = True) -> int | float:
-        return self._get_header(idx=idx, norm=normalized, price=False, header=chs.CVD)
+    def cvd(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.CVD
+        )
 
-    def vwap(self, idx: int | None = None, normalized: bool = True) -> int | float:
-        return self._get_header(idx=idx, norm=normalized, price=False, header=chs.VWAP)
+    def vwap(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP
+        )
 
-    def delta(self, idx: int | None = None, normalized: bool = True) -> int | float:
-        return self._get_header(idx=idx, norm=normalized, price=False, header=chs.Delta)
-
-    def poc(
-        self,
-        idx: int | None = None,
-        index: bool = True,
-    ) -> np.int64 | np.intp:
-        func = np.argmax if index else np.max
-        if idx:
-            return func(self.cv.footprint[:, idx])
-        else:
-            return func(self.cv.footprint[:, self.cv.idxVP])
+    def delta(self, idx: int | None = None, normalized: bool = True) -> Any:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.Delta
+        )
