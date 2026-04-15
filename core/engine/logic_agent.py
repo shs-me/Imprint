@@ -70,14 +70,14 @@ class LogicAgent:
                     return
 
 
-def resolve_reader(manager: AgentManager):
+def resolve_reader(manager: AgentManager, execution_event: Event):
     paths = []
     for p in os.listdir(CorePath.plugins_dir):
         if p.endswith(".py"):
             paths.append(f"{CorePath.plugins_dir}/{p}")
 
     for path in paths:
-        result = get_plugin(path, manager)
+        result = get_plugin(path, manager, execution_event)
         if result:
             return result
 
@@ -85,7 +85,7 @@ def resolve_reader(manager: AgentManager):
 
 
 @error_handler()
-def get_plugin(path: str, manager: AgentManager):
+def get_plugin(path: str, manager: AgentManager, execution_event: Event):
     module_name = os.path.splitext(os.path.basename(path))[0]
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is not None and spec.loader is not None:
@@ -94,16 +94,17 @@ def get_plugin(path: str, manager: AgentManager):
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if issubclass(obj, FootprintReader):
                 if obj is not FootprintReader:
-                    return obj(manager=manager)
+                    return obj(manager=manager, execution_event=execution_event)
 
 
 @manager_office()
 def run_logic(
     logic_event: Event,
+    execution_event: Event,
     general_event: Event,
     **kwargs,
 ) -> None:
-    reader = resolve_reader(kwargs["manager"])
+    reader = resolve_reader(kwargs["manager"], execution_event)
     agent = LogicAgent(
         kwargs["manager"],
         reader=reader,

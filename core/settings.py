@@ -3,31 +3,52 @@ from multiprocessing.synchronize import Event, Semaphore
 from typing import Protocol
 
 
+class CoreResources(Protocol):
+    parsing_event: Event
+    logic_event: Event
+    execution_event: Event
+    general_event: Event
+    sc_sem: Semaphore
+
+
 class StateFlags(IntEnum):
-    NONE = 0
+    def __new__(cls, giglet: None):
+        value = 1 << len(cls.__members__)
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        return obj
+
     # Footprint States
-    POC_FP = 1 << 0
-    VA_MIN_FP = 1 << 1
-    VA_MAX_FP = 1 << 2
+    # Footprint: RealTime
+    BID_DELTA_DOMINATION_FP = None
+    ASK_DELTA_DOMINATION_FP = None
+    # Footprint: Timeout
+    VWAP = None
+    POC_FP = None
+    VA_MIN_FP = None
+    VA_MAX_FP = None
+
     # Bar States
-    OPEN = 1 << 3
-    CLOSE = 1 << 4
-    HIGH = 1 << 5
-    LOW = 1 << 6
+    OPEN = None
+    CLOSE = None
+    HIGH = None
+    LOW = None
     # Bar: Indicators
-    POC_BAR = 1 << 7
-    VA_MIN_BAR = 1 << 8
-    VA_MAX_BAR = 1 << 9
+    POC_BAR = None
+    VA_MIN_BAR = None
+    VA_MAX_BAR = None
     # Bar: Context
-    UNFINISHED_AUCTION = 1 << 10
-    ABSORPTION = 1 << 11
-    EXHAUSTION = 1 << 12
+    UNFINISHED_AUCTION = None
+    ABSORPTION = None
+    EXHAUSTION = None
+
     # Bid/Ask States
-    DELTA_DOMINATION = 1 << 13
-    ZERO_PRINT = 1 << 14
-    IMBALANCE = 1 << 15
+    DELTA_DOMINATION = None
+    ZERO_PRINT = None
+    IMBALANCE = None
+
     # Cluster States
-    BIG_TRADE = 1 << 16
+    BIG_TRADE = None
 
 
 class SignalSetup(IntEnum):
@@ -74,10 +95,3 @@ class ChartInterval(IntEnum):
     _12H = 12 * 60 * 60 * 1000
     _D = 1 * 24 * 60 * 60 * 1000
     _W = 1 * 7 * 24 * 60 * 60 * 1000
-
-
-class CoreResources(Protocol):
-    parsing_event: Event
-    logic_event: Event
-    general_event: Event
-    sc_sem: Semaphore

@@ -82,9 +82,13 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         return self.flag
 
 
-class ConfigurationExecution(ConfigurationSHMSegments):
+class ConfigurationStrategy(ConfigurationSHMSegments):
     def __init__(self) -> None:
-        self.signal_size = 32  # 8 байт (ID) + 8 (Price) + 8 (Qty) + 1 (Side) + 1 (Type) + 6 (Резерв/Status)
+        self.price = INT64
+        self.qty = self.price + INT64
+        self.side = self.qty + UBYTE
+        self.type_order = self.side + UBYTE
+        self.signal_size = self.type_order
         self.cell_amount = 128  # Больше не нужно, так как ордера исполняются быстро
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 

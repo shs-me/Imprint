@@ -17,6 +17,7 @@ class RunMain(CoreResources):
         self.procs = {}
         # CoreResources
         self.parsing_event, self.logic_event = Event(), Event()
+        self.execution_event = Event()
         self.sc_sem, self.general_event = Semaphore(0), Event()
 
     def _init_session(self) -> None:

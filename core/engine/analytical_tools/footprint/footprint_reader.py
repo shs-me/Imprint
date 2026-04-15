@@ -1,4 +1,5 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+from multiprocessing.synchronize import Event
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,8 +12,8 @@ from .. import ConvertMetrics, HeadersGet
 
 
 class FootprintReader(ABC):
-    def __init__(self, manager: AgentManager) -> None:
-        self.manager = manager
+    def __init__(self, manager: AgentManager, execution_event: Event) -> None:
+        self.manager, self.send_signal = manager, execution_event
         self.set_status = manager.set_status
         # Footprint
         self.last_box = 0
@@ -67,6 +68,11 @@ class FootprintReader(ABC):
 
     def check_update(self) -> None:
         self._update_state()
+        self.check_pattern()
+
+    @abstractmethod
+    def check_pattern(self):
+        pass
 
     def _update_state(self):
         old_flag: int = 1 if self.flag_buf[0] == 0 else 0
@@ -93,50 +99,87 @@ class FootprintReader(ABC):
         space[spc.IDYmax], space[spc.IDXmax] = 0, 0
 
     # - - Cluster - -
-    def _update_cluster(self, IDYmin: int, IDYmax: int, IDXmin: int, IDXmax: int):
+    def _update_cluster(
+        self, IDYmin: int, IDYmax: int, IDXmin: int, IDXmax: int
+    ) -> None:
         self._clear_cluster_state(
             IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax
         )
 
-    def _clear_cluster_state(self, IDYmin: int, IDYmax: int, IDXmin: int, IDXmax: int):
+    def _clear_cluster_state(
+        self, IDYmin: int, IDYmax: int, IDXmin: int, IDXmax: int
+    ) -> None:
         indicators = stf.BIG_TRADE
         clear_mask = ~(indicators)
         self.footprint_state[IDYmin:IDYmax, IDXmin:IDXmax] &= clear_mask
 
     # - - BidAsk  - - -
-    def _update_bid_ask_state(self, IDYmin: int, IDYmax: int, idxBid: int, idxAsk: int):
+    def _update_bid_ask_state(
+        self, IDYmin: int, IDYmax: int, idxBid: int, idxAsk: int
+    ) -> None:
         self._clear_bid_ask_state(IDYmin=IDYmin, IDYmax=IDYmax, idxBid=idxBid)
 
+        idyBid = slice(IDYmin + 1, IDYmax + 1)
+        idyAsk = slice(IDYmin, IDYmax)
+        self._update_zero_print(
+            idyBid=idyBid, idyAsk=idyAsk, idxBid=idxBid, idxAsk=idxAsk
+        )
+        self._update_delta_domination(
+            idyBid=idyBid, idyAsk=idyAsk, idxBid=idxBid, idxAsk=idxAsk
+        )
         self._update_imbalance(
-            IDYmin=IDYmin, IDYmax=IDYmax, idxBid=idxBid, idxAsk=idxAsk
+            idyBid=idyBid, idyAsk=idyAsk, idxBid=idxBid, idxAsk=idxAsk
         )
 
-    def _clear_bid_ask_state(self, IDYmin: int, IDYmax: int, idxBid: int):
+    def _clear_bid_ask_state(self, IDYmin: int, IDYmax: int, idxBid: int) -> None:
         indicators = stf.ZERO_PRINT | stf.DELTA_DOMINATION | stf.IMBALANCE
         clear_mask = ~(indicators)
-        self.footprint_state[IDYmin:IDYmax, idxBid : idxBid + 2] &= clear_mask
 
-    def _update_imbalance(self, IDYmin: int, IDYmax: int, idxBid: int, idxAsk: int):
+        self.footprint_state[IDYmin : IDYmax + 1, idxBid : idxBid + 2] &= clear_mask
+
+    def _update_zero_print(
+        self, idyBid: slice, idyAsk: slice, idxBid: int, idxAsk: int
+    ) -> None:
         fp, fp_state = self.footprint, self.footprint_state
         # - - -
-        bids = fp[IDYmin + 1 : IDYmax + 1, idxBid]
-        asks = fp[IDYmin:IDYmax, idxAsk]
+        fp_state[idyBid, idxBid][
+            ((fp[idyAsk, idxAsk] > 0) & (fp[idyBid, idxBid] == 0))
+        ] |= stf.ZERO_PRINT
 
-        fp_state[IDYmin + 1 : IDYmax + 1, idxBid][((asks > 0) & (bids == 0))] |= (
-            stf.ZERO_PRINT
-        )
-        fp_state[IDYmin:IDYmax, idxAsk][((bids > 0) & (asks == 0))] |= stf.ZERO_PRINT
+        fp_state[idyAsk, idxAsk][
+            ((fp[idyBid, idxBid] > 0) & (fp[idyAsk, idxAsk] == 0))
+        ] |= stf.ZERO_PRINT
 
-        fp_state[IDYmin + 1 : IDYmax + 1, idxBid][((bids - asks) < 0)] |= (
+    def _update_delta_domination(
+        self, idyBid: slice, idyAsk: slice, idxBid: int, idxAsk: int
+    ) -> None:
+        fp, fp_state = self.footprint, self.footprint_state
+        # - - -
+        fp_state[idyBid, idxBid][((fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) < 0)] |= (
             stf.DELTA_DOMINATION
         )
-        fp_state[IDYmin:IDYmax, idxAsk][((bids - asks) > 0)] |= stf.DELTA_DOMINATION
 
-        fp_state[IDYmin + 1 : IDYmax + 1, idxBid][(bids > (asks * 3))] |= stf.IMBALANCE
-        fp_state[IDYmin:IDYmax, idxAsk][(asks > (bids * 3))] |= stf.IMBALANCE
+        fp_state[idyAsk, idxAsk][((fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) > 0)] |= (
+            stf.DELTA_DOMINATION
+        )
+
+    def _update_imbalance(
+        self, idyBid: slice, idyAsk: slice, idxBid: int, idxAsk: int
+    ) -> None:
+        fp, fp_state = self.footprint, self.footprint_state
+        # - - -
+        fp_state[idyBid, idxBid][(fp[idyBid, idxBid] > (fp[idyAsk, idxAsk] * 3))] |= (
+            stf.IMBALANCE
+        )
+
+        fp_state[idyAsk, idxAsk][(fp[idyAsk, idxAsk] > (fp[idyBid, idxBid] * 3))] |= (
+            stf.IMBALANCE
+        )
 
     # - - Bar  - -
-    def _update_bar_state(self, IDYmin: int, IDYmax: int, idxBid: int, idxAsk: int):
+    def _update_bar_state(
+        self, IDYmin: int, IDYmax: int, idxBid: int, idxAsk: int
+    ) -> None:
         ind = self.ind
         #  - - -
         open, close = ind.openPrice(idxBid), ind.closePrice(idxBid)
@@ -145,40 +188,73 @@ class FootprintReader(ABC):
         self._clear_bar_state(high=high, low=low, idxBid=idxBid)
 
         self._update_ohlc(idxBid=idxBid, open=open, high=high, low=low, close=close)
+        self._update_poc_va_bar(high=high, low=low, idxBid=idxBid)
 
-    def _clear_bar_state(self, high: int, low: int, idxBid: int):
+    def _clear_bar_state(self, high: int, low: int, idxBid: int) -> None:
         headers = stf.OPEN | stf.HIGH | stf.LOW | stf.CLOSE
         indicators = stf.POC_BAR | stf.VA_MIN_BAR | stf.VA_MAX_BAR
         clear_mask = ~(headers | indicators)
         self.footprint_state[high : low + 1, idxBid] &= clear_mask
 
-    def _update_ohlc(self, idxBid: int, open: int, high: int, low: int, close: int):
+    def _update_ohlc(
+        self, open: int, high: int, low: int, close: int, idxBid: int
+    ) -> None:
         self.footprint_state[open, idxBid] |= stf.OPEN
         self.footprint_state[high, idxBid] |= stf.HIGH
         self.footprint_state[low, idxBid] |= stf.LOW
         self.footprint_state[close, idxBid] |= stf.CLOSE
 
-    def _update_poc_va_bar(self, high: int, low: int, idxBid: int):
+    def _update_poc_va_bar(self, high: int, low: int, idxBid: int) -> None:
         fp, fp_state = self.footprint, self.footprint_state
         # - - -
         vp_bar = fp[high : low + 1, idxBid] + fp[high : low + 1, idxBid + 1]
         poc = np.argmax(vp_bar)
         fp_state[poc, idxBid] |= stf.POC_BAR
+        # TODO: VP ValeArea MIN|MAX
 
     # - - Footprint - -
-    def _update_footprint_state(self, IDYmin: int, IDYmax: int):
-        idxVP = self.con.idxVP
+    def _update_footprint_state(self, IDYmin: int, IDYmax: int) -> None:
+        idxLevel, idxBarrier = self.con.idxVP, self.con.idxDP
         # - - -
-        pass
-        self._clear_footprint_state(idxVP=idxVP)
+        self._clear_footprint_realtime_state(
+            IDYmin=IDYmin, IDYmax=IDYmax, idxLevel=idxLevel
+        )
+        self._update_delta_dominations_fp(
+            IDYmin=IDYmin, IDYmax=IDYmax, idxLevel=idxLevel
+        )
+        # TODO: Timeout
 
-    def _clear_footprint_state(self, idxVP: int):
-        indicators = stf.POC_BAR | stf.VA_MIN_FP | stf.VA_MAX_FP
+    def _clear_footprint_realtime_state(
+        self, IDYmin: int, IDYmax: int, idxLevel: int
+    ) -> None:
+        indicators = stf.BID_DELTA_DOMINATION_FP | stf.ASK_DELTA_DOMINATION_FP
         clear_mask = ~(indicators)
-        self.footprint_state[:, idxVP] &= clear_mask
+        self.footprint_state[IDYmin:IDYmax, idxLevel] &= clear_mask
 
-    def _update_poc_va_fp(self, idxVP: int):
+    def _update_delta_dominations_fp(
+        self, IDYmin: int, IDYmax: int, idxLevel: int
+    ) -> None:
+        fp, fp_state, idxDP = self.footprint, self.footprint_state, self.con.idxDP
+        # - - -
+        fp_state[IDYmin:IDYmax, idxLevel][(fp[IDYmin:IDYmax, idxDP] < 0)] |= (
+            stf.BID_DELTA_DOMINATION_FP
+        )
+        fp_state[IDYmin:IDYmax, idxLevel][(fp[IDYmin:IDYmax, idxDP] > 0)] |= (
+            stf.ASK_DELTA_DOMINATION_FP
+        )
+
+    def _clear_footprint_timeout_state(self, idxLevel: int) -> None:
+        indicators = stf.VWAP | stf.POC_BAR | stf.VA_MIN_FP | stf.VA_MAX_FP
+        clear_mask = ~(indicators)
+        self.footprint_state[:, idxLevel] &= clear_mask
+
+    def _update_vwap_bb(self, idxLevel: int) -> None:
+        self.footprint_state[self.ind.vwap(), idxLevel] |= stf.VWAP
+        # TODO: 2+BB deviation Vwap
+
+    def _update_poc_va_fp(self, idxVP: int) -> None:
         fp, fp_state = self.footprint, self.footprint_state
         # - - -
         poc = np.argmax(fp[:, idxVP])
         fp_state[poc,] |= stf.POC_BAR
+        # TODO: VP ValeArea MIN|MAX
