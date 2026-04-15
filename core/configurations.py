@@ -54,14 +54,10 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
     def get_need_shm_size(self) -> int:
-        self.footprint_1 = OFFSET, OFFSET + (self.lines * self.panelCols * INT64)
-        self.footprint_2 = (
-            self.footprint_1[1],
-            self.footprint_1[1] + (self.lines * self.panelCols * INT64),
-        )
+        self.footprint = OFFSET, OFFSET + (self.lines * self.panelCols * INT64)
         self.headers_1 = (
-            self.footprint_2[1],
-            self.footprint_2[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
+            self.footprint[1],
+            self.footprint[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
         )
         self.headers_2 = (
             self.headers_1[1],

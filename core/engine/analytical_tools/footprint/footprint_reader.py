@@ -38,7 +38,7 @@ class FootprintReader(ABC):
         self.footprint: NDArray[np.int64] = np.ndarray(
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
             dtype=np.int64,
-            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint_2)],
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         self.footprint_state: NDArray[np.int32] = np.ndarray(
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),

@@ -31,15 +31,14 @@ class FootprintWriter:
         self._init_array()
 
     def _init_array(self) -> None:
-        self.footprint_1: NDArray[np.int64] = np.ndarray(
+        self.dirty_footprint: NDArray[np.int64] = np.ndarray(
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
             dtype=np.int64,
-            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint_1)],
         )
-        self.footprint_2: NDArray[np.int64] = np.ndarray(
+        self.footprint: NDArray[np.int64] = np.ndarray(
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
             dtype=np.int64,
-            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint_2)],
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         # - - -
         self.headers_1: memoryview[int] = self.manager.footprint_buf[
@@ -61,7 +60,7 @@ class FootprintWriter:
         # - - -
         self.con: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
-            footprint=self.footprint_1,
+            footprint=self.dirty_footprint,
             headers_buf=self.headers_1,
             cfgFootprint=self.cfgFootprint,
         )
@@ -86,7 +85,7 @@ class FootprintWriter:
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
-                self.footprint_1[idy, idx] += nQty
+                self.dirty_footprint[idy, idx] += nQty
                 self._update_headers(
                     idy=idy,
                     idx=idx,
@@ -131,7 +130,7 @@ class FootprintWriter:
     def _update_indicators(
         self, cid: int | np.intp, idy: int, idx: int, nQty: int, nPrice: int
     ) -> None:
-        hr, footprint = self.headers_1, self.footprint_1
+        hr, footprint = self.headers_1, self.dirty_footprint
         # - - -
         if cid == 8:
             # CVD
@@ -174,18 +173,20 @@ class FootprintWriter:
         if self.guarantee.is_set() is False:
             self.headers_2[:] = self.headers_1[:]
             np.copyto(
-                dst=self.footprint_2[
+                dst=self.footprint[
                     space[IDYmin] : space[IDYmax],
                     space[IDXmin] : space[IDXmax],
                 ],
-                src=self.footprint_1[
+                src=self.dirty_footprint[
                     space[IDYmin] : space[IDYmax],
                     space[IDXmin] : space[IDXmax],
                 ],
             )
             np.copyto(
-                dst=self.footprint_2[space[IDYmin] : space[IDYmax], self.con.idxVP :],
-                src=self.footprint_1[space[IDYmin] : space[IDYmax], self.con.idxVP :],
+                dst=self.footprint[space[IDYmin] : space[IDYmax], self.con.idxVP :],
+                src=self.dirty_footprint[
+                    space[IDYmin] : space[IDYmax], self.con.idxVP :
+                ],
             )
             self.flag_buf[0] = new_flag
             self.guarantee.set()
