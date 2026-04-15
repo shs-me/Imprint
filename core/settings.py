@@ -1,4 +1,4 @@
-from enum import CONTINUOUS, UNIQUE, IntEnum, auto, verify
+from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Protocol
 
@@ -11,44 +11,40 @@ class CoreResources(Protocol):
     sc_sem: Semaphore
 
 
-class StateFlags(IntEnum):
-    def __new__(cls, giglet: None):
-        value = 1 << len(cls.__members__)
-        obj = int.__new__(cls, value)
-        obj._value_ = value
-        return obj
-
+class StateFlags(IntFlag):
     # Footprint States
     # Footprint: RealTime
-    BID_DELTA_DOMINATION_FP = None
-    ASK_DELTA_DOMINATION_FP = None
+    BID_DELTA_DOMINATION_FP = auto()
+    ASK_DELTA_DOMINATION_FP = auto()
     # Footprint: Timeout
-    VWAP = None
-    POC_FP = None
-    VA_MIN_FP = None
-    VA_MAX_FP = None
+    VWAP = auto()
+    UPPER_BB = auto()
+    LOWER_BB = auto()
+    POC_FP = auto()
+    VA_MIN_FP = auto()
+    VA_MAX_FP = auto()
 
     # Bar States
-    OPEN = None
-    CLOSE = None
-    HIGH = None
-    LOW = None
+    OPEN = auto()
+    CLOSE = auto()
+    HIGH = auto()
+    LOW = auto()
     # Bar: Indicators
-    POC_BAR = None
-    VA_MIN_BAR = None
-    VA_MAX_BAR = None
+    POC_BAR = auto()
+    VA_MIN_BAR = auto()
+    VA_MAX_BAR = auto()
     # Bar: Context
-    UNFINISHED_AUCTION = None
-    ABSORPTION = None
-    EXHAUSTION = None
+    UNFINISHED_AUCTION = auto()
+    ABSORPTION = auto()
+    EXHAUSTION = auto()
 
     # Bid/Ask States
-    DELTA_DOMINATION = None
-    ZERO_PRINT = None
-    IMBALANCE = None
+    DELTA_DOMINATION = auto()
+    ZERO_PRINT = auto()
+    IMBALANCE = auto()
 
     # Cluster States
-    BIG_TRADE = None
+    BIG_TRADE = auto()
 
 
 class SignalSetup(IntEnum):
@@ -61,7 +57,7 @@ class SignalSetup(IntEnum):
 class BarHeaders(IntEnum):
     Open, High, Low, Close, Time = 0, auto(), auto(), auto(), auto()
     Volume, Delta, CVD = auto(), auto(), auto()
-    VWAP, VWAP_Weights, VWAP_PWeights = auto(), auto(), auto()
+    VWAP_Weights, VWAP_PWeights, VWAP_P2Weights = auto(), auto(), auto()
     CountTrade = auto()
     _HeadersCount = auto()
 

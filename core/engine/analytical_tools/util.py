@@ -26,7 +26,8 @@ class ConvertMetrics:
         self.BarCount = cfgFootprint.Bar_count
         self.ims = cfgFootprint.intervalMs
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
-        self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
+        self.priceMult = 10**self.pricePrec + 1e-9
+        self.qtyMult = 10**self.qtyPrec + 1e-9
         self.idxVP = cfgFootprint.colVP
         self.idxDP = cfgFootprint.colDP
         self._init_array()
@@ -103,14 +104,9 @@ class ConvertMetrics:
 
     def get_time(self, idx: int, strftime: bool = False) -> int | str:
         if strftime:
-            return self.to_strftime(
-                (idx - (0 if (idx % 2) == 0 else 1)) // 2 * self.ims
-                + self.baseTimestamp
-            )
+            return self.to_strftime((idx & ~1) // 2 * self.ims + self.baseTimestamp)
         else:
-            return (
-                idx - (0 if (idx % 2) == 0 else 1)
-            ) // 2 * self.ims + self.baseTimestamp
+            return (idx & ~1) // 2 * self.ims + self.baseTimestamp
 
     def get_Bar_id(self, idx: int | None = None) -> int | np.intp:
         if idx:
@@ -183,12 +179,23 @@ class HeadersGet:
             idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.CVD
         )
 
-    def vwap(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP
-        )
-
     def delta(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
             idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.Delta
+        )
+
+    # Settings indicators
+    def vwap_sum_p2w(self, idx: int | None = None, normalized: bool = True) -> int:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP_P2Weights
+        )
+
+    def vwap_sum_pw(self, idx: int | None = None, normalized: bool = True) -> int:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP_PWeights
+        )
+
+    def vwap_sum_w(self, idx: int | None = None, normalized: bool = True) -> int:
+        return self._get_header(
+            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP_Weights
         )

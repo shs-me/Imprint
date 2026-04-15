@@ -1,4 +1,4 @@
-from ... import AgentManager, manager_office
+from ... import AgentManager
 
 
 class TradeManagerAgent:
@@ -13,8 +13,3 @@ class TradeManagerAgent:
 
     def run_trade_manager(self) -> None:
         pass
-
-
-@manager_office()
-def run_trade_manager(*argg, **kwargs):
-    pass

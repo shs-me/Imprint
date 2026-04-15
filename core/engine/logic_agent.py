@@ -81,7 +81,7 @@ def resolve_reader(manager: AgentManager, execution_event: Event):
         if result:
             return result
 
-    return BaseFootprintReader(manager=manager)
+    return BaseFootprintReader(manager=manager, execution_event=execution_event)
 
 
 @error_handler()

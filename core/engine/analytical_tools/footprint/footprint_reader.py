@@ -1,7 +1,9 @@
+import math
 from abc import ABC, abstractmethod
 from multiprocessing.synchronize import Event
 
 import numpy as np
+from numba import njit
 from numpy.typing import NDArray
 
 from .... import AgentManager
@@ -16,7 +18,7 @@ class FootprintReader(ABC):
         self.manager, self.send_signal = manager, execution_event
         self.set_status = manager.set_status
         # Footprint
-        self.last_box = 0
+        self.last_box, self.last_idx = 0, 0
         self.cfgFootprint = self.manager.cfgFootprint
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
@@ -80,7 +82,7 @@ class FootprintReader(ABC):
         space = self.space_1 if old_flag == 0 else self.space_2
         IDYmin, IDXmin = space[spc.IDYmin], space[spc.IDXmin]
         IDYmax, IDXmax = space[spc.IDYmax], space[spc.IDXmax]
-        for idx in range((IDXmin if IDXmin % 2 == 0 else IDXmin - 1), IDXmax, 2):
+        for idx in range((IDXmin & ~1), IDXmax, 2):
             idxBid, idxAsk = idx, idx + 1
             self._update_cluster(
                 IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax
@@ -91,7 +93,10 @@ class FootprintReader(ABC):
             self._update_bar_state(
                 IDYmin=IDYmin, IDYmax=IDYmax, idxBid=idxBid, idxAsk=idxAsk
             )
-            self._update_footprint_state(IDYmin=IDYmin, IDYmax=IDYmax)
+            self._update_footprint_realtime_state(IDYmin=IDYmin, IDYmax=IDYmax)
+            if idx > self.last_idx:
+                self.last_idx = idx
+                self._update_footprint_static_state()
 
         # - - -
         # reset
@@ -186,7 +191,6 @@ class FootprintReader(ABC):
         high, low = ind.highPrice(idxBid), ind.lowPrice(idxBid)
 
         self._clear_bar_state(high=high, low=low, idxBid=idxBid)
-
         self._update_ohlc(idxBid=idxBid, open=open, high=high, low=low, close=close)
         self._update_poc_va_bar(high=high, low=low, idxBid=idxBid)
 
@@ -209,12 +213,14 @@ class FootprintReader(ABC):
         # - - -
         vp_bar = fp[high : low + 1, idxBid] + fp[high : low + 1, idxBid + 1]
         poc = np.argmax(vp_bar)
+        va_max, va_min = calc_value_area(vp_slice=vp_bar, center_idx=poc)
         fp_state[poc, idxBid] |= stf.POC_BAR
-        # TODO: VP ValeArea MIN|MAX
+        fp_state[va_max, idxBid] |= stf.VA_MAX_BAR
+        fp_state[va_min, idxBid] |= stf.VA_MIN_BAR
 
-    # - - Footprint - -
-    def _update_footprint_state(self, IDYmin: int, IDYmax: int) -> None:
-        idxLevel, idxBarrier = self.con.idxVP, self.con.idxDP
+    # - - Footprint: RealTime - -
+    def _update_footprint_realtime_state(self, IDYmin: int, IDYmax: int) -> None:
+        idxLevel = self.con.idxVP
         # - - -
         self._clear_footprint_realtime_state(
             IDYmin=IDYmin, IDYmax=IDYmax, idxLevel=idxLevel
@@ -222,7 +228,6 @@ class FootprintReader(ABC):
         self._update_delta_dominations_fp(
             IDYmin=IDYmin, IDYmax=IDYmax, idxLevel=idxLevel
         )
-        # TODO: Timeout
 
     def _clear_footprint_realtime_state(
         self, IDYmin: int, IDYmax: int, idxLevel: int
@@ -243,18 +248,72 @@ class FootprintReader(ABC):
             stf.ASK_DELTA_DOMINATION_FP
         )
 
-    def _clear_footprint_timeout_state(self, idxLevel: int) -> None:
-        indicators = stf.VWAP | stf.POC_BAR | stf.VA_MIN_FP | stf.VA_MAX_FP
-        clear_mask = ~(indicators)
+    # - - Footprint: Static - -
+    def _update_footprint_static_state(self) -> None:
+        idxLevel, idxBarrier = self.con.idxVP, self.con.idxDP  # noqa: F841
+        # - - -
+        self._clear_footprint_static_state(idxLevel=idxLevel)
+        self._update_vwap_bb(idxLevel=idxLevel)
+        self._update_poc_va_fp(idxLevel=idxLevel)
+
+    def _clear_footprint_static_state(self, idxLevel: int) -> None:
+        indicators = stf.VWAP | stf.LOWER_BB | stf.UPPER_BB
+        indicators_1 = stf.POC_BAR | stf.VA_MIN_FP | stf.VA_MAX_FP
+        clear_mask = ~(indicators | indicators_1)
         self.footprint_state[:, idxLevel] &= clear_mask
 
     def _update_vwap_bb(self, idxLevel: int) -> None:
-        self.footprint_state[self.ind.vwap(), idxLevel] |= stf.VWAP
-        # TODO: 2+BB deviation Vwap
+        sum_w = self.ind.vwap_sum_w()
+        sum_pw = self.ind.vwap_sum_pw()
+        sum_p2w = self.ind.vwap_sum_p2w()
+        vwap = sum_pw / sum_w
+        std_dev = math.sqrt(max(0.0, (sum_p2w / sum_w) - (vwap**2)))
+        upper_bb, lower_bb = vwap + (2 * std_dev), vwap - (2 * std_dev)
+        self.footprint_state[self.con.to_idy(round(vwap)), idxLevel] |= stf.VWAP
+        self.footprint_state[self.con.to_idy(round(upper_bb)), idxLevel] |= stf.UPPER_BB
+        self.footprint_state[self.con.to_idy(round(lower_bb)), idxLevel] |= stf.LOWER_BB
 
-    def _update_poc_va_fp(self, idxVP: int) -> None:
-        fp, fp_state = self.footprint, self.footprint_state
+    def _update_poc_va_fp(self, idxLevel: int) -> None:
+        fp, fp_state, idxVP = self.footprint, self.footprint_state, self.con.idxVP
         # - - -
         poc = np.argmax(fp[:, idxVP])
-        fp_state[poc,] |= stf.POC_BAR
-        # TODO: VP ValeArea MIN|MAX
+        va_max, va_min = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
+        fp_state[poc, idxLevel] |= stf.POC_FP
+        fp_state[va_max, idxLevel] |= stf.VA_MAX_FP
+        fp_state[va_min, idxLevel] |= stf.VA_MIN_FP
+
+
+@njit(cache=True)
+def calc_value_area(vp_slice: NDArray[np.int64], center_idx) -> tuple[int, int]:
+    target_vol = np.sum(vp_slice) * 0.70
+    current_vol = vp_slice[center_idx]
+
+    up_idx = center_idx - 1
+    down_idx = center_idx + 1
+    max_len = len(vp_slice)
+
+    while current_vol < target_vol:
+        if 0 <= up_idx - 1 < up_idx:
+            vol_up = vp_slice[up_idx - 1] + vp_slice[up_idx]
+        else:
+            break
+
+        if down_idx < down_idx + 1 < max_len:
+            vol_down = vp_slice[down_idx + 1] + vp_slice[down_idx]
+        else:
+            break
+
+        if vol_up > vol_down:
+            current_vol += vol_up
+            up_idx -= 2
+
+        elif vol_down > vol_up:
+            current_vol += vol_down
+            down_idx += 2
+
+        else:
+            up_idx -= 1
+            current_vol += vol_down + vol_up
+            down_idx += 1
+
+    return up_idx + 2, down_idx - 2

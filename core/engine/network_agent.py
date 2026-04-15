@@ -2,8 +2,6 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.synchronize import Event
 
-import winloop
-
 from .. import AgentManager, manager_office
 from . import RestEngine, WSsEngine
 
@@ -27,7 +25,6 @@ def run_network(
     general_event: Event,
     **kwargs,
 ) -> None:
-    winloop.install()
     wss = WSsEngine(
         kwargs["manager"], wake_up_parser=parsing_event, general_event=general_event
     )

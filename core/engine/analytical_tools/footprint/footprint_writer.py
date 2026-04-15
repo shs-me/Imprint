@@ -81,18 +81,17 @@ class FootprintWriter:
         return True
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
-        con = self.con
-        nPrice, nQty = con.to_nPrice(price), con.to_nQty(qty)
-        idy: int | None = con.to_idy(nPrice=nPrice)
-        idx: int | None = con.to_idx(timestamp=timestamp, is_sell=is_sell)
+        nQty, nPrice = self.con.to_nQty(qty), self.con.to_nPrice(price)
+        idy: int | None = self.con.to_idy(nPrice=nPrice)
+        idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
                 self.footprint_1[idy, idx] += nQty
                 self._update_headers(
                     idy=idy,
                     idx=idx,
-                    nPrice=nPrice,
                     nQty=nQty,
+                    nPrice=nPrice,
                     timestamp=timestamp,
                     is_sell=is_sell,
                 )
@@ -107,30 +106,30 @@ class FootprintWriter:
         return False
 
     def _update_headers(
-        self, idy: int, idx: int, nPrice: int, nQty: int, timestamp: int, is_sell: bool
+        self, idy: int, idx: int, nQty: int, nPrice: int, timestamp: int, is_sell: bool
     ) -> None:
         hr = self.headers_1
         # - - -
         cid = self.con.get_Bar_id(idx) * chs._HeadersCount
         if hr[cid + chs.CountTrade] == 0:
-            hr[cid + chs.Open] = nPrice
+            hr[cid + chs.Open] = idy
             hr[cid + chs.Time] = timestamp
-            hr[cid + chs.Low] = nPrice
+            hr[cid + chs.High] = idy
 
-        if nPrice > hr[cid + chs.High]:
-            hr[cid + chs.High] = nPrice
+        if idy < hr[cid + chs.High]:
+            hr[cid + chs.High] = idy
 
-        if nPrice < hr[cid + chs.Low]:
-            hr[cid + chs.Low] = nPrice
+        if idy > hr[cid + chs.Low]:
+            hr[cid + chs.Low] = idy
 
-        hr[cid + chs.Close] = nPrice
+        hr[cid + chs.Close] = idy
         hr[cid + chs.Volume] += nQty
         hr[cid + chs.Delta] += -nQty if is_sell else nQty
         hr[cid + chs.CountTrade] += 1
-        self._update_indicators(cid=cid, idy=idy, idx=idx, nPrice=nPrice, nQty=nQty)
+        self._update_indicators(cid=cid, idy=idy, idx=idx, nQty=nQty, nPrice=nPrice)
 
     def _update_indicators(
-        self, cid: int | np.intp, idy: int, idx: int, nPrice: int, nQty: int
+        self, cid: int | np.intp, idy: int, idx: int, nQty: int, nPrice: int
     ) -> None:
         hr, footprint = self.headers_1, self.footprint_1
         # - - -
@@ -138,6 +137,7 @@ class FootprintWriter:
             # CVD
             hr[cid + chs.CVD] = hr[cid + chs.Delta]
             # Vwap settings
+            hr[cid + chs.VWAP_P2Weights] = (nPrice**2) * hr[cid + chs.Volume]
             hr[cid + chs.VWAP_PWeights] = nPrice * hr[cid + chs.Volume]
             hr[cid + chs.VWAP_Weights] = hr[cid + chs.Volume]
         else:
@@ -145,6 +145,9 @@ class FootprintWriter:
             # CVD
             hr[cid + chs.CVD] = hr[cid + chs.Delta] + hr[oldCid + chs.CVD]
             # Vwap settings
+            hr[cid + chs.VWAP_P2Weights] = ((nPrice**2) * hr[cid + chs.Volume]) + hr[
+                oldCid + chs.VWAP_P2Weights
+            ]
             hr[cid + chs.VWAP_PWeights] = (nPrice * hr[cid + chs.Volume]) + hr[
                 oldCid + chs.VWAP_PWeights
             ]
@@ -152,8 +155,6 @@ class FootprintWriter:
                 hr[cid + chs.Volume] + hr[oldCid + chs.VWAP_Weights]
             )
 
-        # Vwap
-        hr[cid + chs.VWAP] = hr[cid + chs.VWAP_PWeights] // hr[cid + chs.VWAP_Weights]
         # VolumeProfile
         footprint[idy, self.con.idxVP] += nQty
         # DeltaProfile
