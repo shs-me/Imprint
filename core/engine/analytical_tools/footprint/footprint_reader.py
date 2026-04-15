@@ -282,38 +282,53 @@ class FootprintReader(ABC):
         fp_state[va_max, idxLevel] |= stf.VA_MAX_FP
         fp_state[va_min, idxLevel] |= stf.VA_MIN_FP
 
+    # - - Context - -
+    def _mask_closeBar(self, idx: int) -> None | NDArray[np.int32]:
+        if (idx & ~1) != 0:
+            mask = stf.HIGH | stf.LOW | stf.CLOSE
+            mask_1 = stf.POC_BAR | stf.VA_MAX_BAR | stf.VA_MIN_BAR
+            return self.footprint_state[:, (idx & ~1) - 2] & (mask | mask_1)
+
+    def P_shape(self, idx: int) -> bool:
+        if (closeBar := self._mask_closeBar(idx=idx)) is not None:
+            high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
+            va_min = (closeBar & stf.VA_MIN_BAR).argmax()
+            if (va_min - high) > ((low - high) * 0.3):
+                if (closeBar & stf.CLOSE).argmax() > va_min:
+                    return True
+
+        return False
+
+    def b_shape(self, idx: int) -> bool:
+        if (closeBar := self._mask_closeBar(idx=idx)) is not None:
+            high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
+            va_max = (closeBar & stf.VA_MAX_BAR).argmax()
+            if (low - va_max) > ((low - high) * 0.3):
+                if va_max > (closeBar & stf.CLOSE).argmax():
+                    return True
+
+        return False
+
 
 @njit(cache=True)
 def calc_value_area(vp_slice: NDArray[np.int64], center_idx) -> tuple[int, int]:
-    target_vol = np.sum(vp_slice) * 0.70
-    current_vol = vp_slice[center_idx]
-
-    up_idx = center_idx - 1
-    down_idx = center_idx + 1
-    max_len = len(vp_slice)
-
+    target_vol, current_vol = np.sum(vp_slice) * 0.70, vp_slice[center_idx]
+    up_idx, down_idx, max_len = center_idx - 1, center_idx + 1, len(vp_slice)
     while current_vol < target_vol:
-        if 0 <= up_idx - 1 < up_idx:
+        if 0 <= up_idx - 1 < up_idx and down_idx < down_idx + 1 < max_len:
             vol_up = vp_slice[up_idx - 1] + vp_slice[up_idx]
-        else:
-            break
-
-        if down_idx < down_idx + 1 < max_len:
             vol_down = vp_slice[down_idx + 1] + vp_slice[down_idx]
+            if vol_up > vol_down:
+                current_vol += vol_up
+                up_idx -= 2
+            elif vol_down > vol_up:
+                current_vol += vol_down
+                down_idx += 2
+            else:
+                up_idx -= 2
+                current_vol += vol_down + vol_up
+                down_idx += 2
         else:
             break
 
-        if vol_up > vol_down:
-            current_vol += vol_up
-            up_idx -= 2
-
-        elif vol_down > vol_up:
-            current_vol += vol_down
-            down_idx += 2
-
-        else:
-            up_idx -= 1
-            current_vol += vol_down + vol_up
-            down_idx += 1
-
-    return up_idx + 2, down_idx - 2
+    return up_idx - 1, down_idx - 1
