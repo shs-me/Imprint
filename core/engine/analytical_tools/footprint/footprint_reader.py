@@ -47,7 +47,7 @@ class FootprintReader(ABC):
         self.footprint_state.fill(0)
         #  - - -
         self.headers: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.headers_2)
+            slice(*self.cfgFootprint.headers)
         ].cast("q")
         #  - - -
         self.space_1: memoryview[int] = self.manager.footprint_buf[
