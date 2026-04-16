@@ -291,9 +291,10 @@ class FootprintReader(ABC):
         if (closeBar := self._mask_closeBar(idx=idx)) is not None:
             high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
             va_min = (closeBar & stf.VA_MIN_BAR).argmax()
-            if (va_min - high) > ((low - high) * 0.3):
-                if (closeBar & stf.CLOSE).argmax() > va_min:
-                    return True
+            if (closeBar & stf.OPEN).argmax() > va_min:
+                if (va_min - high) > ((low - high) * 0.3):
+                    if (closeBar & stf.CLOSE).argmax() > va_min:
+                        return True
 
         return False
 
@@ -301,9 +302,10 @@ class FootprintReader(ABC):
         if (closeBar := self._mask_closeBar(idx=idx)) is not None:
             high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
             va_max = (closeBar & stf.VA_MAX_BAR).argmax()
-            if (low - va_max) > ((low - high) * 0.3):
-                if va_max > (closeBar & stf.CLOSE).argmax():
-                    return True
+            if va_max > (closeBar & stf.OPEN).argmax():
+                if (low - va_max) > ((low - high) * 0.3):
+                    if va_max > (closeBar & stf.CLOSE).argmax():
+                        return True
 
         return False
 
