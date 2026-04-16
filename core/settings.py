@@ -16,7 +16,7 @@ class StateFlags(IntFlag):
     # Footprint: RealTime
     BID_DELTA_DOMINATION_FP = auto()
     ASK_DELTA_DOMINATION_FP = auto()
-    # Footprint: Timeout
+    # Footprint: Static
     VWAP = auto()
     UPPER_BB = auto()
     LOWER_BB = auto()
@@ -35,6 +35,7 @@ class StateFlags(IntFlag):
     VA_MAX_BAR = auto()
     # Bar: Context
     UNFINISHED_AUCTION = auto()
+    FINISHED_AUCTION = auto()
     ABSORPTION = auto()
     EXHAUSTION = auto()
 

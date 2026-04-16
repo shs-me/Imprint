@@ -9,4 +9,7 @@ class BaseFootprintReader(FootprintReader):
         super().__init__(manager, execution_event)
 
     def check_pattern(self):
-        pass
+        if self.P_shape():
+            print(self.con.get_Bar_id(), "P-shape: True")
+        if self.b_shape():
+            print(self.con.get_Bar_id(), "b-shape: True")

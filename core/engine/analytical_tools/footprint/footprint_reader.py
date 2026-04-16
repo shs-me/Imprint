@@ -1,5 +1,5 @@
-import math
 from abc import ABC, abstractmethod
+from math import sqrt
 from multiprocessing.synchronize import Event
 
 import numpy as np
@@ -94,7 +94,7 @@ class FootprintReader(ABC):
             )
             if idx > self.last_idx:
                 self.last_idx = idx
-                self._update_footprint_static_state()
+                self._update_footprint_static_state(idx=idx)
 
         # - - -
         # reset
@@ -247,25 +247,31 @@ class FootprintReader(ABC):
         )
 
     # - - Footprint: Static - -
-    def _update_footprint_static_state(self) -> None:
+    def _update_footprint_static_state(self, idx: int) -> None:
         idxLevel, idxBarrier = self.con.idxVP, self.con.idxDP  # noqa: F841
         # - - -
+        high, low = self.ind.highPrice(idx), self.ind.lowPrice(idx)
         self._clear_footprint_static_state(idxLevel=idxLevel)
         self._update_vwap_bb(idxLevel=idxLevel)
         self._update_poc_va_fp(idxLevel=idxLevel)
+        self._update_auction(high=high, low=low, idx=idx, idxLevel=idxLevel)
 
     def _clear_footprint_static_state(self, idxLevel: int) -> None:
-        indicators = stf.VWAP | stf.LOWER_BB | stf.UPPER_BB
-        indicators_1 = stf.POC_BAR | stf.VA_MIN_FP | stf.VA_MAX_FP
-        clear_mask = ~(indicators | indicators_1)
-        self.footprint_state[:, idxLevel] &= clear_mask
+        self.footprint_state[:, idxLevel] &= ~(
+            stf.VWAP
+            | stf.LOWER_BB
+            | stf.UPPER_BB
+            | stf.POC_BAR
+            | stf.VA_MIN_FP
+            | stf.VA_MAX_FP
+            | stf.UNFINISHED_AUCTION
+            | stf.FINISHED_AUCTION
+        )
 
     def _update_vwap_bb(self, idxLevel: int) -> None:
-        sum_w = self.ind.vwap_sum_w()
-        sum_pw = self.ind.vwap_sum_pw()
-        sum_p2w = self.ind.vwap_sum_p2w()
-        vwap = sum_pw / sum_w
-        std_dev = math.sqrt(max(0.0, (sum_p2w / sum_w) - (vwap**2)))
+        sum_w, sum_p2w = self.ind.vwap_sum_w(), self.ind.vwap_sum_p2w()
+        vwap = self.ind.vwap_sum_pw() / sum_w
+        std_dev = sqrt(max(0.0, (sum_p2w / sum_w) - (vwap**2)))
         upper_bb, lower_bb = vwap + (2 * std_dev), vwap - (2 * std_dev)
         self.footprint_state[self.con.to_idy(round(vwap)), idxLevel] |= stf.VWAP
         self.footprint_state[self.con.to_idy(round(upper_bb)), idxLevel] |= stf.UPPER_BB
@@ -280,34 +286,70 @@ class FootprintReader(ABC):
         fp_state[va_max, idxLevel] |= stf.VA_MAX_FP
         fp_state[va_min, idxLevel] |= stf.VA_MIN_FP
 
-    # - - Context - -
-    def _mask_closeBar(self, idx: int) -> None | NDArray[np.int32]:
-        if (idx & ~1) != 0:
-            mask = stf.HIGH | stf.LOW | stf.CLOSE
-            mask_1 = stf.POC_BAR | stf.VA_MAX_BAR | stf.VA_MIN_BAR
-            return self.footprint_state[:, (idx & ~1) - 2] & (mask | mask_1)
+    def _update_auction(self, high: int, low: int, idx: int, idxLevel: int) -> None:
+        fp = self.footprint
+        # - - -
+        self.footprint_state[high, idxLevel] = (
+            stf.FINISHED_AUCTION if fp[high, idx + 1] == 0 else stf.UNFINISHED_AUCTION
+        )
+        self.footprint_state[low, idxLevel] = (
+            stf.FINISHED_AUCTION if fp[low, idx] == 0 else stf.UNFINISHED_AUCTION
+        )
 
-    def P_shape(self, idx: int) -> bool:
+    # - - Pattern - -
+    def _mask_closeBar(self, idx: int | None) -> None | NDArray[np.int32]:
+        idx_ = self.con.get_Bar_id(idx) * 2
+        if (idx_ := self.con.get_Bar_id(idx) * 2) != 0:
+            return self.footprint_state[:, idx_ - 2] & (
+                stf.HIGH
+                | stf.LOW
+                | stf.CLOSE
+                | stf.POC_BAR
+                | stf.VA_MAX_BAR
+                | stf.VA_MIN_BAR
+            )
+
+    def P_shape(self, idx: int | None = None, bullish: bool = True) -> bool:
         if (closeBar := self._mask_closeBar(idx=idx)) is not None:
             high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
             va_min = (closeBar & stf.VA_MIN_BAR).argmax()
+            close = (closeBar & stf.CLOSE).argmax()
             if (closeBar & stf.OPEN).argmax() > va_min:
                 if (va_min - high) > ((low - high) * 0.3):
-                    if (closeBar & stf.CLOSE).argmax() > va_min:
-                        return True
+                    if bullish:
+                        if (closeBar & stf.VA_MAX_BAR).argmax() >= close:
+                            if self.auction(idy=high, finished=False):
+                                return True
+                    else:
+                        if close > va_min:
+                            if self.auction(idy=high, finished=True):
+                                return True
 
         return False
 
-    def b_shape(self, idx: int) -> bool:
+    def b_shape(self, idx: int | None = None, bearish: bool = True) -> bool:
         if (closeBar := self._mask_closeBar(idx=idx)) is not None:
             high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
             va_max = (closeBar & stf.VA_MAX_BAR).argmax()
+            close = (closeBar & stf.CLOSE).argmax()
             if va_max > (closeBar & stf.OPEN).argmax():
                 if (low - va_max) > ((low - high) * 0.3):
-                    if va_max > (closeBar & stf.CLOSE).argmax():
-                        return True
-
+                    if bearish:
+                        if (closeBar & stf.VA_MIN_BAR).argmax() <= close:
+                            if self.auction(idy=low, finished=False):
+                                return True
+                    else:
+                        if va_max > close:
+                            if self.auction(idy=low, finished=True):
+                                return True
         return False
+
+    def auction(self, idy: int | np.intp, finished: bool) -> bool:
+        return bool(
+            self.footprint_state[idy, self.con.idxVP] & stf.FINISHED_AUCTION
+            if finished
+            else stf.UNFINISHED_AUCTION
+        )
 
 
 @njit(cache=True)

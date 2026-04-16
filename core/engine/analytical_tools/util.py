@@ -110,7 +110,7 @@ class ConvertMetrics:
 
     def get_Bar_id(self, idx: int | None = None) -> int | np.intp:
         if idx:
-            return ((idx - 1) // 2) if (idx % 2) != 0 else (idx // 2)
+            return (idx & ~1) // 2
         else:
             return self.headers[:, chs.Open].argmin() - 1
 
