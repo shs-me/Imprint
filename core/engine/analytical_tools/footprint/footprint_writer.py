@@ -158,7 +158,7 @@ class FootprintWriter:
         # VolumeProfile
         footprint[idy, self.con.idxVP] += nQty
         # DeltaProfile
-        footprint[idy, self.con.idxVP] += hr[cid + chs.Delta]
+        footprint[idy, self.con.idxDP] += hr[cid + chs.Delta]
 
     def _update_coords(self, idy: int, idx: int) -> None:
         IDYmin, IDXmin = spc.IDYmin, spc.IDXmin
