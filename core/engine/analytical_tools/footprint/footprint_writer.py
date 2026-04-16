@@ -42,12 +42,12 @@ class FootprintWriter:
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         # - - -
-        self.headers_1: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.headers_1)
+        self.headers: memoryview[int] = self.manager.footprint_buf[
+            slice(*self.cfgFootprint.headers)
         ].cast("q")
-        self.headers_2: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.headers_2)
-        ].cast("q")
+        self.dirty_headers: memoryview[int] = memoryview(
+            bytearray(self.headers.nbytes)
+        ).cast("q")
         # - - -
         self.space_1: memoryview[int] = self.manager.footprint_buf[
             slice(*self.cfgFootprint.space_1)
@@ -62,7 +62,7 @@ class FootprintWriter:
         self.con: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
             footprint=self.dirty_footprint,
-            headers_buf=self.headers_1,
+            headers_buf=self.dirty_headers,
             cfgFootprint=self.cfgFootprint,
         )
         if bpat[0] != 0:
@@ -108,7 +108,7 @@ class FootprintWriter:
     def _update_headers(
         self, idy: int, idx: int, nQty: int, nPrice: int, timestamp: int, is_sell: bool
     ) -> None:
-        hr = self.headers_1
+        hr = self.dirty_headers
         # - - -
         cid = self.con.get_Bar_id(idx) * chs._HeadersCount
         if hr[cid + chs.CountTrade] == 0:
@@ -131,7 +131,7 @@ class FootprintWriter:
     def _update_indicators(
         self, cid: int | np.intp, idy: int, idx: int, nQty: int, nPrice: int
     ) -> None:
-        hr, footprint = self.headers_1, self.dirty_footprint
+        hr, footprint = self.dirty_headers, self.dirty_footprint
         # - - -
         if cid == 8:
             # CVD
@@ -172,7 +172,7 @@ class FootprintWriter:
         space[IDXmax] = idx + 1 if space[IDXmax] <= idx else space[IDXmax]
 
         if self.guarantee.is_set() is False:
-            self.headers_2[:] = self.headers_1[:]
+            self.headers[:] = self.dirty_headers[:]
             np.copyto(
                 dst=self.footprint[
                     space[IDYmin] : space[IDYmax],

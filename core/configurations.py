@@ -55,17 +55,13 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
 
     def get_need_shm_size(self) -> int:
         self.footprint = OFFSET, OFFSET + (self.lines * self.panelCols * INT64)
-        self.headers_1 = (
+        self.headers = (
             self.footprint[1],
             self.footprint[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
         )
-        self.headers_2 = (
-            self.headers_1[1],
-            self.headers_1[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
-        )
         self.space_1 = (
-            self.headers_2[1],
-            self.headers_2[1] + (SpaceCoords._CoordsCount * INT64),
+            self.headers[1],
+            self.headers[1] + (SpaceCoords._CoordsCount * INT64),
         )
         self.space_2 = (
             self.space_1[1],
