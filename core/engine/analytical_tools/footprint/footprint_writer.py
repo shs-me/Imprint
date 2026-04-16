@@ -35,6 +35,7 @@ class FootprintWriter:
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
             dtype=np.int64,
         )
+        self.dirty_footprint.fill(0)
         self.footprint: NDArray[np.int64] = np.ndarray(
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
             dtype=np.int64,

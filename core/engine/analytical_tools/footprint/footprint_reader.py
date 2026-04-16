@@ -44,7 +44,7 @@ class FootprintReader(ABC):
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
             dtype=np.int32,
         )
-        self.footprint_state[:] = 0.0
+        self.footprint_state.fill(0)
         #  - - -
         self.headers: memoryview[int] = self.manager.footprint_buf[
             slice(*self.cfgFootprint.headers_2)
@@ -82,18 +82,16 @@ class FootprintReader(ABC):
         space = self.space_1 if old_flag == 0 else self.space_2
         IDYmin, IDXmin = space[spc.IDYmin], space[spc.IDXmin]
         IDYmax, IDXmax = space[spc.IDYmax], space[spc.IDXmax]
+        self._update_cluster(IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax)
+        self._update_footprint_realtime_state(IDYmin=IDYmin, IDYmax=IDYmax)
         for idx in range((IDXmin & ~1), IDXmax, 2):
             idxBid, idxAsk = idx, idx + 1
-            self._update_cluster(
-                IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax
-            )
             self._update_bid_ask_state(
                 IDYmin=IDYmin, IDYmax=IDYmax, idxBid=idxBid, idxAsk=idxAsk
             )
             self._update_bar_state(
                 IDYmin=IDYmin, IDYmax=IDYmax, idxBid=idxBid, idxAsk=idxAsk
             )
-            self._update_footprint_realtime_state(IDYmin=IDYmin, IDYmax=IDYmax)
             if idx > self.last_idx:
                 self.last_idx = idx
                 self._update_footprint_static_state()
