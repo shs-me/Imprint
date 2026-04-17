@@ -93,9 +93,8 @@ class FootprintReader(ABC):
                 IDYmin=IDYmin, IDYmax=IDYmax, idxBid=idxBid, idxAsk=idxAsk
             )
             if idx > self.last_idx:
+                self._update_footprint_static_state()
                 self.last_idx = idx
-                self._update_footprint_static_state(idx=idx)
-
         # - - -
         # reset
         space[spc.IDYmin], space[spc.IDXmin] = self.con.lines, self.con.footprintCols
@@ -194,7 +193,7 @@ class FootprintReader(ABC):
 
     def _clear_bar_state(self, high: int, low: int, idxBid: int) -> None:
         headers = stf.OPEN | stf.HIGH | stf.LOW | stf.CLOSE
-        indicators = stf.POC_BAR | stf.VA_MIN_BAR | stf.VA_MAX_BAR
+        indicators = stf.POC_BAR | stf.VAL_BAR | stf.VAH_BAR
         clear_mask = ~(headers | indicators)
         self.footprint_state[high : low + 1, idxBid] &= clear_mask
 
@@ -211,10 +210,10 @@ class FootprintReader(ABC):
         # - - -
         vp_bar = fp[high : low + 1, idxBid] + fp[high : low + 1, idxBid + 1]
         poc = np.argmax(vp_bar)
-        va_max, va_min = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-        fp_state[poc, idxBid] |= stf.POC_BAR
-        fp_state[va_max, idxBid] |= stf.VA_MAX_BAR
-        fp_state[va_min, idxBid] |= stf.VA_MIN_BAR
+        VAH, VAL = calc_value_area(vp_slice=vp_bar, center_idx=poc)
+        fp_state[high + poc, idxBid] |= stf.POC_BAR
+        fp_state[high + VAH, idxBid] |= stf.VAH_BAR
+        fp_state[high + VAL, idxBid] |= stf.VAL_BAR
 
     # - - Footprint: RealTime - -
     def _update_footprint_realtime_state(self, IDYmin: int, IDYmax: int) -> None:
@@ -247,14 +246,16 @@ class FootprintReader(ABC):
         )
 
     # - - Footprint: Static - -
-    def _update_footprint_static_state(self, idx: int) -> None:
+    def _update_footprint_static_state(self) -> None:
         idxLevel, idxBarrier = self.con.idxVP, self.con.idxDP  # noqa: F841
         # - - -
-        high, low = self.ind.highPrice(idx), self.ind.lowPrice(idx)
+        lidx = self.last_idx
+        high, low = self.ind.highPrice(lidx), self.ind.lowPrice(lidx)
         self._clear_footprint_static_state(idxLevel=idxLevel)
-        self._update_vwap_bb(idxLevel=idxLevel)
+        self._update_vwap_bb(lidx=lidx, idxLevel=idxLevel)
         self._update_poc_va_fp(idxLevel=idxLevel)
-        self._update_auction(high=high, low=low, idx=idx, idxLevel=idxLevel)
+        self._update_auction(high=high, low=low, idx=lidx, idxLevel=idxLevel)
+        self.P_shape(bullish=False)
 
     def _clear_footprint_static_state(self, idxLevel: int) -> None:
         self.footprint_state[:, idxLevel] &= ~(
@@ -262,15 +263,15 @@ class FootprintReader(ABC):
             | stf.LOWER_BB
             | stf.UPPER_BB
             | stf.POC_BAR
-            | stf.VA_MIN_FP
-            | stf.VA_MAX_FP
+            | stf.VAL_FP
+            | stf.VAH_FP
             | stf.UNFINISHED_AUCTION
             | stf.FINISHED_AUCTION
         )
 
-    def _update_vwap_bb(self, idxLevel: int) -> None:
-        sum_w, sum_p2w = self.ind.vwap_sum_w(), self.ind.vwap_sum_p2w()
-        vwap = self.ind.vwap_sum_pw() / sum_w
+    def _update_vwap_bb(self, lidx: int, idxLevel: int) -> None:
+        sum_w, sum_p2w = self.ind.vwap_sum_w(lidx), self.ind.vwap_sum_p2w(lidx)
+        vwap = self.ind.vwap_sum_pw(lidx) / sum_w
         std_dev = sqrt(max(0.0, (sum_p2w / sum_w) - (vwap**2)))
         upper_bb, lower_bb = vwap + (2 * std_dev), vwap - (2 * std_dev)
         self.footprint_state[self.con.to_idy(round(vwap)), idxLevel] |= stf.VWAP
@@ -281,10 +282,10 @@ class FootprintReader(ABC):
         fp, fp_state, idxVP = self.footprint, self.footprint_state, self.con.idxVP
         # - - -
         poc = np.argmax(fp[:, idxVP])
-        va_max, va_min = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
+        VAH, VAL = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
         fp_state[poc, idxLevel] |= stf.POC_FP
-        fp_state[va_max, idxLevel] |= stf.VA_MAX_FP
-        fp_state[va_min, idxLevel] |= stf.VA_MIN_FP
+        fp_state[VAH, idxLevel] |= stf.VAH_FP
+        fp_state[VAL, idxLevel] |= stf.VAL_FP
 
     def _update_auction(self, high: int, low: int, idx: int, idxLevel: int) -> None:
         fp = self.footprint
@@ -298,30 +299,30 @@ class FootprintReader(ABC):
 
     # - - Pattern - -
     def _mask_closeBar(self, idx: int | None) -> None | NDArray[np.int32]:
-        idx_ = self.con.get_Bar_id(idx) * 2
-        if (idx_ := self.con.get_Bar_id(idx) * 2) != 0:
-            return self.footprint_state[:, idx_ - 2] & (
-                stf.HIGH
-                | stf.LOW
-                | stf.CLOSE
-                | stf.POC_BAR
-                | stf.VA_MAX_BAR
-                | stf.VA_MIN_BAR
-            )
+        idx_ = idx if idx else self.last_idx
+        return self.footprint_state[:, idx_] & (
+            stf.OPEN
+            | stf.HIGH
+            | stf.LOW
+            | stf.CLOSE
+            | stf.POC_BAR
+            | stf.VAH_BAR
+            | stf.VAL_BAR
+        )
 
     def P_shape(self, idx: int | None = None, bullish: bool = True) -> bool:
         if (closeBar := self._mask_closeBar(idx=idx)) is not None:
             high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
-            va_min = (closeBar & stf.VA_MIN_BAR).argmax()
+            VAL = (closeBar & stf.VAL_BAR).argmax()
             close = (closeBar & stf.CLOSE).argmax()
-            if (closeBar & stf.OPEN).argmax() > va_min:
-                if (va_min - high) > ((low - high) * 0.3):
+            if (closeBar & stf.OPEN).argmax() > VAL:
+                if (VAL - high) > ((low - high) * 0.3):
                     if bullish:
-                        if (closeBar & stf.VA_MAX_BAR).argmax() >= close:
+                        if (closeBar & stf.VAH_BAR).argmax() >= close:
                             if self.auction(idy=high, finished=False):
                                 return True
                     else:
-                        if close > va_min:
+                        if close > VAL:
                             if self.auction(idy=high, finished=True):
                                 return True
 
@@ -330,16 +331,16 @@ class FootprintReader(ABC):
     def b_shape(self, idx: int | None = None, bearish: bool = True) -> bool:
         if (closeBar := self._mask_closeBar(idx=idx)) is not None:
             high, low = (closeBar & stf.HIGH).argmax(), (closeBar & stf.LOW).argmax()
-            va_max = (closeBar & stf.VA_MAX_BAR).argmax()
+            VAH = (closeBar & stf.VAH_BAR).argmax()
             close = (closeBar & stf.CLOSE).argmax()
-            if va_max > (closeBar & stf.OPEN).argmax():
-                if (low - va_max) > ((low - high) * 0.3):
+            if VAH > (closeBar & stf.OPEN).argmax():
+                if (low - VAH) > ((low - high) * 0.3):
                     if bearish:
-                        if (closeBar & stf.VA_MIN_BAR).argmax() <= close:
+                        if (closeBar & stf.VAL_BAR).argmax() <= close:
                             if self.auction(idy=low, finished=False):
                                 return True
                     else:
-                        if va_max > close:
+                        if VAH > close:
                             if self.auction(idy=low, finished=True):
                                 return True
         return False

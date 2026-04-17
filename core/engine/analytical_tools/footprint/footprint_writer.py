@@ -115,6 +115,7 @@ class FootprintWriter:
             hr[cid + chs.Open] = idy
             hr[cid + chs.Time] = timestamp
             hr[cid + chs.High] = idy
+            hr[cid + chs.Low] = idy
 
         if idy < hr[cid + chs.High]:
             hr[cid + chs.High] = idy

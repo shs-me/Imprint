@@ -21,8 +21,8 @@ class StateFlags(IntFlag):
     UPPER_BB = auto()
     LOWER_BB = auto()
     POC_FP = auto()
-    VA_MIN_FP = auto()
-    VA_MAX_FP = auto()
+    VAL_FP = auto()
+    VAH_FP = auto()
 
     # Bar States
     OPEN = auto()
@@ -31,8 +31,8 @@ class StateFlags(IntFlag):
     LOW = auto()
     # Bar: Indicators
     POC_BAR = auto()
-    VA_MIN_BAR = auto()
-    VA_MAX_BAR = auto()
+    VAL_BAR = auto()
+    VAH_BAR = auto()
     # Bar: Context
     UNFINISHED_AUCTION = auto()
     FINISHED_AUCTION = auto()
