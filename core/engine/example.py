@@ -9,4 +9,5 @@ class BaseFootprintReader(FootprintReader):
         super().__init__(manager, execution_event)
 
     def check_pattern(self):
-        pass
+        if self.P_shape(bullish=False):
+            print(self.last_idx - 2, "p-shape: True")

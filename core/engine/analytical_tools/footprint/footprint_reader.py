@@ -255,7 +255,6 @@ class FootprintReader(ABC):
         self._update_vwap_bb(lidx=lidx, idxLevel=idxLevel)
         self._update_poc_va_fp(idxLevel=idxLevel)
         self._update_auction(high=high, low=low, idx=lidx, idxLevel=idxLevel)
-        self.P_shape(bullish=False)
 
     def _clear_footprint_static_state(self, idxLevel: int) -> None:
         self.footprint_state[:, idxLevel] &= ~(
