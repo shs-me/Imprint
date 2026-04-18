@@ -5,7 +5,7 @@ from loguru import logger
 
 from ... import configurations as cfg
 from . import StatusCodes as sc
-from . import actions as act
+from . import main_actions as act
 
 
 class MainManager:
@@ -16,6 +16,7 @@ class MainManager:
         shm_buf: memoryview,
     ) -> None:
         self.shm_buf = shm_buf
+        self.close_proc = None
         self.segments_init(segments)
         self.configs_init(configs)
         self.local_segments_init()
@@ -76,11 +77,6 @@ class MainManager:
                 return False
             return False
 
-    def _check_procs(self, procs):
-        for id_proc in procs.keys():
-            if act.check_proc(id_proc=id_proc, procs=procs) is False:
-                return False
-
     def _error_check(self, status_buf: memoryview):
         if status_buf[self.id_err] == sc.ERROR:
             logger.error(f"MainManager | {sc.ERROR.get_msg()}")
@@ -92,15 +88,36 @@ class MainManager:
             if sc.WARN_RE < sc_code < 255:
                 msg = sc(sc_code).get_msg(data["proc_name"])
                 logger.warning(f"{data['proc_name']} | {msg}")
-                if self._task_action(sc_code, procs) is False:
+                if self._task_action(
+                    sc_code=sc_code,
+                    proc_name=data["proc_name"],
+                    proc_id=id_p,
+                    procs=procs,
+                ):
+                    status_buf[id_p] = 0
+                    break
+
+                else:
                     return False
+
+    def _check_procs(self, procs):
+        for id_proc in procs.keys():
+            if act.check_proc(id_proc=id_proc, procs=procs) is False:
+                return False
 
     def _task_action(
         self,
         sc_code: int,
+        proc_name: str,
+        proc_id: int,
         procs: dict,
     ) -> bool:
         if sc.WARN0 <= sc_code <= sc.WARN4:
+            if sc_code == sc.WARN1 and proc_name == "NETWORK_SIM":
+                self.sleep_all.clear()
+                act.data_preppered(procs, proc_id, self.status_buf)
+                return True
+
             self.sleep_all.clear()
             act.set_status_for_procs(  # All Sleep
                 status_buf=self.status_buf, procs=procs, stoping=True

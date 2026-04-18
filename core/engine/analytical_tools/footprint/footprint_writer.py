@@ -1,6 +1,7 @@
-from multiprocessing.synchronize import Event
+from multiprocessing.synchronize import Lock
 
 import numpy as np
+from numba import njit
 from numpy.typing import NDArray
 
 from .... import AgentManager
@@ -11,13 +12,16 @@ from .. import ConvertMetrics
 
 
 class FootprintWriter:
-    def __init__(self, manager: AgentManager, guarantee: Event) -> None:
+    def __init__(self, manager: AgentManager, guarantee: Lock) -> None:
         self.manager, self.guarantee = manager, guarantee
         self.set_status = manager.set_status
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
+        ]
+        self.spare_flag_buf: memoryview[int] = self.manager.footprint_buf[
+            self.cfgFootprint.spare_flag : self.cfgFootprint.spare_flag + 1
         ]
         self.base_price_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.basePrice[0] : self.cfgFootprint.baseTimestamp[1]
@@ -42,11 +46,15 @@ class FootprintWriter:
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         # - - -
-        self.headers: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.headers)
-        ].cast("q")
+        self.headers: NDArray[np.int64] = np.ndarray(
+            shape=(self.cfgFootprint.Bar_count, chs._HeadersCount),
+            dtype=np.int64,
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
+        )
         self.dirty_headers: memoryview[int] = memoryview(
-            bytearray(self.headers.nbytes)
+            bytearray(
+                self.manager.footprint_buf[slice(*self.cfgFootprint.headers)].nbytes
+            )
         ).cast("q")
         # - - -
         self.space_1: memoryview[int] = self.manager.footprint_buf[
@@ -87,13 +95,22 @@ class FootprintWriter:
         if idx is not None:
             if idy is not None:
                 self.dirty_footprint[idy, idx] += nQty
-                self._update_headers(
+                update_headers(
                     idy=idy,
                     idx=idx,
-                    nQty=nQty,
-                    nPrice=nPrice,
                     timestamp=timestamp,
+                    dirty_headers=self.dirty_headers,
+                )
+                update_indicators(
+                    footprint=self.dirty_footprint,
+                    hr=self.dirty_headers,
+                    idy=idy,
+                    idx=idx,
+                    idxVP=self.con.idxVP,
+                    idxDP=self.con.idxDP,
+                    nQty=nQty,
                     is_sell=is_sell,
+                    nPrice=nPrice,
                 )
                 self._update_coords(idy, idx)
                 return True
@@ -105,75 +122,23 @@ class FootprintWriter:
 
         return False
 
-    def _update_headers(
-        self, idy: int, idx: int, nQty: int, nPrice: int, timestamp: int, is_sell: bool
-    ) -> None:
-        hr = self.dirty_headers
-        # - - -
-        cid = self.con.get_Bar_id(idx) * chs._HeadersCount
-        if hr[cid + chs.CountTrade] == 0:
-            hr[cid + chs.Open] = idy
-            hr[cid + chs.Time] = timestamp
-            hr[cid + chs.High] = idy
-            hr[cid + chs.Low] = idy
-
-        if idy < hr[cid + chs.High]:
-            hr[cid + chs.High] = idy
-
-        if idy > hr[cid + chs.Low]:
-            hr[cid + chs.Low] = idy
-
-        hr[cid + chs.Close] = idy
-        hr[cid + chs.Volume] += nQty
-        hr[cid + chs.Delta] += -nQty if is_sell else nQty
-        hr[cid + chs.CountTrade] += 1
-        self._update_indicators(cid=cid, idy=idy, idx=idx, nQty=nQty, nPrice=nPrice)
-
-    def _update_indicators(
-        self, cid: int | np.intp, idy: int, idx: int, nQty: int, nPrice: int
-    ) -> None:
-        hr, footprint = self.dirty_headers, self.dirty_footprint
-        # - - -
-        if cid == 8:
-            # CVD
-            hr[cid + chs.CVD] = hr[cid + chs.Delta]
-            # Vwap settings
-            hr[cid + chs.VWAP_P2Weights] = (nPrice**2) * hr[cid + chs.Volume]
-            hr[cid + chs.VWAP_PWeights] = nPrice * hr[cid + chs.Volume]
-            hr[cid + chs.VWAP_Weights] = hr[cid + chs.Volume]
-        else:
-            oldCid = cid - chs._HeadersCount
-            # CVD
-            hr[cid + chs.CVD] = hr[cid + chs.Delta] + hr[oldCid + chs.CVD]
-            # Vwap settings
-            hr[cid + chs.VWAP_P2Weights] = ((nPrice**2) * hr[cid + chs.Volume]) + hr[
-                oldCid + chs.VWAP_P2Weights
-            ]
-            hr[cid + chs.VWAP_PWeights] = (nPrice * hr[cid + chs.Volume]) + hr[
-                oldCid + chs.VWAP_PWeights
-            ]
-            hr[cid + chs.VWAP_Weights] = (
-                hr[cid + chs.Volume] + hr[oldCid + chs.VWAP_Weights]
-            )
-
-        # VolumeProfile
-        footprint[idy, self.con.idxVP] += nQty
-        # DeltaProfile
-        footprint[idy, self.con.idxDP] += hr[cid + chs.Delta]
-
     def _update_coords(self, idy: int, idx: int) -> None:
         IDYmin, IDXmin = spc.IDYmin, spc.IDXmin
         IDYmax, IDXmax = spc.IDYmax, spc.IDXmax
         # - - -
         new_flag: int = 1 if (flag := self.flag_buf[0]) == 0 else 0
         space = self.space_1 if flag == 0 else self.space_2
-        space[IDYmin] = idy if space[IDYmin] > idy else space[IDYmin]
-        space[IDXmin] = idx if space[IDXmin] > idx else space[IDXmin]
-        space[IDYmax] = idy + 1 if space[IDYmax] <= idy else space[IDYmax]
-        space[IDXmax] = idx + 1 if space[IDXmax] <= idx else space[IDXmax]
+        if space[IDYmin] > idy:
+            space[IDYmin] = idy
+        if space[IDXmin] > idx:
+            space[IDXmin] = idx
+        if space[IDYmax] <= idy:
+            space[IDYmax] = idy + 1
+        if space[IDXmax] <= idx:
+            space[IDXmax] = idx + 1
 
-        if self.guarantee.is_set() is False:
-            self.headers[:] = self.dirty_headers[:]
+        if self.spare_flag_buf[0] == 0:
+            np.copyto(dst=self.headers, src=self.con.headers)
             np.copyto(
                 dst=self.footprint[
                     space[IDYmin] : space[IDYmax],
@@ -190,5 +155,61 @@ class FootprintWriter:
                     space[IDYmin] : space[IDYmax], self.con.idxVP :
                 ],
             )
-            self.flag_buf[0] = new_flag
-            self.guarantee.set()
+            self.flag_buf[0], self.spare_flag_buf[0] = new_flag, 1
+            self.guarantee.release()
+
+
+@njit(cache=True)
+def update_headers(
+    idy: int, idx: int, timestamp: int, dirty_headers: memoryview
+) -> None:
+    cid = (idx & ~1) // 2 * chs._HeadersCount
+    if dirty_headers[cid + chs.CountTrade] == 0:
+        dirty_headers[cid + chs.Open] = idy
+        dirty_headers[cid + chs.Time] = timestamp
+        dirty_headers[cid + chs.High] = idy
+        dirty_headers[cid + chs.Low] = idy
+
+    if idy < dirty_headers[cid + chs.High]:
+        dirty_headers[cid + chs.High] = idy
+
+    if idy > dirty_headers[cid + chs.Low]:
+        dirty_headers[cid + chs.Low] = idy
+
+    dirty_headers[cid + chs.Close] = idy
+    dirty_headers[cid + chs.CountTrade] += 1
+
+
+@njit(cache=True)
+def update_indicators(
+    footprint: NDArray[np.int64],
+    hr: memoryview,
+    idy: int,
+    idx: int,
+    idxVP: int,
+    idxDP: int,
+    nQty: int,
+    is_sell: int,
+    nPrice: int,
+) -> None:
+    cid = (idx & ~1) // 2 * chs._HeadersCount
+    hr[cid + chs.Volume] += nQty
+    hr[cid + chs.Delta] += -nQty if is_sell else nQty
+    cid_ = cid >= chs._HeadersCount
+    oldCid = cid - chs._HeadersCount
+    # CVD
+    hr[cid + chs.CVD] = hr[cid + chs.Delta] + (hr[oldCid + chs.CVD] if cid_ else 0)
+    # Vwap settings
+    hr[cid + chs.VWAP_P2Weights] = ((nPrice**2) * hr[cid + chs.Volume]) + (
+        hr[oldCid + chs.VWAP_P2Weights] if cid_ else 0
+    )
+    hr[cid + chs.VWAP_PWeights] = (nPrice * hr[cid + chs.Volume]) + (
+        hr[oldCid + chs.VWAP_PWeights] if cid_ else 0
+    )
+    hr[cid + chs.VWAP_Weights] = (
+        hr[cid + chs.Volume] + (hr[oldCid + chs.VWAP_Weights]) if cid_ else 0
+    )
+    # VolumeProfile
+    footprint[idy, idxVP] += nQty
+    # DeltaProfile
+    footprint[idy, idxDP] += hr[cid + chs.Delta]

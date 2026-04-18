@@ -54,7 +54,7 @@ class ConvertMetrics:
             return True
 
     def check_bound_idy(self, idy: int) -> int | None:
-        if 0 < idy < self.lines:
+        if 0 <= idy < self.lines:
             return idy
         else:
             return None
@@ -114,88 +114,77 @@ class ConvertMetrics:
         else:
             return self.headers[:, chs.Open].argmin() - 1
 
-
-class HeadersGet:
-    def __init__(
-        self,
-        converter: ConvertMetrics,
-    ) -> None:
-        self.cv = converter
-
+    # Headers
     def _get_header(
         self, idx: int | None, norm: bool, typeNorm: MethodType, header: chs
     ) -> Any:
         if norm:
-            return self.cv.headers_buf[
-                self.cv.get_Bar_id(idx) * chs._HeadersCount + header
-            ]
+            return self.headers_buf[self.get_Bar_id(idx) * chs._HeadersCount + header]
         else:
             return typeNorm(
-                self.cv.headers_buf[
-                    self.cv.get_Bar_id(idx) * chs._HeadersCount + header
-                ]
+                self.headers_buf[self.get_Bar_id(idx) * chs._HeadersCount + header]
             )
 
     # OHLC
     def openPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.Open
+            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.Open
         )
 
     def highPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.High
+            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.High
         )
 
     def lowPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.Low
+            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.Low
         )
 
     def closePrice(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_price, header=chs.Close
+            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.Close
         )
 
     # BaseMetrics
     def openTime(self, idx: int | None = None, strftime: bool = False) -> int | str:
         return self._get_header(
-            idx=idx, norm=strftime, typeNorm=self.cv.to_strftime, header=chs.Time
+            idx=idx, norm=strftime, typeNorm=self.to_strftime, header=chs.Time
         )
 
     def countTrade(self, idx: int | None = None) -> int:
         return self._get_header(
-            idx=idx, norm=True, typeNorm=self.cv.to_price, header=chs.CountTrade
+            idx=idx, norm=True, typeNorm=self.to_price, header=chs.CountTrade
         )
 
     def volume(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.Volume
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.Volume
         )
 
     # Indicators
     def cvd(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.CVD
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.CVD
         )
 
     def delta(self, idx: int | None = None, normalized: bool = True) -> Any:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.Delta
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.Delta
         )
 
     # Settings indicators
     def vwap_sum_p2w(self, idx: int | None = None, normalized: bool = True) -> int:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP_P2Weights
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_P2Weights
         )
 
     def vwap_sum_pw(self, idx: int | None = None, normalized: bool = True) -> int:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP_PWeights
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_PWeights
         )
 
     def vwap_sum_w(self, idx: int | None = None, normalized: bool = True) -> int:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.cv.to_qty, header=chs.VWAP_Weights
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_Weights
         )

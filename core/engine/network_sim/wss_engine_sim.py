@@ -3,13 +3,14 @@ import time
 import traceback
 from collections import deque
 from multiprocessing.synchronize import Event
-from threading import Thread
+from threading import Lock, Thread
 
 import msgspec
 from msgspec.json import Encoder
 
 from ... import AgentManager, CorePath, error_handler
 from ... import StatusCodes as sc
+from ...settings import BacktestingMode as bm
 
 
 class AggTradeSim(msgspec.Struct):
@@ -26,15 +27,18 @@ class AggTradeSim(msgspec.Struct):
 
 
 class DataPrepper:
-    def __init__(self, symbol: str) -> None:
+    def __init__(self, symbol: str, lock: Lock, mode: int) -> None:
         self.file_path: str = CorePath.data_csv
         self.symbol: str = symbol.upper()
+        self.lock = lock
+        self.mode = mode
         self.queue: deque = deque(maxlen=10000)
-        self.is_running = True
+        self.is_running, self.complete = True, False
         self.error: None | str = None
 
     def start(self) -> None:
-        Thread(target=self._run, daemon=True).start()
+        self.subP = Thread(target=self._run, daemon=True)
+        self.subP.start()
 
     def _run(self) -> None:
         try:
@@ -43,6 +47,12 @@ class DataPrepper:
                 for line in f:
                     if not self.is_running:
                         break
+
+                    if len(self.queue) == self.queue.maxlen:
+                        if self.mode == bm.FAST:
+                            time.sleep(0)
+                        elif self.mode == bm.REAL_SIM:
+                            self.lock.acquire()
 
                     d: list[str] = line.strip().split(sep=",")
                     obj = AggTradeSim(
@@ -58,8 +68,8 @@ class DataPrepper:
                         m=(d[6] in ("true", "1")),
                     )
                     self.queue.append(obj)
-                    while len(self.queue) == self.queue.maxlen:
-                        time.sleep(0.001)
+
+            self.complete = True
 
         except Exception as e:
             self.error = f"Prepper Error: {e}\n{traceback.format_exc()}"
@@ -74,9 +84,13 @@ class WSsSimEngine:
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
 
+        self.mode = manager.cfgBacktesting.mode
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         self.encoder: Encoder = Encoder()
-        self.prepper: DataPrepper = DataPrepper(self.manager.cfgBacktesting.symbol)
+        self.lock = Lock()
+        self.prepper: DataPrepper = DataPrepper(
+            symbol=self.manager.cfgBacktesting.symbol, lock=self.lock, mode=self.mode
+        )
 
         self.ottrade, self.nttrade = 0, 0  # new|old time trade
         self.min_delta = 0
@@ -95,61 +109,6 @@ class WSsSimEngine:
             slice(*self.cfgRaw.ReaderCellCounter)
         ].cast("q")
 
-    def _time_to_sleep(self) -> float:
-        # ott: Old Time Trade | ntt: New Time Trade
-        ott, ntt = self.ottrade, self.nttrade
-        # - - -
-        if 0 < ott:
-            if ott <= ntt:
-                if ott < ntt:
-                    self.ottrade = ntt
-
-                return (ntt - ott) / 1000  # Time To Sleep
-
-        else:
-            self.ottrade = ntt
-
-        return 0.01  # Base Time To Sleep
-
-    def _alarm_clock(self, tts: memoryview, start_time: int, end_time: int) -> None:
-        if self.min_delta > (delta := (end_time - start_time)):
-            self.min_delta = delta
-        else:
-            self.min_delta = delta if self.min_delta == 0 else self.min_delta
-
-        tts[0] = self.min_delta
-
-    def _encode_data(
-        self, prepper: DataPrepper, encoder: msgspec.json.Encoder
-    ) -> bytes | None:
-        obj: AggTradeSim = prepper.queue.popleft()
-        raw_data: bytes = encoder.encode(obj)
-        self.nttrade: int = obj.E
-        return raw_data
-
-    def _set_raw_data(
-        self,
-        raw_data: bytes,
-        raw_buf: memoryview,
-        WCellC: memoryview,
-        cell_amount: int,
-        data_size: int,
-        data_offset: int,
-        dataHeader_offset: int,
-    ) -> bool:
-        if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-            cell: int = WCellC[0]  # get cell
-            raw_buf[cell + dataHeader_offset] = lrd  # set lrd on cell[header]
-            start: int = cell * data_size + data_offset
-            raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
-            new_cell = cell + 1  # cell for next update
-            WCellC[0] = new_cell if new_cell < cell_amount else 0
-            return True
-
-        else:
-            self.set_status(code=sc.WARN0)
-            return False
-
     @error_handler(set_status_code=True)
     def run_wss_sim_engine(self) -> None:
         # Local Links
@@ -163,8 +122,8 @@ class WSsSimEngine:
         data_size = self.data_size
         data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
         cell_amount = self.cell_amount
-        set_raw_data, encode_data = self._set_raw_data, self._encode_data
-        time_to_sleep, have_task = self._time_to_sleep, self.have_task
+        update_cells = self._update_cells
+        have_task = self.have_task
         prepper, alarm_clock = self.prepper, self._alarm_clock
         # - - -
         while True:
@@ -182,25 +141,84 @@ class WSsSimEngine:
 
                     if prepper.error is None:
                         if not prepper.queue:
+                            if prepper.complete:
+                                set_status(code=sc.WARN1)
+
+                            if self.lock.locked():
+                                self.lock.release()
+
                             time.sleep(0)
                             continue
 
-                        time.sleep(time_to_sleep())
-                        alarm_clock(tts_buf, stime, time.perf_counter_ns())
+                        alarm_clock(tts_buf, stime)
                         set_status(code=WAKE_UP)
-                        if raw_data := encode_data(prepper=prepper, encoder=encoder):
-                            if set_raw_data(
-                                raw_data=raw_data,
-                                raw_buf=raw_buf,
-                                WCellC=WCellC,
-                                cell_amount=cell_amount,
-                                data_size=data_size,
-                                data_offset=data_offset,
-                                dataHeader_offset=dataHeader_offset,
-                            ):
-                                if wake_up_parser.is_set() is False:
-                                    wake_up_parser.set()
+                        if update_cells(
+                            queue=prepper.queue,
+                            encoder=encoder,
+                            raw_buf=raw_buf,
+                            WCellC=WCellC,
+                            cell_amount=cell_amount,
+                            data_size=data_size,
+                            data_offset=data_offset,
+                            dataHeader_offset=dataHeader_offset,
+                        ):
+                            if wake_up_parser.is_set() is False:
+                                wake_up_parser.set()
                     else:
                         raise RuntimeError(prepper.error)
                 else:
                     return
+
+    def _alarm_clock(
+        self,
+        tts: memoryview,
+        start_time: int,
+    ) -> None:
+        if self.mode == bm.FAST:
+            return
+        elif self.mode == bm.REAL_SIM:
+            time.sleep(self._time_to_sleep())
+            tts[0] = time.perf_counter_ns() - start_time
+
+    def _time_to_sleep(self) -> float:
+        # ott: Old Time Trade | ntt: New Time Trade
+        ott, ntt = self.ottrade, self.nttrade
+        # - - -
+        if 0 < ott:
+            if ott <= ntt:
+                if ott < ntt:
+                    self.ottrade = ntt
+
+                return (ntt - ott) / 1000  # Time To Sleep
+
+        else:
+            self.ottrade = ntt
+
+        return 0  # Base Time To Sleep
+
+    def _update_cells(
+        self,
+        queue: deque[AggTradeSim],
+        encoder: msgspec.json.Encoder,
+        raw_buf: memoryview,
+        WCellC: memoryview,
+        cell_amount: int,
+        data_size: int,
+        data_offset: int,
+        dataHeader_offset: int,
+    ) -> bool:
+        obj: AggTradeSim = queue.popleft()
+        self.nttrade: int = obj.T
+        raw_data: bytes = encoder.encode(obj)
+        if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
+            cell: int = WCellC[0]  # get cell
+            raw_buf[cell + dataHeader_offset] = lrd  # set lrd on cell[header]
+            start: int = cell * data_size + data_offset
+            raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
+            new_cell = cell + 1  # cell for next update
+            WCellC[0] = new_cell if new_cell < cell_amount else 0
+            return True
+
+        else:
+            self.set_status(code=sc.WARN0)
+            return False

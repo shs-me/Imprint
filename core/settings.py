@@ -1,14 +1,19 @@
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
-from multiprocessing.synchronize import Event, Semaphore
+from multiprocessing.synchronize import Event, Lock, Semaphore
 from typing import Protocol
 
 
 class CoreResources(Protocol):
     parsing_event: Event
-    logic_event: Event
+    logic_lock: Lock
     execution_event: Event
     general_event: Event
     sc_sem: Semaphore
+
+
+class BacktestingMode(IntEnum):
+    REAL_SIM = 0
+    FAST = 1
 
 
 class StateFlags(IntFlag):

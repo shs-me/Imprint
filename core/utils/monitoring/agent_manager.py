@@ -5,6 +5,7 @@ import numpy as np
 
 from ... import configurations as cfg
 from . import StatusCodes as sc
+from . import agent_action as aact
 
 
 class AgentManager:
@@ -22,6 +23,7 @@ class AgentManager:
         self.segments_init(segments)
         self.configs_init(configs)
         self.local_segments_init()
+        self.status_task = self.status_buf[task_id : task_id + 1]
 
     def segments_init(self, segments: dict[str, Any]) -> None:
         _slice: slice
@@ -83,10 +85,17 @@ class AgentManager:
         return False
 
     def have_task(self) -> bool:
-        if self.status_buf[self.task_id] == sc.STOP:
+        if self.status_buf[self.task_id] != 0:
+            self.task_action(self.status_buf[self.task_id])
             return True
 
         return False
+
+    def task_action(self, task_code: int):
+        if task_code == sc.COMPLETE:
+            return
+        elif task_code == sc.STOP:
+            return
 
     @staticmethod
     def dump_profile(file_path: str, obj: np.ndarray | memoryview, raw=False) -> None:

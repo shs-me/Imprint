@@ -6,10 +6,18 @@ from loguru import logger
 from . import StatusCodes as sc
 
 
+def data_preppered(procs: dict, proc_id: int, status_buf: memoryview):
+    for id_p, data in procs.items():
+        if data["proc_name"] == "PARSING" or id_p == proc_id:
+            status_buf[data["task_id"]] = sc.COMPLETE
+
+    procs.pop(proc_id)
+
+
 def set_status_for_procs(
     status_buf: memoryview, procs: dict[int, dict], stoping=True
 ) -> None:
-    sc_code = 2 if stoping else 1
+    sc_code = sc.STOP if stoping else sc.RUN
     for id_p, data in procs.items():
         status_buf[id_p] = sc_code
         logger.success(f"{data['proc_name']} | {sc(sc_code).name}")

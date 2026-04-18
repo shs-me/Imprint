@@ -1,6 +1,6 @@
 import inspect
 import os
-from multiprocessing import Event, Process, Semaphore
+from multiprocessing import Event, Lock, Process, Semaphore
 from types import FunctionType
 
 from loguru import logger
@@ -16,7 +16,9 @@ class RunMain(CoreResources):
         self.backtesting = backtesting
         self.procs = {}
         # CoreResources
-        self.parsing_event, self.logic_event = Event(), Event()
+        self.parsing_event = Event()
+        self.logic_lock = Lock()
+        self.logic_lock.acquire(block=False)
         self.execution_event = Event()
         self.sc_sem, self.general_event = Semaphore(0), Event()
 
@@ -26,9 +28,9 @@ class RunMain(CoreResources):
                 os.mkdir(_dir)
 
         self.funcs = [
-            run_network_sim if self.backtesting else run_network,
-            run_parsing,
             run_logic,
+            run_parsing,
+            run_network_sim if self.backtesting else run_network,
         ]
 
     def _get_kwargs_for_func(self, func: FunctionType) -> dict | None:
@@ -79,6 +81,7 @@ class RunMain(CoreResources):
 
         self.general_event.set()
         logger.info("-- Core -- | Init completed.")
+        print(self.procs)
         while True:
             if (
                 self.manager.run(

@@ -1,6 +1,6 @@
 from abc import ABC
 
-from .settings import BarHeaders, ChartInterval, SpaceCoords
+from .settings import BacktestingMode, BarHeaders, ChartInterval, SpaceCoords
 
 UBYTE = 1
 INT64 = 8
@@ -24,18 +24,20 @@ class ConfigurationBacktesting(Configuration):
         tick_size: str = "0.01",
         lot_size: str = "0.001",
         backtesting: bool = True,
+        mode: BacktestingMode = BacktestingMode.REAL_SIM,
     ) -> None:
         self.symbol: str = symbol
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size
         self.backtesting: bool = backtesting
+        self.mode = mode
 
 
 # ShmSegmentsSubclasses
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
-        chart_interval: ChartInterval = ChartInterval._M,
+        chart_interval: ChartInterval = ChartInterval._30S,
         chart_range: int = 1,
     ) -> None:
         self.intervalMs = chart_interval
@@ -71,7 +73,8 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64
 
         self.flag = self.baseTimestamp[1]
-        return self.flag
+        self.spare_flag = self.flag + UBYTE
+        return self.spare_flag
 
 
 class ConfigurationStrategy(ConfigurationSHMSegments):
@@ -81,7 +84,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.side = self.qty + UBYTE
         self.type_order = self.side + UBYTE
         self.signal_size = self.type_order
-        self.cell_amount = 128  # Больше не нужно, так как ордера исполняются быстро
+        self.cell_amount = 128
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
@@ -102,7 +105,7 @@ class ConfigurationRingRawBuf(ConfigurationSHMSegments):
         self.header_size = 1
         self.data_size = 256
         self.cell_amount = 10000
-        self.safe_lag = int(self.cell_amount * 0.1)
+        self.safe_lag = int(self.cell_amount * 0.9)
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:

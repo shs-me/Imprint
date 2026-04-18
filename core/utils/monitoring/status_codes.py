@@ -20,6 +20,7 @@ class StatusCodes(IntEnum):
     STOP = "STOPING"
     SLEEP = "SLEEPING"
     WAKE_UP = "WAKE_UP"
+    COMPLETE = "pass"
     ERR_RE = "> this value, error sc"
     ERROR = "Error, for more info check exc_info.log"
     WARN_RE = "> this value, warn sc"
@@ -33,7 +34,7 @@ class StatusCodes(IntEnum):
         "PARSING": "ParserAgent: GetDecodeRawData: aggTrade data < 0",
         "LOGIC": "",
         "NETWORK": "",
-        "NETWORK_SIM": "",
+        "NETWORK_SIM": "WssSimAgent: data preppered",
     }
     WARN2 = {
         "PARSING": "FootprintWriter: InitSession: amount tick in price > 80% array lines",

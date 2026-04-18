@@ -2,7 +2,7 @@ import gc
 import importlib.util
 import inspect
 import os
-from multiprocessing.synchronize import Event
+from multiprocessing.synchronize import Event, Lock
 
 from .. import AgentManager, CorePath, error_handler, manager_office
 from .. import StatusCodes as sc
@@ -14,7 +14,7 @@ class LogicAgent:
         self,
         manager: AgentManager,
         reader: FootprintReader,
-        pre_sleep_logic: Event,
+        pre_sleep_logic: Lock,
         general_event: Event,
     ) -> None:
         self.manager, self.reader = manager, reader
@@ -22,16 +22,13 @@ class LogicAgent:
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
 
-    def _alarm_clock(self, tts: memoryview) -> bool:
-        counter = 1
-        last_box = self.reader.last_box
-        box_id = self.reader.flag_buf
-        while last_box == box_id[0]:
-            counter += 1
-            if counter >= tts[0]:
-                return True
-        else:
-            return False
+    def _alarm_clock(self, tts: memoryview, pre_sleep_logic: Lock) -> None:
+        flag = self.reader.spare_flag_buf
+        while flag[0] == 0:
+            break
+            # - - -
+
+        pre_sleep_logic.acquire()
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
@@ -48,14 +45,10 @@ class LogicAgent:
             init_session = True
             while True:
                 set_status(code=SLEEP)
+                alarm_clock(tts_buf, pre_sleep_logic)
                 if have_problem() is False:
                     if have_task():
                         break
-
-                    if alarm_clock(tts_buf):
-                        if pre_sleep_logic.is_set() is False:
-                            pre_sleep_logic.wait()
-                        continue
 
                     set_status(code=WAKE_UP)
                     if init_session:
@@ -63,8 +56,6 @@ class LogicAgent:
                         init_session = False
 
                     reader.check_update()
-                    if pre_sleep_logic.is_set():
-                        pre_sleep_logic.clear()
 
                 else:
                     return
@@ -99,7 +90,7 @@ def get_plugin(path: str, manager: AgentManager, execution_event: Event):
 
 @manager_office()
 def run_logic(
-    logic_event: Event,
+    logic_lock: Lock,
     execution_event: Event,
     general_event: Event,
     **kwargs,
@@ -108,7 +99,7 @@ def run_logic(
     agent = LogicAgent(
         kwargs["manager"],
         reader=reader,
-        pre_sleep_logic=logic_event,
+        pre_sleep_logic=logic_lock,
         general_event=general_event,
     )
     agent.run_logic_engine()

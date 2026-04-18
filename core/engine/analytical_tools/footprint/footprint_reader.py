@@ -10,7 +10,7 @@ from .... import AgentManager
 from ....settings import BarHeaders as chs  # noqa: F401
 from ....settings import SpaceCoords as spc
 from ....settings import StateFlags as stf
-from .. import ConvertMetrics, HeadersGet
+from .. import ConvertMetrics
 
 
 class FootprintReader(ABC):
@@ -18,10 +18,13 @@ class FootprintReader(ABC):
         self.manager, self.send_signal = manager, execution_event
         self.set_status = manager.set_status
         # Footprint
-        self.last_box, self.last_idx = 0, 0
+        self.last_idx = 0
         self.cfgFootprint = self.manager.cfgFootprint
         self.flag_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
+        ]
+        self.spare_flag_buf: memoryview[int] = self.manager.footprint_buf[
+            self.cfgFootprint.spare_flag : self.cfgFootprint.spare_flag + 1
         ]
         self.base_price_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.basePrice[0] : self.cfgFootprint.baseTimestamp[1]
@@ -65,7 +68,6 @@ class FootprintReader(ABC):
             headers_buf=self.headers,
             cfgFootprint=self.cfgFootprint,
         )
-        self.ind = HeadersGet(converter=self.con)
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
 
     def check_update(self) -> None:
@@ -78,7 +80,6 @@ class FootprintReader(ABC):
 
     def _update_state(self):
         old_flag: int = 1 if self.flag_buf[0] == 0 else 0
-        self.last_box = self.flag_buf[0]
         space = self.space_1 if old_flag == 0 else self.space_2
         IDYmin, IDXmin = space[spc.IDYmin], space[spc.IDXmin]
         IDYmax, IDXmax = space[spc.IDYmax], space[spc.IDXmax]
@@ -99,6 +100,7 @@ class FootprintReader(ABC):
         # reset
         space[spc.IDYmin], space[spc.IDXmin] = self.con.lines, self.con.footprintCols
         space[spc.IDYmax], space[spc.IDXmax] = 0, 0
+        self.spare_flag_buf[0] = 0
 
     # - - Cluster - -
     def _update_cluster(
@@ -182,10 +184,8 @@ class FootprintReader(ABC):
     def _update_bar_state(
         self, IDYmin: int, IDYmax: int, idxBid: int, idxAsk: int
     ) -> None:
-        ind = self.ind
-        #  - - -
-        open, close = ind.openPrice(idxBid), ind.closePrice(idxBid)
-        high, low = ind.highPrice(idxBid), ind.lowPrice(idxBid)
+        open, close = self.con.openPrice(idxBid), self.con.closePrice(idxBid)
+        high, low = self.con.highPrice(idxBid), self.con.lowPrice(idxBid)
 
         self._clear_bar_state(high=high, low=low, idxBid=idxBid)
         self._update_ohlc(idxBid=idxBid, open=open, high=high, low=low, close=close)
@@ -250,7 +250,7 @@ class FootprintReader(ABC):
         idxLevel, idxBarrier = self.con.idxVP, self.con.idxDP  # noqa: F841
         # - - -
         lidx = self.last_idx
-        high, low = self.ind.highPrice(lidx), self.ind.lowPrice(lidx)
+        high, low = self.con.highPrice(lidx), self.con.lowPrice(lidx)
         self._clear_footprint_static_state(idxLevel=idxLevel)
         self._update_vwap_bb(lidx=lidx, idxLevel=idxLevel)
         self._update_poc_va_fp(idxLevel=idxLevel)
@@ -269,8 +269,8 @@ class FootprintReader(ABC):
         )
 
     def _update_vwap_bb(self, lidx: int, idxLevel: int) -> None:
-        sum_w, sum_p2w = self.ind.vwap_sum_w(lidx), self.ind.vwap_sum_p2w(lidx)
-        vwap = self.ind.vwap_sum_pw(lidx) / sum_w
+        sum_w, sum_p2w = self.con.vwap_sum_w(lidx), self.con.vwap_sum_p2w(lidx)
+        vwap = self.con.vwap_sum_pw(lidx) / sum_w
         std_dev = sqrt(max(0.0, (sum_p2w / sum_w) - (vwap**2)))
         upper_bb, lower_bb = vwap + (2 * std_dev), vwap - (2 * std_dev)
         self.footprint_state[self.con.to_idy(round(vwap)), idxLevel] |= stf.VWAP
