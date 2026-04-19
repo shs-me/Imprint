@@ -47,7 +47,6 @@ class FootprintWriter:
         self.chsVWAP_PWeights = int(chs.VWAP_PWeights)
         self.chsVWAP_Weights = int(chs.VWAP_Weights)
 
-
     def _init_array(self) -> None:
         self.footprint: NDArray[np.int64] = np.ndarray(
             shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
@@ -207,24 +206,20 @@ def update_footprint_and_headers_and_indicators_and_coords(
         dirty_headers[bar, chsCVD] = (
             dirty_headers[bar, chsDelta] + (dirty_headers[oldCid, chsCVD])
         )
-        dirty_headers[bar, chsVWAP_P2Weights] = (
-            (nPrice**2) * dirty_headers[bar, chsVolume]
-        ) + dirty_headers[oldCid, chsVWAP_P2Weights]
-
-        dirty_headers[bar, chsVWAP_PWeights] = (
-            nPrice * dirty_headers[bar, chsVolume]
-        ) + dirty_headers[oldCid, chsVWAP_PWeights]
-
+        dirty_headers[bar, chsVWAP_P2Weights] = ((nPrice**2) * nQty) + dirty_headers[
+            oldCid, chsVWAP_P2Weights
+        ]
+        dirty_headers[bar, chsVWAP_PWeights] = (nPrice * nQty) + dirty_headers[
+            oldCid, chsVWAP_PWeights
+        ]
         dirty_headers[bar, chsVWAP_Weights] = (
-            dirty_headers[bar, chsVolume] + (dirty_headers[oldCid, chsVWAP_Weights])
+            nQty + (dirty_headers[oldCid, chsVWAP_Weights])
         )
     else:
         dirty_headers[bar, chsCVD] = dirty_headers[bar, chsDelta]
-        dirty_headers[bar, chsVWAP_P2Weights] = (nPrice**2) * dirty_headers[
-            bar, chsVolume
-        ]
-        dirty_headers[bar, chsVWAP_PWeights] = nPrice * dirty_headers[bar, chsVolume]
-        dirty_headers[bar, chsVWAP_Weights] = dirty_headers[bar, chsVolume]
+        dirty_headers[bar, chsVWAP_P2Weights] += (nPrice**2) * nQty
+        dirty_headers[bar, chsVWAP_PWeights] += nPrice * nQty
+        dirty_headers[bar, chsVWAP_Weights] += nQty
 
     # Update Space Coords
     buf: int = space_flag[0]

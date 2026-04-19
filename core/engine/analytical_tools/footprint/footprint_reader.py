@@ -290,10 +290,10 @@ class FootprintReader(ABC):
     def _update_auction(self, high: int, low: int, idx: int, idxLevel: int) -> None:
         fp = self.footprint
         # - - -
-        self.footprint_state[high, idxLevel] = (
+        self.footprint_state[high, idxLevel] |= (
             stf.FINISHED_AUCTION if fp[high, idx + 1] == 0 else stf.UNFINISHED_AUCTION
         )
-        self.footprint_state[low, idxLevel] = (
+        self.footprint_state[low, idxLevel] |= (
             stf.FINISHED_AUCTION if fp[low, idx] == 0 else stf.UNFINISHED_AUCTION
         )
 
@@ -324,6 +324,18 @@ class FootprintReader(ABC):
                     else:
                         if close > VAL:
                             if self.auction(idy=high, finished=True):
+                                print(
+                                    self.last_idx,
+                                    self.con.get_time(idx=self.last_idx, strftime=True),
+                                    "p-shape[bullish=False]: True",
+                                    self.footprint[
+                                        (closeBar & stf.OPEN).argmax(), self.last_idx
+                                    ],
+                                    self.footprint[high, self.last_idx],
+                                    self.footprint[low, self.last_idx],
+                                    self.footprint[close, self.last_idx],
+                                    self.footprint[VAL, self.last_idx],
+                                )
                                 return True
 
         return False
@@ -347,9 +359,8 @@ class FootprintReader(ABC):
 
     def auction(self, idy: int | np.intp, finished: bool) -> bool:
         return bool(
-            self.footprint_state[idy, self.con.idxVP] & stf.FINISHED_AUCTION
-            if finished
-            else stf.UNFINISHED_AUCTION
+            self.footprint_state[idy, self.con.idxVP]
+            & (stf.FINISHED_AUCTION if finished else stf.UNFINISHED_AUCTION)
         )
 
 
@@ -358,19 +369,13 @@ def calc_value_area(vp_slice: NDArray[np.int64], center_idx) -> tuple[int, int]:
     target_vol, current_vol = np.sum(vp_slice) * 0.70, vp_slice[center_idx]
     up_idx, down_idx, max_len = center_idx - 1, center_idx + 1, len(vp_slice)
     while current_vol < target_vol:
-        if 0 <= up_idx - 1 or down_idx + 1 < max_len:
-            vol_up = vp_slice[up_idx - 1] if 0 <= up_idx - 1 else 0
-            vol_down = vp_slice[down_idx + 1] if down_idx + 1 < max_len else 0
-            if vol_up > vol_down:
-                current_vol += vol_up
-                up_idx -= 1
-            elif vol_down > vol_up:
-                current_vol += vol_down
-                down_idx += 1
-            else:
-                up_idx -= 1
-                current_vol += vol_down + vol_up
-                down_idx += 1
+        if 0 <= up_idx and down_idx < max_len:
+            vol_up = vp_slice[up_idx] if 0 <= up_idx else 0
+            vol_down = vp_slice[down_idx] if down_idx < max_len else 0
+            up_idx -= 1 if vol_up > vol_down or vol_up == vol_down else 0
+            down_idx += 1 if vol_down > vol_up or vol_down == vol_up else 0
+            current_vol += vol_up + vol_down
+
         else:
             break
 
