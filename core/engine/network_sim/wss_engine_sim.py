@@ -48,24 +48,26 @@ class DataPrepper:
                     if not self.is_running:
                         break
 
-                    if len(self.queue) == self.queue.maxlen:
-                        if self.mode == bm.FAST:
+                    while len(self.queue) == self.queue.maxlen:
+                        if self.mode == bm.NONE_STOP:
                             time.sleep(0)
-                        elif self.mode == bm.REAL_SIM:
+                        elif self.mode == bm.ZERO_SLEEP:
+                            time.sleep(0)
+                        elif self.mode == bm.REAL_TIME_SIM:
                             self.lock.acquire()
 
-                    d: list[str] = line.strip().split(sep=",")
+                    data: list[str] = line.strip().split(sep=",")
                     obj = AggTradeSim(
                         e="aggTrade",
-                        E=int(d[5]),
-                        a=int(d[0]),
+                        E=int(data[5]),
+                        a=int(data[0]),
                         s=self.symbol,
-                        p=d[1],
-                        q=d[2],
-                        f=int(d[3]),
-                        l=int(d[4]),
-                        T=int(d[5]),
-                        m=(d[6] in ("true", "1")),
+                        p=data[1],
+                        q=data[2],
+                        f=int(data[3]),
+                        l=int(data[4]),
+                        T=int(data[5]),
+                        m=(data[6] in ("true", "1")),
                     )
                     self.queue.append(obj)
 
@@ -118,10 +120,10 @@ class WSsSimEngine:
         have_task = self.have_task
         raw_buf = self.manager.raw_buf
         tts_buf = self.manager.time_to_sleep_buf
-        WCellC = self.WriterCellCounter
+        WCellC, RCellC = self.WriterCellCounter, self.ReaderCellCounter
         data_size = self.data_size
         data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
-        cell_amount = self.cell_amount
+        cell_amount, safe_lag = self.cell_amount, self.safe_lag
         update_cells = self._update_cells
         have_task = self.have_task
         prepper, alarm_clock = self.prepper, self._alarm_clock
@@ -150,7 +152,14 @@ class WSsSimEngine:
                             time.sleep(0)
                             continue
 
-                        alarm_clock(tts_buf, stime)
+                        alarm_clock(
+                            tts_buf,
+                            stime,
+                            WCellC=WCellC,
+                            RCellC=RCellC,
+                            cell_amount=cell_amount,
+                            safe_lag=safe_lag,
+                        )
                         set_status(code=WAKE_UP)
                         if update_cells(
                             queue=prepper.queue,
@@ -173,12 +182,26 @@ class WSsSimEngine:
         self,
         tts: memoryview,
         start_time: int,
+        WCellC: memoryview,
+        RCellC: memoryview,
+        cell_amount: int,
+        safe_lag: int,
     ) -> None:
-        if self.mode == bm.FAST:
-            return
-        elif self.mode == bm.REAL_SIM:
-            time.sleep(self._time_to_sleep())
-            tts[0] = time.perf_counter_ns() - start_time
+        if self.mode == bm.ZERO_SLEEP:
+            while ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
+                time.sleep(0)
+
+        elif self.mode == bm.NONE_STOP or self.mode == bm.REAL_TIME_SIM:
+            if ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
+                raise RuntimeError(
+                    f"WssAgentSim: AlarmClock: reading lag[\
+                ({WCellC[0]} - {RCellC[0]} + {cell_amount}) % {cell_amount}\
+                ] > safe lag[{safe_lag}]"
+                )
+
+            if self.mode == bm.REAL_TIME_SIM:
+                time.sleep(self._time_to_sleep())
+                tts[0] = time.perf_counter_ns() - start_time
 
     def _time_to_sleep(self) -> float:
         # ott: Old Time Trade | ntt: New Time Trade

@@ -12,8 +12,9 @@ class CoreResources(Protocol):
 
 
 class BacktestingMode(IntEnum):
-    REAL_SIM = 0
-    FAST = 1
+    REAL_TIME_SIM = 0
+    ZERO_SLEEP = 1
+    NONE_STOP = 2
 
 
 class StateFlags(IntFlag):

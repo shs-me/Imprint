@@ -24,7 +24,7 @@ class ConfigurationBacktesting(Configuration):
         tick_size: str = "0.01",
         lot_size: str = "0.001",
         backtesting: bool = True,
-        mode: BacktestingMode = BacktestingMode.REAL_SIM,
+        mode: BacktestingMode = BacktestingMode.ZERO_SLEEP,
     ) -> None:
         self.symbol: str = symbol
         self.tick_size: str = tick_size
@@ -37,7 +37,7 @@ class ConfigurationBacktesting(Configuration):
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
-        chart_interval: ChartInterval = ChartInterval._30S,
+        chart_interval: ChartInterval = ChartInterval._M,
         chart_range: int = 1,
     ) -> None:
         self.intervalMs = chart_interval
@@ -61,15 +61,11 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
             self.footprint[1],
             self.footprint[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
         )
-        self.space_1 = (
+        self.space = (
             self.headers[1],
-            self.headers[1] + (SpaceCoords._CoordsCount * INT64),
+            self.headers[1] + (SpaceCoords._CoordsCount * 2 * INT64),
         )
-        self.space_2 = (
-            self.space_1[1],
-            self.space_1[1] + (SpaceCoords._CoordsCount * INT64),
-        )
-        self.basePrice = self.space_2[1], self.space_2[1] + INT64
+        self.basePrice = self.space[1], self.space[1] + INT64
         self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64
 
         self.flag = self.baseTimestamp[1]

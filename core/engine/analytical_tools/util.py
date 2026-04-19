@@ -14,12 +14,12 @@ class ConvertMetrics:
         self,
         trade_param: memoryview,
         footprint: NDArray[np.int64],
-        headers_buf: memoryview,
+        headers: NDArray[np.int64],
         cfgFootprint: ConfigurationFootprint,
     ) -> None:
         self.trade_par = trade_param
         self.footprint = footprint
-        self.headers_buf = headers_buf
+        self.headers = headers
         self.lines = cfgFootprint.lines
         self.footprintCols = cfgFootprint.footprintCols
         self.panelCols = cfgFootprint.panelCols
@@ -30,14 +30,6 @@ class ConvertMetrics:
         self.qtyMult = 10**self.qtyPrec + 1e-9
         self.idxVP = cfgFootprint.colVP
         self.idxDP = cfgFootprint.colDP
-        self._init_array()
-
-    def _init_array(self):
-        self.headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.BarCount, chs._HeadersCount),
-            dtype=np.int64,
-            buffer=self.headers_buf,
-        )
 
     def init_session(self, price: float | int, timestamp: int):
         self.nBasePrice = self.to_nPrice(price) if isinstance(price, float) else price
@@ -109,7 +101,7 @@ class ConvertMetrics:
             return (idx & ~1) // 2 * self.ims + self.baseTimestamp
 
     def get_Bar_id(self, idx: int | None = None) -> int | np.intp:
-        if idx:
+        if idx is not None:
             return (idx & ~1) // 2
         else:
             return self.headers[:, chs.Open].argmin() - 1
@@ -119,11 +111,9 @@ class ConvertMetrics:
         self, idx: int | None, norm: bool, typeNorm: MethodType, header: chs
     ) -> Any:
         if norm:
-            return self.headers_buf[self.get_Bar_id(idx) * chs._HeadersCount + header]
+            return self.headers[self.get_Bar_id(idx), header]
         else:
-            return typeNorm(
-                self.headers_buf[self.get_Bar_id(idx) * chs._HeadersCount + header]
-            )
+            return typeNorm(self.headers[self.get_Bar_id(idx), header])
 
     # OHLC
     def openPrice(self, idx: int | None = None, normalized: bool = True) -> Any:

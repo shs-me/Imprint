@@ -81,7 +81,6 @@ class RunMain(CoreResources):
 
         self.general_event.set()
         logger.info("-- Core -- | Init completed.")
-        print(self.procs)
         while True:
             if (
                 self.manager.run(

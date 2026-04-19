@@ -2,10 +2,12 @@ import gc
 import importlib.util
 import inspect
 import os
+import time
 from multiprocessing.synchronize import Event, Lock
 
 from .. import AgentManager, CorePath, error_handler, manager_office
 from .. import StatusCodes as sc
+from ..settings import BacktestingMode as bm
 from . import BaseFootprintReader, FootprintReader
 
 
@@ -21,14 +23,20 @@ class LogicAgent:
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
+        self.mode = manager.cfgBacktesting.mode
 
     def _alarm_clock(self, tts: memoryview, pre_sleep_logic: Lock) -> None:
-        flag = self.reader.spare_flag_buf
-        while flag[0] == 0:
-            break
-            # - - -
+        flag = self.reader.spare_flag
+        if self.mode == bm.NONE_STOP:
+            while flag[0] == 0:
+                pass
 
-        pre_sleep_logic.acquire()
+        elif self.mode == bm.ZERO_SLEEP:
+            while flag[0] == 0:
+                time.sleep(0)
+
+        elif self.mode == bm.REAL_TIME_SIM:
+            pre_sleep_logic.acquire()
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:

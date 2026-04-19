@@ -20,10 +20,10 @@ class FootprintReader(ABC):
         # Footprint
         self.last_idx = 0
         self.cfgFootprint = self.manager.cfgFootprint
-        self.flag_buf: memoryview[int] = self.manager.footprint_buf[
+        self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
-        self.spare_flag_buf: memoryview[int] = self.manager.footprint_buf[
+        self.spare_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.spare_flag : self.cfgFootprint.spare_flag + 1
         ]
         self.base_price_and_timestamp_buf: memoryview[int] = self.manager.footprint_buf[
@@ -49,23 +49,24 @@ class FootprintReader(ABC):
         )
         self.footprint_state.fill(0)
         #  - - -
-        self.headers: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.headers)
-        ].cast("q")
+        self.headers: NDArray[np.int64] = np.ndarray(
+            shape=(self.cfgFootprint.Bar_count, chs._HeadersCount),
+            dtype=np.int64,
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
+        )
         #  - - -
-        self.space_1: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.space_1)
-        ].cast("q")
-        self.space_2: memoryview[int] = self.manager.footprint_buf[
-            slice(*self.cfgFootprint.space_2)
-        ].cast("q")
+        self.space: NDArray[np.int64] = np.ndarray(
+            (2, spc._CoordsCount),
+            dtype=np.int64,
+            buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.space)],
+        )
 
     def init_session(self) -> None:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
         self.con: ConvertMetrics = ConvertMetrics(
             trade_param=self.trade_par,
             footprint=self.footprint,
-            headers_buf=self.headers,
+            headers=self.headers,
             cfgFootprint=self.cfgFootprint,
         )
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
@@ -79,10 +80,8 @@ class FootprintReader(ABC):
         pass
 
     def _update_state(self):
-        old_flag: int = 1 if self.flag_buf[0] == 0 else 0
-        space = self.space_1 if old_flag == 0 else self.space_2
-        IDYmin, IDXmin = space[spc.IDYmin], space[spc.IDXmin]
-        IDYmax, IDXmax = space[spc.IDYmax], space[spc.IDXmax]
+        old_flag: int = 1 if self.space_flag[0] == 0 else 0
+        IDYmin, IDXmin, IDYmax, IDXmax = self.space[old_flag, :]
         self._update_cluster(IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax)
         self._update_footprint_realtime_state(IDYmin=IDYmin, IDYmax=IDYmax)
         for idx in range((IDXmin & ~1), IDXmax, 2):
@@ -98,9 +97,10 @@ class FootprintReader(ABC):
                 self.last_idx = idx
         # - - -
         # reset
-        space[spc.IDYmin], space[spc.IDXmin] = self.con.lines, self.con.footprintCols
-        space[spc.IDYmax], space[spc.IDXmax] = 0, 0
-        self.spare_flag_buf[0] = 0
+        self.space[:, spc.IDYmin] = self.con.lines
+        self.space[:, spc.IDXmin] = self.con.footprintCols
+        self.space[:, spc.IDYmax :] = 0
+        self.spare_flag[0] = 0
 
     # - - Cluster - -
     def _update_cluster(
@@ -255,6 +255,7 @@ class FootprintReader(ABC):
         self._update_vwap_bb(lidx=lidx, idxLevel=idxLevel)
         self._update_poc_va_fp(idxLevel=idxLevel)
         self._update_auction(high=high, low=low, idx=lidx, idxLevel=idxLevel)
+        self.P_shape(bullish=False)
 
     def _clear_footprint_static_state(self, idxLevel: int) -> None:
         self.footprint_state[:, idxLevel] &= ~(
