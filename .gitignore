@@ -1,7 +1,6 @@
 # Project gitignore
 /archive
 /logs
-/plugins
 /data
 /dump
 

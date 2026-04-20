@@ -37,7 +37,7 @@ class ConfigurationBacktesting(Configuration):
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
-        chart_interval: ChartInterval = ChartInterval._M,
+        chart_interval: ChartInterval = ChartInterval._5M,
         chart_range: int = 1,
     ) -> None:
         self.intervalMs = chart_interval

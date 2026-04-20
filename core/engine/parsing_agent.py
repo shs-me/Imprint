@@ -34,7 +34,6 @@ class ParserAgent:
         self.wait_main: Event = general_event
         self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
         self.mode = manager.cfgBacktesting.mode
-        self.status_task = manager.status_task
         # InitGetRawData
         self.cfgRaw = self.manager.cfgRaw
         self.data_size = self.cfgRaw.data_size
@@ -57,9 +56,8 @@ class ParserAgent:
         decoder, writer = self.decoder, self.writer
         pre_sleep_wss, wake_up_logic = self.pre_sleep_wss, self.wake_up_logic
         set_status, have_problem = self.set_status, self.have_problem
-        have_task, status_task = self.have_task, self.status_task
+        have_task, status_task = self.have_task, self.manager.status_task
         raw_buf = self.manager.raw_buf
-        tts_buf = self.manager.time_to_sleep_buf
         RCellC, WCellC = self.ReaderCellCounter, self.WriterCellCounter
         data_size = self.data_size
         data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
@@ -76,7 +74,7 @@ class ParserAgent:
                     if have_task():
                         break
 
-                    alarm_clock(tts_buf, status_task, RCellC, WCellC, pre_sleep_wss)
+                    alarm_clock(status_task, RCellC, WCellC, pre_sleep_wss)
                     set_status(code=WAKE_UP)
                     update_cells(
                         raw_buf=raw_buf,
@@ -96,7 +94,6 @@ class ParserAgent:
 
     def _alarm_clock(
         self,
-        tts: memoryview,
         status_task: memoryview,
         RCellC: memoryview,
         WCellC: memoryview,

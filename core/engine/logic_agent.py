@@ -25,25 +25,12 @@ class LogicAgent:
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
         self.mode = manager.cfgBacktesting.mode
 
-    def _alarm_clock(self, tts: memoryview, pre_sleep_logic: Lock) -> None:
-        flag = self.reader.spare_flag
-        if self.mode == bm.NONE_STOP:
-            while flag[0] == 0:
-                pass
-
-        elif self.mode == bm.ZERO_SLEEP:
-            while flag[0] == 0:
-                time.sleep(0)
-
-        elif self.mode == bm.REAL_TIME_SIM:
-            pre_sleep_logic.acquire()
-
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
         # LocalLinks
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         set_status, have_problem = self.set_status, self.have_problem
-        tts_buf = self.manager.time_to_sleep_buf
+        status_task = self.manager.status_task
         pre_sleep_logic, alarm_clock = self.pre_sleep_logic, self._alarm_clock
         reader, have_task = self.reader, self.have_task
         #  - - -
@@ -53,7 +40,7 @@ class LogicAgent:
             init_session = True
             while True:
                 set_status(code=SLEEP)
-                alarm_clock(tts_buf, pre_sleep_logic)
+                alarm_clock(status_task, pre_sleep_logic)
                 if have_problem() is False:
                     if have_task():
                         break
@@ -67,6 +54,19 @@ class LogicAgent:
 
                 else:
                     return
+
+    def _alarm_clock(self, status_task: memoryview, pre_sleep_logic: Lock) -> None:
+        flag = self.reader.spare_flag
+        if self.mode == bm.NONE_STOP:
+            while flag[0] == 0 and status_task[0] == 0:
+                pass
+
+        elif self.mode == bm.ZERO_SLEEP:
+            while flag[0] == 0 and status_task[0] == 0:
+                time.sleep(0)
+
+        elif self.mode == bm.REAL_TIME_SIM:
+            pre_sleep_logic.acquire()
 
 
 def resolve_reader(manager: AgentManager, execution_event: Event):

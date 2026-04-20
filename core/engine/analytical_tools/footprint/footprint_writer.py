@@ -5,9 +5,9 @@ from numba import njit
 from numpy.typing import NDArray
 
 from .... import AgentManager
-from .... import StatusCodes as sc
-from ....settings import BarHeaders as chs
-from ....settings import SpaceCoords as spc
+from .... import StatusCodes as stc
+from ....settings import BarHeaders as bh
+from ....settings import SpaceCoords as sc
 from .. import ConvertMetrics
 
 
@@ -36,16 +36,16 @@ class FootprintWriter:
         self._init_array()
         # Variables
         self.idxVP, self.idxDP = self.cfgFootprint.colVP, self.cfgFootprint.colDP
-        self.spcIDYmin, self.spcIDXmin = int(spc.IDYmin), int(spc.IDXmin)
-        self.spcIDYmax, self.spcIDXmax = int(spc.IDYmax), int(spc.IDXmax)
-        self.chsOpen, self.chsHigh = int(chs.Open), int(chs.High)
-        self.chsLow, self.chsClose = int(chs.Low), int(chs.Close)
-        self.chsVolume, self.chsDelta = int(chs.Volume), int(chs.Delta)
-        self.chsTime, self.chsCountTrade = int(chs.Time), int(chs.CountTrade)
-        self.chsCVD = int(chs.CVD)
-        self.chsVWAP_P2Weights = int(chs.VWAP_P2Weights)
-        self.chsVWAP_PWeights = int(chs.VWAP_PWeights)
-        self.chsVWAP_Weights = int(chs.VWAP_Weights)
+        self.spcIDYmin, self.spcIDXmin = int(sc.IDYmin), int(sc.IDXmin)
+        self.spcIDYmax, self.spcIDXmax = int(sc.IDYmax), int(sc.IDXmax)
+        self.chsOpen, self.chsHigh = int(bh.Open), int(bh.High)
+        self.chsLow, self.chsClose = int(bh.Low), int(bh.Close)
+        self.chsVolume, self.chsDelta = int(bh.Volume), int(bh.Delta)
+        self.chsTime, self.chsCountTrade = int(bh.Time), int(bh.CountTrade)
+        self.chsCVD = int(bh.CVD)
+        self.chsVWAP_P2Weights = int(bh.VWAP_P2Weights)
+        self.chsVWAP_PWeights = int(bh.VWAP_PWeights)
+        self.chsVWAP_Weights = int(bh.VWAP_Weights)
 
     def _init_array(self) -> None:
         self.footprint: NDArray[np.int64] = np.ndarray(
@@ -60,18 +60,18 @@ class FootprintWriter:
         self.dirty_footprint.fill(0)
         # - - -
         self.headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.Bar_count, chs._HeadersCount),
+            shape=(self.cfgFootprint.Bar_count, bh._HeadersCount),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
         )
         self.dirty_headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.Bar_count, chs._HeadersCount),
+            shape=(self.cfgFootprint.Bar_count, bh._HeadersCount),
             dtype=np.int64,
         )
         self.dirty_headers.fill(0)
         # - - -
         self.space: NDArray[np.int64] = np.ndarray(
-            (2, spc._CoordsCount),
+            (2, sc._CoordsCount),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.space)],
         )
@@ -88,12 +88,12 @@ class FootprintWriter:
         if bpat[0] != 0:
             price, timestamp = bpat[:]
         else:
-            self.space[:, spc.IDYmin] = self.con.lines
-            self.space[:, spc.IDXmin] = self.con.footprintCols
-            self.space[:, spc.IDYmax :] = 0
+            self.space[:, sc.IDYmin] = self.con.lines
+            self.space[:, sc.IDXmin] = self.con.footprintCols
+            self.space[:, sc.IDYmax :] = 0
 
         if self.con.init_session(price, timestamp) is False:
-            self.set_status(code=sc.WARN2)
+            self.set_status(code=stc.WARN2)
             return False
 
         bpat[0], bpat[1] = self.con.nBasePrice, self.con.baseTimestamp
@@ -140,9 +140,9 @@ class FootprintWriter:
                 )
 
             else:
-                self.set_status(code=sc.WARN4)
+                self.set_status(code=stc.WARN4)
         else:
-            self.set_status(code=sc.WARN3)
+            self.set_status(code=stc.WARN3)
 
         return False
 
@@ -247,4 +247,5 @@ def update_footprint_and_headers_and_indicators_and_coords(
         footprint[IDYmin:IDYmax, idxVP:] = dirty_footprint[IDYmin:IDYmax, idxVP:]
         space_flag[0], spare_flag[0] = new_buf, 1
         return True
+
     return False

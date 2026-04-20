@@ -8,8 +8,7 @@ from . import StatusCodes as sc
 
 def data_preppered(procs: dict, proc_id: int, status_buf: memoryview):
     for id_p, data in procs.items():
-        if data["proc_name"] == "PARSING" or id_p == proc_id:
-            status_buf[data["task_id"]] = sc.COMPLETE
+        status_buf[data["task_id"]] = sc.COMPLETE
 
     procs.pop(proc_id)
 
