@@ -209,7 +209,6 @@ def update_footprint_and_headers_and_indicators_and_coords(
 
     # Update Space Coords
     buf: int = space_flag[0]
-    newBuf: int = 1 if buf == 0 else 0
     IDYmin, IDXmin, IDYmax, IDXmax = space[buf, :]
     IDYmin: int | np.int64 = idy if IDYmin > idy else IDYmin
     IDXmin: int | np.int64 = idx if IDXmin > idx else IDXmin
@@ -223,7 +222,7 @@ def update_footprint_and_headers_and_indicators_and_coords(
         hr[idxMin:idxMax, :] = dirty_hr[idxMin:idxMax, :]
         fp[IDYmin:IDYmax, IDXmin:IDXmax] = dirty_fp[IDYmin:IDYmax, IDXmin:IDXmax]
         fp[IDYmin:IDYmax, idxVP:] = dirty_fp[IDYmin:IDYmax, idxVP:]
-        space_flag[0], spare_flag[0] = newBuf, 1
+        space_flag[0], spare_flag[0] = 1 if buf == 0 else 0, 1
         return True
 
     return False

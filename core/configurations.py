@@ -34,6 +34,30 @@ class ConfigurationBacktesting(Configuration):
 
 
 # ShmSegmentsSubclasses
+
+
+class ConfigurationStrategy(ConfigurationSHMSegments):
+    def __init__(self) -> None:
+        self.cell_amount = 128
+
+        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+
+    def get_need_shm_size(self) -> int:
+        self.reader = OFFSET, OFFSET + INT64
+        self.writer = self.reader[1], self.reader[1] + INT64
+        self.price = self.writer[1], self.writer[1] + INT64
+        self.qty = self.price[1], self.price[1] + INT64
+        self.side = self.qty[1], self.qty[1] + UBYTE
+        self.type_order = self.side[1], self.side[1] + UBYTE
+        self.signal_size = self.type_order[1]
+        self.signal_buf_size = self.signal_size * self.cell_amount
+
+        self.pattern_1 = 0, self.signal_buf_size
+        self.pattern_2 = self.pattern_1[1], self.signal_buf_size
+
+        return 1
+
+
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
@@ -71,29 +95,6 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.flag = self.baseTimestamp[1]
         self.spare_flag = self.flag + UBYTE
         return self.spare_flag
-
-
-class ConfigurationStrategy(ConfigurationSHMSegments):
-    def __init__(self) -> None:
-        self.price = INT64
-        self.qty = self.price + INT64
-        self.side = self.qty + UBYTE
-        self.type_order = self.side + UBYTE
-        self.signal_size = self.type_order
-        self.cell_amount = 128
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
-
-    def get_need_shm_size(self) -> int:
-        self.ReaderCellCounter = OFFSET, OFFSET + INT64
-        self.WriterCellCounter = (
-            self.ReaderCellCounter[1],
-            self.ReaderCellCounter[1] + INT64,
-        )
-        self.signals = (
-            self.WriterCellCounter[1],
-            (self.cell_amount * self.signal_size) + self.WriterCellCounter[1],
-        )
-        return self.signals[1]
 
 
 class ConfigurationRingRawBuf(ConfigurationSHMSegments):
