@@ -43,29 +43,29 @@ class FootprintWriter:
         self.chsVolume, self.chsDelta = int(bh.Volume), int(bh.Delta)
         self.chsTime, self.chsCountTrade = int(bh.Time), int(bh.CountTrade)
         self.chsCVD = int(bh.CVD)
-        self.chsVWAP_P2Weights = int(bh.VWAP_P2Weights)
-        self.chsVWAP_PWeights = int(bh.VWAP_PWeights)
-        self.chsVWAP_Weights = int(bh.VWAP_Weights)
+        self.chsVWAP_P2W = int(bh.VWAP_P2W)
+        self.chsVWAP_PW = int(bh.VWAP_PW)
+        self.chsVWAP_W = int(bh.VWAP_W)
 
     def _init_array(self) -> None:
         self.footprint: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
+            shape=(self.cfgFootprint.fpLines, self.cfgFootprint.fpPanelCols),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         self.dirty_footprint: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
+            shape=(self.cfgFootprint.fpLines, self.cfgFootprint.fpPanelCols),
             dtype=np.int64,
         )
         self.dirty_footprint.fill(0)
         # - - -
         self.headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.Bar_count, bh._HeadersCount),
+            shape=(self.cfgFootprint.bar_count, bh._HeadersCount),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
         )
         self.dirty_headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.Bar_count, bh._HeadersCount),
+            shape=(self.cfgFootprint.bar_count, bh._HeadersCount),
             dtype=np.int64,
         )
         self.dirty_headers.fill(0)
@@ -88,9 +88,7 @@ class FootprintWriter:
         if bpat[0] != 0:
             price, timestamp = bpat[:]
         else:
-            self.space[:, sc.IDYmin] = self.con.lines
-            self.space[:, sc.IDXmin] = self.con.footprintCols
-            self.space[:, sc.IDYmax :] = 0
+            self.space[:] = self.con.fpLines, self.con.fpCols, 0, 0
 
         if self.con.init_session(price, timestamp) is False:
             self.set_status(code=stc.WARN2)
@@ -114,17 +112,13 @@ class FootprintWriter:
                     idx=idx,
                     idxVP=self.idxVP,
                     idxDP=self.idxDP,
-                    footprint=self.footprint,
-                    dirty_footprint=self.dirty_footprint,
-                    headers=self.headers,
-                    dirty_headers=self.dirty_headers,
+                    fp=self.footprint,
+                    dirty_fp=self.dirty_footprint,
+                    hr=self.headers,
+                    dirty_hr=self.dirty_headers,
                     space=self.space,
                     space_flag=self.space_flag,
                     spare_flag=self.spare_flag,
-                    spcIDYmin=self.spcIDYmin,
-                    spcIDXmin=self.spcIDXmin,
-                    spcIDYmax=self.spcIDYmax,
-                    spcIDXmax=self.spcIDXmax,
                     chsOpen=self.chsOpen,
                     chsHigh=self.chsHigh,
                     chsLow=self.chsLow,
@@ -134,9 +128,9 @@ class FootprintWriter:
                     chsTime=self.chsTime,
                     chsCountTrade=self.chsCountTrade,
                     chsCVD=self.chsCVD,
-                    chsVWAP_P2Weights=self.chsVWAP_P2Weights,
-                    chsVWAP_PWeights=self.chsVWAP_PWeights,
-                    chsVWAP_Weights=self.chsVWAP_Weights,
+                    chsVWAP_P2W=self.chsVWAP_P2W,
+                    chsVWAP_PW=self.chsVWAP_PW,
+                    chsVWAP_W=self.chsVWAP_W,
                 )
 
             else:
@@ -157,17 +151,13 @@ def update_footprint_and_headers_and_indicators_and_coords(
     idx: int,
     idxVP: int,
     idxDP: int,
-    footprint: NDArray[np.int64],
-    dirty_footprint: NDArray[np.int64],
-    headers: NDArray[np.int64],
-    dirty_headers: NDArray[np.int64],
+    fp: NDArray[np.int64],
+    dirty_fp: NDArray[np.int64],
+    hr: NDArray[np.int64],
+    dirty_hr: NDArray[np.int64],
     space: NDArray[np.int64],
     space_flag: memoryview,
     spare_flag: memoryview,
-    spcIDXmin: int,
-    spcIDYmin: int,
-    spcIDYmax: int,
-    spcIDXmax: int,
     chsOpen: int,
     chsHigh: int,
     chsLow: int,
@@ -177,75 +167,63 @@ def update_footprint_and_headers_and_indicators_and_coords(
     chsTime: int,
     chsCountTrade: int,
     chsCVD: int,
-    chsVWAP_P2Weights: int,
-    chsVWAP_PWeights: int,
-    chsVWAP_Weights: int,
+    chsVWAP_P2W: int,
+    chsVWAP_PW: int,
+    chsVWAP_W: int,
 ) -> bool:
     # Update Dirty Footprint
-    dirty_footprint[idy, idx] += nQty
-    dirty_footprint[idy, idxVP] += nQty  # VolumeProfile
-    dirty_footprint[idy, idxDP] += -nQty if is_sell else nQty  # Delta Profile
+    dirty_fp[idy, idx] += nQty
+    dirty_fp[idy, idxVP] += nQty  # VolumeProfile
+    dirty_fp[idy, idxDP] += -nQty if is_sell else nQty  # Delta Profile
+
     # Update Dirty Headers
+    # Headers: OHLC
     bar = (idx & ~1) // 2
-    if dirty_headers[bar, chsCountTrade] == 0:  # Init Bar
-        dirty_headers[bar, chsOpen : chsClose + 1] = idy
-        dirty_headers[bar, chsTime] = timestamp
+    if dirty_hr[bar, chsCountTrade] == 0:  # Init Bar
+        dirty_hr[bar, chsOpen : chsClose + 1] = idy
+        dirty_hr[bar, chsTime] = timestamp
 
-    if idy < dirty_headers[bar, chsHigh]:  # Update BarHigh: reverse
-        dirty_headers[bar, chsHigh] = idy
-    if idy > dirty_headers[bar, chsLow]:  # Update BarLow: reverse
-        dirty_headers[bar, chsLow] = idy
+    if idy < dirty_hr[bar, chsHigh]:  # Update BarHigh: reverse
+        dirty_hr[bar, chsHigh] = idy
+    if idy > dirty_hr[bar, chsLow]:  # Update BarLow: reverse
+        dirty_hr[bar, chsLow] = idy
 
-    # Update Indicators
-    dirty_headers[bar, chsClose] = idy
-    dirty_headers[bar, chsCountTrade] += 1
-    dirty_headers[bar, chsVolume] += nQty
-    dirty_headers[bar, chsDelta] += -nQty if is_sell else nQty
+    dirty_hr[bar, chsClose] = idy
+    # Headers: Update Indicators
+    dirty_hr[bar, chsCountTrade] += 1
+    dirty_hr[bar, chsVolume] += nQty
+    dirty_hr[bar, chsDelta] += -nQty if is_sell else nQty
     if bar > 0:
-        oldCid = bar - 1
-        dirty_headers[bar, chsCVD] = (
-            dirty_headers[bar, chsDelta] + (dirty_headers[oldCid, chsCVD])
-        )
-        dirty_headers[bar, chsVWAP_P2Weights] = ((nPrice**2) * nQty) + dirty_headers[
-            oldCid, chsVWAP_P2Weights
+        oldBar = bar - 1
+        dirty_hr[bar, chsCVD] = dirty_hr[bar, chsDelta] + (dirty_hr[oldBar, chsCVD])
+        dirty_hr[bar, chsVWAP_P2W] = ((nPrice**2) * nQty) + dirty_hr[
+            oldBar, chsVWAP_P2W
         ]
-        dirty_headers[bar, chsVWAP_PWeights] = (nPrice * nQty) + dirty_headers[
-            oldCid, chsVWAP_PWeights
-        ]
-        dirty_headers[bar, chsVWAP_Weights] = (
-            nQty + (dirty_headers[oldCid, chsVWAP_Weights])
-        )
+        dirty_hr[bar, chsVWAP_PW] = (nPrice * nQty) + dirty_hr[oldBar, chsVWAP_PW]
+        dirty_hr[bar, chsVWAP_W] = nQty + (dirty_hr[oldBar, chsVWAP_W])
     else:
-        dirty_headers[bar, chsCVD] = dirty_headers[bar, chsDelta]
-        dirty_headers[bar, chsVWAP_P2Weights] += (nPrice**2) * nQty
-        dirty_headers[bar, chsVWAP_PWeights] += nPrice * nQty
-        dirty_headers[bar, chsVWAP_Weights] += nQty
+        dirty_hr[bar, chsCVD] = dirty_hr[bar, chsDelta]
+        dirty_hr[bar, chsVWAP_P2W] += (nPrice**2) * nQty
+        dirty_hr[bar, chsVWAP_PW] += nPrice * nQty
+        dirty_hr[bar, chsVWAP_W] += nQty
 
     # Update Space Coords
     buf: int = space_flag[0]
-    new_buf: int = 1 if buf == 0 else 0
-    space[buf, spcIDYmin] = IDYmin = (
-        idy if space[buf, spcIDYmin] > idy else space[buf, spcIDYmin]
-    )
-    space[buf, spcIDXmin] = IDXmin = (
-        idx if space[buf, spcIDXmin] > idx else space[buf, spcIDXmin]
-    )
-    space[buf, spcIDYmax] = IDYmax = (
-        idy + 1 if space[buf, spcIDYmax] <= idy else space[buf, spcIDYmax]
-    )
-    space[buf, spcIDXmax] = IDXmax = (
-        idx + 1 if space[buf, spcIDXmax] <= idx else space[buf, spcIDXmax]
-    )
+    newBuf: int = 1 if buf == 0 else 0
+    IDYmin, IDXmin, IDYmax, IDXmax = space[buf, :]
+    IDYmin: int | np.int64 = idy if IDYmin > idy else IDYmin
+    IDXmin: int | np.int64 = idx if IDXmin > idx else IDXmin
+    IDYmax: int | np.int64 = idy + 1 if IDYmax <= idy else IDYmax
+    IDXmax: int | np.int64 = idx + 1 if IDXmax <= idx else IDXmax
+    space[buf, :] = IDYmin, IDXmin, IDYmax, IDXmax
 
-    # Change Buffer And Copy Values
+    # IF True: Change buffer and copy value's to pure array's
     if spare_flag[0] == 0:
         idxMin, idxMax = (IDXmin & ~1) // 2, ((IDXmax - 1) & ~1) // 2 + 1
-        headers[idxMin:idxMax, :] = dirty_headers[idxMin:idxMax, :]
-        footprint[IDYmin:IDYmax, IDXmin:IDXmax] = dirty_footprint[
-            IDYmin:IDYmax, IDXmin:IDXmax
-        ]
-        footprint[IDYmin:IDYmax, idxVP:] = dirty_footprint[IDYmin:IDYmax, idxVP:]
-        space_flag[0], spare_flag[0] = new_buf, 1
+        hr[idxMin:idxMax, :] = dirty_hr[idxMin:idxMax, :]
+        fp[IDYmin:IDYmax, IDXmin:IDXmax] = dirty_fp[IDYmin:IDYmax, IDXmin:IDXmax]
+        fp[IDYmin:IDYmax, idxVP:] = dirty_fp[IDYmin:IDYmax, idxVP:]
+        space_flag[0], spare_flag[0] = newBuf, 1
         return True
 
     return False

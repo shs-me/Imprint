@@ -39,18 +39,18 @@ class FootprintReader(ABC):
 
     def _init_array(self) -> None:
         self.footprint: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
+            shape=(self.cfgFootprint.fpLines, self.cfgFootprint.fpPanelCols),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
         self.footprint_state: NDArray[np.int32] = np.ndarray(
-            shape=(self.cfgFootprint.lines, self.cfgFootprint.panelCols),
+            shape=(self.cfgFootprint.fpLines, self.cfgFootprint.fpPanelCols),
             dtype=np.int32,
         )
         self.footprint_state.fill(0)
         #  - - -
         self.headers: NDArray[np.int64] = np.ndarray(
-            shape=(self.cfgFootprint.Bar_count, bh._HeadersCount),
+            shape=(self.cfgFootprint.bar_count, bh._HeadersCount),
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
         )
@@ -60,6 +60,10 @@ class FootprintReader(ABC):
             dtype=np.int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.space)],
         )
+
+    def _save_array(self):
+        np.save("footprint", self.footprint)
+        np.save("headers", self.headers)
 
     def init_session(self) -> None:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
@@ -75,10 +79,12 @@ class FootprintReader(ABC):
         self._update_state()
 
     def _update_state(self):
-        old_flag: int = 1 if self.space_flag[0] == 0 else 0
-        IDYmin, IDXmin, IDYmax, IDXmax = self.space[old_flag, :]
+        oldBuf: int = 1 if self.space_flag[0] == 0 else 0
+        IDYmin, IDXmin, IDYmax, IDXmax = self.space[oldBuf, :]
+
         self._update_cluster(IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax)
         self._update_footprint_realtime_state(IDYmin=IDYmin, IDYmax=IDYmax)
+
         for idx in range((IDXmin & ~1), IDXmax, 2):
             idxBid, idxAsk = idx, idx + 1
             self._update_bid_ask_state(
@@ -90,11 +96,8 @@ class FootprintReader(ABC):
             if idx > self.last_idx:
                 self._update_footprint_static_state()
                 self.last_idx = idx
-        # - - -
-        # reset
-        self.space[:, sc.IDYmin] = self.con.lines
-        self.space[:, sc.IDXmin] = self.con.footprintCols
-        self.space[:, sc.IDYmax :] = 0
+
+        self.space[oldBuf, :] = self.con.fpLines, self.con.fpCols, 0, 0
         self.spare_flag[0] = 0
 
     # - - Cluster - -

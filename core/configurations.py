@@ -41,25 +41,25 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         chart_range: int = 1,
     ) -> None:
         self.intervalMs = chart_interval
-        self.Bar_count = self.get_Bar_count(day=chart_range)
-        self.lines = 10001
-        self.footprintCols = self.Bar_count * 2
-        self.panelCols = self.footprintCols + self.get_panel_count_cols()
+        self.bar_count = self.get_bar_count(day=chart_range)
+        self.fpLines = 10001
+        self.fpCols = self.bar_count * 2
+        self.fpPanelCols = self.fpCols + self.get_panel_count_cols()
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_panel_count_cols(self) -> int:
         self.colVP, self.colDP = -2, -1
         return 2
 
-    def get_Bar_count(self, day: int) -> int:
+    def get_bar_count(self, day: int) -> int:
         dayMs, ivlMs = (day if day >= 1 else 1) * 24 * 60 * 60 * 1000, self.intervalMs
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
     def get_need_shm_size(self) -> int:
-        self.footprint = OFFSET, OFFSET + (self.lines * self.panelCols * INT64)
+        self.footprint = OFFSET, OFFSET + (self.fpLines * self.fpPanelCols * INT64)
         self.headers = (
             self.footprint[1],
-            self.footprint[1] + (BarHeaders._HeadersCount * self.Bar_count * INT64),
+            self.footprint[1] + (BarHeaders._HeadersCount * self.bar_count * INT64),
         )
         self.space = (
             self.headers[1],

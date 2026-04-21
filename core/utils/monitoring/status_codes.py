@@ -37,7 +37,7 @@ class StatusCodes(IntEnum):
         "NETWORK_SIM": "WssSimAgent: data preppered",
     }
     WARN2 = {
-        "PARSING": "FootprintWriter: InitSession: amount tick in price > 80% array lines",
+        "PARSING": "FootprintWriter: InitSession: amount tick in price > 80% array fpLines",
         "LOGIC": "",
         "NETWORK": "",
         "NETWORK_SIM": "",
@@ -49,7 +49,7 @@ class StatusCodes(IntEnum):
         "NETWORK_SIM": "",
     }
     WARN4 = {
-        "PARSING": "FootprintWriter: Update: array lines < idy or idy < 0",
+        "PARSING": "FootprintWriter: Update: array fpLines < idy or idy < 0",
         "LOGIC": "",
         "NETWORK": "",
         "NETWORK_SIM": "",

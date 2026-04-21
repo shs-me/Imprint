@@ -64,7 +64,7 @@ class SignalSetup(IntEnum):
 class BarHeaders(IntEnum):
     Open, High, Low, Close, Time = 0, auto(), auto(), auto(), auto()
     Volume, Delta, CVD = auto(), auto(), auto()
-    VWAP_Weights, VWAP_PWeights, VWAP_P2Weights = auto(), auto(), auto()
+    VWAP_W, VWAP_PW, VWAP_P2W = auto(), auto(), auto()
     CountTrade = auto()
     _HeadersCount = auto()
 

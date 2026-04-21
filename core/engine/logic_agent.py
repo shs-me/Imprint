@@ -43,6 +43,8 @@ class LogicAgent:
                 alarm_clock(status_task, pre_sleep_logic)
                 if have_problem() is False:
                     if have_task():
+                        # if status_task[0] == sc.COMPLETE:
+                        #    self.reader._save_array()
                         break
 
                     set_status(code=WAKE_UP)

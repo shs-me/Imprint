@@ -20,7 +20,6 @@ class IntraDay(FootprintReader):
     def check_pattern(self):
         lidx, con = self.last_idx, self.con
         volume, delta = con.volume(lidx), con.delta(lidx)
-
         barStates = self.bar_state_mask(bar=lidx)
         HIGH: np.intp = (barStates[:, 0] & sf.HIGH).argmax()
         LOW: np.intp = (barStates[:, 0] & sf.LOW).argmax()

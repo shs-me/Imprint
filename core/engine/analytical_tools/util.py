@@ -20,10 +20,10 @@ class ConvertMetrics:
         self.trade_par = trade_param
         self.footprint = footprint
         self.headers = headers
-        self.lines = cfgFootprint.lines
-        self.footprintCols = cfgFootprint.footprintCols
-        self.panelCols = cfgFootprint.panelCols
-        self.BarCount = cfgFootprint.Bar_count
+        self.fpLines = cfgFootprint.fpLines
+        self.fpCols = cfgFootprint.fpCols
+        self.fpPanelCols = cfgFootprint.fpPanelCols
+        self.BarCount = cfgFootprint.bar_count
         self.ims = cfgFootprint.intervalMs
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
         self.priceMult = 10**self.pricePrec + 1e-9
@@ -34,25 +34,25 @@ class ConvertMetrics:
     def init_session(self, price: float | int, timestamp: int):
         self.nBasePrice = self.to_nPrice(price) if isinstance(price, float) else price
         self.baseTimestamp = timestamp
-        if self.nBasePrice >= round(number=self.lines * 0.8):
+        if self.nBasePrice >= round(number=self.fpLines * 0.8):
             return False
 
         else:
             self.center: int = (
                 self.nBasePrice
-                if self.nBasePrice >= (self.lines - self.nBasePrice)
-                else (self.lines - self.nBasePrice)
+                if self.nBasePrice >= (self.fpLines - self.nBasePrice)
+                else (self.fpLines - self.nBasePrice)
             )
             return True
 
     def check_bound_idy(self, idy: int) -> int | None:
-        if 0 <= idy < self.lines:
+        if 0 <= idy < self.fpLines:
             return idy
         else:
             return None
 
     def check_bound_idx(self, idx: int) -> int | None:
-        if 0 <= idx < self.footprintCols:
+        if 0 <= idx < self.fpCols:
             return idx
         else:
             return None
@@ -166,15 +166,15 @@ class ConvertMetrics:
     # Settings indicators
     def vwap_sum_p2w(self, idx: int | None = None, normalized: bool = True) -> int:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_P2Weights
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_P2W
         )
 
     def vwap_sum_pw(self, idx: int | None = None, normalized: bool = True) -> int:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_PWeights
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_PW
         )
 
     def vwap_sum_w(self, idx: int | None = None, normalized: bool = True) -> int:
         return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_Weights
+            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_W
         )
