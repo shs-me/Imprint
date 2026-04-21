@@ -50,7 +50,7 @@ class DataPrepper:
 
                     while len(self.queue) == self.queue.maxlen:
                         if self.mode == bm.NONE_STOP:
-                            time.sleep(0)
+                            pass
                         elif self.mode == bm.ZERO_SLEEP:
                             time.sleep(0)
                         elif self.mode == bm.REAL_TIME_SIM:

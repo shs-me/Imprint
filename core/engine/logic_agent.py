@@ -59,16 +59,17 @@ class LogicAgent:
 
     def _alarm_clock(self, status_task: memoryview, pre_sleep_logic: Lock) -> None:
         flag = self.reader.spare_flag
-        if self.mode == bm.NONE_STOP:
+        flag[0] = 0
+        if self.mode == bm.REAL_TIME_SIM:
+            pre_sleep_logic.acquire()
+
+        elif self.mode == bm.NONE_STOP:
             while flag[0] == 0 and status_task[0] == 0:
                 pass
 
         elif self.mode == bm.ZERO_SLEEP:
             while flag[0] == 0 and status_task[0] == 0:
                 time.sleep(0)
-
-        elif self.mode == bm.REAL_TIME_SIM:
-            pre_sleep_logic.acquire()
 
 
 def resolve_reader(manager: AgentManager, execution_event: Event):

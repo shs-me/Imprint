@@ -34,8 +34,6 @@ class ConfigurationBacktesting(Configuration):
 
 
 # ShmSegmentsSubclasses
-
-
 class ConfigurationStrategy(ConfigurationSHMSegments):
     def __init__(self) -> None:
         self.cell_amount = 128
@@ -85,9 +83,11 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
             self.footprint[1],
             self.footprint[1] + (BarHeaders._HeadersCount * self.bar_count * INT64),
         )
+
+        self.meta_data = (self.headers[1], self.headers[1] + (6 * FLOAT64))
         self.space = (
-            self.headers[1],
-            self.headers[1] + (SpaceCoords._CoordsCount * 2 * INT64),
+            self.meta_data[1],
+            self.meta_data[1] + (SpaceCoords._CoordsCount * 2 * INT64),
         )
         self.basePrice = self.space[1], self.space[1] + INT64
         self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64

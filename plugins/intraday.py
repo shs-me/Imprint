@@ -13,13 +13,12 @@ class IntraDay(FootprintReader):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager, execution_event)
 
-    def _update_footprint_static_state(self) -> None:
-        super()._update_footprint_static_state()
+    def _update_fp_static_state(self) -> None:
+        super()._update_fp_static_state()
         self.check_pattern()
 
     def check_pattern(self):
-        lidx, con = self.last_idx, self.con
-        volume, delta = con.volume(lidx), con.delta(lidx)
+        lidx, to = self.last_idx, self.con.get_price
         barStates = self.bar_state_mask(bar=lidx)
         HIGH: np.intp = (barStates[:, 0] & sf.HIGH).argmax()
         LOW: np.intp = (barStates[:, 0] & sf.LOW).argmax()
@@ -36,9 +35,9 @@ class IntraDay(FootprintReader):
         LOW_AUCTION = fpStates[-1] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
 
         if self.P_shape(HIGH=HIGH, LOW=LOW, VAL=VAL):
-            if delta > 0 and CLOSE <= POC:
+            if CLOSE > VAL:
                 print(
-                    f"P-shape-Long[O:{OPEN}|H:{HIGH}|L:{LOW}|C:{CLOSE}|VAH:{VAH}|POC:{POC}|VAL:{VAL} | TIME{self.con.get_time(lidx, strftime=True)}",
+                    f"P-shape-Long[O:{to(OPEN)}|H:{to(HIGH)}|L:{to(LOW)}|C:{to(CLOSE)}|VAH:{to(VAH)}|POC:{to(POC)}|VAL:{to(VAL)} | TIME{self.con.get_time(lidx, strftime=True)}",
                     flush=True,
                 )
 
@@ -47,11 +46,11 @@ class IntraDay(FootprintReader):
             sf.OPEN | sf.HIGH | sf.LOW | sf.CLOSE | sf.POC_BAR | sf.VAH_BAR | sf.VAL_BAR
         )
         bid_ask_flags = sf.DELTA_DOMINATION | sf.IMBALANCE | sf.ZERO_PRINT
-        return self.footprint_state[:, bar : bar + 2] & (bar_flags | bid_ask_flags)
+        return self.fp_state[:, bar : bar + 2] & (bar_flags | bid_ask_flags)
 
     def fp_state_mask(self, IDYmin: np.intp, IDYmax: np.intp) -> NDArray[np.int32]:
         state = sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION
-        return self.footprint_state[IDYmin:IDYmax, self.con.idxVP] & state
+        return self.fp_state[IDYmin:IDYmax, self.con.idxVP] & state
 
     def P_shape(self, HIGH: np.intp, LOW: np.intp, VAL: np.intp) -> bool:
         if LOW - VAL >= ((LOW - HIGH) * 0.7):

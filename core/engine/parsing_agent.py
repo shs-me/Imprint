@@ -141,16 +141,18 @@ class ParserAgent:
                     else:
                         break
 
-                if writer.update(
+                temp = writer.update(
                     price=trade.p,
                     qty=trade.q,
                     timestamp=trade.T,
                     is_sell=trade.m,
-                ):
+                )
+                if temp is False:
+                    pass
+                elif temp is True:
                     if self.mode == bm.REAL_TIME_SIM:
                         wake_up_logic.release()
-
-                else:
+                elif temp is None:
                     break
 
 

@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
-from types import MethodType
-from typing import Any
+from typing import overload
 
 import numpy as np
+from numpy import float64, int64
 from numpy.typing import NDArray
 
 from ...configurations import ConfigurationFootprint
@@ -12,28 +12,27 @@ from ...settings import BarHeaders as chs
 class ConvertMetrics:
     def __init__(
         self,
+        footprint: NDArray[int64],
+        headers: NDArray[int64],
         trade_param: memoryview,
-        footprint: NDArray[np.int64],
-        headers: NDArray[np.int64],
-        cfgFootprint: ConfigurationFootprint,
+        cfgFP: ConfigurationFootprint,
     ) -> None:
+        self.footprint, self.headers = footprint, headers
         self.trade_par = trade_param
-        self.footprint = footprint
-        self.headers = headers
-        self.fpLines = cfgFootprint.fpLines
-        self.fpCols = cfgFootprint.fpCols
-        self.fpPanelCols = cfgFootprint.fpPanelCols
-        self.BarCount = cfgFootprint.bar_count
-        self.ims = cfgFootprint.intervalMs
+        self.fpLines, self.fpCols = cfgFP.fpLines, cfgFP.fpCols
+        self.fpPanelCols, self.barCount = cfgFP.fpPanelCols, cfgFP.bar_count
+        self.ims = cfgFP.intervalMs
+        self.idxVP, self.idxDP = cfgFP.colVP, cfgFP.colDP
+
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
-        self.priceMult = 10**self.pricePrec + 1e-9
-        self.qtyMult = 10**self.qtyPrec + 1e-9
-        self.idxVP = cfgFootprint.colVP
-        self.idxDP = cfgFootprint.colDP
+        self.priceMult: float = (10**self.pricePrec) + 1e-9
+        self.qtyMult: float = 10**self.qtyPrec + 1e-9
 
     def init_session(self, price: float | int, timestamp: int):
-        self.nBasePrice = self.to_nPrice(price) if isinstance(price, float) else price
-        self.baseTimestamp = timestamp
+        self.nBasePrice: int = (
+            self.to_nPrice(price) if isinstance(price, float) else price
+        )
+        self.baseTimestamp: int = timestamp
         if self.nBasePrice >= round(number=self.fpLines * 0.8):
             return False
 
@@ -45,136 +44,100 @@ class ConvertMetrics:
             )
             return True
 
-    def check_bound_idy(self, idy: int) -> int | None:
+    @overload
+    def to_idy(self, nPrice: int) -> int | None: ...
+    @overload
+    def to_idy(self, nPrice: int64) -> int64: ...
+    def to_idy(self, nPrice):
+        idy: int | int64 = (self.nBasePrice - nPrice) + self.center
         if 0 <= idy < self.fpLines:
             return idy
         else:
             return None
 
-    def check_bound_idx(self, idx: int) -> int | None:
+    def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
+        idx: int = (timestamp - self.baseTimestamp) // self.ims * 2 + (
+            0 if is_sell else 1
+        )
         if 0 <= idx < self.fpCols:
             return idx
         else:
             return None
 
-    def to_idy(self, nPrice: int) -> int | None:
-        return self.check_bound_idy(self.nBasePrice - nPrice + self.center)
-
-    def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
-        return self.check_bound_idx(
-            (timestamp - self.baseTimestamp) // self.ims * 2 + (0 if is_sell else 1)
-        )
-
     def to_nPrice(self, price: float) -> int:
         return round(price * self.priceMult)
-
-    def to_price(self, nPrice: int) -> float:
-        return nPrice / self.priceMult
 
     def to_nQty(self, qty: float) -> int:
         return round(qty * self.qtyMult)
 
-    def to_qty(self, nQty: int | np.intp) -> float:
+    def to_price(self, nPrice: int | int64) -> float | float64:
+        return nPrice / self.priceMult
+
+    def to_qty(self, nQty: int | int64) -> float | float64:
         return nQty / self.qtyMult
 
-    def to_strftime(self, timestamp_ms: int) -> str:
-        return datetime.fromtimestamp(timestamp_ms // 1000, tz=timezone.utc).strftime(
+    def to_strftime(self, timestamp_ms: int | int64) -> str:
+        return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
-    def get_price(self, idy: int, normalized: bool = True) -> Any:
-        if normalized:
-            return self.center - idy + self.nBasePrice
-        else:
-            return self.to_price(self.center - idy + self.nBasePrice)
+    def get_price(self, idy: int | int64) -> float:
+        return round(
+            self.to_price((self.center - idy) + self.nBasePrice),
+            ndigits=self.pricePrec,
+        )
 
-    def get_qty(self, idy: int, idx: int, normalized: bool = True) -> Any:
-        if normalized:
-            return self.footprint[idy, idx]
-        else:
-            return self.to_qty(self.footprint[idy, idx])
+    def get_qty(self, idy: int, idx: int) -> float:
+        return self.to_qty(self.footprint[idy, idx])
 
-    def get_time(self, idx: int, strftime: bool = False) -> int | str:
+    @overload
+    def get_time(self, idx: int64, strftime: bool = False) -> int64: ...
+    @overload
+    def get_time(self, idx: int, strftime: bool = True) -> str: ...
+    def get_time(self, idx: int | int64, strftime: bool = False):
         if strftime:
             return self.to_strftime((idx & ~1) // 2 * self.ims + self.baseTimestamp)
         else:
             return (idx & ~1) // 2 * self.ims + self.baseTimestamp
 
-    def get_Bar_id(self, idx: int | None = None) -> int | np.intp:
-        if idx is not None:
-            return (idx & ~1) // 2
-        else:
-            return self.headers[:, chs.Open].argmin() - 1
-
     # Headers
-    def _get_header(
-        self, idx: int | None, norm: bool, typeNorm: MethodType, header: chs
-    ) -> Any:
-        if norm:
-            return self.headers[self.get_Bar_id(idx), header]
-        else:
-            return typeNorm(self.headers[self.get_Bar_id(idx), header])
+    def _get_header(self, idx: int | int64, header: chs) -> int64:
+        return self.headers[(idx & ~1) // 2, header]
 
     # OHLC
-    def openPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.Open
-        )
+    def openIdy(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.Open)
 
-    def highPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.High
-        )
+    def highIdy(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.High)
 
-    def lowPrice(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.Low
-        )
+    def lowIdy(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.Low)
 
-    def closePrice(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_price, header=chs.Close
-        )
+    def closeIdy(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.Close)
 
-    # BaseMetrics
-    def openTime(self, idx: int | None = None, strftime: bool = False) -> int | str:
-        return self._get_header(
-            idx=idx, norm=strftime, typeNorm=self.to_strftime, header=chs.Time
-        )
-
-    def countTrade(self, idx: int | None = None) -> int:
-        return self._get_header(
-            idx=idx, norm=True, typeNorm=self.to_price, header=chs.CountTrade
-        )
-
-    def volume(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.Volume
-        )
+    def openTime(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.Time)
 
     # Indicators
-    def cvd(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.CVD
-        )
+    def countTrade(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.CountTrade)
 
-    def delta(self, idx: int | None = None, normalized: bool = True) -> Any:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.Delta
-        )
+    def volume(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.Volume)
 
-    # Settings indicators
-    def vwap_sum_p2w(self, idx: int | None = None, normalized: bool = True) -> int:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_P2W
-        )
+    def delta(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.Delta)
 
-    def vwap_sum_pw(self, idx: int | None = None, normalized: bool = True) -> int:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_PW
-        )
+    def cvd(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.CVD)
 
-    def vwap_sum_w(self, idx: int | None = None, normalized: bool = True) -> int:
-        return self._get_header(
-            idx=idx, norm=normalized, typeNorm=self.to_qty, header=chs.VWAP_W
-        )
+    def vwap(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.VWAP)
+
+    def vwap_bb_lower(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.VWAP_BB_LOWER)
+
+    def vwap_bb_upper(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.VWAP_BB_UPPER)
