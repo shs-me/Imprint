@@ -23,7 +23,8 @@ class LogicAgent:
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
-        self.mode = manager.cfgBacktesting.mode
+        self.backtesting = manager.cfgBacktesting.backtesting
+        self.btMode = manager.cfgBacktesting.mode
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
@@ -60,16 +61,19 @@ class LogicAgent:
     def _alarm_clock(self, status_task: memoryview, pre_sleep_logic: Lock) -> None:
         flag = self.reader.spare_flag
         flag[0] = 0
-        if self.mode == bm.REAL_TIME_SIM:
+        if self.backtesting:
+            if self.btMode == bm.REAL_TIME_SIM:
+                pre_sleep_logic.acquire()
+
+            elif self.btMode == bm.NONE_STOP:
+                while flag[0] == 0 and status_task[0] == 0:
+                    pass
+
+            elif self.btMode == bm.ZERO_SLEEP:
+                while flag[0] == 0 and status_task[0] == 0:
+                    time.sleep(0)
+        else:
             pre_sleep_logic.acquire()
-
-        elif self.mode == bm.NONE_STOP:
-            while flag[0] == 0 and status_task[0] == 0:
-                pass
-
-        elif self.mode == bm.ZERO_SLEEP:
-            while flag[0] == 0 and status_task[0] == 0:
-                time.sleep(0)
 
 
 def resolve_reader(manager: AgentManager, execution_event: Event):

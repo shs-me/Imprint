@@ -17,6 +17,15 @@ class BacktestingMode(IntEnum):
     NONE_STOP = 2
 
 
+class OrderFlag(IntFlag):
+    SHORT = auto()
+    LONG = auto()
+    SELL = auto()
+    BUY = auto()
+    MARKET = auto()
+    LIMIT = auto()
+
+
 class StateFlags(IntFlag):
     # Footprint States
     # Footprint: RealTime

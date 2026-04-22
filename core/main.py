@@ -5,8 +5,12 @@ from types import FunctionType
 
 from loguru import logger
 
-from . import CorePath, CoreResources, MainManager, manager_office
-from .engine import run_logic, run_network, run_network_sim, run_parsing
+from core import CorePath, CoreResources, MainManager, manager_office
+from core.engine.execution_agent import run_execution
+from core.engine.logic_agent import run_logic
+from core.engine.network_agent import run_network
+from core.engine.network_sim_agent import run_network_sim
+from core.engine.parsing_agent import run_parsing
 
 
 class RunMain(CoreResources):
@@ -30,6 +34,7 @@ class RunMain(CoreResources):
         self.funcs = [
             run_logic,
             run_parsing,
+            run_execution,
             run_network_sim if self.backtesting else run_network,
         ]
 

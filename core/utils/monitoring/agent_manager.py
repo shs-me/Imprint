@@ -33,7 +33,9 @@ class AgentManager:
                     f"{name} not subclass {cfg.ConfigurationSHMSegments.__name__}"
                 )
 
-            if name == cfg.ConfigurationFootprint.__name__:
+            if name == cfg.ConfigurationStrategy.__name__:
+                self.strategy_buf = self.shm_buf[_slice]
+            elif name == cfg.ConfigurationFootprint.__name__:
                 self.footprint_buf = self.shm_buf[_slice]
             elif name == cfg.ConfigurationMetrics.__name__:
                 self.metrics_buf = self.shm_buf[_slice]
@@ -48,7 +50,9 @@ class AgentManager:
             if name not in config_subclasses:
                 raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
 
-            if isinstance(obj, cfg.ConfigurationBacktesting):
+            if isinstance(obj, cfg.ConfigurationStrategy):
+                self.cfgStrategy = obj
+            elif isinstance(obj, cfg.ConfigurationBacktesting):
                 self.cfgBacktesting = obj
             elif isinstance(obj, cfg.ConfigurationFootprint):
                 self.cfgFootprint = obj

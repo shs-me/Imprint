@@ -33,7 +33,8 @@ class ParserAgent:
         self.pre_sleep_wss, self.wake_up_logic = pre_sleep_wss, wake_up_logic
         self.wait_main: Event = general_event
         self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
-        self.mode = manager.cfgBacktesting.mode
+        self.backtesting = manager.cfgBacktesting.backtesting
+        self.btMode = manager.cfgBacktesting.mode
         # InitGetRawData
         self.cfgRaw = self.manager.cfgRaw
         self.data_size = self.cfgRaw.data_size
@@ -99,15 +100,19 @@ class ParserAgent:
         WCellC: memoryview,
         pre_sleep_wss: Event,
     ) -> None:
-        if self.mode == bm.NONE_STOP:
-            while WCellC[0] == RCellC[0] and status_task[0] == 0:
-                pass
+        if self.backtesting:
+            if self.btMode == bm.NONE_STOP:
+                while WCellC[0] == RCellC[0] and status_task[0] == 0:
+                    pass
 
-        elif self.mode == bm.ZERO_SLEEP:
-            while WCellC[0] == RCellC[0] and status_task[0] == 0:
-                time.sleep(0)
+            elif self.btMode == bm.ZERO_SLEEP:
+                while WCellC[0] == RCellC[0] and status_task[0] == 0:
+                    time.sleep(0)
 
-        elif self.mode == bm.REAL_TIME_SIM:
+            elif self.btMode == bm.REAL_TIME_SIM:
+                pre_sleep_wss.clear()
+                pre_sleep_wss.wait()
+        else:
             pre_sleep_wss.clear()
             pre_sleep_wss.wait()
 
@@ -149,9 +154,16 @@ class ParserAgent:
                 )
                 if temp is False:
                     pass
+
                 elif temp is True:
-                    if self.mode == bm.REAL_TIME_SIM:
-                        wake_up_logic.release()
+                    if self.backtesting:
+                        if self.btMode == bm.REAL_TIME_SIM:
+                            pass
+                        else:
+                            continue
+
+                    wake_up_logic.release()
+
                 elif temp is None:
                     break
 

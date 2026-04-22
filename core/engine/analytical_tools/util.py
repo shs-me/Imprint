@@ -64,8 +64,15 @@ class ConvertMetrics:
         else:
             return None
 
-    def to_nPrice(self, price: float) -> int:
-        return round(price * self.priceMult)
+    @overload
+    def to_nPrice(self, value: float) -> int: ...
+    @overload
+    def to_nPrice(self, value: int | int64) -> int | int64: ...
+    def to_nPrice(self, value):
+        if isinstance(value, float):
+            return round(value * self.priceMult)
+        else:
+            return (self.center - value) + self.nBasePrice
 
     def to_nQty(self, qty: float) -> int:
         return round(qty * self.qtyMult)
@@ -83,7 +90,7 @@ class ConvertMetrics:
 
     def get_price(self, idy: int | int64) -> float:
         return round(
-            self.to_price((self.center - idy) + self.nBasePrice),
+            self.to_price(self.to_nPrice(idy)),
             ndigits=self.pricePrec,
         )
 

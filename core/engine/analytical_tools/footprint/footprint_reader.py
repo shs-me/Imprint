@@ -19,7 +19,7 @@ class FootprintReader(ABC):
         self.set_status = manager.set_status
         # Variable's
         self.last_idx: int = 0
-        # fp
+        # Footprint
         self.cfgFP = self.manager.cfgFootprint
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFP.flag : self.cfgFP.flag + 1
@@ -172,38 +172,42 @@ class FootprintReader(ABC):
     def _update_bar_state(
         self, IDYmin: int64, IDYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
-        open, close = self.con.openIdy(idxBid), self.con.closeIdy(idxBid)
-        high, low = self.con.highIdy(idxBid), self.con.lowIdy(idxBid)
+        _ = self.con
 
-        self._clear_bar_state(high=high, low=low, idxBid=idxBid)
-        self._update_ohlc(idxBid=idxBid, open=open, high=high, low=low, close=close)
-        self._update_poc_va_bar(high=high, low=low, idxBid=idxBid, idxAsk=idxAsk)
+        OPEN: int64 = _.openIdy(idxBid)
+        HIGH: int64 = _.highIdy(idxBid)
+        LOW: int64 = _.lowIdy(idxBid)
+        CLOSE: int64 = _.closeIdy(idxBid)
 
-    def _clear_bar_state(self, high: int64, low: int64, idxBid: int) -> None:
+        self._clear_bar_state(HIGH=HIGH, LOW=LOW, idxBid=idxBid)
+        self._update_ohlc(idxBid=idxBid, OPEN=OPEN, HIGH=HIGH, LOW=LOW, CLOSE=CLOSE)
+        self._update_poc_va_bar(HIGH=HIGH, LOW=LOW, idxBid=idxBid, idxAsk=idxAsk)
+
+    def _clear_bar_state(self, HIGH: int64, LOW: int64, idxBid: int) -> None:
         headers = sf.OPEN | sf.HIGH | sf.LOW | sf.CLOSE
         indicators = sf.POC_BAR | sf.VAL_BAR | sf.VAH_BAR
         clear_mask = ~(headers | indicators)
-        self.fp_state[high : low + 1, idxBid] &= clear_mask
+        self.fp_state[HIGH : LOW + 1, idxBid] &= clear_mask
 
     def _update_ohlc(
-        self, open: int64, high: int64, low: int64, close: int64, idxBid: int
+        self, OPEN: int64, HIGH: int64, LOW: int64, CLOSE: int64, idxBid: int
     ) -> None:
-        self.fp_state[open, idxBid] |= sf.OPEN
-        self.fp_state[high, idxBid] |= sf.HIGH
-        self.fp_state[low, idxBid] |= sf.LOW
-        self.fp_state[close, idxBid] |= sf.CLOSE
+        self.fp_state[OPEN, idxBid] |= sf.OPEN
+        self.fp_state[HIGH, idxBid] |= sf.HIGH
+        self.fp_state[LOW, idxBid] |= sf.LOW
+        self.fp_state[CLOSE, idxBid] |= sf.CLOSE
 
     def _update_poc_va_bar(
-        self, high: int64, low: int64, idxBid: int, idxAsk: int
+        self, HIGH: int64, LOW: int64, idxBid: int, idxAsk: int
     ) -> None:
         vp_bar: NDArray[int64] = (
-            self.fp[high : low + 1, idxBid] + self.fp[high : low + 1, idxAsk]
+            self.fp[HIGH : LOW + 1, idxBid] + self.fp[HIGH : LOW + 1, idxAsk]
         )
         poc: intp = np.argmax(vp_bar)
         vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-        self.fp_state[high + poc, idxBid] |= sf.POC_BAR
-        self.fp_state[high + vah, idxBid] |= sf.VAH_BAR
-        self.fp_state[high + val, idxBid] |= sf.VAL_BAR
+        self.fp_state[HIGH + poc, idxBid] |= sf.POC_BAR
+        self.fp_state[HIGH + vah, idxBid] |= sf.VAH_BAR
+        self.fp_state[HIGH + val, idxBid] |= sf.VAL_BAR
 
     # - - Footprint: RealTime - -
     def _update_fp_realtime_state(self, IDYmin: int64, IDYmax: int64) -> None:
@@ -231,11 +235,11 @@ class FootprintReader(ABC):
     # - - Footprint: Static - -
     def _update_fp_static_state(self) -> None:
         lidx, idxLevel, idxBarrier = self.last_idx, self.con.idxVP, self.con.idxDP
-        high, low = self.con.highIdy(lidx), self.con.lowIdy(lidx)
+        HIGH, LOW = self.con.highIdy(lidx), self.con.lowIdy(lidx)
         self._clear_fp_static_state(idxLevel=idxLevel)
         self._update_vwap_bb(lidx=lidx, idxLevel=idxLevel)
         self._update_poc_va_fp(idxLevel=idxLevel)
-        self._update_auction(high=high, low=low, idx=lidx, idxLevel=idxLevel)
+        self._update_auction(HIGH=HIGH, LOW=LOW, idx=lidx, idxLevel=idxLevel)
 
     def _clear_fp_static_state(self, idxLevel: int) -> None:
         state_1 = sf.VWAP | sf.LOWER_BB | sf.UPPER_BB
@@ -259,17 +263,17 @@ class FootprintReader(ABC):
         self.fp_state[vah, idxLevel] |= sf.VAH_FP
         self.fp_state[val, idxLevel] |= sf.VAL_FP
 
-    def _update_auction(self, high: int64, low: int64, idx: int, idxLevel: int) -> None:
+    def _update_auction(self, HIGH: int64, LOW: int64, idx: int, idxLevel: int) -> None:
         highAuction = (
             sf.FINISHED_AUCTION
-            if self.fp[high, idx + 1] == 0
+            if self.fp[HIGH, idx + 1] == 0
             else sf.UNFINISHED_AUCTION
         )
         lowAuction = (
-            sf.FINISHED_AUCTION if self.fp[low, idx] == 0 else sf.UNFINISHED_AUCTION
+            sf.FINISHED_AUCTION if self.fp[LOW, idx] == 0 else sf.UNFINISHED_AUCTION
         )
-        self.fp_state[high, idxLevel] |= highAuction
-        self.fp_state[low, idxLevel] |= lowAuction
+        self.fp_state[HIGH, idxLevel] |= highAuction
+        self.fp_state[LOW, idxLevel] |= lowAuction
 
 
 @njit(cache=True)

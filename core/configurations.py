@@ -1,6 +1,6 @@
 from abc import ABC
 
-from .settings import BacktestingMode, BarHeaders, ChartInterval, SpaceCoords
+from core.settings import BacktestingMode, BarHeaders, ChartInterval, SpaceCoords
 
 UBYTE = 1
 INT64 = 8
@@ -23,8 +23,8 @@ class ConfigurationBacktesting(Configuration):
         symbol: str = "dashusdt",
         tick_size: str = "0.01",
         lot_size: str = "0.001",
-        backtesting: bool = True,
-        mode: BacktestingMode = BacktestingMode.ZERO_SLEEP,
+        backtesting: bool = False,
+        mode: BacktestingMode = BacktestingMode.REAL_TIME_SIM,
     ) -> None:
         self.symbol: str = symbol
         self.tick_size: str = tick_size
@@ -35,7 +35,18 @@ class ConfigurationBacktesting(Configuration):
 
 # ShmSegmentsSubclasses
 class ConfigurationStrategy(ConfigurationSHMSegments):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        RR: float = 1.0,
+        TP: float = 0.01,
+        SL: float = 0.01,
+        max_trades: int = 10000,
+    ) -> None:
+        self.RR = RR
+        self.TP = TP
+        self.SL = SL
+        self.max_trades = max_trades
+        self.tradeParam = 8
         self.cell_amount = 128
 
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
@@ -43,17 +54,21 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
     def get_need_shm_size(self) -> int:
         self.reader = OFFSET, OFFSET + INT64
         self.writer = self.reader[1], self.reader[1] + INT64
-        self.price = self.writer[1], self.writer[1] + INT64
-        self.qty = self.price[1], self.price[1] + INT64
-        self.side = self.qty[1], self.qty[1] + UBYTE
-        self.type_order = self.side[1], self.side[1] + UBYTE
-        self.signal_size = self.type_order[1]
-        self.signal_buf_size = self.signal_size * self.cell_amount
+        self.offset = self.writer[1]
+        self.nPrice = OFFSET, OFFSET + INT64
+        self.time_ms = self.nPrice[1], self.nPrice[1] + INT64
+        self.orderParam = self.time_ms[1], self.time_ms[1] + INT64
+        self.signal_size = self.orderParam[1]
+        self.signal_buf_size = self.offset + self.signal_size * self.cell_amount
 
-        self.pattern_1 = 0, self.signal_buf_size
-        self.pattern_2 = self.pattern_1[1], self.signal_buf_size
+        self.longBuf = OFFSET, OFFSET + self.signal_buf_size
+        self.shortBuf = self.longBuf[1], self.longBuf[1] + self.signal_buf_size
 
-        return 1
+        self.trades = (
+            self.shortBuf[1],
+            self.shortBuf[1] + (self.max_trades * self.tradeParam * INT64),
+        )
+        return self.trades[1]
 
 
 class ConfigurationFootprint(ConfigurationSHMSegments):
