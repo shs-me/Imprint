@@ -20,10 +20,17 @@ class BacktestingMode(IntEnum):
 class OrderFlag(IntFlag):
     SHORT = auto()
     LONG = auto()
+    # Side
     SELL = auto()
     BUY = auto()
+    # TypeOrder
     MARKET = auto()
     LIMIT = auto()
+    # StatusOrder
+    NEW = auto()
+    # TIF
+    GTC = auto()
+    FOC = auto()
 
 
 class StateFlags(IntFlag):

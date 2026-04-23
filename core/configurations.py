@@ -22,9 +22,15 @@ class ConfigurationBacktesting(Configuration):
         self,
         tick_size: str = "0.01",
         lot_size: str = "0.001",
+        taker_commission: float = 0.002,
+        maker_commission: float = 0.0015,
+        balance: float = 100.0,
     ) -> None:
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size
+        self.taker_commision: float = taker_commission
+        self.maker_commission: float = maker_commission
+        self.balance: float = balance
 
 
 # ShmSegmentsSubclasses
