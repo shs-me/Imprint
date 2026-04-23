@@ -3,13 +3,17 @@ from typing import Any
 
 import numpy as np
 
-from ... import configurations as cfg
-from . import StatusCodes as sc
+from core import configurations as cfg
+from core.settings import BacktestingMode
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class AgentManager:
     def __init__(
         self,
+        backtesting: bool,
+        mode: BacktestingMode,
+        symbol: str,
         proc_id: int,
         task_id: int,
         segments: dict[str, Any],
@@ -19,6 +23,9 @@ class AgentManager:
     ):
         self.proc_id, self.task_id = proc_id, task_id
         self.sc_sem, self.shm_buf = sc_sem, shm_buf
+        self.backtesting = backtesting
+        self.mode = mode
+        self.symbol = symbol
         self.segments_init(segments)
         self.configs_init(configs)
         self.local_segments_init()

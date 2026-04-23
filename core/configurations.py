@@ -1,6 +1,6 @@
 from abc import ABC
 
-from core.settings import BacktestingMode, BarHeaders, ChartInterval, SpaceCoords
+from core.settings import BarHeaders, ChartInterval, SpaceCoords
 
 UBYTE = 1
 INT64 = 8
@@ -20,17 +20,11 @@ class ConfigurationSHMSegments(Configuration):
 class ConfigurationBacktesting(Configuration):
     def __init__(
         self,
-        symbol: str = "dashusdt",
         tick_size: str = "0.01",
         lot_size: str = "0.001",
-        backtesting: bool = False,
-        mode: BacktestingMode = BacktestingMode.REAL_TIME_SIM,
     ) -> None:
-        self.symbol: str = symbol
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size
-        self.backtesting: bool = backtesting
-        self.mode = mode
 
 
 # ShmSegmentsSubclasses
@@ -74,12 +68,13 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
 class ConfigurationFootprint(ConfigurationSHMSegments):
     def __init__(
         self,
-        chart_interval: ChartInterval = ChartInterval._5M,
+        chart_interval: ChartInterval = ChartInterval._H,
         chart_range: int = 1,
+        fp_lines: int = 10001,
     ) -> None:
         self.intervalMs = chart_interval
         self.bar_count = self.get_bar_count(day=chart_range)
-        self.fpLines = 10001
+        self.fpLines = fp_lines
         self.fpCols = self.bar_count * 2
         self.fpPanelCols = self.fpCols + self.get_panel_count_cols()
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096

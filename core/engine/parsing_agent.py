@@ -5,10 +5,12 @@ from multiprocessing.synchronize import Event, Lock
 import msgspec
 from msgspec.json import Decoder
 
-from .. import AgentManager, error_handler, manager_office
-from .. import StatusCodes as sc
-from ..settings import BacktestingMode as bm
-from . import FootprintWriter
+from core.engine.analytical_tools.footprint.footprint_writer import FootprintWriter
+from core.settings import BacktestingMode as bm
+from core.utils.handlers import error_handler
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.office import manager_office
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class AggTrade(msgspec.Struct):
@@ -33,8 +35,8 @@ class ParserAgent:
         self.pre_sleep_wss, self.wake_up_logic = pre_sleep_wss, wake_up_logic
         self.wait_main: Event = general_event
         self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
-        self.backtesting = manager.cfgBacktesting.backtesting
-        self.btMode = manager.cfgBacktesting.mode
+        self.backtesting = manager.backtesting
+        self.btMode = manager.mode
         # InitGetRawData
         self.cfgRaw = self.manager.cfgRaw
         self.data_size = self.cfgRaw.data_size

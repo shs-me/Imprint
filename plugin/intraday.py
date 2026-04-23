@@ -1,15 +1,13 @@
 import time
 from multiprocessing.synchronize import Event
 
-import numpy as np
-from numpy import bool_, int32, int64, intp
+from numpy import int32, int64, intp
 from numpy.typing import NDArray
 
-from core.engine.analytical_tools import FootprintReader
-from core.settings import BarHeaders as bh  # noqa: F401
+from core.engine.analytical_tools.footprint.footprint_reader import FootprintReader
 from core.settings import OrderFlag as of
 from core.settings import StateFlags as sf
-from core.utils.monitoring import AgentManager
+from core.utils.monitoring.agent_manager import AgentManager
 
 
 class IntraDay(FootprintReader):

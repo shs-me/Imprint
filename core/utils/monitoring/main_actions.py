@@ -3,7 +3,7 @@ from multiprocessing.synchronize import Event
 
 from loguru import logger
 
-from . import StatusCodes as sc
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 def data_preppered(procs: dict, proc_id: int, status_buf: memoryview):

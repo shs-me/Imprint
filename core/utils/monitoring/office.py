@@ -3,9 +3,11 @@ import inspect
 from functools import wraps
 from multiprocessing.shared_memory import SharedMemory
 
-from ... import Configuration, ConfigurationSHMSegments, configurations
-from .. import error_handler
-from . import AgentManager, MainManager
+from core import configurations
+from core.configurations import Configuration, ConfigurationSHMSegments
+from core.utils.handlers import error_handler
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.main_manager import MainManager
 
 
 def manager_office(main: bool = False):
@@ -60,6 +62,9 @@ def agent_init(main: bool, shm_buf: memoryview, **kwargs):
         )
     else:
         manager = AgentManager(
+            backtesting=kwargs.pop("backtesting"),
+            mode=kwargs.pop("mode"),
+            symbol=kwargs.pop("symbol"),
             proc_id=kwargs.pop("proc_id"),
             task_id=kwargs.pop("task_id"),
             segments=kwargs.pop("segments"),

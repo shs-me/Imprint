@@ -5,19 +5,22 @@ from types import FunctionType
 
 from loguru import logger
 
-from core import CorePath, CoreResources, MainManager, manager_office
+from core.constant import CORE_LOG_PATH, DIRS_LIST
 from core.engine.execution_agent import run_execution
 from core.engine.logic_agent import run_logic
 from core.engine.network_agent import run_network
 from core.engine.network_sim_agent import run_network_sim
 from core.engine.parsing_agent import run_parsing
+from core.settings import BacktestingMode, CoreResources
+from core.utils.monitoring.main_manager import MainManager
+from core.utils.monitoring.office import manager_office
 
 
 class RunMain(CoreResources):
-    def __init__(self, backtesting: bool, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         self.manager: MainManager = kwargs.pop("manager")
         self.baseKwargs = kwargs
-        self.backtesting = backtesting
+        self.backtesting = kwargs["backtesting"]
         self.procs = {}
         # CoreResources
         self.parsing_event = Event()
@@ -27,7 +30,7 @@ class RunMain(CoreResources):
         self.sc_sem, self.general_event = Semaphore(0), Event()
 
     def _init_session(self) -> None:
-        for _dir in CorePath.dirs:
+        for _dir in DIRS_LIST:
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
 
@@ -100,15 +103,24 @@ class RunMain(CoreResources):
 
 
 @manager_office(main=True)
-def run_core(backtesting: bool, **kwargs) -> None:
+def run_core(
+    backtesting: bool = False,
+    mode: BacktestingMode = BacktestingMode.REAL_TIME_SIM,
+    symbol: str = "DASHUSDT",
+    **kwargs,
+) -> None:
     logger.remove()
     logger.add(
-        CorePath.core_log,
+        CORE_LOG_PATH,
         rotation="100 MB",
         enqueue=True,
         format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
-    state = RunMain(backtesting=backtesting, **kwargs)
+    kwargs["backtesting"] = backtesting
+    kwargs["mode"] = mode
+    kwargs["symbol"] = symbol
+
+    state = RunMain(**kwargs)
     state.run_core_engine()
     logger.info("-- Core -- | Close the Core.")

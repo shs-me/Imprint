@@ -1,7 +1,7 @@
 from multiprocessing.synchronize import Event
 
-from .. import AgentManager
-from . import FootprintReader
+from core.engine.analytical_tools.footprint.footprint_reader import FootprintReader
+from core.utils.monitoring.agent_manager import AgentManager
 
 
 class BaseFootprintReader(FootprintReader):

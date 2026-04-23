@@ -6,18 +6,17 @@ from numba import njit
 from numpy import float64
 from numpy.typing import NDArray
 
-from .... import AgentManager
-from .... import StatusCodes as stc
-from ....settings import BarHeaders as bh
-from ....settings import SpaceCoords as sc
-from .. import ConvertMetrics
+from core.engine.analytical_tools.util import ConvertMetrics
+from core.settings import BarHeaders as bh
+from core.settings import SpaceCoords as sc
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.status_codes import StatusCodes as stc
 
 
 class FootprintWriter:
     def __init__(self, manager: AgentManager, guarantee: Lock) -> None:
         self.manager, self.guarantee = manager, guarantee
         self.set_status = manager.set_status
-        self.mode = manager.cfgBacktesting.mode
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
         self.space_flag: memoryview[int] = self.manager.footprint_buf[

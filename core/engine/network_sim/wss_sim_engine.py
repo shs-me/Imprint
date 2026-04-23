@@ -1,16 +1,20 @@
 import gc
+import os
 import time
 import traceback
 from collections import deque
+from datetime import date
 from multiprocessing.synchronize import Event
 from threading import Lock, Thread
 
 import msgspec
 from msgspec.json import Encoder
 
-from ... import AgentManager, CorePath, error_handler
-from ... import StatusCodes as sc
-from ...settings import BacktestingMode as bm
+from core.constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
+from core.settings import BacktestingMode as bm
+from core.utils.handlers import error_handler
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class AggTradeSim(msgspec.Struct):
@@ -27,49 +31,53 @@ class AggTradeSim(msgspec.Struct):
 
 
 class DataPrepper:
-    def __init__(self, symbol: str, lock: Lock, mode: int) -> None:
-        self.file_path: str = CorePath.data_csv
+    def __init__(self, symbol: str, lock: Lock, mode: bm) -> None:
+        self.datadir: str = DATA_PATH
+        self.typeData: str = DATA_TYPE_AGGTRADES_PATH
         self.symbol: str = symbol.upper()
-        self.lock = lock
-        self.mode = mode
+        self.base_path: str = f"{self.datadir}/{self.typeData}/{self.symbol}"
+        self.lock: Lock = lock
+        self.mode: bm = mode
         self.queue: deque = deque(maxlen=10000)
         self.is_running, self.complete = True, False
         self.error: None | str = None
 
     def start(self) -> None:
-        self.subP = Thread(target=self._run, daemon=True)
+        self.subP: Thread = Thread(target=self.run_prepper_engine, daemon=True)
         self.subP.start()
 
-    def _run(self) -> None:
+    def run_prepper_engine(self) -> None:
         try:
-            with open(file=self.file_path, mode="r") as f:
-                next(f)
-                for line in f:
-                    if not self.is_running:
-                        break
+            data_paths: list[str] = self.get_data_paths()
+            for path in data_paths:
+                with open(file=path, mode="r") as f:
+                    next(f)
+                    for line in f:
+                        if not self.is_running:
+                            break
 
-                    while len(self.queue) == self.queue.maxlen:
-                        if self.mode == bm.NONE_STOP:
-                            pass
-                        elif self.mode == bm.ZERO_SLEEP:
-                            time.sleep(0)
-                        elif self.mode == bm.REAL_TIME_SIM:
-                            self.lock.acquire()
+                        while len(self.queue) == self.queue.maxlen:
+                            if self.mode == bm.NONE_STOP:
+                                pass
+                            elif self.mode == bm.ZERO_SLEEP:
+                                time.sleep(0)
+                            elif self.mode == bm.REAL_TIME_SIM:
+                                self.lock.acquire()
 
-                    data: list[str] = line.strip().split(sep=",")
-                    obj = AggTradeSim(
-                        e="aggTrade",
-                        E=int(data[5]),
-                        a=int(data[0]),
-                        s=self.symbol,
-                        p=data[1],
-                        q=data[2],
-                        f=int(data[3]),
-                        l=int(data[4]),
-                        T=int(data[5]),
-                        m=(data[6] in ("true", "1")),
-                    )
-                    self.queue.append(obj)
+                        data: list[str] = line.strip().split(sep=",")
+                        obj = AggTradeSim(
+                            e=self.typeData,
+                            E=int(data[5]),
+                            a=int(data[0]),
+                            s=self.symbol,
+                            p=data[1],
+                            q=data[2],
+                            f=int(data[3]),
+                            l=int(data[4]),
+                            T=int(data[5]),
+                            m=(data[6] in ("true", "True")),
+                        )
+                        self.queue.append(obj)
 
             self.complete = True
 
@@ -77,21 +85,26 @@ class DataPrepper:
             self.error = f"Prepper Error: {e}\n{traceback.format_exc()}"
             self.is_running = False
 
+    def get_data_paths(self) -> list[str]:
+        paths = [p for p in os.listdir(self.base_path) if p.endswith(".csv")]
+        dates = sorted([date.fromisoformat(p.split(".")[0]) for p in paths])
+        return [f"{self.base_path}/{date.isoformat(d)}.csv" for d in dates]
+
 
 class WSsSimEngine:
     def __init__(
         self, manager: AgentManager, wake_up_parser: Event, general_event: Event
     ) -> None:
-        self.manager = manager
+        self.manager: AgentManager = manager
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
 
-        self.mode = manager.cfgBacktesting.mode
+        self.mode: bm = manager.mode
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         self.encoder: Encoder = Encoder()
         self.lock = Lock()
         self.prepper: DataPrepper = DataPrepper(
-            symbol=self.manager.cfgBacktesting.symbol, lock=self.lock, mode=self.mode
+            symbol=self.manager.symbol, lock=self.lock, mode=self.mode
         )
 
         self.ottrade, self.nttrade = 0, 0  # new|old time trade

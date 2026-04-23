@@ -5,10 +5,14 @@ import os
 import time
 from multiprocessing.synchronize import Event, Lock
 
-from .. import AgentManager, CorePath, error_handler, manager_office
-from .. import StatusCodes as sc
-from ..settings import BacktestingMode as bm
-from . import BaseFootprintReader, FootprintReader
+from core.constant import PLUGIN_PATH
+from core.engine.analytical_tools.footprint.footprint_reader import FootprintReader
+from core.engine.example import BaseFootprintReader
+from core.settings import BacktestingMode as bm
+from core.utils.handlers import error_handler
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.office import manager_office
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class LogicAgent:
@@ -23,8 +27,8 @@ class LogicAgent:
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
         self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
-        self.backtesting = manager.cfgBacktesting.backtesting
-        self.btMode = manager.cfgBacktesting.mode
+        self.backtesting = manager.backtesting
+        self.btMode = manager.mode
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
@@ -78,9 +82,9 @@ class LogicAgent:
 
 def resolve_reader(manager: AgentManager, execution_event: Event):
     paths = []
-    for p in os.listdir(CorePath.plugins_dir):
+    for p in os.listdir(PLUGIN_PATH):
         if p.endswith(".py"):
-            paths.append(f"{CorePath.plugins_dir}/{p}")
+            paths.append(f"{PLUGIN_PATH}/{p}")
 
     for path in paths:
         result = get_plugin(path, manager, execution_event)

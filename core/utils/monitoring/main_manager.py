@@ -3,9 +3,9 @@ from typing import Any
 
 from loguru import logger
 
-from ... import configurations as cfg
-from . import StatusCodes as sc
-from . import main_actions as act
+from core import configurations as cfg
+from core.utils.monitoring import main_actions as act
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class MainManager:

@@ -1,35 +1,39 @@
 from multiprocessing.synchronize import Event
 
-from .. import AgentManager, manager_office
-from . import WSsSimEngine
+from core.engine.network_sim.rest_sim_engine import RestSimAgent
+from core.engine.network_sim.wss_sim_engine import WSsSimEngine
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.office import manager_office
 
 
 class NetworkSimAgent:
-    def __init__(self, wss: WSsSimEngine, manager: AgentManager) -> None:
-        self.manager, self.wss = manager, wss
+    def __init__(
+        self, manager: AgentManager, wss: WSsSimEngine, rest: RestSimAgent
+    ) -> None:
+        self.manager = manager
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
 
+        self.wss, self.rest = wss, rest
         self.cfgBT = self.manager.cfgBacktesting
         self.cfgMetrics = self.manager.cfgMetrics
-        self.tick_size = self.cfgBT.tick_size
-        self.lot_size = self.cfgBT.lot_size
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
             self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
         ].cast("q")
         """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
 
     def _init_session(self) -> None:
-        tick_size, lot_size = self.tick_size, self.lot_size
+        self.ts = self.rest.get_tick_size()
+        self.ls = self.rest.get_lot_size()
         self.trade_par[2] = self.pricePrec = (
-            len(tick_size.split(sep=".")[-1]) if "." in tick_size else 0
+            len(self.ts.split(sep=".")[-1]) if "." in self.ts else 0
         )
         self.trade_par[3] = self.qtyPrec = (
-            len(lot_size.split(sep=".")[-1]) if "." in lot_size else 0
+            len(self.ls.split(sep=".")[-1]) if "." in self.ls else 0
         )
         self.pricMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
-        self.trade_par[0] = round(float(tick_size) * self.pricePrec)
-        self.trade_par[1] = round(float(tick_size) * self.qtyPrec)
+        self.trade_par[0] = round(float(self.ts) * self.pricePrec)
+        self.trade_par[1] = round(float(self.ls) * self.qtyPrec)
 
     def run_network_engine(self) -> None:
         self._init_session()
@@ -43,7 +47,10 @@ def run_network_sim(
     **kwargs,
 ) -> None:
     wss: WSsSimEngine = WSsSimEngine(
-        kwargs["manager"], general_event=general_event, wake_up_parser=parsing_event
+        manager=kwargs["manager"],
+        general_event=general_event,
+        wake_up_parser=parsing_event,
     )
-    agent = NetworkSimAgent(wss=wss, manager=kwargs["manager"])
+    rest: RestSimAgent = RestSimAgent(manager=kwargs["manager"])
+    agent = NetworkSimAgent(manager=kwargs["manager"], wss=wss, rest=rest)
     agent.run_network_engine()

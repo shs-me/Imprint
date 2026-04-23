@@ -3,9 +3,10 @@ from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
 
-from ... import AgentManager, error_handler
-from ... import StatusCodes as sc
-from ...constant import WS_STREAMS_PROD_URL
+from core.constant import WS_STREAMS_PROD_URL
+from core.utils.handlers import error_handler
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class WSsEngine:
@@ -15,7 +16,9 @@ class WSsEngine:
         self.manager = manager
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
-        self.uri = f"{WS_STREAMS_PROD_URL}{'dashusdt'}@aggTrade"
+
+        self.symbol = manager.symbol
+        self.wss_aggTrades_url = f"{WS_STREAMS_PROD_URL}{self.symbol.lower()}@aggTrade"
         self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         # InitGetRawData
         self.cfgRaw = self.manager.cfgRaw
@@ -71,7 +74,7 @@ class WSsEngine:
         while True:
             gc.collect()
             self.wait_main.wait()
-            async with connect(self.uri, ping_interval=20) as ws:
+            async with connect(self.wss_aggTrades_url, ping_interval=20) as ws:
                 while True:
                     set_status(code=SLEEP)
                     if have_problem() is False:

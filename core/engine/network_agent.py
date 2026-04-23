@@ -2,8 +2,10 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.synchronize import Event
 
-from .. import AgentManager, manager_office
-from . import RestEngine, WSsEngine
+from core.engine.network.rest_engine import RestEngine
+from core.engine.network.wss_engine import WSsEngine
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.office import manager_office
 
 
 class NetworkAgent:

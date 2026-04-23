@@ -7,7 +7,7 @@ from functools import wraps
 from types import TracebackType
 from typing import Any
 
-from .. import CorePath
+from core.constant import EXC_DUMP_PATH
 
 
 class DebugEncoder(json.JSONEncoder):
@@ -106,8 +106,9 @@ def dump_exception() -> None:
                 data["locals"][var_name] = f"<Error processing value: {e}>"
 
     try:
-        with open(file=CorePath.exc_dump, mode="a", encoding="utf-8") as f:
+        with open(file=EXC_DUMP_PATH, mode="a", encoding="utf-8") as f:
             json.dump(obj=data, fp=f, ensure_ascii=False, indent=4, cls=DebugEncoder)
             f.write("\n" + "=" * 50 + "\n")
+
     except Exception as final_err:
         sys.stderr.write(f"Critical error during dump_exception: {final_err}\n")

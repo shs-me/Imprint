@@ -1,4 +1,4 @@
-from ... import AgentManager
+from core.utils.monitoring.agent_manager import AgentManager
 
 
 class TradeManagerAgent:

@@ -10,14 +10,15 @@ REST_API_TESTNET_URL = "https://testnet.binancefuture.com"
 WS_API_TESTNET_URL = "wss://testnet.binancefuture.com/ws-fapi/v1"
 WS_STREAMS_TESTNET_URL = "wss://fstream.binancefuture.com"
 
+DATA_PATH = "data"
+DATA_TYPE_AGGTRADES_PATH = "aggTrades"
 
-class CorePath:
-    dirs = ["plugins", "dump", "data", "logs"]
-    core_log = "logs/_core_.log"
-    profiling_log = "logs/profiling.log"
-    data_csv = "data/aggtrades.csv"
-    plugins_dir = "plugins"
-    exc_dump = "dump/exc_dump.json"
-    profiling_bin = "dump/profiling.bin"
-    profiling_csv = "dump/profiling.csv"
-    pheaders_csv = "dump/pheaders.csv"
+LOGS_PATH = "logs"
+CORE_LOG_PATH = f"{LOGS_PATH}/core.log"
+
+DUMP_PATH = "dump"
+EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
+
+PLUGIN_PATH = "plugin"
+
+DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH, PLUGIN_PATH]

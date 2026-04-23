@@ -6,11 +6,11 @@ from numba import njit
 from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
-from .... import AgentManager
-from ....settings import BarHeaders as bh
-from ....settings import SpaceCoords as sc
-from ....settings import StateFlags as sf
-from .. import ConvertMetrics
+from core.engine.analytical_tools.util import ConvertMetrics
+from core.settings import BarHeaders as bh
+from core.settings import SpaceCoords as sc
+from core.settings import StateFlags as sf
+from core.utils.monitoring.agent_manager import AgentManager
 
 
 class FootprintReader(ABC):

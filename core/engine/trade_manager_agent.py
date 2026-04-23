@@ -1,8 +1,9 @@
 import gc
 from multiprocessing.synchronize import Event
 
-from .. import AgentManager, manager_office
-from .. import StatusCodes as sc
+from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.office import manager_office
+from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class TradeManagerAgent:
