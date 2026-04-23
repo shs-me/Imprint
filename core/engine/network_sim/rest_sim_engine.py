@@ -13,7 +13,7 @@ class RestSimAgent:
         return self.tick_size
 
     def get_lot_size(self) -> str:
-        return self.tick_size
+        return self.lot_size
 
     def send_order(self) -> bool:
         return True

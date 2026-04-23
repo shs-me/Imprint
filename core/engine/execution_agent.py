@@ -5,6 +5,8 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
+from core.engine.network.rest_engine import RestEngine
+from core.engine.network_sim.rest_sim_engine import RestSimAgent
 from core.settings import OrderFlag as of
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
@@ -13,10 +15,18 @@ from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
 class ExecutionAgent:
-    def __init__(self, execution_event: Event, manager: AgentManager) -> None:
-        self.manager, self.execution_event = manager, execution_event
+    def __init__(
+        self,
+        manager: AgentManager,
+        rest: RestEngine | RestSimAgent,
+        execution_event: Event,
+    ) -> None:
+        self.manager = manager
         self.have_task = self.manager.have_task
         self.set_status, self.have_problem = manager.set_status, manager.have_problem
+
+        self.rest = rest
+        self.execution_event = execution_event
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
@@ -62,7 +72,6 @@ class ExecutionAgent:
         # LocalLinks
         SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
         set_status, have_problem = self.set_status, self.have_problem
-        have_task = self.have_task
         check_signal_buf = self._check_signal_buf
         alarm_clock = self._alarm_clock
         # - - -
@@ -71,9 +80,6 @@ class ExecutionAgent:
             while True:
                 set_status(code=SLEEP)
                 if have_problem() is False:
-                    if have_task():
-                        break
-
                     alarm_clock()
                     set_status(code=WAKE_UP)
                     check_signal_buf()
@@ -94,7 +100,6 @@ class ExecutionAgent:
                 self._check_long_buf()
             if WSB[0] != RSB[0]:
                 self._check_short_buf()
-            pass
 
     def _check_long_buf(self) -> None:
         nPrice, time_ms, orderParam = self._get_signal(signal_buf=self.longBuf)
@@ -139,5 +144,9 @@ class ExecutionAgent:
 
 @manager_office()
 def run_execution(execution_event: Event, **kwargs):
-    agent = ExecutionAgent(execution_event=execution_event, manager=kwargs["manager"])
+    type_rest = RestSimAgent if kwargs["backtesting"] else RestEngine
+    rest = type_rest(manager=kwargs["manager"])
+    agent = ExecutionAgent(
+        manager=kwargs["manager"], rest=rest, execution_event=execution_event
+    )
     agent.run_execution_engine()
