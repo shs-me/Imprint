@@ -62,26 +62,6 @@ def process_value(val: Any, max_len: int = 100) -> Any:
     return repr(val)
 
 
-def error_handler(set_status_code: bool = False):
-    def decorator(func):
-        @wraps(wrapped=func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except KeyboardInterrupt:
-                pass
-            except Exception:
-                dump_exception()
-                if set_status_code and args:
-                    manager = getattr(args[0], "manager", None)
-                    if manager and hasattr(manager, "_for_error_action"):
-                        manager._for_error_action()
-
-        return wrapper
-
-    return decorator
-
-
 def dump_exception() -> None:
     exc_type, exc_value, exc_tb = sys.exc_info()
 
@@ -112,3 +92,23 @@ def dump_exception() -> None:
 
     except Exception as final_err:
         sys.stderr.write(f"Critical error during dump_exception: {final_err}\n")
+
+
+def error_handler(set_status_code: bool = False):
+    def decorator(func):
+        @wraps(wrapped=func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except KeyboardInterrupt:
+                pass
+            except Exception:
+                dump_exception()
+                if set_status_code and args:
+                    manager = getattr(args[0], "manager", None)
+                    if manager and hasattr(manager, "_for_error_action"):
+                        manager._for_error_action()
+
+        return wrapper
+
+    return decorator

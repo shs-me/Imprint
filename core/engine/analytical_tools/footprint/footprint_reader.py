@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 from multiprocessing.synchronize import Event
 
@@ -6,6 +7,7 @@ from numba import njit
 from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
+from core.constant import DATA_PATH, DUMP_PATH
 from core.engine.analytical_tools.util import ConvertMetrics
 from core.settings import BarHeaders as bh
 from core.settings import SpaceCoords as sc
@@ -15,9 +17,10 @@ from core.utils.monitoring.agent_manager import AgentManager
 
 class FootprintReader(ABC):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
-        self.manager, self.execution_event = manager, execution_event
-        self.set_status = manager.set_status
-        # Variable's
+        self.manager: AgentManager = manager
+        self.execution_event: Event = execution_event
+
+        self.base_dump_fp_path = f"{DUMP_PATH}/{self.manager.symbol.upper()}"
         self.last_idx: int = 0
         # Footprint
         self.cfgFP = self.manager.cfgFootprint
@@ -62,12 +65,11 @@ class FootprintReader(ABC):
             buffer=self.manager.footprint_buf[slice(*self.cfgFP.space)],
         )
 
-    def _save_array(self) -> None:
-        np.save("footprint", self.fp)
-        np.save("headers", self.headers)
-
     def init_session(self) -> None:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
+        self.fp.fill(0)
+        self.fp_state.fill(0)
+        self.headers.fill(0)
         self.con: ConvertMetrics = ConvertMetrics(
             footprint=self.fp,
             headers=self.headers,
@@ -75,6 +77,17 @@ class FootprintReader(ABC):
             cfgFP=self.cfgFP,
         )
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
+        startFPtime = self.con.get_time(idx=0, strftime=True)
+        endFPtime = self.con.get_time(idx=self.last_idx, strftime=True)
+        self.rawFp_save_path = f"RawFP_{startFPtime}_{endFPtime}"
+        self.headers_save_path = f"FPheaders_{startFPtime}_{endFPtime}"
+
+    def dump_footprint(self) -> None:
+        if os.path.exists(self.base_dump_fp_path) is False:
+            os.mkdir(self.base_dump_fp_path)
+
+        np.save(self.rawFp_save_path, self.fp)
+        np.save(self.headers_save_path, self.headers)
 
     def check_update(self) -> None:
         self._update_state()

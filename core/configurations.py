@@ -156,6 +156,5 @@ class ConfigurationMonitoring(ConfigurationSHMSegments):
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
-        self.status = 0, 256
-        self.id_error = 255
-        return self.status[1]
+        self.procs_buf = 0, 40 * INT64
+        return self.procs_buf[1]

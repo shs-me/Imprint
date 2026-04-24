@@ -10,11 +10,15 @@ class NetworkSimAgent:
     def __init__(
         self, manager: AgentManager, wss: WSsSimEngine, rest: RestSimAgent
     ) -> None:
-        self.manager = manager
-        self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = manager.set_status, manager.have_problem
+        self.manager: AgentManager = manager
+        self.wss: WSsSimEngine = wss
+        self.rest: RestSimAgent = rest
 
-        self.wss, self.rest = wss, rest
+        self.set_proc_sc = manager.set_proc_sc
+        self.check_task = manager.check_task
+        self.task_status: memoryview = manager.task_status
+        self.proc_status: memoryview = manager.proc_status
+
         self.cfgBT = self.manager.cfgBacktesting
         self.cfgMetrics = self.manager.cfgMetrics
         self.trade_par: memoryview[int] = self.manager.metrics_buf[

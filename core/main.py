@@ -44,6 +44,7 @@ class RunMain(CoreResources):
     def _get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)
         proc_id = len(self.procs)
+        task_id = proc_id
         proc_name = func.__name__.removeprefix("run_").upper()
         kwargs = {}
         for param_name in sig.parameters:
@@ -51,7 +52,7 @@ class RunMain(CoreResources):
                 val = getattr(self, param_name)
                 kwargs[param_name] = val
             elif param_name == "kwargs":
-                kwargs["proc_id"], kwargs["task_id"] = proc_id, proc_id + 10
+                kwargs["proc_id"], kwargs["task_id"] = proc_id, task_id
                 kwargs["sc_sem"] = self.sc_sem
             else:
                 logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
@@ -91,15 +92,11 @@ class RunMain(CoreResources):
         logger.info("-- Core -- | Init completed.")
         print(self.procs)
         while True:
-            if (
-                self.manager.run(
-                    procs=self.procs,
-                    general_event=self.general_event,
-                    sc_sem=self.sc_sem,
-                )
-                is False
-            ):
-                return
+            self.manager.run(
+                procs=self.procs,
+                general_event=self.general_event,
+                scs_sem=self.sc_sem,
+            )
 
 
 @manager_office(main=True)

@@ -1,11 +1,11 @@
+from datetime import date
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
 from loguru import logger
 
 from core import configurations as cfg
-from core.utils.monitoring import main_actions as act
-from core.utils.monitoring.status_codes import StatusCodes as sc
+from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class MainManager:
@@ -15,11 +15,23 @@ class MainManager:
         configs: dict[str, Any],
         shm_buf: memoryview,
     ) -> None:
-        self.shm_buf = shm_buf
-        self.close_proc = None
+        self.shm_buf: memoryview = shm_buf
+        self.startDate: date = date.today()
         self.segments_init(segments)
         self.configs_init(configs)
         self.local_segments_init()
+
+    def configs_init(self, configs: dict[str, Any]) -> None:
+        config_subclasses: list[str] = configs["subclasses"]
+        for name, obj in configs.items():
+            if isinstance(obj, list):
+                continue
+
+            if name not in config_subclasses:
+                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
+
+            if isinstance(obj, cfg.ConfigurationMonitoring):
+                self.cfgMonitoring = obj
 
     def segments_init(self, segments: dict[str, Any]) -> None:
         _slice: slice
@@ -36,97 +48,102 @@ class MainManager:
             if name == cfg.ConfigurationMonitoring.__name__:
                 self.monitoring_buf = self.shm_buf[_slice]
 
-    def configs_init(self, configs: dict[str, Any]) -> None:
-        config_subclasses: list[str] = configs["subclasses"]
-        for name, obj in configs.items():
-            if isinstance(obj, list):
-                continue
-
-            if name not in config_subclasses:
-                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
-
-            if isinstance(obj, cfg.ConfigurationMonitoring):
-                self.cfgMonitoring = obj
-
     def local_segments_init(self) -> None:
-        self.status_buf = self.monitoring_buf[slice(*self.cfgMonitoring.status)]
-        self.id_err = self.cfgMonitoring.id_error
+        self.procs_buf = self.monitoring_buf[slice(*self.cfgMonitoring.procs_buf)].cast(
+            "Q"
+        )
 
     def run(
         self,
         procs: dict[int, dict],
         general_event: Event,
-        sc_sem: Semaphore,
-    ) -> bool:
-        self.procs = _procs = procs
-        self.sc_sem = _sc_sem = sc_sem
-        self.sleep_all = _sleep_all = general_event
-        # LocalLinks
-        status_buf = self.status_buf
-        error_check, warn_check = self._error_check, self._warn_check
-        check_procs = self._check_procs
-        #  - - -
+        scs_sem: Semaphore,
+    ) -> None:
+        self.procs = procs
+        self.scs_sem = scs_sem
+        self.sleep_all = general_event
+        # - - -
         while True:
-            sc_sem.acquire(timeout=60)
-            if error_check(status_buf) is not False:
-                if warn_check(status_buf, procs) is not False:
-                    if check_procs(procs) is not False:
+            scs_sem.acquire(timeout=60)
+            if date.today() > self.startDate:
+                self.set_task_sc_to_procs(scs.GC_COLLECT)
+
+            if procs:
+                if self.procs_is_alive() is False:
+                    if self.check_process_status_code() is not False:
                         continue
+            return
 
-                    return False
+    def procs_is_alive(self) -> bool:
+        for k, v in self.procs.items():
+            if v["proc"].is_alive() is False:
+                logger.critical(f"Process {v['proc_name']} is dead.")
                 return False
-            return False
-
-    def _error_check(self, status_buf: memoryview):
-        if status_buf[self.id_err] == sc.ERROR:
-            logger.error(f"MainManager | {sc.ERROR.get_msg()}")
-            return False
-
-    def _warn_check(self, status_buf: memoryview, procs: dict[int, dict]):
-        for id_p, data in procs.items():
-            sc_code = status_buf[id_p]
-            if sc.WARN_RE < sc_code < 255:
-                msg = sc(sc_code).get_msg(data["proc_name"])
-                logger.warning(f"{data['proc_name']} | {msg}")
-                if self._task_action(
-                    sc_code=sc_code,
-                    proc_name=data["proc_name"],
-                    proc_id=id_p,
-                    procs=procs,
-                ):
-                    status_buf[id_p] = 0
-                    break
-
-                else:
-                    return False
-
-    def _check_procs(self, procs):
-        for id_proc in procs.keys():
-            if act.check_proc(id_proc=id_proc, procs=procs) is False:
-                return False
-
-    def _task_action(
-        self,
-        sc_code: int,
-        proc_name: str,
-        proc_id: int,
-        procs: dict,
-    ) -> bool:
-        if sc.WARN0 <= sc_code <= sc.WARN4:
-            if sc_code == sc.WARN1 and proc_name == "NETWORK_SIM":
-                self.sleep_all.clear()
-                act.data_preppered(procs, proc_id, self.status_buf)
-                return True
-
-            self.sleep_all.clear()
-            act.set_status_for_procs(  # All Sleep
-                status_buf=self.status_buf, procs=procs, stoping=True
-            )
-            act.sleep_untill_market_open(self.sleep_all)
-            act.set_status_for_procs(  # All WeckUp
-                status_buf=self.status_buf, procs=procs, stoping=False
-            )
-            act.reset(self.shm_buf)
-            self.sleep_all.set()
 
         return True
+
+    def check_process_status_code(self):
+        procs, procs_buf = self.procs, self.procs_buf
+        del_proc = None
+        for _ in range(3):
+            for k, v in procs.items():
+                sc = procs_buf[k]
+                # Action's
+                # General
+                if sc & scs.ERROR:
+                    logger.error(f"{v['proc_name']}: {scs(sc).label}")
+                    return False
+
+                if sc & scs.COMPLETE | scs.EXIT:
+                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    del_proc = k
+
+                # Parsing
+                elif sc & scs.UNVALID_DATA:
+                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    self.set_task_sc_to_procs(scs.EXIT)
+
+                elif sc & scs.FP_INIT_FAILED:
+                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    self.set_task_sc_to_procs(scs.EXIT)
+
+                elif sc & scs.FP_IDY_FILLED | scs.FP_IDX_FILLED:
+                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):
+                        self.set_task_sc_to_proc(scs.FP_RE_INIT, task_id)
+
+                # Network/Sim
+                elif sc & scs.DATA_PREPPERED:
+                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    self.set_task_sc_to_procs(scs.COMPLETE)
+
+                elif sc & scs.BIG_RAW_DATA:
+                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    self.set_task_sc_to_procs(scs.EXIT)
+
+                # Other
+                else:
+                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+
+                if sc != 0:
+                    self.clear_proc_sc(code=sc, proc_id=k)
+
+                if del_proc is not None:
+                    procs.pop(del_proc)
+                    del_proc = None
+                    break
+
+    def set_task_sc_to_proc(self, code: scs, task_id: int):
+        self.procs_buf[task_id] |= code
+
+    def set_task_sc_to_procs(self, code: scs):
+        for _, data in self.procs.items():
+            self.procs_buf[data["task_id"]] |= code
+
+    def clear_proc_sc(self, code: scs | int, proc_id: int) -> None:
+        self.procs_buf[proc_id] &= ~(code)
+
+    def get_procs_task_id(self, procs_name: list[str]) -> list[int]:
+        return [
+            v["task_id"] for k, v in self.procs.items() if v["proc_name"] in procs_name
+        ]

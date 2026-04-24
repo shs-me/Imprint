@@ -11,7 +11,7 @@ from core.settings import OrderFlag as of
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
-from core.utils.monitoring.status_codes import StatusCodes as sc
+from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class ExecutionAgent:
@@ -21,12 +21,15 @@ class ExecutionAgent:
         rest: RestEngine | RestSimAgent,
         execution_event: Event,
     ) -> None:
-        self.manager = manager
-        self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = manager.set_status, manager.have_problem
+        self.manager: AgentManager = manager
+        self.rest: RestEngine | RestSimAgent = rest
+        self.execution_event: Event = execution_event
 
-        self.rest = rest
-        self.execution_event = execution_event
+        self.set_proc_sc = manager.set_proc_sc
+        self.check_task = manager.check_task
+        self.task_status: memoryview = manager.task_status
+        self.proc_status: memoryview = manager.proc_status
+
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
@@ -70,22 +73,26 @@ class ExecutionAgent:
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:
         # LocalLinks
-        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
-        set_status, have_problem = self.set_status, self.have_problem
+        proc_status, task_status = self.proc_status, self.task_status
+        # - - -
         check_signal_buf = self._check_signal_buf
         alarm_clock = self._alarm_clock
         # - - -
         while True:
-            gc.collect()
             while True:
-                set_status(code=SLEEP)
-                if have_problem() is False:
-                    alarm_clock()
-                    set_status(code=WAKE_UP)
-                    check_signal_buf()
+                if proc_status[0] != 0 or task_status[0] != 0:
+                    if task := self.check_task(
+                        complete=(
+                            self.WLB[0] == self.RLB[0] and self.WSB[0] == self.RSB[0]
+                        )
+                    ):
+                        return
 
-                else:
-                    return
+                    elif task is False:
+                        pass
+
+                alarm_clock()
+                check_signal_buf()
 
     def _alarm_clock(self):
         if self.WLB[0] == self.RLB[0] and self.WSB[0] == self.RSB[0]:

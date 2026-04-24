@@ -10,13 +10,13 @@ from core.engine.analytical_tools.util import ConvertMetrics
 from core.settings import BarHeaders as bh
 from core.settings import SpaceCoords as sc
 from core.utils.monitoring.agent_manager import AgentManager
-from core.utils.monitoring.status_codes import StatusCodes as stc
+from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class FootprintWriter:
     def __init__(self, manager: AgentManager, guarantee: Lock) -> None:
         self.manager, self.guarantee = manager, guarantee
-        self.set_status = manager.set_status
+        self.set_proc_sc = manager.set_proc_sc
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
@@ -85,6 +85,8 @@ class FootprintWriter:
     def init_session(self, price: float, timestamp: int) -> bool:
         bpat = self.base_price_and_timestamp_buf
         # - - -
+        self.dirty_footprint.fill(0)
+        self.dirty_headers.fill(0)
         self.con: ConvertMetrics = ConvertMetrics(
             footprint=self.footprint,
             headers=self.headers,
@@ -97,7 +99,7 @@ class FootprintWriter:
             self.space[:] = self.con.fpLines, self.con.fpCols, 0, 0
 
         if self.con.init_session(price, timestamp) is False:
-            self.set_status(code=stc.WARN2)
+            self.set_proc_sc(code=scs.FP_INIT_FAILED)
             return False
 
         bpat[0], bpat[1] = self.con.nBasePrice, self.con.baseTimestamp
@@ -144,9 +146,9 @@ class FootprintWriter:
                 )
 
             else:
-                self.set_status(code=stc.WARN4)
+                self.set_proc_sc(code=scs.FP_IDY_FILLED)
         else:
-            self.set_status(code=stc.WARN3)
+            self.set_proc_sc(code=scs.FP_IDX_FILLED)
 
         return None
 

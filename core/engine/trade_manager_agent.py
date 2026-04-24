@@ -1,5 +1,6 @@
 import gc
 from multiprocessing.synchronize import Event
+from types import MethodType
 
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
@@ -8,27 +9,23 @@ from core.utils.monitoring.status_codes import StatusCodes as sc
 
 class TradeManagerAgent:
     def __init__(self, manager: AgentManager) -> None:
-        self.manager = manager
-
-        self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = manager.set_status, manager.have_problem
+        self.manager: AgentManager = manager
+        self.set_proc_sc = manager.set_proc_sc
+        self.check_task = manager.check_task
+        self.task_status: memoryview = manager.task_status
+        self.proc_status: memoryview = manager.proc_status
 
     def run_trade_manager_engine(self) -> None:
-        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
-        set_status, have_problem = self.set_status, self.have_problem
-        have_task = self.have_task
+        task_status, proc_status = self.task_status, self.proc_status
+        verifed_sc = 0
         while True:
             gc.collect()
             while True:
-                set_status(code=SLEEP)
-                if have_problem() is False:
-                    if have_task():
-                        break
-                    set_status(code=WAKE_UP)
-                    # - - -
-
+                if proc_status[0] == 0 and task_status[0] == 0:
+                    pass
                 else:
-                    return
+                    if task := self.check_task(complete=True):
+                        return
 
 
 @manager_office()

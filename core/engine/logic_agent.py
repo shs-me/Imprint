@@ -1,4 +1,3 @@
-import gc
 import importlib.util
 import inspect
 import os
@@ -12,7 +11,7 @@ from core.settings import BacktestingMode as bm
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
-from core.utils.monitoring.status_codes import StatusCodes as sc
+from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class LogicAgent:
@@ -23,61 +22,59 @@ class LogicAgent:
         pre_sleep_logic: Lock,
         general_event: Event,
     ) -> None:
-        self.manager, self.reader = manager, reader
-        self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = manager.set_status, manager.have_problem
-        self.pre_sleep_logic, self.wait_main = pre_sleep_logic, general_event
-        self.backtesting = manager.backtesting
-        self.btMode = manager.mode
+        self.manager: AgentManager = manager
+        self.reader: FootprintReader = reader
+        self.pre_sleep_logic: Lock = pre_sleep_logic
+        self.wait_main: Event = general_event
+
+        self.set_proc_sc = manager.set_proc_sc
+        self.check_task = manager.check_task
+        self.task_status: memoryview = manager.task_status
+        self.proc_status: memoryview = manager.proc_status
+
+        self.backtesting: bool = manager.backtesting
+        self.btMode: bm = manager.mode
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
         # LocalLinks
-        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
-        set_status, have_problem = self.set_status, self.have_problem
-        status_task = self.manager.status_task
+        reader = self.reader
         pre_sleep_logic, alarm_clock = self.pre_sleep_logic, self._alarm_clock
-        reader, have_task = self.reader, self.have_task
-        #  - - -
+        # - - -
+        proc_status, task_status = self.proc_status, self.task_status
+        # - - -
         while True:
-            gc.collect()
-            self.wait_main.wait()
             init_session = True
             while True:
-                set_status(code=SLEEP)
-                alarm_clock(status_task, pre_sleep_logic)
-                if have_problem() is False:
-                    if have_task():
-                        # if status_task[0] == sc.COMPLETE:
-                        #    self.reader._save_array()
+                if proc_status[0] != 0 or task_status[0] != 0:
+                    if task := self.check_task(complete=reader.spare_flag[0] == 0):
+                        return
+                    elif task & scs.FP_RE_INIT:
+                        reader.dump_footprint()
                         break
+                    elif task is False:
+                        pass
 
-                    set_status(code=WAKE_UP)
-                    if init_session:
-                        reader.init_session()
-                        init_session = False
+                alarm_clock(task_status, pre_sleep_logic)
+                if init_session:
+                    reader.init_session()
+                    init_session = False
 
-                    reader.check_update()
+                reader.check_update()
 
-                else:
-                    return
-
-    def _alarm_clock(self, status_task: memoryview, pre_sleep_logic: Lock) -> None:
-        flag = self.reader.spare_flag
-        flag[0] = 0
+    def _alarm_clock(self, task_status: memoryview, pre_sleep_logic: Lock) -> None:
+        mode, ZeroSleep, flag = self.btMode, bm.ZERO_SLEEP, self.reader.spare_flag
         if self.backtesting:
-            if self.btMode == bm.REAL_TIME_SIM:
-                pre_sleep_logic.acquire()
+            if mode == bm.NONE_STOP or mode == ZeroSleep:
+                flag[0] = 0
+                while flag[0] == 0 and task_status[0] == 0:
+                    if mode == ZeroSleep:
+                        time.sleep(0)
 
-            elif self.btMode == bm.NONE_STOP:
-                while flag[0] == 0 and status_task[0] == 0:
-                    pass
+                return
 
-            elif self.btMode == bm.ZERO_SLEEP:
-                while flag[0] == 0 and status_task[0] == 0:
-                    time.sleep(0)
-        else:
-            pre_sleep_logic.acquire()
+        flag[0] = 0
+        pre_sleep_logic.acquire()
 
 
 def resolve_reader(manager: AgentManager, execution_event: Event):

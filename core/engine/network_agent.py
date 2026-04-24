@@ -30,6 +30,6 @@ def run_network(
     wss = WSsEngine(
         kwargs["manager"], wake_up_parser=parsing_event, general_event=general_event
     )
-    rest = RestEngine()
+    rest = RestEngine(manager=kwargs["manager"])
     agent = NetworkAgent(wss=wss, rest=rest, manager=kwargs["manager"])
     asyncio.run(agent.run_network_engine())

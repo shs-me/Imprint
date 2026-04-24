@@ -1,4 +1,3 @@
-import gc
 import os
 import time
 import traceback
@@ -96,11 +95,15 @@ class WSsSimEngine:
         self, manager: AgentManager, wake_up_parser: Event, general_event: Event
     ) -> None:
         self.manager: AgentManager = manager
-        self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = manager.set_status, manager.have_problem
+        self.wake_up_parser: Event = wake_up_parser
+        self.wait_main: Event = general_event
+
+        self.set_proc_sc = manager.set_proc_sc
+        self.check_task = manager.check_task
+        self.task_status: memoryview = manager.task_status
+        self.proc_status: memoryview = manager.proc_status
 
         self.mode: bm = manager.mode
-        self.wake_up_parser, self.wait_main = wake_up_parser, general_event
         self.encoder: Encoder = Encoder()
         self.lock = Lock()
         self.prepper: DataPrepper = DataPrepper(
@@ -127,65 +130,60 @@ class WSsSimEngine:
     @error_handler(set_status_code=True)
     def run_wss_sim_engine(self) -> None:
         # Local Links
-        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
-        wake_up_parser, encoder = self.wake_up_parser, self.encoder
-        set_status, have_problem = self.set_status, self.have_problem
-        have_task = self.have_task
+        prepper, encoder = self.prepper, self.encoder
+        wake_up_parser = self.wake_up_parser
+        # - - -
+        proc_status, task_status = self.proc_status, self.task_status
+        # - - -
         raw_buf = self.manager.raw_buf
-        tts_buf = self.manager.time_to_sleep_buf
         WCellC, RCellC = self.WriterCellCounter, self.ReaderCellCounter
         data_size = self.data_size
         data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
         cell_amount, safe_lag = self.cell_amount, self.safe_lag
+        # - - -
         update_cells = self._update_cells
-        have_task = self.have_task
-        prepper, alarm_clock = self.prepper, self._alarm_clock
+        alarm_clock = self._alarm_clock
         # - - -
         while True:
-            gc.collect()
-            self.wait_main.wait()
             prepper.start()
             while True:
-                stime = time.perf_counter_ns()
-                set_status(code=SLEEP)
-                if have_problem() is False:
-                    if have_task():
+                if proc_status[0] != 0 or task_status[0] != 0:
+                    if task := self.check_task(
+                        complete=prepper.complete and not prepper.queue
+                    ):
+                        return
+                    elif task is False:
+                        pass
+
+                if prepper.error is None:
+                    if not prepper.queue:
+                        if prepper.complete:
+                            self.set_proc_sc(code=sc.DATA_PREPPERED)
+
+                        if self.lock.locked():
+                            self.lock.release()
+
+                        time.sleep(0)
+                        continue
+
+                    alarm_clock(
+                        WCellC=WCellC,
+                        RCellC=RCellC,
+                        cell_amount=cell_amount,
+                        safe_lag=safe_lag,
+                    )
+                    if update_cells(
+                        queue=prepper.queue,
+                        encoder=encoder,
+                        raw_buf=raw_buf,
+                        WCellC=WCellC,
+                        cell_amount=cell_amount,
+                        data_size=data_size,
+                        data_offset=data_offset,
+                        dataHeader_offset=dataHeader_offset,
+                    ):
                         if wake_up_parser.is_set() is False:
                             wake_up_parser.set()
-                        break
-
-                    if prepper.error is None:
-                        if not prepper.queue:
-                            if prepper.complete:
-                                set_status(code=sc.WARN1)
-
-                            if self.lock.locked():
-                                self.lock.release()
-
-                            time.sleep(0)
-                            continue
-
-                        alarm_clock(
-                            tts_buf,
-                            stime,
-                            WCellC=WCellC,
-                            RCellC=RCellC,
-                            cell_amount=cell_amount,
-                            safe_lag=safe_lag,
-                        )
-                        set_status(code=WAKE_UP)
-                        if update_cells(
-                            queue=prepper.queue,
-                            encoder=encoder,
-                            raw_buf=raw_buf,
-                            WCellC=WCellC,
-                            cell_amount=cell_amount,
-                            data_size=data_size,
-                            data_offset=data_offset,
-                            dataHeader_offset=dataHeader_offset,
-                        ):
-                            if wake_up_parser.is_set() is False:
-                                wake_up_parser.set()
                     else:
                         raise RuntimeError(prepper.error)
                 else:
@@ -193,28 +191,26 @@ class WSsSimEngine:
 
     def _alarm_clock(
         self,
-        tts: memoryview,
-        start_time: int,
         WCellC: memoryview,
         RCellC: memoryview,
         cell_amount: int,
         safe_lag: int,
     ) -> None:
-        if self.mode == bm.ZERO_SLEEP:
+        if self.mode == bm.ZERO_SLEEP or self.mode == bm.NONE_STOP:
             while ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
-                time.sleep(0)
+                if self.mode == bm.ZERO_SLEEP:
+                    time.sleep(0)
 
-        elif self.mode == bm.NONE_STOP or self.mode == bm.REAL_TIME_SIM:
+        elif self.mode == bm.REAL_TIME_SIM:
             if ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
+                writer_cell = WCellC[0]  # debug
+                reader_cell = RCellC[0]  # debug
+                lag = (writer_cell - reader_cell + cell_amount) % cell_amount
                 raise RuntimeError(
-                    f"WssAgentSim: AlarmClock: reading lag[\
-                ({WCellC[0]} - {RCellC[0]} + {cell_amount}) % {cell_amount}\
-                ] > safe lag[{safe_lag}]"
+                    f"WssAgentSim: AlarmClock: reading lag[{lag}] > safe lag[{safe_lag}]"
                 )
 
-            if self.mode == bm.REAL_TIME_SIM:
-                time.sleep(self._time_to_sleep())
-                tts[0] = time.perf_counter_ns() - start_time
+            time.sleep(self._time_to_sleep())
 
     def _time_to_sleep(self) -> float:
         # ott: Old Time Trade | ntt: New Time Trade
@@ -256,5 +252,5 @@ class WSsSimEngine:
             return True
 
         else:
-            self.set_status(code=sc.WARN0)
+            self.set_proc_sc(code=sc.BIG_RAW_DATA)
             return False

@@ -84,7 +84,7 @@ class ConvertMetrics:
 
     def to_strftime(self, timestamp_ms: int | int64) -> str:
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M:%S"
+            "%Y-%m-%d-%H-%M-%S"
         )
 
     def get_price(self, idy: int | int64) -> float:

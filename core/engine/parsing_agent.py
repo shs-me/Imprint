@@ -1,4 +1,3 @@
-import gc
 import time
 from multiprocessing.synchronize import Event, Lock
 
@@ -10,7 +9,7 @@ from core.settings import BacktestingMode as bm
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
-from core.utils.monitoring.status_codes import StatusCodes as sc
+from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class AggTrade(msgspec.Struct):
@@ -29,11 +28,17 @@ class ParserAgent:
         wake_up_logic: Lock,
         general_event: Event,
     ) -> None:
-        self.manager, self.writer = manager, writer
-        self.have_task = self.manager.have_task
-        self.set_status, self.have_problem = manager.set_status, manager.have_problem
-        self.pre_sleep_wss, self.wake_up_logic = pre_sleep_wss, wake_up_logic
+        self.manager: AgentManager = manager
+        self.writer: FootprintWriter = writer
+        self.pre_sleep_wss: Event = pre_sleep_wss
+        self.wake_up_logic: Lock = wake_up_logic
         self.wait_main: Event = general_event
+
+        self.set_proc_sc = manager.set_proc_sc
+        self.check_task = manager.check_task
+        self.task_status: memoryview = manager.task_status
+        self.proc_status: memoryview = manager.proc_status
+
         self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
         self.backtesting = manager.backtesting
         self.btMode = manager.mode
@@ -55,68 +60,64 @@ class ParserAgent:
     @error_handler(set_status_code=True)
     def run_parsing_engine(self) -> None:
         # LocalLinks
-        SLEEP, WAKE_UP = sc.SLEEP, sc.WAKE_UP
-        decoder, writer = self.decoder, self.writer
         pre_sleep_wss, wake_up_logic = self.pre_sleep_wss, self.wake_up_logic
-        set_status, have_problem = self.set_status, self.have_problem
-        have_task, status_task = self.have_task, self.manager.status_task
+        decoder, writer = self.decoder, self.writer
+        # - - -
+        proc_status, task_status = self.proc_status, self.task_status
+        # - - -
         raw_buf = self.manager.raw_buf
         RCellC, WCellC = self.ReaderCellCounter, self.WriterCellCounter
         data_size = self.data_size
         data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
         cell_amount = self.cell_amount
+        # - - -
         update_cells, alarm_clock = self._update_cells, self._alarm_clock
         #  - - -
         while True:
-            gc.collect()
-            self.wait_main.wait()
             self.init_session = True
             while True:
-                set_status(code=SLEEP)
-                if have_problem() is False:
-                    if have_task():
+                if proc_status[0] != 0 or task_status[0] != 0:
+                    if task := self.check_task(
+                        complete=(WCellC[0] == RCellC[0] and writer.spare_flag[0] == 1)
+                    ):
+                        return
+                    elif task & scs.FP_RE_INIT:
                         break
+                    elif task is False:
+                        pass
 
-                    alarm_clock(status_task, RCellC, WCellC, pre_sleep_wss)
-                    set_status(code=WAKE_UP)
-                    update_cells(
-                        raw_buf=raw_buf,
-                        WCellC=WCellC,
-                        RCellC=RCellC,
-                        cell_amount=cell_amount,
-                        data_size=data_size,
-                        data_offset=data_offset,
-                        dataHeader_offset=dataHeader_offset,
-                        decoder=decoder,
-                        writer=writer,
-                        wake_up_logic=wake_up_logic,
-                    )
-
-                else:
-                    return
+                alarm_clock(task_status, RCellC, WCellC, pre_sleep_wss)
+                update_cells(
+                    raw_buf=raw_buf,
+                    WCellC=WCellC,
+                    RCellC=RCellC,
+                    cell_amount=cell_amount,
+                    data_size=data_size,
+                    data_offset=data_offset,
+                    dataHeader_offset=dataHeader_offset,
+                    decoder=decoder,
+                    writer=writer,
+                    wake_up_logic=wake_up_logic,
+                )
 
     def _alarm_clock(
         self,
-        status_task: memoryview,
+        task_status: memoryview,
         RCellC: memoryview,
         WCellC: memoryview,
         pre_sleep_wss: Event,
     ) -> None:
+        mode, ZERO_SLEEP = self.btMode, bm.ZERO_SLEEP
+        # - - -
         if self.backtesting:
-            if self.btMode == bm.NONE_STOP:
-                while WCellC[0] == RCellC[0] and status_task[0] == 0:
-                    pass
+            if self.btMode == bm.NONE_STOP or self.btMode == bm.ZERO_SLEEP:
+                while WCellC[0] == RCellC[0] and task_status[0] == 0:
+                    if mode == ZERO_SLEEP:
+                        time.sleep(0)
+                return
 
-            elif self.btMode == bm.ZERO_SLEEP:
-                while WCellC[0] == RCellC[0] and status_task[0] == 0:
-                    time.sleep(0)
-
-            elif self.btMode == bm.REAL_TIME_SIM:
-                pre_sleep_wss.clear()
-                pre_sleep_wss.wait()
-        else:
-            pre_sleep_wss.clear()
-            pre_sleep_wss.wait()
+        pre_sleep_wss.clear()
+        pre_sleep_wss.wait()
 
     def _update_cells(
         self,
@@ -139,7 +140,7 @@ class ParserAgent:
             RCellC[0] = new_cell if new_cell < cell_amount else 0
             trade: AggTrade = decoder.decode(raw_buf[start : start + lrd])
             if trade.p < 0 or trade.q < 0 or trade.T < 0:
-                self.set_status(code=sc.WARN1)
+                self.set_proc_sc(code=scs.UNVALID_DATA)
                 break
             else:
                 if self.init_session:
