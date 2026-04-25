@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 from typing import overload
 
@@ -147,3 +148,7 @@ class ConvertMetrics:
 
     def vwap_bb_upper(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=chs.VWAP_BB_UPPER)
+
+    # Other
+    def time_ms(self) -> int:
+        return time.time_ns() // 1_000_000

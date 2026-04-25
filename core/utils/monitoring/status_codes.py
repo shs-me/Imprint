@@ -28,13 +28,17 @@ class StatusCodes(IntEnum):
     # - - -
     # PARSING
     # PROC_SC
-    UNVALID_DATA = "PARSING: _update_cells[ aggTradeData[price,qty or timestamp] < 0 ]"
-    FP_INIT_FAILED = "PARSING: FootprintWriter: init_session: amount tick in nPrice > 80% array[fpLines]"
-    FP_IDX_FILLED = "PARSING: FootprintWriter: update: array[fpCols] < idx or idx < 0"
-    FP_IDY_FILLED = "PARSING: FootprintWriter: update: array[fpLines] < idy or idy < 0"
+    UNVALID_DATA = "_update_cells[ aggTradeData[price,qty or timestamp] < 0 ]"
+    FP_INIT_FAILED = (
+        "FootprintWriter: init_session: amount tick in nPrice > 80% array[fpLines]"
+    )
+    FP_IDX_FILLED = "FootprintWriter: update: array[fpCols] < idx or idx < 0"
+    FP_IDY_FILLED = "FootprintWriter: update: array[fpLines] < idy or idy < 0"
     # TASK_SC
     FP_RE_INIT = ""
     # - - -
     # NETWORK/SIM
-    BIG_RAW_DATA = "NETWORK/SIM: wss: _set_raw_data: size/len raw_data > data_cell_size_in_ring_buffer"
-    DATA_PREPPERED = "NETWORK_SIM: wss_sim: historical data preppered"
+    BIG_RAW_DATA = (
+        "wss: _set_raw_data: size/len raw_data > data_cell_size_in_ring_buffer"
+    )
+    DATA_PREPPERED = "wss_sim: historical data preppered"

@@ -18,17 +18,6 @@ def to_date(year: int, month: int, day: int) -> date:
     return date(year, month, day)
 
 
-def check_dirs(path: str) -> None:
-    dirs: list[str] = path.split("/")
-    dirP: str = ""
-    if os.path.exists((dirP := dirs[0])) is False:
-        os.mkdir(dirP)
-
-    for _ in range(len(dirs[1:])):
-        if os.path.exists(dirP := f"{dirP}/{dirs[_]}") is False:
-            os.mkdir(dirP)
-
-
 def download_file(url: str, path: str) -> None:
     try:
         dl_file = request.urlopen(url)
@@ -51,7 +40,7 @@ def download_file(url: str, path: str) -> None:
 
 def download_aggTrade_hist_data(symbol: str, startDate: date, endDate: date) -> bool:
     base_path = f"{ct.DATA_PATH}/{ct.DATA_TYPE_AGGTRADES_PATH}/{symbol.upper()}"
-    check_dirs(base_path)
+    os.makedirs(base_path, exist_ok=True)
 
     date_ = startDate
     endDate = endDate if date.today() > endDate else date.today()

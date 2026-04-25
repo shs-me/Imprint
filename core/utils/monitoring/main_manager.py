@@ -50,7 +50,7 @@ class MainManager:
 
     def local_segments_init(self) -> None:
         self.procs_buf = self.monitoring_buf[slice(*self.cfgMonitoring.procs_buf)].cast(
-            "Q"
+            "q"
         )
 
     def run(
@@ -63,15 +63,18 @@ class MainManager:
         self.scs_sem = scs_sem
         self.sleep_all = general_event
         # - - -
+        self.sleep_all.set()
+        print(self.procs)
         while True:
             scs_sem.acquire(timeout=60)
             if date.today() > self.startDate:
                 self.set_task_sc_to_procs(scs.GC_COLLECT)
 
-            if procs:
-                if self.procs_is_alive() is False:
-                    if self.check_process_status_code() is not False:
+            if bool(len(procs)):
+                if self.procs_is_alive():
+                    if self.check_process_status_code():
                         continue
+
             return
 
     def procs_is_alive(self) -> bool:
@@ -82,56 +85,59 @@ class MainManager:
 
         return True
 
-    def check_process_status_code(self):
+    def check_process_status_code(self) -> bool:
         procs, procs_buf = self.procs, self.procs_buf
-        del_proc = None
-        for _ in range(3):
+        for _ in range(len(self.procs)):
             for k, v in procs.items():
                 sc = procs_buf[k]
                 # Action's
                 # General
                 if sc & scs.ERROR:
-                    logger.error(f"{v['proc_name']}: {scs(sc).label}")
+                    logger.error(f"{v['proc_name']}: {scs.ERROR.label}")
                     return False
 
-                if sc & scs.COMPLETE | scs.EXIT:
-                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
-                    del_proc = k
+                elif sc & scs.EXIT:
+                    logger.warning(f"{v['proc_name']} | {scs.EXIT.label}")
+                    procs.pop(k)
+                    break
+
+                elif sc & scs.COMPLETE:
+                    logger.warning(f"{v['proc_name']} | {scs.COMPLETE.label}")
+                    procs.pop(k)
+                    break
 
                 # Parsing
                 elif sc & scs.UNVALID_DATA:
-                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    logger.warning(f"{v['proc_name']} | {scs.UNVALID_DATA.label}")
                     self.set_task_sc_to_procs(scs.EXIT)
 
                 elif sc & scs.FP_INIT_FAILED:
-                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    logger.warning(f"{v['proc_name']} | {scs.FP_INIT_FAILED.label}")
                     self.set_task_sc_to_procs(scs.EXIT)
 
-                elif sc & scs.FP_IDY_FILLED | scs.FP_IDX_FILLED:
-                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                elif sc & scs.FP_IDX_FILLED:
+                    logger.warning(f"{v['proc_name']} | {scs.FP_IDX_FILLED.label}")
+                    for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):
+                        self.set_task_sc_to_proc(scs.FP_RE_INIT, task_id)
+
+                elif sc & scs.FP_IDY_FILLED:
+                    logger.warning(f"{v['proc_name']} | {scs.FP_IDY_FILLED.label}")
                     for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):
                         self.set_task_sc_to_proc(scs.FP_RE_INIT, task_id)
 
                 # Network/Sim
                 elif sc & scs.DATA_PREPPERED:
-                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    logger.warning(f"{v['proc_name']} | {scs.DATA_PREPPERED.label}")
                     self.set_task_sc_to_procs(scs.COMPLETE)
 
                 elif sc & scs.BIG_RAW_DATA:
-                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
+                    logger.warning(f"{v['proc_name']} | {scs.BIG_RAW_DATA.label}")
                     self.set_task_sc_to_procs(scs.EXIT)
-
-                # Other
-                else:
-                    logger.warning(f"{v['proc_name']} | {scs(sc).label}")
 
                 if sc != 0:
                     self.clear_proc_sc(code=sc, proc_id=k)
 
-                if del_proc is not None:
-                    procs.pop(del_proc)
-                    del_proc = None
-                    break
+        return True
 
     def set_task_sc_to_proc(self, code: scs, task_id: int):
         self.procs_buf[task_id] |= code

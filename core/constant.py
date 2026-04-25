@@ -14,6 +14,7 @@ LOGS_PATH = "logs"
 CORE_LOG_PATH = f"{LOGS_PATH}/core.log"
 # Debug Constant
 DUMP_PATH = "dump"
+BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/Footprint"
 EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
 # Core Constant
 PLUGIN_PATH = "plugin"

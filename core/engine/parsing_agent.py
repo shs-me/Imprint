@@ -117,7 +117,8 @@ class ParserAgent:
                 return
 
         pre_sleep_wss.clear()
-        pre_sleep_wss.wait()
+        if WCellC[0] == RCellC[0] and task_status[0] == 0:
+            pre_sleep_wss.wait()
 
     def _update_cells(
         self,
@@ -159,11 +160,8 @@ class ParserAgent:
                     pass
 
                 elif temp is True:
-                    if self.backtesting:
-                        if self.btMode == bm.REAL_TIME_SIM:
-                            pass
-                        else:
-                            continue
+                    if self.backtesting and self.btMode != bm.REAL_TIME_SIM:
+                        continue
 
                     wake_up_logic.release()
 

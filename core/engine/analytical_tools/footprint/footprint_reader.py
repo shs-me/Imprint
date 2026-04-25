@@ -7,9 +7,10 @@ from numba import njit
 from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
-from core.constant import DATA_PATH, DUMP_PATH
+from core.constant import BASE_FOOTPRINT_DUMP_PATH
 from core.engine.analytical_tools.util import ConvertMetrics
 from core.settings import BarHeaders as bh
+from core.settings import OrderFlag as of
 from core.settings import SpaceCoords as sc
 from core.settings import StateFlags as sf
 from core.utils.monitoring.agent_manager import AgentManager
@@ -20,9 +21,11 @@ class FootprintReader(ABC):
         self.manager: AgentManager = manager
         self.execution_event: Event = execution_event
 
-        self.base_dump_fp_path = f"{DUMP_PATH}/{self.manager.symbol.upper()}"
-        self.last_idx: int = 0
         # Footprint
+        self.last_idx: int = 0
+        self.base_fp_dump_path: str = (
+            f"{BASE_FOOTPRINT_DUMP_PATH}/{self.manager.symbol.upper()}"
+        )
         self.cfgFP = self.manager.cfgFootprint
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFP.flag : self.cfgFP.flag + 1
@@ -40,6 +43,25 @@ class FootprintReader(ABC):
         ].cast("q")
         """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
         self._init_array()
+        # Strategy
+        self.cfgST = self.manager.cfgStrategy
+        self.TP = self.cfgST.TP
+        self.SL = self.cfgST.SL
+        # L/S Buf Setup
+        self.cell_amount: int = self.cfgST.cell_amount
+        self.readerId: int = self.cfgST.reader[1] // 8 - 1
+        self.writerId: int = self.cfgST.writer[1] // 8 - 1
+        self.nPriceId: int = self.cfgST.nPrice[1] // 8 - 1
+        self.time_msId: int = self.cfgST.time_ms[1] // 8 - 1
+        self.orderParamId: int = self.cfgST.orderParam[1] // 8 - 1
+        self.signal_size: int = self.cfgST.signal_size // 8
+        self.signal_offset: int = self.cfgST.offset // 8
+        self.longBuf: memoryview = self.manager.strategy_buf[
+            slice(*self.cfgST.longBuf)
+        ].cast("q")
+        self.shortBuf: memoryview = self.manager.strategy_buf[
+            slice(*self.cfgST.shortBuf)
+        ].cast("q")
 
     def _init_array(self) -> None:
         self.fp: NDArray[int64] = np.ndarray(
@@ -79,16 +101,47 @@ class FootprintReader(ABC):
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
         startFPtime = self.con.get_time(idx=0, strftime=True)
         endFPtime = self.con.get_time(idx=self.last_idx, strftime=True)
-        self.rawFp_save_path = f"RawFP_{startFPtime}_{endFPtime}"
-        self.headers_save_path = f"FPheaders_{startFPtime}_{endFPtime}"
+        self.rawFp_save_path = (
+            f"{self.base_fp_dump_path}/RawFP_{startFPtime}_{endFPtime}"
+        )
+        self.headers_save_path = (
+            f"{self.base_fp_dump_path}/FPheaders_{startFPtime}_{endFPtime}"
+        )
 
     def dump_footprint(self) -> None:
-        if os.path.exists(self.base_dump_fp_path) is False:
-            os.mkdir(self.base_dump_fp_path)
+        os.makedirs(self.base_fp_dump_path, exist_ok=True)
 
         np.save(self.rawFp_save_path, self.fp)
         np.save(self.headers_save_path, self.headers)
 
+    # - - Strategy Methods - -
+    def send_signal(
+        self,
+        nPrice: int,
+        time_ms: int,
+        long: bool,
+        buy: bool,
+        market: bool,
+    ) -> None:
+        signal_buf = self.longBuf if long else self.shortBuf
+
+        orderParam = 0
+        orderParam |= of.BUY if buy else of.SELL
+        orderParam |= of.MARKET if market else of.LIMIT
+
+        cell: int = signal_buf[self.writerId]
+        start: int = cell * self.signal_size + self.signal_offset
+
+        signal_buf[start + self.nPriceId] = nPrice
+        signal_buf[start + self.time_msId] = time_ms
+        signal_buf[start + self.orderParamId] = orderParam
+
+        new_cell = cell + 1
+        signal_buf[self.writerId] = new_cell if new_cell < self.cell_amount else 0
+        if self.execution_event.is_set() is False:
+            self.execution_event.set()
+
+    # - - Footprint Analysis/Update Methods - -
     def check_update(self) -> None:
         self._update_state()
 
@@ -247,7 +300,7 @@ class FootprintReader(ABC):
 
     # - - Footprint: Static - -
     def _update_fp_static_state(self) -> None:
-        lidx, idxLevel, idxBarrier = self.last_idx, self.con.idxVP, self.con.idxDP
+        lidx, idxLevel = self.last_idx, self.con.idxVP
         HIGH, LOW = self.con.highIdy(lidx), self.con.lowIdy(lidx)
         self._clear_fp_static_state(idxLevel=idxLevel)
         self._update_vwap_bb(lidx=lidx, idxLevel=idxLevel)

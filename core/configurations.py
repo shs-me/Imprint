@@ -45,8 +45,8 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.RR = RR
         self.TP = TP
         self.SL = SL
-        self.max_trades = max_trades
-        self.tradeParam = 8
+        self.lines = max_trades
+        self.cols = 5
         self.cell_amount = 128
 
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
@@ -66,7 +66,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
 
         self.trades = (
             self.shortBuf[1],
-            self.shortBuf[1] + (self.max_trades * self.tradeParam * INT64),
+            self.shortBuf[1] + (self.lines * self.cols * INT64),
         )
         return self.trades[1]
 

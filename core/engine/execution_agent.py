@@ -1,4 +1,3 @@
-import gc
 from multiprocessing.synchronize import Event
 
 import numpy as np
@@ -7,11 +6,10 @@ from numpy.typing import NDArray
 
 from core.engine.network.rest_engine import RestEngine
 from core.engine.network_sim.rest_sim_engine import RestSimAgent
-from core.settings import OrderFlag as of
+from core.settings import OrderFlag
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
-from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class ExecutionAgent:
@@ -44,20 +42,24 @@ class ExecutionAgent:
         self.TP = self.cfgST.TP
         self.SL = self.cfgST.SL
         # TradesArray
-        self.lines = self.cfgST.max_trades
-        self.cols = self.cfgST.tradeParam
+        self.lines: int = self.cfgST.lines
+        self.cols: int = self.cfgST.cols
         self._init_array()
         # L/S bufSetup
-        self.cell_amount = self.cfgST.cell_amount
-        self.readerId = self.cfgST.reader[1] // 8 - 1
-        self.writerId = self.cfgST.writer[1] // 8 - 1
-        self.nPriceId = self.cfgST.nPrice[1] // 8 - 1
-        self.time_msId = self.cfgST.time_ms[1] // 8 - 1
-        self.orderParamId = self.cfgST.orderParam[1] // 8 - 1
-        self.signal_size = self.cfgST.signal_size // 8
-        self.signal_offset = self.cfgST.offset // 8
-        self.longBuf = self.manager.strategy_buf[slice(*self.cfgST.longBuf)].cast("q")
-        self.shortBuf = self.manager.strategy_buf[slice(*self.cfgST.shortBuf)].cast("q")
+        self.cell_amount: int = self.cfgST.cell_amount
+        self.readerId: int = self.cfgST.reader[1] // 8 - 1
+        self.writerId: int = self.cfgST.writer[1] // 8 - 1
+        self.nPriceId: int = self.cfgST.nPrice[1] // 8 - 1
+        self.time_msId: int = self.cfgST.time_ms[1] // 8 - 1
+        self.orderParamId: int = self.cfgST.orderParam[1] // 8 - 1
+        self.signal_size: int = self.cfgST.signal_size // 8
+        self.signal_offset: int = self.cfgST.offset // 8
+        self.longBuf: memoryview = self.manager.strategy_buf[
+            slice(*self.cfgST.longBuf)
+        ].cast("q")
+        self.shortBuf: memoryview = self.manager.strategy_buf[
+            slice(*self.cfgST.shortBuf)
+        ].cast("q")
         self.WLB: memoryview[int] = self.longBuf[self.writerId : self.writerId + 1]
         self.RLB: memoryview[int] = self.longBuf[self.readerId : self.readerId + 1]
         self.WSB: memoryview[int] = self.shortBuf[self.writerId : self.writerId + 1]
@@ -95,8 +97,8 @@ class ExecutionAgent:
                 check_signal_buf()
 
     def _alarm_clock(self):
+        self.execution_event.clear()
         if self.WLB[0] == self.RLB[0] and self.WSB[0] == self.RSB[0]:
-            self.execution_event.clear()
             self.execution_event.wait()
 
     def _check_signal_buf(self) -> None:
@@ -110,25 +112,27 @@ class ExecutionAgent:
 
     def _check_long_buf(self) -> None:
         nPrice, time_ms, orderParam = self._get_signal(signal_buf=self.longBuf)
-        side = orderParam & (of.BUY | of.SELL)
-        orderType = orderParam & (of.MARKET | of.LIMIT)
-        if side & of.BUY:  # Open Position
+        side = orderParam & (OrderFlag.BUY | OrderFlag.SELL)
+        if side & OrderFlag.BUY:  # Open Position
             # - - -
-            print(f"Open Long: entryPrice:{nPrice} | quantity: 0 | side: BUY")
-        elif side & of.SELL:  # Close Position
+            # print(f"Open Long: entryPrice:{nPrice} | quantity: 0 | side: BUY")
+            pass
+        elif side & OrderFlag.SELL:  # Close Position
             # - - -
-            print(f"Close Long: entryPrice:{nPrice} | quantity: 0 | side: SELL")
+            # print(f"Close Long: entryPrice:{nPrice} | quantity: 0 | side: SELL")
+            pass
 
     def _check_short_buf(self) -> None:
         nPrice, time_ms, orderParam = self._get_signal(signal_buf=self.shortBuf)
-        side = orderParam & (of.BUY | of.SELL)
-        orderType = orderParam & (of.MARKET | of.LIMIT)
-        if side & of.SELL:  # Open Position
+        side = orderParam & (OrderFlag.BUY | OrderFlag.SELL)
+        if side & OrderFlag.SELL:  # Open Position
             # - - -
-            print(f"Open Short: entryPrice:{nPrice} | quantity: 0 | side: SELL")
-        elif side & of.BUY:  # Close Position
+            # print(f"Open Short: entryPrice:{nPrice} | quantity: 0 | side: SELL")
+            pass
+        elif side & OrderFlag.BUY:  # Close Position
             # - - -
-            print(f"Close Short: entryPrice:{nPrice} | quantity: 0 | side: BUY")
+            # print(f"Close Short: entryPrice:{nPrice} | quantity: 0 | side: BUY")
+            pass
 
     def _get_signal(self, signal_buf: memoryview) -> tuple[int, int, int]:
         cell: int = signal_buf[self.readerId]
@@ -142,10 +146,15 @@ class ExecutionAgent:
         signal_buf[self.readerId] = new_cell if new_cell < self.cell_amount else 0
         return nPrice, time_ms, orderParam
 
-    def _send_order(self):
-        pass
+    def update_trades(
+        self,
+        orderId: int | int64,
+        orderPaaram: OrderFlag,
+        nPrice: int | int64,
+        nQty: int | int64,
+        Timestamp: int,
+    ):
 
-    def set_data_to_trade_array(self, price):
         pass
 
 

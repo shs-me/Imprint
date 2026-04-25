@@ -44,7 +44,7 @@ class RunMain(CoreResources):
     def _get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)
         proc_id = len(self.procs)
-        task_id = proc_id
+        task_id = proc_id + 10
         proc_name = func.__name__.removeprefix("run_").upper()
         kwargs = {}
         for param_name in sig.parameters:
@@ -59,7 +59,7 @@ class RunMain(CoreResources):
                 return None
 
         kwargs = kwargs | self.baseKwargs
-        self.procs[proc_id] = {"proc_name": proc_name, "task_id": proc_id + 10}
+        self.procs[proc_id] = {"proc_name": proc_name, "task_id": task_id}
         return kwargs
 
     def _run_proc(self, func) -> bool:
@@ -88,15 +88,17 @@ class RunMain(CoreResources):
             if self._run_proc(func=func) is False:
                 return
 
-        self.general_event.set()
         logger.info("-- Core -- | Init completed.")
-        print(self.procs)
-        while True:
+        try:
             self.manager.run(
                 procs=self.procs,
                 general_event=self.general_event,
                 scs_sem=self.sc_sem,
             )
+        except KeyboardInterrupt:
+            pass
+        finally:
+            logger.info("-- Core -- | Close the Core.")
 
 
 @manager_office(main=True)
@@ -120,4 +122,3 @@ def run_core(
 
     state = RunMain(**kwargs)
     state.run_core_engine()
-    logger.info("-- Core -- | Close the Core.")

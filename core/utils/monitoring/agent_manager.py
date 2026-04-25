@@ -74,7 +74,7 @@ class AgentManager:
     def local_segments_init(self) -> None:
         self.status_buf = self.monitoring_buf[
             slice(*self.cfgMonitoring.procs_buf)
-        ].cast("Q")
+        ].cast("q")
 
         self.time_to_sleep_buf = self.metrics_buf[
             slice(*self.cfgMetrics.time_to_sleep)
@@ -82,10 +82,10 @@ class AgentManager:
 
     def check_task(self, complete: bool) -> bool | int:
         if self.task_status[0] != 0 or self.proc_status[0] != 0:
-            task_sc = self.task_status[0]
             while self.task_status[0] == 0:
-                time.sleep(0)
+                time.sleep(0.001)
 
+            task_sc = self.task_status[0]
             if task_sc & scs.EXIT:
                 self.clear_task_sc(task_sc)
                 self.set_proc_sc(task_sc)
@@ -94,9 +94,11 @@ class AgentManager:
             elif task_sc & scs.COMPLETE:
                 if complete:
                     self.clear_task_sc(task_sc)
+                    self.set_proc_sc(task_sc)
                     return True
                 else:
                     return False
+
             elif task_sc & scs.GC_COLLECT:
                 gc.collect()
                 self.clear_task_sc(task_sc)

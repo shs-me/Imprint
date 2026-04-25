@@ -1,11 +1,9 @@
-import time
 from multiprocessing.synchronize import Event
 
 from numpy import int32, int64, intp
 from numpy.typing import NDArray
 
 from core.engine.analytical_tools.footprint.footprint_reader import FootprintReader
-from core.settings import OrderFlag as of
 from core.settings import StateFlags as sf
 from core.utils.monitoring.agent_manager import AgentManager
 
@@ -13,49 +11,6 @@ from core.utils.monitoring.agent_manager import AgentManager
 class IntraDay(FootprintReader):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager, execution_event)
-        self.strategy_init()
-
-    def strategy_init(self) -> None:
-        self.cfgST = self.manager.cfgStrategy
-        self.TP = self.cfgST.TP
-        self.SL = self.cfgST.SL
-        # L/S Buf Setup
-        self.cell_amount = self.cfgST.cell_amount
-        self.readerId = self.cfgST.reader[1] // 8 - 1
-        self.writerId = self.cfgST.writer[1] // 8 - 1
-        self.nPriceId = self.cfgST.nPrice[1] // 8 - 1
-        self.time_msId = self.cfgST.time_ms[1] // 8 - 1
-        self.orderParamId = self.cfgST.orderParam[1] // 8 - 1
-        self.signal_size = self.cfgST.signal_size // 8
-        self.signal_offset = self.cfgST.offset // 8
-        self.longBuf = self.manager.strategy_buf[slice(*self.cfgST.longBuf)].cast("q")
-        self.shortBuf = self.manager.strategy_buf[slice(*self.cfgST.shortBuf)].cast("q")
-
-    def send_signal(
-        self,
-        nPrice: int,
-        time_ms: int,
-        long: bool,
-        buy: bool,
-        market: bool,
-    ) -> None:
-        signal_buf = self.longBuf if long else self.shortBuf
-
-        orderParam = 0
-        orderParam |= of.BUY if buy else of.SELL
-        orderParam |= of.MARKET if market else of.LIMIT
-
-        cell: int = signal_buf[self.writerId]
-        start: int = cell * self.signal_size + self.signal_offset
-
-        signal_buf[start + self.nPriceId] = nPrice
-        signal_buf[start + self.time_msId] = time_ms
-        signal_buf[start + self.orderParamId] = orderParam
-
-        new_cell = cell + 1
-        signal_buf[self.writerId] = new_cell if new_cell < self.cell_amount else 0
-        if self.execution_event.is_set() is False:
-            self.execution_event.set()
 
     def _update_fp_static_state(self) -> None:
         super()._update_fp_static_state()
@@ -81,40 +36,40 @@ class IntraDay(FootprintReader):
         LOW_AUCTION = fpStates[-1] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
 
         if self.P_shape(HIGH=HIGH, LOW=LOW, VAL=VAL):
-            print(
-                "P-shape: "
-                f"O:{_.get_price(OPEN)}"
-                f" | H:{_.get_price(HIGH)}"
-                f" | L:{_.get_price(LOW)}"
-                f" | C:{_.get_price(CLOSE)}"
-                f" | VAH:{_.get_price(VAH)}"
-                f" | POC:{_.get_price(POC)}"
-                f" | VAL:{_.get_price(VAL)}"
-                f" | TIME:{_.get_time(lidx, strftime=True)}",
-            )
+            # print(
+            #    "P-shape: "
+            #    f"O:{_.get_price(OPEN)}"
+            #    f" | H:{_.get_price(HIGH)}"
+            #    f" | L:{_.get_price(LOW)}"
+            #    f" | C:{_.get_price(CLOSE)}"
+            #    f" | VAH:{_.get_price(VAH)}"
+            #    f" | POC:{_.get_price(POC)}"
+            #    f" | VAL:{_.get_price(VAL)}"
+            #    f" | TIME:{_.get_time(lidx, strftime=True)}",
+            # )
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
-                time_ms=(time.time_ns() // 1000),
+                time_ms=_.time_ms(),
                 long=True,
                 buy=True,
                 market=True,
             )
 
         if self.b_shape(HIGH=HIGH, LOW=LOW, VAH=VAH):
-            print(
-                "b-shape: "
-                f"O:{_.get_price(OPEN)}"
-                f" | H:{_.get_price(HIGH)}"
-                f" | L:{_.get_price(LOW)}"
-                f" | C:{_.get_price(CLOSE)}"
-                f" | VAH:{_.get_price(VAH)}"
-                f" | POC:{_.get_price(POC)}"
-                f" | VAL:{_.get_price(VAL)}"
-                f" | TIME:{_.get_time(lidx, strftime=True)}",
-            )
+            # print(
+            #    "b-shape: "
+            #    f"O:{_.get_price(OPEN)}"
+            #    f" | H:{_.get_price(HIGH)}"
+            #    f" | L:{_.get_price(LOW)}"
+            #    f" | C:{_.get_price(CLOSE)}"
+            #    f" | VAH:{_.get_price(VAH)}"
+            #    f" | POC:{_.get_price(POC)}"
+            #    f" | VAL:{_.get_price(VAL)}"
+            #    f" | TIME:{_.get_time(lidx, strftime=True)}",
+            # )
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
-                time_ms=(time.time_ns() // 1000 // 1000),
+                time_ms=_.time_ms(),
                 long=False,
                 buy=False,
                 market=True,

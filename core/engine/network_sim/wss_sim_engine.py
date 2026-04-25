@@ -56,10 +56,8 @@ class DataPrepper:
                             break
 
                         while len(self.queue) == self.queue.maxlen:
-                            if self.mode == bm.NONE_STOP:
-                                pass
-                            elif self.mode == bm.ZERO_SLEEP:
-                                time.sleep(0)
+                            if self.mode == bm.NONE_STOP or self.mode == bm.ZERO_SLEEP:
+                                time.sleep(0.001)
                             elif self.mode == bm.REAL_TIME_SIM:
                                 self.lock.acquire()
 
@@ -144,13 +142,11 @@ class WSsSimEngine:
         update_cells = self._update_cells
         alarm_clock = self._alarm_clock
         # - - -
+        prepper.start()
         while True:
-            prepper.start()
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
-                    if task := self.check_task(
-                        complete=prepper.complete and not prepper.queue
-                    ):
+                    if task := self.check_task(complete=prepper.complete):
                         return
                     elif task is False:
                         pass
@@ -159,7 +155,6 @@ class WSsSimEngine:
                     if not prepper.queue:
                         if prepper.complete:
                             self.set_proc_sc(code=sc.DATA_PREPPERED)
-
                         if self.lock.locked():
                             self.lock.release()
 

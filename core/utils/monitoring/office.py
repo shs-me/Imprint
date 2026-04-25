@@ -86,13 +86,9 @@ def configurations_init(**kwargs) -> dict:
             and obj is not Configuration
             and obj is not ConfigurationSHMSegments
         ):
-            if name in kwargs:
-                kwargs["configs"][name] = obj = kwargs.pop(name)
-
-            else:
-                if isinstance(obj, obj) is False:
-                    kwargs["configs"][name] = obj = obj()
-
+            kwargs["configs"][name] = obj = (
+                kwargs.pop(name) if name in kwargs else obj()
+            )
             kwargs["configs"]["subclasses"].append(name)
             if issubclass(obj.__class__, ConfigurationSHMSegments):
                 kwargs["segments"][name] = slice(
