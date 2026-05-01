@@ -1,4 +1,6 @@
 import os
+import traceback
+import zipfile
 from datetime import date
 from urllib import error, request
 
@@ -35,29 +37,39 @@ def download_file(url: str, path: str) -> None:
                     dl_progress += len(buf)
 
     except error.HTTPError:
+        traceback.print_exc()
         pass
 
 
-def download_aggTrade_hist_data(symbol: str, startDate: date, endDate: date) -> bool:
+def download_aggTrade_hist_daily_data(
+    symbol: str, startDate: date, endDate: date
+) -> bool:
     base_path = f"{ct.DATA_PATH}/{ct.DATA_TYPE_AGGTRADES_PATH}/{symbol.upper()}"
     os.makedirs(base_path, exist_ok=True)
 
-    date_ = startDate
+    curDate = startDate
     endDate = endDate if date.today() > endDate else date.today()
-    while date_ != endDate:
-        file_name = f"{symbol.upper()}-aggTrades-{date_.isoformat()}.zip"
-        path = f"{base_path}/{file_name}"
-        if os.path.exists(path) is False:
-            url = f"{ct.BASE_UM_AGGTRADES_DAILY_URL}{symbol.lower()}/{file_name}"
-            download_file(url, path)
-            try:
-                date_ = date_.replace(day=date_.day + 1)
-            except ValueError:
-                year, month, day = (
-                    (date_.year + 1, 1, 1)
-                    if (date_.month + 1) > 12
-                    else (date_.year, date_.month + 1, 1)
-                )
-                date_ = date_.replace(year, month, day)
+    while curDate < endDate:
+        file_name = f"{symbol.upper()}-aggTrades-{curDate.isoformat()}"
+        zip_path = f"{base_path}/{file_name}.zip"
+        file_path = f"{base_path}/{curDate.isoformat()}.csv"
+        if os.path.exists(file_path) is False:
+            url = f"{ct.BASE_UM_AGGTRADES_DAILY_URL}{symbol.upper()}/{file_name}.zip"
+            download_file(url, zip_path)
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                file_path_ = zip_ref.extract(zip_ref.namelist()[0])
+
+            os.rename(file_path_, file_path)
+            os.remove(zip_path)
+
+        try:
+            curDate = curDate.replace(day=curDate.day + 1)
+        except ValueError:
+            year, month, day = (
+                (curDate.year + 1, 1, 1)
+                if (curDate.month + 1) > 12
+                else (curDate.year, curDate.month + 1, 1)
+            )
+            curDate = curDate.replace(year, month, day)
 
     return True

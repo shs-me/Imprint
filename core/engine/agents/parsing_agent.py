@@ -4,7 +4,7 @@ from multiprocessing.synchronize import Event, Lock
 import msgspec
 from msgspec.json import Decoder
 
-from core.engine.analytical_tools.footprint.footprint_writer import FootprintWriter
+from core.engine.agents_utils.parsing.footprint_writer import FootprintWriter
 from core.settings import BacktestingMode as bm
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
@@ -35,7 +35,7 @@ class ParserAgent:
         self.wait_main: Event = general_event
 
         self.set_proc_sc = manager.set_proc_sc
-        self.check_task = manager.check_task
+        self.check_base_task = manager.check_base_task
         self.task_status: memoryview = manager.task_status
         self.proc_status: memoryview = manager.proc_status
 
@@ -77,14 +77,14 @@ class ParserAgent:
             self.init_session = True
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
-                    if task := self.check_task(
-                        complete=(WCellC[0] == RCellC[0] and writer.spare_flag[0] == 1)
-                    ):
-                        return
+                    task: bool | int = self.check_base_task(complete=self.complete())
+                    if isinstance(task, bool):
+                        if task:
+                            return
+
                     elif task & scs.FP_RE_INIT:
+                        writer.pre_re_init()
                         break
-                    elif task is False:
-                        pass
 
                 alarm_clock(task_status, RCellC, WCellC, pre_sleep_wss)
                 update_cells(
@@ -100,6 +100,9 @@ class ParserAgent:
                     wake_up_logic=wake_up_logic,
                 )
 
+    def complete(self) -> bool:
+        return self.WriterCellCounter[0] == self.ReaderCellCounter[0]
+
     def _alarm_clock(
         self,
         task_status: memoryview,
@@ -107,18 +110,18 @@ class ParserAgent:
         WCellC: memoryview,
         pre_sleep_wss: Event,
     ) -> None:
-        mode, ZERO_SLEEP = self.btMode, bm.ZERO_SLEEP
-        # - - -
         if self.backtesting:
-            if self.btMode == bm.NONE_STOP or self.btMode == bm.ZERO_SLEEP:
+            mode, ZERO_SLEEP = self.btMode, bm.ZERO_SLEEP
+            if mode == bm.NONE_STOP or mode == ZERO_SLEEP:
                 while WCellC[0] == RCellC[0] and task_status[0] == 0:
                     if mode == ZERO_SLEEP:
                         time.sleep(0)
                 return
 
-        pre_sleep_wss.clear()
         if WCellC[0] == RCellC[0] and task_status[0] == 0:
-            pre_sleep_wss.wait()
+            pre_sleep_wss.clear()
+            if WCellC[0] == RCellC[0] and task_status[0] == 0:
+                pre_sleep_wss.wait()
 
     def _update_cells(
         self,
@@ -133,7 +136,7 @@ class ParserAgent:
         writer: FootprintWriter,
         wake_up_logic: Lock,
     ) -> None:
-        while WCellC[0] != RCellC[0]:
+        if WCellC[0] != RCellC[0]:
             cell: int = RCellC[0]
             lrd: int = raw_buf[cell + dataHeader_offset]
             start = cell * data_size + data_offset
@@ -142,31 +145,24 @@ class ParserAgent:
             trade: AggTrade = decoder.decode(raw_buf[start : start + lrd])
             if trade.p < 0 or trade.q < 0 or trade.T < 0:
                 self.set_proc_sc(code=scs.UNVALID_DATA)
-                break
+                return
             else:
                 if self.init_session:
                     if writer.init_session(price=trade.p, timestamp=trade.T):
                         self.init_session = False
                     else:
-                        break
+                        return
 
-                temp = writer.update(
+                if writer.update(
                     price=trade.p,
                     qty=trade.q,
                     timestamp=trade.T,
                     is_sell=trade.m,
-                )
-                if temp is False:
-                    pass
-
-                elif temp is True:
+                ):
                     if self.backtesting and self.btMode != bm.REAL_TIME_SIM:
-                        continue
+                        return
 
                     wake_up_logic.release()
-
-                elif temp is None:
-                    break
 
 
 @manager_office()

@@ -3,7 +3,7 @@ from multiprocessing.synchronize import Event
 from numpy import int32, int64, intp
 from numpy.typing import NDArray
 
-from core.engine.analytical_tools.footprint.footprint_reader import FootprintReader
+from core.engine.agents_utils.logic.footprint_reader import FootprintReader
 from core.settings import StateFlags as sf
 from core.utils.monitoring.agent_manager import AgentManager
 
@@ -50,9 +50,8 @@ class IntraDay(FootprintReader):
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
                 time_ms=_.time_ms(),
-                long=True,
-                buy=True,
-                market=True,
+                is_long=True,
+                is_buy=True,
             )
 
         if self.b_shape(HIGH=HIGH, LOW=LOW, VAH=VAH):
@@ -70,9 +69,8 @@ class IntraDay(FootprintReader):
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
                 time_ms=_.time_ms(),
-                long=False,
-                buy=False,
-                market=True,
+                is_long=False,
+                is_buy=False,
             )
 
     def bar_state_mask(

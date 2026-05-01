@@ -80,32 +80,30 @@ class AgentManager:
             slice(*self.cfgMetrics.time_to_sleep)
         ].cast("q")
 
-    def check_task(self, complete: bool) -> bool | int:
+    def check_base_task(self, complete: bool) -> bool | int:
         if self.task_status[0] != 0 or self.proc_status[0] != 0:
             while self.task_status[0] == 0:
                 time.sleep(0.001)
 
             task_sc = self.task_status[0]
             if task_sc & scs.EXIT:
-                self.clear_task_sc(task_sc)
                 self.set_proc_sc(task_sc)
                 return True
 
-            elif task_sc & scs.COMPLETE:
+            if task_sc & scs.COMPLETE:
                 if complete:
-                    self.clear_task_sc(task_sc)
                     self.set_proc_sc(task_sc)
                     return True
                 else:
                     return False
 
-            elif task_sc & scs.GC_COLLECT:
+            if task_sc & scs.GC_COLLECT:
                 gc.collect()
-                self.clear_task_sc(task_sc)
                 return False
 
-            else:
-                return task_sc
+            self.clear_task_sc(task_sc)
+            return task_sc
+
         else:
             return False
 

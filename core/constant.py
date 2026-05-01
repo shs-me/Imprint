@@ -21,6 +21,8 @@ PLUGIN_PATH = "plugin"
 # Data Download Constant
 DATA_PATH = "data"
 DATA_TYPE_AGGTRADES_PATH = "aggTrades"
-BASE_UM_AGGTRADES_DAILY_URL = "https://data.binance.vision/um/aggTrades/daily/"
+BASE_UM_AGGTRADES_DAILY_URL = (
+    "https://data.binance.vision/data/futures/um/daily/aggTrades/"
+)
 
 DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH, PLUGIN_PATH]

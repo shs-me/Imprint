@@ -13,6 +13,7 @@ from core.constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
 from core.settings import BacktestingMode as bm
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.office import manager_office
 from core.utils.monitoring.status_codes import StatusCodes as sc
 
 
@@ -31,15 +32,20 @@ class AggTradeSim(msgspec.Struct):
 
 class DataPrepper:
     def __init__(self, symbol: str, lock: Lock, mode: bm) -> None:
-        self.datadir: str = DATA_PATH
-        self.typeData: str = DATA_TYPE_AGGTRADES_PATH
         self.symbol: str = symbol.upper()
-        self.base_path: str = f"{self.datadir}/{self.typeData}/{self.symbol}"
         self.lock: Lock = lock
         self.mode: bm = mode
+
+        self.datadir: str = DATA_PATH
+        self.typeData: str = DATA_TYPE_AGGTRADES_PATH
+        self.base_path: str = f"{self.datadir}/{self.typeData}/{self.symbol}"
+
+        self.encoder: Encoder = Encoder()
         self.queue: deque = deque(maxlen=10000)
+
         self.is_running, self.complete = True, False
         self.error: None | str = None
+        self.nttrade: int = 0
 
     def start(self) -> None:
         self.subP: Thread = Thread(target=self.run_prepper_engine, daemon=True)
@@ -62,18 +68,21 @@ class DataPrepper:
                                 self.lock.acquire()
 
                         data: list[str] = line.strip().split(sep=",")
-                        obj = AggTradeSim(
-                            e=self.typeData,
-                            E=int(data[5]),
-                            a=int(data[0]),
-                            s=self.symbol,
-                            p=data[1],
-                            q=data[2],
-                            f=int(data[3]),
-                            l=int(data[4]),
-                            T=int(data[5]),
-                            m=(data[6] in ("true", "True")),
+                        obj: bytes = self.encoder.encode(
+                            AggTradeSim(
+                                e=self.typeData,
+                                E=int(data[5]),
+                                a=int(data[0]),
+                                s=self.symbol,
+                                p=data[1],
+                                q=data[2],
+                                f=int(data[3]),
+                                l=int(data[4]),
+                                T=int(data[5]),
+                                m=(data[6] in ("true", "True")),
+                            )
                         )
+                        self.ntt = int(data[5])
                         self.queue.append(obj)
 
             self.complete = True
@@ -88,7 +97,7 @@ class DataPrepper:
         return [f"{self.base_path}/{date.isoformat(d)}.csv" for d in dates]
 
 
-class WSsSimEngine:
+class WssSimAgent:
     def __init__(
         self, manager: AgentManager, wake_up_parser: Event, general_event: Event
     ) -> None:
@@ -97,27 +106,26 @@ class WSsSimEngine:
         self.wait_main: Event = general_event
 
         self.set_proc_sc = manager.set_proc_sc
-        self.check_task = manager.check_task
+        self.check_base_task = manager.check_base_task
         self.task_status: memoryview = manager.task_status
         self.proc_status: memoryview = manager.proc_status
 
         self.mode: bm = manager.mode
-        self.encoder: Encoder = Encoder()
-        self.lock = Lock()
+        self.lock: Lock = Lock()
         self.prepper: DataPrepper = DataPrepper(
             symbol=self.manager.symbol, lock=self.lock, mode=self.mode
         )
 
-        self.ottrade, self.nttrade = 0, 0  # new|old time trade
-        self.min_delta = 0
+        self.ottrade: int = 0  # new time trade
+        self.min_delta: int = 0
         # InitGetRawData
         self.cfgRaw = self.manager.cfgRaw
-        self.data_size = self.cfgRaw.data_size
-        self.header_size = self.cfgRaw.header_size
+        self.data_size: int = self.cfgRaw.data_size
+        self.header_size: int = self.cfgRaw.header_size
         self.data_offset: int = self.cfgRaw.data[0]
         self.dataHeader_offset: int = self.cfgRaw.dataHeader[0]
-        self.cell_amount = self.cfgRaw.cell_amount
-        self.safe_lag = self.cfgRaw.safe_lag
+        self.cell_amount: int = self.cfgRaw.cell_amount
+        self.safe_lag: int = self.cfgRaw.safe_lag
         self.WriterCellCounter: memoryview[int] = self.manager.raw_buf[
             slice(*self.cfgRaw.WriterCellCounter)
         ].cast("q")
@@ -128,7 +136,7 @@ class WSsSimEngine:
     @error_handler(set_status_code=True)
     def run_wss_sim_engine(self) -> None:
         # Local Links
-        prepper, encoder = self.prepper, self.encoder
+        prepper = self.prepper
         wake_up_parser = self.wake_up_parser
         # - - -
         proc_status, task_status = self.proc_status, self.task_status
@@ -144,12 +152,13 @@ class WSsSimEngine:
         # - - -
         prepper.start()
         while True:
+            # - - -
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
-                    if task := self.check_task(complete=prepper.complete):
-                        return
-                    elif task is False:
-                        pass
+                    task: bool | int = self.check_base_task(complete=prepper.complete)
+                    if isinstance(task, bool):
+                        if task:
+                            return
 
                 if prepper.error is None:
                     if not prepper.queue:
@@ -169,7 +178,6 @@ class WSsSimEngine:
                     )
                     if update_cells(
                         queue=prepper.queue,
-                        encoder=encoder,
                         raw_buf=raw_buf,
                         WCellC=WCellC,
                         cell_amount=cell_amount,
@@ -200,7 +208,7 @@ class WSsSimEngine:
             if ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
                 writer_cell = WCellC[0]  # debug
                 reader_cell = RCellC[0]  # debug
-                lag = (writer_cell - reader_cell + cell_amount) % cell_amount
+                lag = (writer_cell - reader_cell + cell_amount) % cell_amount  # debug
                 raise RuntimeError(
                     f"WssAgentSim: AlarmClock: reading lag[{lag}] > safe lag[{safe_lag}]"
                 )
@@ -209,7 +217,7 @@ class WSsSimEngine:
 
     def _time_to_sleep(self) -> float:
         # ott: Old Time Trade | ntt: New Time Trade
-        ott, ntt = self.ottrade, self.nttrade
+        ott, ntt = self.ottrade, self.prepper.nttrade
         # - - -
         if 0 < ott:
             if ott <= ntt:
@@ -225,8 +233,7 @@ class WSsSimEngine:
 
     def _update_cells(
         self,
-        queue: deque[AggTradeSim],
-        encoder: msgspec.json.Encoder,
+        queue: deque[bytes],
         raw_buf: memoryview,
         WCellC: memoryview,
         cell_amount: int,
@@ -234,18 +241,32 @@ class WSsSimEngine:
         data_offset: int,
         dataHeader_offset: int,
     ) -> bool:
-        obj: AggTradeSim = queue.popleft()
-        self.nttrade: int = obj.T
-        raw_data: bytes = encoder.encode(obj)
+        raw_data: bytes = queue.popleft()
         if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-            cell: int = WCellC[0]  # get cell
-            raw_buf[cell + dataHeader_offset] = lrd  # set lrd on cell[header]
+            cell: int = WCellC[0]
+
+            raw_buf[cell + dataHeader_offset] = lrd
             start: int = cell * data_size + data_offset
-            raw_buf[start : start + lrd] = raw_data  # set raw data on cell[data]
-            new_cell = cell + 1  # cell for next update
+            raw_buf[start : start + lrd] = raw_data
+
+            new_cell = cell + 1
             WCellC[0] = new_cell if new_cell < cell_amount else 0
             return True
 
         else:
             self.set_proc_sc(code=sc.BIG_RAW_DATA)
             return False
+
+
+@manager_office()
+def run_wss_sim(
+    parsing_event: Event,
+    general_event: Event,
+    **kwargs,
+) -> None:
+    agent = WssSimAgent(
+        manager=kwargs["manager"],
+        wake_up_parser=parsing_event,
+        general_event=general_event,
+    )
+    agent.run_wss_sim_engine()

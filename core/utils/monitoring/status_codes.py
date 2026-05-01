@@ -16,7 +16,7 @@ class StatusCodes(IntEnum):
         obj.label = sc_label
         return obj
 
-    # General PROC/TASK SC
+    # General
     RUN = "RUNNING"
     STOP = "STOPING"
     EXIT = "EXIT"
@@ -27,18 +27,17 @@ class StatusCodes(IntEnum):
     GC_COLLECT = "Collect garbage"
     # - - -
     # PARSING
-    # PROC_SC
     UNVALID_DATA = "_update_cells[ aggTradeData[price,qty or timestamp] < 0 ]"
-    FP_INIT_FAILED = (
-        "FootprintWriter: init_session: amount tick in nPrice > 80% array[fpLines]"
-    )
     FP_IDX_FILLED = "FootprintWriter: update: array[fpCols] < idx or idx < 0"
     FP_IDY_FILLED = "FootprintWriter: update: array[fpLines] < idy or idy < 0"
-    # TASK_SC
-    FP_RE_INIT = ""
+    # PARSING/LOGIC
+    FP_RE_INIT = "Footprint re-initializated"
     # - - -
-    # NETWORK/SIM
+    # WSS/SIM
     BIG_RAW_DATA = (
         "wss: _set_raw_data: size/len raw_data > data_cell_size_in_ring_buffer"
     )
     DATA_PREPPERED = "wss_sim: historical data preppered"
+    # EXECUTION
+    LOSS_MORE_LIMIT = "balance >= max loss limit"
+    QTY_LESS_LIMIT = "qtyUSDT <= min order size in usdt"

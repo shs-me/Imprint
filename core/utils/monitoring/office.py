@@ -92,7 +92,8 @@ def configurations_init(**kwargs) -> dict:
             kwargs["configs"]["subclasses"].append(name)
             if issubclass(obj.__class__, ConfigurationSHMSegments):
                 kwargs["segments"][name] = slice(
-                    offset, (offset := (offset + obj.shm_size))
+                    offset,
+                    (offset := (offset + obj.shm_size)),  # type: ignore # reportAttributeAccessIssue
                 )
                 kwargs["segments"]["subclasses"].append(name)
 

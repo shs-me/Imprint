@@ -1,12 +1,15 @@
+import time
 from math import sqrt
 from multiprocessing.synchronize import Lock
 
 import numpy as np
+from llvmlite.utils import os
 from numba import njit
-from numpy import float64
+from numpy import float64, int64
 from numpy.typing import NDArray
 
-from core.engine.analytical_tools.util import ConvertMetrics
+from core.constant import BASE_FOOTPRINT_DUMP_PATH
+from core.engine.agents_utils.utils import FPconverter
 from core.settings import BarHeaders as bh
 from core.settings import SpaceCoords as sc
 from core.utils.monitoring.agent_manager import AgentManager
@@ -17,6 +20,7 @@ class FootprintWriter:
     def __init__(self, manager: AgentManager, guarantee: Lock) -> None:
         self.manager, self.guarantee = manager, guarantee
         self.set_proc_sc = manager.set_proc_sc
+        self.task_status = manager.task_status
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
@@ -36,6 +40,10 @@ class FootprintWriter:
         """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
         self._init_array()
         # Variables
+        self.base_fp_dump_path: str = (
+            f"{BASE_FOOTPRINT_DUMP_PATH}/{self.manager.symbol.upper()}"
+        )
+        self.last_idx = 0
         self.idxVP, self.idxDP = self.cfgFootprint.colVP, self.cfgFootprint.colDP
         self.spcIDYmin, self.spcIDXmin = int(sc.IDYmin), int(sc.IDXmin)
         self.spcIDYmax, self.spcIDXmax = int(sc.IDYmax), int(sc.IDXmax)
@@ -47,17 +55,24 @@ class FootprintWriter:
         self.chsVWAP_BB_UPPER = int(bh.VWAP_BB_UPPER)
         self.chsVWAP_BB_LOWER = int(bh.VWAP_BB_LOWER)
 
+        # - - -
+        self.con: FPconverter = FPconverter(
+            footprint=self.footprint,
+            headers=self.headers,
+            trade_param=self.trade_par,
+            cfgFP=self.cfgFootprint,
+        )
+
     def _init_array(self) -> None:
-        self.footprint: NDArray[np.int64] = np.ndarray(
+        self.footprint: NDArray[int64] = np.ndarray(
             shape=(self.cfgFootprint.fpLines, self.cfgFootprint.fpPanelCols),
-            dtype=np.int64,
+            dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.footprint)],
         )
-        self.dirty_footprint: NDArray[np.int64] = np.ndarray(
+        self.dirty_footprint: NDArray[int64] = np.ndarray(
             shape=(self.cfgFootprint.fpLines, self.cfgFootprint.fpPanelCols),
-            dtype=np.int64,
+            dtype=int64,
         )
-        self.dirty_footprint.fill(0)
         # - - -
         self.meta_data: NDArray[np.float64] = np.ndarray(
             shape=(2, 3),
@@ -65,54 +80,41 @@ class FootprintWriter:
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.meta_data)],
         )
         # - - -
-        self.headers: NDArray[np.int64] = np.ndarray(
+        self.headers: NDArray[int64] = np.ndarray(
             shape=(self.cfgFootprint.bar_count, bh._HeadersCount),
-            dtype=np.int64,
+            dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
         )
-        self.dirty_headers: NDArray[np.int64] = np.ndarray(
+        self.dirty_headers: NDArray[int64] = np.ndarray(
             shape=(self.cfgFootprint.bar_count, bh._HeadersCount),
-            dtype=np.int64,
+            dtype=int64,
         )
-        self.dirty_headers.fill(0)
         # - - -
-        self.space: NDArray[np.int64] = np.ndarray(
+        self.space: NDArray[int64] = np.ndarray(
             (2, sc._CoordsCount),
-            dtype=np.int64,
+            dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.space)],
         )
 
     def init_session(self, price: float, timestamp: int) -> bool:
-        bpat = self.base_price_and_timestamp_buf
-        # - - -
         self.dirty_footprint.fill(0)
         self.dirty_headers.fill(0)
-        self.con: ConvertMetrics = ConvertMetrics(
-            footprint=self.footprint,
-            headers=self.headers,
-            trade_param=self.trade_par,
-            cfgFP=self.cfgFootprint,
-        )
-        if bpat[0] != 0:
-            price, timestamp = bpat[:]
-        else:
-            self.space[:] = self.con.fpLines, self.con.fpCols, 0, 0
+        self.footprint.fill(0)
+        self.headers.fill(0)
+        self.space[:] = self.con.fpLines, self.con.fpCols, 0, 0
 
-        if self.con.init_session(price, timestamp) is False:
-            self.set_proc_sc(code=scs.FP_INIT_FAILED)
-            return False
+        self.con.init_session(price, timestamp)
 
-        bpat[0], bpat[1] = self.con.nBasePrice, self.con.baseTimestamp
+        self.base_price_and_timestamp_buf[0] = self.con.nBasePrice
+        self.base_price_and_timestamp_buf[1] = self.con.baseTimestamp
         return True
 
-    def update(
-        self, price: float, qty: float, timestamp: int, is_sell: bool
-    ) -> bool | None:
+    def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         idy: int | None = self.con.to_idy(nPrice=self.con.to_nPrice(price))
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
-                return update_footprint_and_headers_and_indicators_and_coords(
+                update_footprint_and_headers_and_indicators_and_coords(
                     price=price,
                     qty=qty,
                     timestamp=timestamp,
@@ -123,13 +125,10 @@ class FootprintWriter:
                     idx=idx,
                     idxVP=self.idxVP,
                     idxDP=self.idxDP,
-                    fp=self.footprint,
                     dirty_fp=self.dirty_footprint,
-                    hr=self.headers,
                     dirty_hr=self.dirty_headers,
                     space=self.space,
                     space_flag=self.space_flag,
-                    spare_flag=self.spare_flag,
                     chsOpen=self.chsOpen,
                     chsHigh=self.chsHigh,
                     chsLow=self.chsLow,
@@ -146,11 +145,52 @@ class FootprintWriter:
                 )
 
             else:
+                self.space_is_read()
                 self.set_proc_sc(code=scs.FP_IDY_FILLED)
+
         else:
+            self.space_is_read()
             self.set_proc_sc(code=scs.FP_IDX_FILLED)
 
-        return None
+        return copy_to(
+            idxVP=self.idxVP,
+            fp=self.footprint,
+            dirty_fp=self.dirty_footprint,
+            hr=self.headers,
+            dirty_hr=self.dirty_headers,
+            space=self.space,
+            space_flag=self.space_flag,
+            spare_flag=self.spare_flag,
+        )
+
+    def space_is_read(self) -> None:
+        while self.spare_flag[0] != 0 and self.task_status[0] == 0:
+            time.sleep(0)
+
+    # For Agent Method's
+    def pre_re_init(self, save_array: bool = False) -> None:
+        self.space_is_read()
+        if save_array:
+            self.dump_footprint()
+
+        self.set_proc_sc(scs.FP_RE_INIT)
+
+    def dump_footprint(self, onlyHeaders: bool = True) -> None:
+        os.makedirs(self.base_fp_dump_path, exist_ok=True)
+
+        startFPtime = self.con.get_time(idx=0, strftime=True)
+        endFPtime = self.con.get_time(idx=self.last_idx, strftime=True)
+        self.rawFp_save_path = (
+            f"{self.base_fp_dump_path}/RawFP_{startFPtime}_{endFPtime}"
+        )
+        self.headers_save_path = (
+            f"{self.base_fp_dump_path}/FPheaders_{startFPtime}_{endFPtime}"
+        )
+        if onlyHeaders is False:
+            np.save(self.rawFp_save_path, self.footprint)
+        np.save(self.headers_save_path, self.headers)
+
+    # - - -
 
 
 @njit(cache=True)
@@ -165,13 +205,10 @@ def update_footprint_and_headers_and_indicators_and_coords(
     idx: int,
     idxVP: int,
     idxDP: int,
-    fp: NDArray[np.int64],
-    dirty_fp: NDArray[np.int64],
-    hr: NDArray[np.int64],
-    dirty_hr: NDArray[np.int64],
-    space: NDArray[np.int64],
+    dirty_fp: NDArray[int64],
+    dirty_hr: NDArray[int64],
+    space: NDArray[int64],
     space_flag: memoryview,
-    spare_flag: memoryview,
     chsOpen: int,
     chsHigh: int,
     chsLow: int,
@@ -185,7 +222,7 @@ def update_footprint_and_headers_and_indicators_and_coords(
     chsVWAP_BB_UPPER: int,
     chsVWAP_BB_LOWER: int,
     meta_data: NDArray[np.float64],
-) -> bool:
+) -> None:
     nQty: int = round(qty * qtyMult)
     # Update Dirty Footprint
     dirty_fp[idy, idx] += nQty
@@ -228,18 +265,34 @@ def update_footprint_and_headers_and_indicators_and_coords(
     # Update Space Coords
     buf: int = space_flag[0]
     IDYmin, IDXmin, IDYmax, IDXmax = space[buf, :]
-    IDYmin: int | np.int64 = idy if IDYmin > idy else IDYmin
-    IDXmin: int | np.int64 = idx if IDXmin > idx else IDXmin
-    IDYmax: int | np.int64 = idy + 1 if IDYmax <= idy else IDYmax
-    IDXmax: int | np.int64 = idx + 1 if IDXmax <= idx else IDXmax
+    IDYmin: int | int64 = idy if IDYmin > idy else IDYmin
+    IDXmin: int | int64 = idx if IDXmin > idx else IDXmin
+    IDYmax: int | int64 = idy + 1 if IDYmax <= idy else IDYmax
+    IDXmax: int | int64 = idx + 1 if IDXmax <= idx else IDXmax
     space[buf, :] = IDYmin, IDXmin, IDYmax, IDXmax
 
-    # IF True: Change buffer and copy value's to pure array's
-    if spare_flag[0] == 0:
+
+@njit(cache=True)
+def copy_to(
+    fp: NDArray[int64],
+    dirty_fp: NDArray[int64],
+    hr: NDArray[int64],
+    dirty_hr: NDArray[int64],
+    space: NDArray[int64],
+    space_flag: memoryview,
+    spare_flag: memoryview,
+    idxVP: int,
+) -> bool:
+    if spare_flag[0] == 0:  # IF True: Change buffer and copy value's to pure array's
+        buf: int = space_flag[0]
+        IDYmin, IDXmin, IDYmax, IDXmax = space[buf, :]
+
         idxMin, idxMax = (IDXmin & ~1) // 2, ((IDXmax - 1) & ~1) // 2 + 1
         hr[idxMin:idxMax, :] = dirty_hr[idxMin:idxMax, :]
+
         fp[IDYmin:IDYmax, IDXmin:IDXmax] = dirty_fp[IDYmin:IDYmax, IDXmin:IDXmax]
         fp[IDYmin:IDYmax, idxVP:] = dirty_fp[IDYmin:IDYmax, idxVP:]
+
         space_flag[0], spare_flag[0] = 1 if buf == 0 else 0, 1
         return True
 

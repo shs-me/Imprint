@@ -3,6 +3,7 @@
 /logs
 /data
 /dump
+test_gridcore.py
 
 # Base gitignore
 # Byte-compiled / optimized / DLL files

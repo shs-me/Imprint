@@ -33,6 +33,12 @@ class MainManager:
             if isinstance(obj, cfg.ConfigurationMonitoring):
                 self.cfgMonitoring = obj
 
+            elif isinstance(obj, cfg.ConfigurationMetrics):
+                self.cfgMetrics = obj
+
+            elif isinstance(obj, cfg.ConfigurationBacktesting):
+                self.cfgBacktesting = obj
+
     def segments_init(self, segments: dict[str, Any]) -> None:
         _slice: slice
         segments_subclasses: list[str] = segments["subclasses"]
@@ -47,6 +53,9 @@ class MainManager:
 
             if name == cfg.ConfigurationMonitoring.__name__:
                 self.monitoring_buf = self.shm_buf[_slice]
+
+            elif name == cfg.ConfigurationMetrics.__name__:
+                self.metrics_buf = self.shm_buf[_slice]
 
     def local_segments_init(self) -> None:
         self.procs_buf = self.monitoring_buf[slice(*self.cfgMonitoring.procs_buf)].cast(
@@ -102,17 +111,13 @@ class MainManager:
                     break
 
                 elif sc & scs.COMPLETE:
-                    logger.warning(f"{v['proc_name']} | {scs.COMPLETE.label}")
+                    logger.success(f"{v['proc_name']} | {scs.COMPLETE.label}")
                     procs.pop(k)
                     break
 
                 # Parsing
                 elif sc & scs.UNVALID_DATA:
                     logger.warning(f"{v['proc_name']} | {scs.UNVALID_DATA.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
-
-                elif sc & scs.FP_INIT_FAILED:
-                    logger.warning(f"{v['proc_name']} | {scs.FP_INIT_FAILED.label}")
                     self.set_task_sc_to_procs(scs.EXIT)
 
                 elif sc & scs.FP_IDX_FILLED:
@@ -125,6 +130,10 @@ class MainManager:
                     for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):
                         self.set_task_sc_to_proc(scs.FP_RE_INIT, task_id)
 
+                elif sc & scs.FP_RE_INIT:
+                    logger.success(f"{v['proc_name']} | {scs.FP_RE_INIT.label}")
+                    self.set_task_sc_to_procs(scs.RUN)
+
                 # Network/Sim
                 elif sc & scs.DATA_PREPPERED:
                     logger.warning(f"{v['proc_name']} | {scs.DATA_PREPPERED.label}")
@@ -132,6 +141,15 @@ class MainManager:
 
                 elif sc & scs.BIG_RAW_DATA:
                     logger.warning(f"{v['proc_name']} | {scs.BIG_RAW_DATA.label}")
+                    self.set_task_sc_to_procs(scs.EXIT)
+
+                # Execution
+                elif sc & scs.LOSS_MORE_LIMIT:
+                    logger.warning(f"{v['proc_name']} | {scs.LOSS_MORE_LIMIT.label}")
+                    self.set_task_sc_to_procs(scs.EXIT)
+
+                elif sc & scs.QTY_LESS_LIMIT:
+                    logger.warning(f"{v['proc_name']} | {scs.QTY_LESS_LIMIT.label}")
                     self.set_task_sc_to_procs(scs.EXIT)
 
                 if sc != 0:

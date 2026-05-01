@@ -5,8 +5,8 @@ import time
 from multiprocessing.synchronize import Event, Lock
 
 from core.constant import PLUGIN_PATH
-from core.engine.analytical_tools.footprint.footprint_reader import FootprintReader
-from core.engine.example import BaseFootprintReader
+from core.engine.agents_utils.logic.example import BaseFootprintReader
+from core.engine.agents_utils.logic.footprint_reader import FootprintReader
 from core.settings import BacktestingMode as bm
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
@@ -28,7 +28,7 @@ class LogicAgent:
         self.wait_main: Event = general_event
 
         self.set_proc_sc = manager.set_proc_sc
-        self.check_task = manager.check_task
+        self.check_base_task = manager.check_base_task
         self.task_status: memoryview = manager.task_status
         self.proc_status: memoryview = manager.proc_status
 
@@ -47,13 +47,15 @@ class LogicAgent:
             init_session = True
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
-                    if task := self.check_task(complete=reader.spare_flag[0] == 0):
-                        return
+                    task: bool | int = self.check_base_task(
+                        complete=reader.spare_flag[0] == 0
+                    )
+                    if isinstance(task, bool):
+                        if task:
+                            return
+
                     elif task & scs.FP_RE_INIT:
-                        reader.dump_footprint()
                         break
-                    elif task is False:
-                        pass
 
                 alarm_clock(task_status, pre_sleep_logic)
                 if init_session:
@@ -63,8 +65,9 @@ class LogicAgent:
                 reader.check_update()
 
     def _alarm_clock(self, task_status: memoryview, pre_sleep_logic: Lock) -> None:
-        mode, ZeroSleep, flag = self.btMode, bm.ZERO_SLEEP, self.reader.spare_flag
+        flag = self.reader.spare_flag
         if self.backtesting:
+            mode, ZeroSleep = self.btMode, bm.ZERO_SLEEP
             if mode == bm.NONE_STOP or mode == ZeroSleep:
                 flag[0] = 0
                 while flag[0] == 0 and task_status[0] == 0:

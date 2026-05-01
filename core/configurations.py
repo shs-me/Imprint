@@ -1,6 +1,6 @@
 from abc import ABC
 
-from core.settings import BarHeaders, ChartInterval, SpaceCoords
+from core.settings import BarHeaders, ChartInterval, SpaceCoords, TradeParam
 
 UBYTE = 1
 INT64 = 8
@@ -22,34 +22,44 @@ class ConfigurationBacktesting(Configuration):
         self,
         tick_size: str = "0.01",
         lot_size: str = "0.001",
+        minOrderSizeUSDT: float = 5.0,
         taker_commission: float = 0.002,
         maker_commission: float = 0.0015,
-        balance: float = 100.0,
+        balanceUSDT: float = 100.0,
     ) -> None:
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size
+        self.minOrderSizeUSDT: float = minOrderSizeUSDT
         self.taker_commision: float = taker_commission
         self.maker_commission: float = maker_commission
-        self.balance: float = balance
+        self.balance = balanceUSDT
 
 
 # ShmSegmentsSubclasses
 class ConfigurationStrategy(ConfigurationSHMSegments):
     def __init__(
         self,
-        RR: float = 1.0,
-        TP: float = 0.01,
-        SL: float = 0.01,
-        max_trades: int = 10000,
+        scale: int = 20,
+        leverage: int = 25,
+        maxLockBalance: float = 0.5,
+        maxLossBalance: float = 0.5,
+        entry_qty: float = 0.01,
+        TProi: float = 1.0,
+        SLroi: float = 1.0,
     ) -> None:
-        self.RR = RR
-        self.TP = TP
-        self.SL = SL
-        self.lines = max_trades
-        self.cols = 5
-        self.cell_amount = 128
+        self.scale: int = 10**scale
+        self.leverage: int = leverage
+        self.maxLockBalance: int = round(maxLockBalance * 1000)
+        self.maxLossBalance: int = round(maxLossBalance * 1000)
+        self.entryQty: int = round(entry_qty * 1000)
+        self.TProi: int = round(TProi * 1000)
+        self.SLroi: int = round(SLroi * 1000)
 
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+        self.lines: int = 10000
+        self.cols: int = TradeParam._TradeParamCount
+        self.cell_amount: int = 128
+
+        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
         self.reader = OFFSET, OFFSET + INT64
@@ -58,17 +68,18 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.nPrice = OFFSET, OFFSET + INT64
         self.time_ms = self.nPrice[1], self.nPrice[1] + INT64
         self.orderParam = self.time_ms[1], self.time_ms[1] + INT64
+        self.orderID = self.orderParam[1], self.orderParam[1] + INT64
+        self.commission = self.orderID[1], self.orderID[1] + INT64
+
         self.signal_size = self.orderParam[1]
+        self.executed_size = self.commission[1]
+
         self.signal_buf_size = self.offset + self.signal_size * self.cell_amount
+        self.executedBuf_size = self.offset + self.executed_size * self.cell_amount
 
-        self.longBuf = OFFSET, OFFSET + self.signal_buf_size
-        self.shortBuf = self.longBuf[1], self.longBuf[1] + self.signal_buf_size
-
-        self.trades = (
-            self.shortBuf[1],
-            self.shortBuf[1] + (self.lines * self.cols * INT64),
-        )
-        return self.trades[1]
+        self.executeBuf = OFFSET, OFFSET + self.signal_buf_size
+        self.executedBuf = self.executeBuf[1], self.executeBuf[1] + self.signal_buf_size
+        return self.executeBuf[1]
 
 
 class ConfigurationFootprint(ConfigurationSHMSegments):
@@ -114,10 +125,10 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
 
 
 class ConfigurationRingRawBuf(ConfigurationSHMSegments):
-    def __init__(self) -> None:
+    def __init__(self, cell_amount: int = 10000) -> None:
         self.header_size = 1
         self.data_size = 256
-        self.cell_amount = 10000
+        self.cell_amount = cell_amount
         self.safe_lag = int(self.cell_amount * 0.9)
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 

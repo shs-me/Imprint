@@ -5,11 +5,11 @@ from typing import overload
 from numpy import float64, int64
 from numpy.typing import NDArray
 
-from core.configurations import ConfigurationFootprint
+from core.configurations import ConfigurationFootprint, ConfigurationStrategy
 from core.settings import BarHeaders as chs
 
 
-class ConvertMetrics:
+class FPconverter:
     def __init__(
         self,
         footprint: NDArray[int64],
@@ -33,16 +33,7 @@ class ConvertMetrics:
             self.to_nPrice(price) if isinstance(price, float) else price
         )
         self.baseTimestamp: int = timestamp
-        if self.nBasePrice >= round(number=self.fpLines * 0.8):
-            return False
-
-        else:
-            self.center: int = (
-                self.nBasePrice
-                if self.nBasePrice >= (self.fpLines - self.nBasePrice)
-                else (self.fpLines - self.nBasePrice)
-            )
-            return True
+        self.center: int = self.fpLines // 2
 
     @overload
     def to_idy(self, nPrice: int) -> int | None: ...
@@ -62,6 +53,7 @@ class ConvertMetrics:
         if 0 <= idx < self.fpCols:
             return idx
         else:
+            print(idx, timestamp, self.baseTimestamp)
             return None
 
     @overload
@@ -152,3 +144,77 @@ class ConvertMetrics:
     # Other
     def time_ms(self) -> int:
         return time.time_ns() // 1_000_000
+
+
+class TradeConverter:
+    def __init__(
+        self,
+        trade_param: memoryview,
+        cfgStrategy: ConfigurationStrategy,
+    ) -> None:
+        self.trade_param = trade_param
+        self.cfgST = cfgStrategy
+
+        self.leverage: int = self.cfgST.leverage
+        self.scale: int = self.cfgST.scale
+        self.entryQty = self.cfgST.entryQty
+
+        self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = trade_param[:]
+        self.priceMult: float = (10**self.pricePrec) + 1e-9
+        self.qtyMult: float = 10**self.qtyPrec + 1e-9
+
+    def init_session(self, orderID: int) -> None:
+        self.baseOrderID = orderID
+
+    def to_fpPrice(self, nPrice: int) -> float:
+        return round((nPrice / self.priceMult), self.pricePrec)
+
+    def to_fpQty(self, nQty: int) -> float:
+        return round((nQty / self.qtyMult), self.qtyPrec)
+
+    def to_fpNprice(self, price: float) -> int:
+        return round(price * self.priceMult)
+
+    def to_fpNqty(self, qty: float) -> int:
+        return round(qty * self.qtyMult)
+
+    def to_price(self, nPrice: int) -> float:
+        return round((nPrice / self.scale), self.pricePrec)
+
+    def to_qty(self, nQty: int) -> float:
+        return round((nQty / self.scale), self.qtyPrec)
+
+    def to_nPrice(self, price: float) -> int:
+        return round(price * self.scale)
+
+    def to_nQty(self, qty: float) -> int:
+        return round(qty * self.scale)
+
+    def to_oid(self, orderId: int) -> int:
+        return orderId - self.baseOrderID
+
+    def to_margin(self, nPrice: int, nQty: int) -> int:
+        return (nQty * nPrice) // self.scale // self.leverage
+
+    def to_nPnl(
+        self,
+        closeNprice: int,
+        entryNprice: int,
+        is_long: bool,
+        nQty: int,
+        nCommission: int,
+    ) -> int:
+        return (closeNprice - entryNprice) * (1 if is_long else -1) * nQty - nCommission
+
+    def to_nRoi(self, nPnl: int, nMargin: int) -> int:
+        return (nPnl * self.scale) // nMargin * 100 // self.scale
+
+    def get_nQty(self, nPrice: int, nBalance: int) -> int:
+        return (
+            (self.leverage * (nBalance * self.entryQty // 1000)) * self.scale // nPrice
+        )
+
+    def to_strftime(self, timestamp_ms: int) -> str:
+        return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )

@@ -1,16 +1,20 @@
 import inspect
 import os
 from multiprocessing import Event, Lock, Process, Semaphore
+from multiprocessing.synchronize import Event as EventT
+from multiprocessing.synchronize import Lock as LockT
+from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
 
 from loguru import logger
 
 from core.constant import CORE_LOG_PATH, DIRS_LIST
-from core.engine.execution_agent import run_execution
-from core.engine.logic_agent import run_logic
-from core.engine.network_agent import run_network
-from core.engine.network_sim_agent import run_network_sim
-from core.engine.parsing_agent import run_parsing
+from core.engine.agents.execution_agent import run_execution
+from core.engine.agents.logic_agent import run_logic
+from core.engine.agents.parsing_agent import run_parsing
+from core.engine.agents.rest_agent import RestAgent
+from core.engine.agents.wss_agent import run_wss
+from core.engine.agents.wss_sim_agent import run_wss_sim
 from core.settings import BacktestingMode, CoreResources
 from core.utils.monitoring.main_manager import MainManager
 from core.utils.monitoring.office import manager_office
@@ -18,16 +22,32 @@ from core.utils.monitoring.office import manager_office
 
 class RunMain(CoreResources):
     def __init__(self, **kwargs) -> None:
+        self.baseKwargs: dict = kwargs
+        self.symbol: str = kwargs["symbol"]
+        self.backtesting: bool = kwargs["backtesting"]
         self.manager: MainManager = kwargs.pop("manager")
-        self.baseKwargs = kwargs
-        self.backtesting = kwargs["backtesting"]
-        self.procs = {}
+
+        self.cfgBacktesting = self.manager.cfgBacktesting
         # CoreResources
-        self.parsing_event = Event()
-        self.logic_lock = Lock()
+        self.general_event: EventT = Event()
+        self.execution_event: EventT = Event()
+        self.parsing_event: EventT = Event()
+        self.sc_sem: SemT = Semaphore(0)
+        self.logic_lock: LockT = Lock()
         self.logic_lock.acquire(block=False)
-        self.execution_event = Event()
-        self.sc_sem, self.general_event = Semaphore(0), Event()
+        # Variable's
+        self.procs: dict = {}
+        self.rest = RestAgent(
+            symbol=self.symbol,
+            backtesting=self.backtesting,
+            cfgBacktesting=self.cfgBacktesting,
+        )
+        # Metrics
+        self.cfgMetrics = self.manager.cfgMetrics
+        self.trade_par: memoryview = self.manager.metrics_buf[
+            self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
+        ].cast("q")
+        """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
 
     def _init_session(self) -> None:
         for _dir in DIRS_LIST:
@@ -38,8 +58,20 @@ class RunMain(CoreResources):
             run_logic,
             run_parsing,
             run_execution,
-            run_network_sim if self.backtesting else run_network,
+            run_wss_sim if self.backtesting else run_wss,
         ]
+
+        self.ts = self.rest.get_tick_size()
+        self.ls = self.rest.get_lot_size()
+        self.trade_par[2] = self.pricePrec = (
+            len(self.ts.split(sep=".")[-1]) if "." in self.ts else 0
+        )
+        self.trade_par[3] = self.qtyPrec = (
+            len(self.ls.split(sep=".")[-1]) if "." in self.ls else 0
+        )
+        self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
+        self.trade_par[0] = round(float(self.ts) * self.priceMult)
+        self.trade_par[1] = round(float(self.ls) * self.qtyMult)
 
     def _get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)
@@ -58,7 +90,7 @@ class RunMain(CoreResources):
                 logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
                 return None
 
-        kwargs = kwargs | self.baseKwargs
+        kwargs = self.baseKwargs | kwargs
         self.procs[proc_id] = {"proc_name": proc_name, "task_id": task_id}
         return kwargs
 

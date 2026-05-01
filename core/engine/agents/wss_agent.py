@@ -1,3 +1,4 @@
+import asyncio
 from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
@@ -5,10 +6,11 @@ from websockets.asyncio.client import connect
 from core.constant import WS_STREAMS_PROD_URL
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
+from core.utils.monitoring.office import manager_office
 from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
-class WSsEngine:
+class WssAgent:
     def __init__(
         self, manager: AgentManager, wake_up_parser: Event, general_event: Event
     ) -> None:
@@ -17,7 +19,7 @@ class WSsEngine:
         self.wait_main: Event = general_event
 
         self.set_proc_st = manager.set_proc_sc
-        self.check_task = manager.check_task
+        self.check_base_task = manager.check_base_task
         self.proc_status: memoryview = manager.proc_status
         self.task_status: memoryview = manager.task_status
 
@@ -57,11 +59,10 @@ class WSsEngine:
             async with connect(self.wss_aggTrades_url, ping_interval=20) as ws:
                 while True:
                     if proc_status[0] != 0 or task_status[0] != 0:
-                        if task := self.check_task(complete=True):
-                            return
-
-                        elif task is False:
-                            pass
+                        task: bool | int = self.check_base_task(complete=True)
+                        if isinstance(task, bool):
+                            if task:
+                                return
 
                     raw_data = await ws.recv(decode=False)
                     if set_raw_data(
@@ -101,3 +102,15 @@ class WSsEngine:
         else:
             self.set_proc_st(code=scs.BIG_RAW_DATA)
             return False
+
+
+@manager_office()
+def run_wss(
+    parsing_event: Event,
+    general_event: Event,
+    **kwargs,
+) -> None:
+    agent = WssAgent(
+        kwargs["manager"], wake_up_parser=parsing_event, general_event=general_event
+    )
+    asyncio.run(agent.run_wss_engine())

@@ -1,6 +1,6 @@
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
 from multiprocessing.synchronize import Event, Lock, Semaphore
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 
 class CoreResources(Protocol):
@@ -11,62 +11,72 @@ class CoreResources(Protocol):
     sc_sem: Semaphore
 
 
+class OpenPosition(TypedDict):
+    positionSide: str
+    openTime: str
+    entryNprice: int
+    nQuantity: int
+    nominalNqty: int
+    tempNqty: int
+    nominalNcommission: int
+    laverage: int
+    realizedPNL: float
+    realizedROI: float
+    TakeProfits: dict
+    StopLosses: dict
+
+
+class ClosePosition(TypedDict):
+    positionSide: str
+    openTime: str
+    closeTime: str
+    entryPrice: float
+    closePrice: float
+    quantity: float
+    nominalQty: float
+    nominalCommission: float
+    laverage: int
+    realizedPNL: float
+    realizedROI: float
+    TakeProfits: dict
+    StopLosses: dict
+
+
 class BacktestingMode(IntEnum):
-    REAL_TIME_SIM = 0
-    ZERO_SLEEP = 1
-    NONE_STOP = 2
+    REAL_TIME_SIM, ZERO_SLEEP, NONE_STOP = 0, 1, 2
 
 
 class OrderFlag(IntFlag):
-    LONG = auto()
-    SHORT = auto()
+    # Position Side
+    LONG, SHORT = auto(), auto()
     # Side
-    BUY = auto()
-    SELL = auto()
+    BUY, SELL = auto(), auto()
     # Type
-    LIMIT = auto()
-    MARKET = auto()
+    LIMIT, MARKET = auto(), auto()
     # TIF
     GTC = auto()
-    FOC = auto()
     # Status
-    NEW = auto()
-    FILLED = auto()
-    CANCELED = auto()
+    NEW, FILLED, CANCELED = auto(), auto(), auto()
 
 
 class StateFlags(IntFlag):
     # Footprint States
     # Footprint: RealTime
-    BID_DELTA_DOMINATION_FP = auto()
-    ASK_DELTA_DOMINATION_FP = auto()
+    BID_DELTA_DOMINATION_FP, ASK_DELTA_DOMINATION_FP = auto(), auto()
     # Footprint: Static
-    VWAP = auto()
-    UPPER_BB = auto()
-    LOWER_BB = auto()
-    POC_FP = auto()
-    VAL_FP = auto()
-    VAH_FP = auto()
+    VWAP, UPPER_BB, LOWER_BB = auto(), auto(), auto()
+    POC_FP, VAL_FP, VAH_FP = auto(), auto(), auto()
 
     # Bar States
-    OPEN = auto()
-    CLOSE = auto()
-    HIGH = auto()
-    LOW = auto()
+    OPEN, CLOSE, HIGH, LOW = auto(), auto(), auto(), auto()
     # Bar: Indicators
-    POC_BAR = auto()
-    VAL_BAR = auto()
-    VAH_BAR = auto()
+    POC_BAR, VAL_BAR, VAH_BAR = auto(), auto(), auto()
     # Bar: Context
-    UNFINISHED_AUCTION = auto()
-    FINISHED_AUCTION = auto()
-    ABSORPTION = auto()
-    EXHAUSTION = auto()
+    UNFINISHED_AUCTION, FINISHED_AUCTION = auto(), auto()
+    ABSORPTION, EXHAUSTION = auto(), auto()
 
     # Bid/Ask States
-    DELTA_DOMINATION = auto()
-    ZERO_PRINT = auto()
-    IMBALANCE = auto()
+    DELTA_DOMINATION, ZERO_PRINT, IMBALANCE = auto(), auto(), auto()
 
     # Cluster States
     BIG_TRADE = auto()
@@ -76,6 +86,13 @@ class SignalSetup(IntEnum):
     BUY, SELL = 0, 1
     OPEN, CLOSE = 0, 1
     MARKET, LIMIT = 0, 1
+
+
+@verify(CONTINUOUS, UNIQUE)
+class TradeParam(IntEnum):
+    N_Price, N_Qty = 0, auto()
+    Timestamp, OrderParam = auto(), auto()
+    _TradeParamCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
@@ -99,8 +116,6 @@ class ChartInterval(IntEnum):
         "S": second
         "M": minute
         "H: hour
-        "D": day
-        "W": week
 
     All constant convert to millisecond.
     """
@@ -111,7 +126,3 @@ class ChartInterval(IntEnum):
     _15M = 15 * 60 * 1000
     _30M = 30 * 60 * 1000
     _H = 1 * 60 * 60 * 1000
-    _4H = 4 * 60 * 60 * 1000
-    _8H = 8 * 60 * 60 * 1000
-    _12H = 12 * 60 * 60 * 1000
-    _D = 1 * 24 * 60 * 60 * 1000

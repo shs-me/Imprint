@@ -1,4 +1,3 @@
-import os
 from abc import ABC
 from multiprocessing.synchronize import Event
 
@@ -7,8 +6,7 @@ from numba import njit
 from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
-from core.constant import BASE_FOOTPRINT_DUMP_PATH
-from core.engine.analytical_tools.util import ConvertMetrics
+from core.engine.agents_utils.utils import FPconverter
 from core.settings import BarHeaders as bh
 from core.settings import OrderFlag as of
 from core.settings import SpaceCoords as sc
@@ -23,9 +21,6 @@ class FootprintReader(ABC):
 
         # Footprint
         self.last_idx: int = 0
-        self.base_fp_dump_path: str = (
-            f"{BASE_FOOTPRINT_DUMP_PATH}/{self.manager.symbol.upper()}"
-        )
         self.cfgFP = self.manager.cfgFootprint
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFP.flag : self.cfgFP.flag + 1
@@ -45,8 +40,6 @@ class FootprintReader(ABC):
         self._init_array()
         # Strategy
         self.cfgST = self.manager.cfgStrategy
-        self.TP = self.cfgST.TP
-        self.SL = self.cfgST.SL
         # L/S Buf Setup
         self.cell_amount: int = self.cfgST.cell_amount
         self.readerId: int = self.cfgST.reader[1] // 8 - 1
@@ -56,12 +49,17 @@ class FootprintReader(ABC):
         self.orderParamId: int = self.cfgST.orderParam[1] // 8 - 1
         self.signal_size: int = self.cfgST.signal_size // 8
         self.signal_offset: int = self.cfgST.offset // 8
-        self.longBuf: memoryview = self.manager.strategy_buf[
-            slice(*self.cfgST.longBuf)
+
+        self.executeBuf: memoryview = self.manager.strategy_buf[
+            slice(*self.cfgST.executeBuf)
         ].cast("q")
-        self.shortBuf: memoryview = self.manager.strategy_buf[
-            slice(*self.cfgST.shortBuf)
-        ].cast("q")
+        # - - -
+        self.con: FPconverter = FPconverter(
+            footprint=self.fp,
+            headers=self.headers,
+            trade_param=self.trade_par,
+            cfgFP=self.cfgFP,
+        )
 
     def _init_array(self) -> None:
         self.fp: NDArray[int64] = np.ndarray(
@@ -89,55 +87,31 @@ class FootprintReader(ABC):
 
     def init_session(self) -> None:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
-        self.fp.fill(0)
         self.fp_state.fill(0)
-        self.headers.fill(0)
-        self.con: ConvertMetrics = ConvertMetrics(
-            footprint=self.fp,
-            headers=self.headers,
-            trade_param=self.trade_par,
-            cfgFP=self.cfgFP,
-        )
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
-        startFPtime = self.con.get_time(idx=0, strftime=True)
-        endFPtime = self.con.get_time(idx=self.last_idx, strftime=True)
-        self.rawFp_save_path = (
-            f"{self.base_fp_dump_path}/RawFP_{startFPtime}_{endFPtime}"
-        )
-        self.headers_save_path = (
-            f"{self.base_fp_dump_path}/FPheaders_{startFPtime}_{endFPtime}"
-        )
-
-    def dump_footprint(self) -> None:
-        os.makedirs(self.base_fp_dump_path, exist_ok=True)
-
-        np.save(self.rawFp_save_path, self.fp)
-        np.save(self.headers_save_path, self.headers)
 
     # - - Strategy Methods - -
     def send_signal(
         self,
         nPrice: int,
         time_ms: int,
-        long: bool,
-        buy: bool,
-        market: bool,
+        is_long: bool,
+        is_buy: bool,
     ) -> None:
-        signal_buf = self.longBuf if long else self.shortBuf
-
         orderParam = 0
-        orderParam |= of.BUY if buy else of.SELL
-        orderParam |= of.MARKET if market else of.LIMIT
 
-        cell: int = signal_buf[self.writerId]
+        orderParam |= of.LONG if is_long else of.SHORT
+        orderParam |= of.BUY if is_buy else of.SELL
+
+        cell: int = self.executeBuf[self.writerId]
         start: int = cell * self.signal_size + self.signal_offset
 
-        signal_buf[start + self.nPriceId] = nPrice
-        signal_buf[start + self.time_msId] = time_ms
-        signal_buf[start + self.orderParamId] = orderParam
+        self.executeBuf[start + self.nPriceId] = nPrice
+        self.executeBuf[start + self.time_msId] = time_ms
+        self.executeBuf[start + self.orderParamId] = orderParam
 
         new_cell = cell + 1
-        signal_buf[self.writerId] = new_cell if new_cell < self.cell_amount else 0
+        self.executeBuf[self.writerId] = new_cell if new_cell < self.cell_amount else 0
         if self.execution_event.is_set() is False:
             self.execution_event.set()
 
