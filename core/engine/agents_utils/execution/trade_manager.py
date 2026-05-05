@@ -1,5 +1,5 @@
 import numpy as np
-from numpy import int64
+from numpy import uint64
 from numpy.typing import NDArray
 
 from core.engine.agents_utils.utils import TradeConverter
@@ -23,10 +23,10 @@ class TradeManager:
         self.weight: int = 0
         self.p_weight: int = 0
 
-    def _init_array(self):
-        self.trades: NDArray[int64] = np.ndarray(
+    def _init_array(self) -> None:
+        self.trades: NDArray[uint64] = np.ndarray(
             shape=(self.lines, self.cols),
-            dtype=int64,
+            dtype=uint64,
         )
 
     def update_trades(
@@ -76,10 +76,10 @@ class TradeManager:
                     nMargin=nMargin,
                 )
 
-        elif is_new:
+        elif is_new and ((is_buy and is_long) or (is_sell and is_short)):
             lockBalance, balance = nMargin, 0
 
-        elif is_canceled:
+        elif is_canceled and ((is_buy and is_long) or (is_sell and is_short)):
             lockBalance, balance = -nMargin, 0
 
         return lockBalance, balance

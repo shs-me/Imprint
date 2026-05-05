@@ -20,7 +20,6 @@ class FootprintReader(ABC):
         self.execution_event: Event = execution_event
 
         # Footprint
-        self.last_idx: int = 0
         self.cfgFP = self.manager.cfgFootprint
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFP.flag : self.cfgFP.flag + 1
@@ -88,6 +87,7 @@ class FootprintReader(ABC):
     def init_session(self) -> None:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
         self.fp_state.fill(0)
+        self.last_idx = 0
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
 
     # - - Strategy Methods - -
@@ -148,172 +148,116 @@ class FootprintReader(ABC):
     def _update_cluster(
         self, IDYmin: int64, IDYmax: int64, IDXmin: int64, IDXmax: int64
     ) -> None:
-        self._clear_cluster_state(
-            IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax
-        )
-
-    def _clear_cluster_state(
-        self, IDYmin: int64, IDYmax: int64, IDXmin: int64, IDXmax: int64
-    ) -> None:
-        self.fp_state[IDYmin:IDYmax, IDXmin:IDXmax] &= ~(sf.BIG_TRADE)
+        _, _fp, fp_state = self.con, self.fp, self.fp_state
+        # - - -
+        # Clear State's
+        fp_state[IDYmin:IDYmax, IDXmin:IDXmax] &= ~(sf.BIG_TRADE)
 
     # - - BidAsk  - - -
     def _update_bid_ask_state(
         self, IDYmin: int64, IDYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
+        _, fp, fp_state = self.con, self.fp, self.fp_state
+        # - - -
         idyBid: slice[int64, int64] = slice(IDYmin + 1, IDYmax + 1)
         idyAsk: slice[int64, int64] = slice(IDYmin, IDYmax)
-        self._clear_bid_ask_state(IDYmin=IDYmin, IDYmax=IDYmax, idxBid=idxBid)
-        self._update_zero_print(
-            idyBid=idyBid, idyAsk=idyAsk, idxBid=idxBid, idxAsk=idxAsk
-        )
-        self._update_delta_domination(
-            idyBid=idyBid, idyAsk=idyAsk, idxBid=idxBid, idxAsk=idxAsk
-        )
-        self._update_imbalance(
-            idyBid=idyBid, idyAsk=idyAsk, idxBid=idxBid, idxAsk=idxAsk
-        )
-
-    def _clear_bid_ask_state(self, IDYmin: int64, IDYmax: int64, idxBid: int) -> None:
+        # Clear State's
         indicators = sf.ZERO_PRINT | sf.DELTA_DOMINATION | sf.IMBALANCE
         clear_mask = ~(indicators)
-
-        self.fp_state[IDYmin : IDYmax + 1, idxBid : idxBid + 2] &= clear_mask
-
-    def _update_zero_print(
-        self, idyBid: slice, idyAsk: slice, idxBid: int, idxAsk: int
-    ) -> None:
-        bidZP: NDArray[bool_] = (self.fp[idyAsk, idxAsk] > 0) & (
-            self.fp[idyBid, idxBid] == 0
-        )
-        askZP: NDArray[bool_] = (self.fp[idyBid, idxBid] > 0) & (
-            self.fp[idyAsk, idxAsk] == 0
-        )
-        self.fp_state[idyBid, idxBid][bidZP] |= sf.ZERO_PRINT
-        self.fp_state[idyAsk, idxAsk][askZP] |= sf.ZERO_PRINT
-
-    def _update_delta_domination(
-        self, idyBid: slice, idyAsk: slice, idxBid: int, idxAsk: int
-    ) -> None:
-        bidDD: NDArray[bool_] = (self.fp[idyBid, idxBid] - self.fp[idyAsk, idxAsk]) < 0
-        askDD: NDArray[bool_] = (self.fp[idyBid, idxBid] - self.fp[idyAsk, idxAsk]) > 0
-        self.fp_state[idyBid, idxBid][bidDD] |= sf.DELTA_DOMINATION
-        self.fp_state[idyAsk, idxAsk][askDD] |= sf.DELTA_DOMINATION
-
-    def _update_imbalance(
-        self, idyBid: slice, idyAsk: slice, idxBid: int, idxAsk: int
-    ) -> None:
-        bidImb: NDArray[bool_] = self.fp[idyBid, idxBid] > (self.fp[idyAsk, idxAsk] * 3)
-        askImb: NDArray[bool_] = self.fp[idyAsk, idxAsk] > (self.fp[idyBid, idxBid] * 3)
-        self.fp_state[idyBid, idxBid][bidImb] |= sf.IMBALANCE
-        self.fp_state[idyAsk, idxAsk][askImb] |= sf.IMBALANCE
+        fp_state[IDYmin : IDYmax + 1, idxBid : idxBid + 2] &= clear_mask
+        # Update ZeroPrint
+        bidZP: NDArray[bool_] = (fp[idyAsk, idxAsk] > 0) & (fp[idyBid, idxBid] == 0)
+        askZP: NDArray[bool_] = (fp[idyBid, idxBid] > 0) & (fp[idyAsk, idxAsk] == 0)
+        fp_state[idyBid, idxBid][bidZP] |= sf.ZERO_PRINT
+        fp_state[idyAsk, idxAsk][askZP] |= sf.ZERO_PRINT
+        # Update Delta Domination
+        bidDD: NDArray[bool_] = (fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) < 0
+        askDD: NDArray[bool_] = (fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) > 0
+        fp_state[idyBid, idxBid][bidDD] |= sf.DELTA_DOMINATION
+        fp_state[idyAsk, idxAsk][askDD] |= sf.DELTA_DOMINATION
+        # Update IMBALANCE
+        bidImb: NDArray[bool_] = fp[idyBid, idxBid] > (fp[idyAsk, idxAsk] * 3)
+        askImb: NDArray[bool_] = fp[idyAsk, idxAsk] > (fp[idyBid, idxBid] * 3)
+        fp_state[idyBid, idxBid][bidImb] |= sf.IMBALANCE
+        fp_state[idyAsk, idxAsk][askImb] |= sf.IMBALANCE
 
     # - - Bar  - -
     def _update_bar_state(
         self, IDYmin: int64, IDYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
-        _ = self.con
-
-        OPEN: int64 = _.openIdy(idxBid)
-        HIGH: int64 = _.highIdy(idxBid)
-        LOW: int64 = _.lowIdy(idxBid)
-        CLOSE: int64 = _.closeIdy(idxBid)
-
-        self._clear_bar_state(HIGH=HIGH, LOW=LOW, idxBid=idxBid)
-        self._update_ohlc(idxBid=idxBid, OPEN=OPEN, HIGH=HIGH, LOW=LOW, CLOSE=CLOSE)
-        self._update_poc_va_bar(HIGH=HIGH, LOW=LOW, idxBid=idxBid, idxAsk=idxAsk)
-
-    def _clear_bar_state(self, HIGH: int64, LOW: int64, idxBid: int) -> None:
+        _, fp, fp_state = self.con, self.fp, self.fp_state
+        # - - -
+        OPEN: int64 = _.to_idy(_.openNprice(idxBid))
+        HIGH: int64 = _.to_idy(_.highNprice(idxBid))
+        LOW: int64 = _.to_idy(_.lowNprice(idxBid))
+        CLOSE: int64 = _.to_idy(_.closeNprice(idxBid))
+        # Clear State's
         headers = sf.OPEN | sf.HIGH | sf.LOW | sf.CLOSE
         indicators = sf.POC_BAR | sf.VAL_BAR | sf.VAH_BAR
         clear_mask = ~(headers | indicators)
-        self.fp_state[HIGH : LOW + 1, idxBid] &= clear_mask
-
-    def _update_ohlc(
-        self, OPEN: int64, HIGH: int64, LOW: int64, CLOSE: int64, idxBid: int
-    ) -> None:
-        self.fp_state[OPEN, idxBid] |= sf.OPEN
-        self.fp_state[HIGH, idxBid] |= sf.HIGH
-        self.fp_state[LOW, idxBid] |= sf.LOW
-        self.fp_state[CLOSE, idxBid] |= sf.CLOSE
-
-    def _update_poc_va_bar(
-        self, HIGH: int64, LOW: int64, idxBid: int, idxAsk: int
-    ) -> None:
-        vp_bar: NDArray[int64] = (
-            self.fp[HIGH : LOW + 1, idxBid] + self.fp[HIGH : LOW + 1, idxAsk]
-        )
+        fp_state[HIGH : LOW + 1, idxBid] &= clear_mask
+        # Update OHLC
+        fp_state[OPEN, idxBid] |= sf.OPEN
+        fp_state[HIGH, idxBid] |= sf.HIGH
+        fp_state[LOW, idxBid] |= sf.LOW
+        fp_state[CLOSE, idxBid] |= sf.CLOSE
+        # Update VA + POC
+        vp_bar: NDArray[int64] = fp[HIGH : LOW + 1, idxBid] + fp[HIGH : LOW + 1, idxAsk]
         poc: intp = np.argmax(vp_bar)
         vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-        self.fp_state[HIGH + poc, idxBid] |= sf.POC_BAR
-        self.fp_state[HIGH + vah, idxBid] |= sf.VAH_BAR
-        self.fp_state[HIGH + val, idxBid] |= sf.VAL_BAR
+        fp_state[HIGH + poc, idxBid] |= sf.POC_BAR
+        fp_state[HIGH + vah, idxBid] |= sf.VAH_BAR
+        fp_state[HIGH + val, idxBid] |= sf.VAL_BAR
 
     # - - Footprint: RealTime - -
     def _update_fp_realtime_state(self, IDYmin: int64, IDYmax: int64) -> None:
-        idxLevel = self.con.idxVP
-        self._clear_fp_realtime_state(IDYmin=IDYmin, IDYmax=IDYmax, idxLevel=idxLevel)
-        self._update_delta_dominations_fp(
-            IDYmin=IDYmin, IDYmax=IDYmax, idxLevel=idxLevel
-        )
-
-    def _clear_fp_realtime_state(
-        self, IDYmin: int64, IDYmax: int64, idxLevel: int
-    ) -> None:
+        _, fp, fp_state = self.con, self.fp, self.fp_state
+        # - - -
+        idxLevel = _.idxVP
+        # Clear State's
         indicators = sf.BID_DELTA_DOMINATION_FP | sf.ASK_DELTA_DOMINATION_FP
         clear_mask = ~(indicators)
-        self.fp_state[IDYmin:IDYmax, idxLevel] &= clear_mask
-
-    def _update_delta_dominations_fp(
-        self, IDYmin: int64, IDYmax: int64, idxLevel: int
-    ) -> None:
-        bidDD: NDArray[bool_] = self.fp[IDYmin:IDYmax, self.con.idxDP] < 0
-        askDD: NDArray[bool_] = self.fp[IDYmin:IDYmax, self.con.idxDP] > 0
-        self.fp_state[IDYmin:IDYmax, idxLevel][bidDD] |= sf.BID_DELTA_DOMINATION_FP
-        self.fp_state[IDYmin:IDYmax, idxLevel][askDD] |= sf.ASK_DELTA_DOMINATION_FP
+        fp_state[IDYmin:IDYmax, idxLevel] &= clear_mask
+        # Update Delta Domination
+        bidDD: NDArray[bool_] = fp[IDYmin:IDYmax, _.idxDP] < 0
+        askDD: NDArray[bool_] = fp[IDYmin:IDYmax, _.idxDP] > 0
+        fp_state[IDYmin:IDYmax, idxLevel][bidDD] |= sf.BID_DELTA_DOMINATION_FP
+        fp_state[IDYmin:IDYmax, idxLevel][askDD] |= sf.ASK_DELTA_DOMINATION_FP
 
     # - - Footprint: Static - -
     def _update_fp_static_state(self) -> None:
-        lidx, idxLevel = self.last_idx, self.con.idxVP
-        HIGH, LOW = self.con.highIdy(lidx), self.con.lowIdy(lidx)
-        self._clear_fp_static_state(idxLevel=idxLevel)
-        self._update_vwap_bb(lidx=lidx, idxLevel=idxLevel)
-        self._update_poc_va_fp(idxLevel=idxLevel)
-        self._update_auction(HIGH=HIGH, LOW=LOW, idx=lidx, idxLevel=idxLevel)
-
-    def _clear_fp_static_state(self, idxLevel: int) -> None:
+        _, fp, fp_state = self.con, self.fp, self.fp_state
+        # - - -
+        lidx, idxLevel = self.last_idx, _.idxVP
+        HIGH: int64 = _.to_idy(_.highNprice(lidx))
+        LOW: int64 = _.to_idy(_.lowNprice(lidx))
+        # Clear State's
         state_1 = sf.VWAP | sf.LOWER_BB | sf.UPPER_BB
         state_2 = sf.POC_BAR | sf.VAL_FP | sf.VAH_FP
         state_3 = sf.UNFINISHED_AUCTION | sf.FINISHED_AUCTION
-        self.fp_state[:, idxLevel] &= ~(state_1 | state_2 | state_3)
-
-    def _update_vwap_bb(self, lidx: int, idxLevel: int) -> None:
-        _ = self.con
+        fp_state[:, idxLevel] &= ~(state_1 | state_2 | state_3)
+        # Update VWAP+BB
         vwap: int64 = _.vwap(lidx)
         bb_lower: int64 = _.vwap_bb_lower(lidx)
         bb_upper: int64 = _.vwap_bb_upper(lidx)
-        self.fp_state[_.to_idy(vwap), idxLevel] |= sf.VWAP
-        self.fp_state[_.to_idy(bb_lower), idxLevel] |= sf.LOWER_BB
-        self.fp_state[_.to_idy(bb_upper), idxLevel] |= sf.UPPER_BB
-
-    def _update_poc_va_fp(self, idxLevel: int) -> None:
-        poc: intp = np.argmax(self.fp[:, self.con.idxVP])
-        vah, val = calc_value_area(vp_slice=self.fp[:, self.con.idxVP], center_idx=poc)
-        self.fp_state[poc, idxLevel] |= sf.POC_FP
-        self.fp_state[vah, idxLevel] |= sf.VAH_FP
-        self.fp_state[val, idxLevel] |= sf.VAL_FP
-
-    def _update_auction(self, HIGH: int64, LOW: int64, idx: int, idxLevel: int) -> None:
+        fp_state[_.to_idy(vwap), idxLevel] |= sf.VWAP
+        fp_state[_.to_idy(bb_lower), idxLevel] |= sf.LOWER_BB
+        fp_state[_.to_idy(bb_upper), idxLevel] |= sf.UPPER_BB
+        # Update POC + VA
+        poc: intp = np.argmax(fp[:, _.idxVP])
+        vah, val = calc_value_area(vp_slice=fp[:, _.idxVP], center_idx=poc)
+        fp_state[poc, idxLevel] |= sf.POC_FP
+        fp_state[vah, idxLevel] |= sf.VAH_FP
+        fp_state[val, idxLevel] |= sf.VAL_FP
+        # Update Auction
         highAuction = (
-            sf.FINISHED_AUCTION
-            if self.fp[HIGH, idx + 1] == 0
-            else sf.UNFINISHED_AUCTION
+            sf.FINISHED_AUCTION if fp[HIGH, lidx + 1] == 0 else sf.UNFINISHED_AUCTION
         )
         lowAuction = (
-            sf.FINISHED_AUCTION if self.fp[LOW, idx] == 0 else sf.UNFINISHED_AUCTION
+            sf.FINISHED_AUCTION if fp[LOW, lidx] == 0 else sf.UNFINISHED_AUCTION
         )
-        self.fp_state[HIGH, idxLevel] |= highAuction
-        self.fp_state[LOW, idxLevel] |= lowAuction
+        fp_state[HIGH, idxLevel] |= highAuction
+        fp_state[LOW, idxLevel] |= lowAuction
 
 
 @njit(cache=True)

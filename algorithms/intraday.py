@@ -17,15 +17,15 @@ class IntraDay(FootprintReader):
         self.check_pattern()
 
     def check_pattern(self) -> None:
-        lidx, _ = self.last_idx, self.con
+        idx, _ = self.last_idx, self.con
 
-        OPEN: int64 = _.openIdy(lidx)
-        HIGH: int64 = _.highIdy(lidx)
-        LOW: int64 = _.lowIdy(lidx)
-        CLOSE: int64 = _.closeIdy(lidx)
+        OPEN: int64 = _.to_idy(_.openNprice(idx))
+        HIGH: int64 = _.to_idy(_.highNprice(idx))
+        LOW: int64 = _.to_idy(_.lowNprice(idx))
+        CLOSE: int64 = _.to_idy(_.closeNprice(idx))
 
         fpStates = self.fp_state_mask(IDYmin=HIGH, IDYmax=LOW + 1)
-        barStates = self.bar_state_mask(IDYmin=HIGH, IDYmax=LOW + 1, idxBid=lidx)
+        barStates = self.bar_state_mask(IDYmin=HIGH, IDYmax=LOW + 1, idxBid=idx)
         bid, ask = barStates[:, 0], barStates[:, 1]
 
         VAH: intp = (bid & sf.VAH_BAR).argmax() + HIGH
@@ -45,11 +45,11 @@ class IntraDay(FootprintReader):
             #    f" | VAH:{_.get_price(VAH)}"
             #    f" | POC:{_.get_price(POC)}"
             #    f" | VAL:{_.get_price(VAL)}"
-            #    f" | TIME:{_.get_time(lidx, strftime=True)}",
+            #    f" | TIME:{_.get_time(lidx, isoformat=True)}",
             # )
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
-                time_ms=_.time_ms(),
+                time_ms=_.time_ms(idx),
                 is_long=True,
                 is_buy=True,
             )
@@ -64,11 +64,11 @@ class IntraDay(FootprintReader):
             #    f" | VAH:{_.get_price(VAH)}"
             #    f" | POC:{_.get_price(POC)}"
             #    f" | VAL:{_.get_price(VAL)}"
-            #    f" | TIME:{_.get_time(lidx, strftime=True)}",
+            #    f" | TIME:{_.get_time(lidx, isoformat=True)}",
             # )
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
-                time_ms=_.time_ms(),
+                time_ms=_.time_ms(idx),
                 is_long=False,
                 is_buy=False,
             )

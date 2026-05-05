@@ -1,19 +1,35 @@
+import os
 import time
 from math import sqrt
 from multiprocessing.synchronize import Lock
 
 import numpy as np
-from llvmlite.utils import os
 from numba import njit
 from numpy import float64, int64
 from numpy.typing import NDArray
 
 from core.constant import BASE_FOOTPRINT_DUMP_PATH
 from core.engine.agents_utils.utils import FPconverter
-from core.settings import BarHeaders as bh
-from core.settings import SpaceCoords as sc
+from core.settings import BarHeaders, SpaceCoords
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.status_codes import StatusCodes as scs
+
+# Numba Constant
+BarHeader_Open: int = int(BarHeaders.Open)
+BarHeader_High: int = int(BarHeaders.High)
+BarHeader_Low: int = int(BarHeaders.Low)
+BarHeader_Close: int = int(BarHeaders.Close)
+BarHeader_Volume: int = int(BarHeaders.Volume)
+BarHeader_Delta: int = int(BarHeaders.Delta)
+BarHeader_CVD: int = int(BarHeaders.CVD)
+BarHeader_VWAP: int = int(BarHeaders.VWAP)
+BarHeader_VWAP_BB_UPPER: int = int(BarHeaders.VWAP_BB_UPPER)
+BarHeader_VWAP_BB_LOWER: int = int(BarHeaders.VWAP_BB_LOWER)
+BarHeader_Time: int = int(BarHeaders.OpenTime)
+BarHeader_LastTradeTime: int = int(BarHeaders.LastTradeTime)
+BarHeader_CountTrade: int = int(BarHeaders.CountTrade)
+BarHeader_HeadersCount: int = int(BarHeaders._HeadersCount)
+# - - -
 
 
 class FootprintWriter:
@@ -23,6 +39,7 @@ class FootprintWriter:
         self.task_status = manager.task_status
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
+        self.save_headers: bool = self.cfgFootprint.save_headers
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
@@ -43,19 +60,7 @@ class FootprintWriter:
         self.base_fp_dump_path: str = (
             f"{BASE_FOOTPRINT_DUMP_PATH}/{self.manager.symbol.upper()}"
         )
-        self.last_idx = 0
         self.idxVP, self.idxDP = self.cfgFootprint.colVP, self.cfgFootprint.colDP
-        self.spcIDYmin, self.spcIDXmin = int(sc.IDYmin), int(sc.IDXmin)
-        self.spcIDYmax, self.spcIDXmax = int(sc.IDYmax), int(sc.IDXmax)
-        self.chsOpen, self.chsHigh = int(bh.Open), int(bh.High)
-        self.chsLow, self.chsClose = int(bh.Low), int(bh.Close)
-        self.chsVolume, self.chsDelta = int(bh.Volume), int(bh.Delta)
-        self.chsTime, self.chsCountTrade = int(bh.Time), int(bh.CountTrade)
-        self.chsCVD, self.chsVWAP = int(bh.CVD), int(bh.VWAP)
-        self.chsVWAP_BB_UPPER = int(bh.VWAP_BB_UPPER)
-        self.chsVWAP_BB_LOWER = int(bh.VWAP_BB_LOWER)
-
-        # - - -
         self.con: FPconverter = FPconverter(
             footprint=self.footprint,
             headers=self.headers,
@@ -74,24 +79,24 @@ class FootprintWriter:
             dtype=int64,
         )
         # - - -
-        self.meta_data: NDArray[np.float64] = np.ndarray(
+        self.meta_data: NDArray[float64] = np.ndarray(
             shape=(2, 3),
-            dtype=np.float64,
+            dtype=float64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.meta_data)],
         )
         # - - -
         self.headers: NDArray[int64] = np.ndarray(
-            shape=(self.cfgFootprint.bar_count, bh._HeadersCount),
+            shape=(self.cfgFootprint.bar_count, BarHeader_HeadersCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
         )
         self.dirty_headers: NDArray[int64] = np.ndarray(
-            shape=(self.cfgFootprint.bar_count, bh._HeadersCount),
+            shape=(self.cfgFootprint.bar_count, BarHeader_HeadersCount),
             dtype=int64,
         )
         # - - -
         self.space: NDArray[int64] = np.ndarray(
-            (2, sc._CoordsCount),
+            (2, SpaceCoords._CoordsCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.space)],
         )
@@ -101,6 +106,8 @@ class FootprintWriter:
         self.dirty_headers.fill(0)
         self.footprint.fill(0)
         self.headers.fill(0)
+        self.meta_data.fill(0)
+        self.last_idx: int = 0
         self.space[:] = self.con.fpLines, self.con.fpCols, 0, 0
 
         self.con.init_session(price, timestamp)
@@ -110,7 +117,8 @@ class FootprintWriter:
         return True
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
-        idy: int | None = self.con.to_idy(nPrice=self.con.to_nPrice(price))
+        nPrice: int = self.con.to_nPrice(price)
+        idy: int | None = self.con.to_idy(nPrice=nPrice)
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
@@ -119,28 +127,17 @@ class FootprintWriter:
                     qty=qty,
                     timestamp=timestamp,
                     is_sell=is_sell,
-                    priceMult=self.con.priceMult,
-                    qtyMult=self.con.qtyMult,
+                    nPrice=nPrice,
                     idy=idy,
                     idx=idx,
                     idxVP=self.idxVP,
                     idxDP=self.idxDP,
+                    priceMult=self.con.priceMult,
+                    qtyMult=self.con.qtyMult,
                     dirty_fp=self.dirty_footprint,
                     dirty_hr=self.dirty_headers,
                     space=self.space,
                     space_flag=self.space_flag,
-                    chsOpen=self.chsOpen,
-                    chsHigh=self.chsHigh,
-                    chsLow=self.chsLow,
-                    chsClose=self.chsClose,
-                    chsVolume=self.chsVolume,
-                    chsDelta=self.chsDelta,
-                    chsTime=self.chsTime,
-                    chsCountTrade=self.chsCountTrade,
-                    chsCVD=self.chsCVD,
-                    chsVWAP=self.chsVWAP,
-                    chsVWAP_BB_LOWER=self.chsVWAP_BB_LOWER,
-                    chsVWAP_BB_UPPER=self.chsVWAP_BB_UPPER,
                     meta_data=self.meta_data,
                 )
 
@@ -168,29 +165,16 @@ class FootprintWriter:
             time.sleep(0)
 
     # For Agent Method's
-    def pre_re_init(self, save_array: bool = False) -> None:
+    def pre_re_init(self) -> None:
         self.space_is_read()
-        if save_array:
-            self.dump_footprint()
+        if self.save_headers:
+            os.makedirs(self.base_fp_dump_path, exist_ok=True)
+            headers_save_path = (
+                f"{self.base_fp_dump_path}/{self.con.get_time(idx=0, strftime=True)}"
+            )
+            np.save(headers_save_path, self.headers)
 
         self.set_proc_sc(scs.FP_RE_INIT)
-
-    def dump_footprint(self, onlyHeaders: bool = True) -> None:
-        os.makedirs(self.base_fp_dump_path, exist_ok=True)
-
-        startFPtime = self.con.get_time(idx=0, strftime=True)
-        endFPtime = self.con.get_time(idx=self.last_idx, strftime=True)
-        self.rawFp_save_path = (
-            f"{self.base_fp_dump_path}/RawFP_{startFPtime}_{endFPtime}"
-        )
-        self.headers_save_path = (
-            f"{self.base_fp_dump_path}/FPheaders_{startFPtime}_{endFPtime}"
-        )
-        if onlyHeaders is False:
-            np.save(self.rawFp_save_path, self.footprint)
-        np.save(self.headers_save_path, self.headers)
-
-    # - - -
 
 
 @njit(cache=True)
@@ -199,28 +183,17 @@ def update_footprint_and_headers_and_indicators_and_coords(
     qty: float,
     timestamp: int,
     is_sell: bool,
-    priceMult: float,
-    qtyMult: float,
+    nPrice: int,
     idy: int,
     idx: int,
     idxVP: int,
     idxDP: int,
+    priceMult: float,
+    qtyMult: float,
     dirty_fp: NDArray[int64],
     dirty_hr: NDArray[int64],
     space: NDArray[int64],
     space_flag: memoryview,
-    chsOpen: int,
-    chsHigh: int,
-    chsLow: int,
-    chsClose: int,
-    chsVolume: int,
-    chsDelta: int,
-    chsTime: int,
-    chsCountTrade: int,
-    chsCVD: int,
-    chsVWAP: int,
-    chsVWAP_BB_UPPER: int,
-    chsVWAP_BB_LOWER: int,
     meta_data: NDArray[np.float64],
 ) -> None:
     nQty: int = round(qty * qtyMult)
@@ -228,29 +201,31 @@ def update_footprint_and_headers_and_indicators_and_coords(
     dirty_fp[idy, idx] += nQty
     dirty_fp[idy, idxVP] += nQty  # VolumeProfile
     dirty_fp[idy, idxDP] += -nQty if is_sell else nQty  # Delta Profile
-
-    # Update Dirty Headers
+    # Update Dirty BarHeader_s
     bar: int = (idx & ~1) // 2
-    # Headers: OHLC
-    if dirty_hr[bar, chsCountTrade] == 0:  # Init Bar
-        dirty_hr[bar, chsOpen : chsClose + 1] = idy
-        dirty_hr[bar, chsTime] = timestamp
+    # BarHeader_s: OHLC
+    if dirty_hr[bar, BarHeader_CountTrade] == 0:  # Init Bar
+        dirty_hr[bar, BarHeader_Open : BarHeader_Close + 1] = nPrice
+        dirty_hr[bar, BarHeader_Time] = timestamp
 
-    if idy < dirty_hr[bar, chsHigh]:  # Update BarHigh: reverse
-        dirty_hr[bar, chsHigh] = idy
-    if idy > dirty_hr[bar, chsLow]:  # Update BarLow: reverse
-        dirty_hr[bar, chsLow] = idy
+    if nPrice > dirty_hr[bar, BarHeader_High]:
+        dirty_hr[bar, BarHeader_High] = nPrice
+    if nPrice < dirty_hr[bar, BarHeader_Low]:
+        dirty_hr[bar, BarHeader_Low] = nPrice
 
-    dirty_hr[bar, chsClose] = idy
-    # Headers: Update Indicators
-    dirty_hr[bar, chsCountTrade] += 1
-    dirty_hr[bar, chsVolume] += nQty
-    dirty_hr[bar, chsDelta] += -nQty if is_sell else nQty
+    dirty_hr[bar, BarHeader_Close] = nPrice
+    dirty_hr[bar, BarHeader_LastTradeTime] = timestamp
+    # BarHeader_s: Update Indicators
+    dirty_hr[bar, BarHeader_CountTrade] += 1
+    dirty_hr[bar, BarHeader_Volume] += nQty
+    dirty_hr[bar, BarHeader_Delta] += -nQty if is_sell else nQty
     if bar != 0:
         oldBar: int = bar - 1
-        dirty_hr[bar, chsCVD] = dirty_hr[bar, chsDelta] + dirty_hr[oldBar, chsCVD]
+        dirty_hr[bar, BarHeader_CVD] = (
+            dirty_hr[bar, BarHeader_Delta] + dirty_hr[oldBar, BarHeader_CVD]
+        )
     else:
-        dirty_hr[bar, chsCVD] = dirty_hr[bar, chsDelta]
+        dirty_hr[bar, BarHeader_CVD] = dirty_hr[bar, BarHeader_Delta]
 
     meta_data[0, 0] += qty
     meta_data[0, 1] += price * qty
@@ -258,9 +233,9 @@ def update_footprint_and_headers_and_indicators_and_coords(
     vwap: float64 = meta_data[0, 1] / meta_data[0, 0]
     std_dev: float = sqrt(max(0.0, (meta_data[0, 2] / meta_data[0, 0]) - (vwap**2)))
     upper_bb, lower_bb = vwap + (2 * std_dev), vwap - (2 * std_dev)
-    dirty_hr[bar, chsVWAP] = round(vwap * priceMult)
-    dirty_hr[bar, chsVWAP_BB_LOWER] = round(lower_bb * priceMult)
-    dirty_hr[bar, chsVWAP_BB_UPPER] = round(upper_bb * priceMult)
+    dirty_hr[bar, BarHeader_VWAP] = round(vwap * priceMult)
+    dirty_hr[bar, BarHeader_VWAP_BB_LOWER] = round(lower_bb * priceMult)
+    dirty_hr[bar, BarHeader_VWAP_BB_UPPER] = round(upper_bb * priceMult)
 
     # Update Space Coords
     buf: int = space_flag[0]

@@ -26,6 +26,7 @@ class AgentManager:
         self.backtesting = backtesting
         self.mode = mode
         self.symbol = symbol
+
         self.segments_init(segments)
         self.configs_init(configs)
         self.local_segments_init()
@@ -85,24 +86,28 @@ class AgentManager:
             while self.task_status[0] == 0:
                 time.sleep(0.001)
 
-            task_sc = self.task_status[0]
+            task_sc: int = self.task_status[0]
+            return_data: int | None = task_sc
             if task_sc & scs.EXIT:
                 self.set_proc_sc(task_sc)
-                return True
+                return_data = True
 
-            if task_sc & scs.COMPLETE:
+            elif task_sc & scs.COMPLETE:
                 if complete:
                     self.set_proc_sc(task_sc)
-                    return True
+                    return_data = True
                 else:
                     return False
 
-            if task_sc & scs.GC_COLLECT:
+            elif task_sc & scs.GC_COLLECT:
                 gc.collect()
-                return False
+                return_data = False
+
+            elif task_sc & scs.RUN:
+                return_data = False
 
             self.clear_task_sc(task_sc)
-            return task_sc
+            return return_data
 
         else:
             return False

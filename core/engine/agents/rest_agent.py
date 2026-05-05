@@ -1,16 +1,12 @@
 import time
 
-from core.configurations import ConfigurationBacktesting
-
 
 class RestAgent:
-    def __init__(
-        self, symbol: str, backtesting: bool, cfgBacktesting: ConfigurationBacktesting
-    ) -> None:
+    def __init__(self, symbol: str, backtesting: bool, cfgBacktesting) -> None:
         self.symbol: str = symbol
         self.backtesting: bool = backtesting
         # Backtesting
-        self.cfgBT: ConfigurationBacktesting = cfgBacktesting
+        self.cfgBT = cfgBacktesting
         self.tick_size: str = self.cfgBT.tick_size
         self.lot_size: str = self.cfgBT.lot_size
         self.minOrderSizeUsdt: float = self.cfgBT.minOrderSizeUSDT
@@ -48,24 +44,24 @@ class RestAgent:
         else:
             return self.makerCommission if is_maker else self.takerCommission
 
-    def send_new_order(
+    def send_new_batchOrder(
         self,
         price: float,
         qty: float,
+        tpPrice: float,
+        slPrice: float,
         is_long: bool,
         is_buy: bool,
         is_market: bool,
-    ) -> tuple:
+    ) -> tuple[dict, dict, dict]:
         if self.backtesting:
-            self.orderId += 1
-            return self.orderId, round(time.time() * 1000)
+            return ({}, {}, {})
 
         else:
-            self.orderId += 1
-            return self.orderId, round(time.time() * 1000)
+            return ({}, {}, {})
 
     def cancel_new_order(self, orderId: int) -> tuple:
         if self.backtesting:
             return orderId, round(time.time() * 1000)
         else:
-            return orderId, round(time.time() * 1000)
+            return ()

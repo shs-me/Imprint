@@ -134,6 +134,13 @@ class MainManager:
                     logger.success(f"{v['proc_name']} | {scs.FP_RE_INIT.label}")
                     self.set_task_sc_to_procs(scs.RUN)
 
+                # Logic
+                elif sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:
+                    logger.warning(
+                        f"{v['proc_name']} | {scs.ANALYSIS_LAG_MORE_SAFE_LAG.label}"
+                    )
+                    self.set_task_sc_to_proc(scs.RUN, v["task_id"])
+
                 # Network/Sim
                 elif sc & scs.DATA_PREPPERED:
                     logger.warning(f"{v['proc_name']} | {scs.DATA_PREPPERED.label}")

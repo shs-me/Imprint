@@ -4,7 +4,7 @@ import os
 import time
 from multiprocessing.synchronize import Event, Lock
 
-from core.constant import PLUGIN_PATH
+from core.constant import ALGORITHM_PATH
 from core.engine.agents_utils.logic.example import BaseFootprintReader
 from core.engine.agents_utils.logic.footprint_reader import FootprintReader
 from core.settings import BacktestingMode as bm
@@ -34,6 +34,13 @@ class LogicAgent:
 
         self.backtesting: bool = manager.backtesting
         self.btMode: bm = manager.mode
+        # Footprint
+        self.analysis_safe_lagMs = self.manager.cfgFootprint.analysis_safe_lagMs
+        # Metrics
+        self.cfgMetrics = self.manager.cfgMetrics
+        self.timeStartReading = self.manager.metrics_buf[
+            slice(*self.cfgMetrics.timeStartReading)
+        ].cast("q")
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
@@ -77,14 +84,18 @@ class LogicAgent:
                 return
 
         flag[0] = 0
+        lag = (time.perf_counter_ns() - self.timeStartReading[0]) // 1_000_000
+        if lag > self.analysis_safe_lagMs:
+            self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
+
         pre_sleep_logic.acquire()
 
 
 def resolve_reader(manager: AgentManager, execution_event: Event):
     paths = []
-    for p in os.listdir(PLUGIN_PATH):
+    for p in os.listdir(ALGORITHM_PATH):
         if p.endswith(".py"):
-            paths.append(f"{PLUGIN_PATH}/{p}")
+            paths.append(f"{ALGORITHM_PATH}/{p}")
 
     for path in paths:
         result = get_plugin(path, manager, execution_event)

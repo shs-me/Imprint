@@ -29,7 +29,6 @@ class ExecutionAgent:
 
         # Backtesting
         self.cfgBT = self.manager.cfgBacktesting
-
         # Strategy
         self.cfgST = self.manager.cfgStrategy
         self.cell_amount: int = self.cfgST.cell_amount
@@ -83,6 +82,9 @@ class ExecutionAgent:
         self.maxLossNbalance: int = (
             self.startNbalance * self.cfgST.maxLossBalance // 1000
         )
+
+        self.TProi = self.cfgST.TProi
+        self.SLroi = self.cfgST.SLroi
 
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:
@@ -160,9 +162,14 @@ class ExecutionAgent:
             self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
             return
 
-        self.rest.send_new_order(
+        nPriceTP = nPrice * self.TProi // 1000
+        nPriceSL = nPrice * self.TProi // 1000
+
+        self.rest.send_new_batchOrder(
             price=self.con.to_price(nPrice),
             qty=self.con.to_qty(nQty),
+            tpPrice=self.con.to_price(nPriceTP),
+            slPrice=self.con.to_price(nPriceSL),
             is_long=bool(orderParam & OrderFlag.LONG),
             is_buy=bool(orderParam & OrderFlag.BUY),
             is_market=True,

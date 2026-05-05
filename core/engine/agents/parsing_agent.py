@@ -56,6 +56,11 @@ class ParserAgent:
         self.ReaderCellCounter: memoryview[int] = self.manager.raw_buf[
             slice(*self.cfgRaw.ReaderCellCounter)
         ].cast("q")
+        # Metrics
+        self.cfgMetrics = self.manager.cfgMetrics
+        self.timeStartReading = self.manager.metrics_buf[
+            slice(*self.cfgMetrics.timeStartReading)
+        ].cast("q")
 
     @error_handler(set_status_code=True)
     def run_parsing_engine(self) -> None:
@@ -159,6 +164,7 @@ class ParserAgent:
                     timestamp=trade.T,
                     is_sell=trade.m,
                 ):
+                    self.timeStartReading[0] = time.perf_counter_ns()
                     if self.backtesting and self.btMode != bm.REAL_TIME_SIM:
                         return
 

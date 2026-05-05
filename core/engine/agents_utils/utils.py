@@ -1,4 +1,3 @@
-import time
 from datetime import datetime, timezone
 from typing import overload
 
@@ -53,7 +52,6 @@ class FPconverter:
         if 0 <= idx < self.fpCols:
             return idx
         else:
-            print(idx, timestamp, self.baseTimestamp)
             return None
 
     @overload
@@ -77,7 +75,7 @@ class FPconverter:
 
     def to_strftime(self, timestamp_ms: int | int64) -> str:
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
-            "%Y-%m-%d-%H-%M-%S"
+            "%Y-%m-%dT%H-%M-%S"
         )
 
     def get_price(self, idy: int | int64) -> float:
@@ -104,20 +102,23 @@ class FPconverter:
         return self.headers[(idx & ~1) // 2, header]
 
     # OHLC
-    def openIdy(self, idx: int | int64) -> int64:
+    def openNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=chs.Open)
 
-    def highIdy(self, idx: int | int64) -> int64:
+    def highNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=chs.High)
 
-    def lowIdy(self, idx: int | int64) -> int64:
+    def lowNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=chs.Low)
 
-    def closeIdy(self, idx: int | int64) -> int64:
+    def closeNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=chs.Close)
 
     def openTime(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=chs.Time)
+        return self._get_header(idx=idx, header=chs.OpenTime)
+
+    def lastTradeTime(self, idx: int | int64) -> int64:
+        return self._get_header(idx=idx, header=chs.LastTradeTime)
 
     # Indicators
     def countTrade(self, idx: int | int64) -> int64:
@@ -142,8 +143,8 @@ class FPconverter:
         return self._get_header(idx=idx, header=chs.VWAP_BB_UPPER)
 
     # Other
-    def time_ms(self) -> int:
-        return time.time_ns() // 1_000_000
+    def time_ms(self, idx: int | int64) -> int:
+        return int(self.lastTradeTime(idx) // 1_000_000)
 
 
 class TradeConverter:

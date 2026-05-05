@@ -97,9 +97,10 @@ class TradeParam(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class BarHeaders(IntEnum):
-    Open, High, Low, Close, Time = 0, auto(), auto(), auto(), auto()
-    Volume, Delta, CVD, VWAP = auto(), auto(), auto(), auto()
-    VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto()
+    Open, High, Low, Close = 0, auto(), auto(), auto()
+    Volume, Delta, CVD = auto(), auto(), auto()
+    VWAP, VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto(), auto()
+    OpenTime, LastTradeTime = auto(), auto()
     CountTrade = auto()
     _HeadersCount = auto()
 

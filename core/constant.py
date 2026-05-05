@@ -14,10 +14,10 @@ LOGS_PATH = "logs"
 CORE_LOG_PATH = f"{LOGS_PATH}/core.log"
 # Debug Constant
 DUMP_PATH = "dump"
-BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/Footprint"
+BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
 EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
 # Core Constant
-PLUGIN_PATH = "plugin"
+ALGORITHM_PATH = "algorithms"
 # Data Download Constant
 DATA_PATH = "data"
 DATA_TYPE_AGGTRADES_PATH = "aggTrades"
@@ -25,4 +25,4 @@ BASE_UM_AGGTRADES_DAILY_URL = (
     "https://data.binance.vision/data/futures/um/daily/aggTrades/"
 )
 
-DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH, PLUGIN_PATH]
+DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH, ALGORITHM_PATH]

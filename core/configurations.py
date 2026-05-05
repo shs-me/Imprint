@@ -26,6 +26,7 @@ class ConfigurationBacktesting(Configuration):
         taker_commission: float = 0.002,
         maker_commission: float = 0.0015,
         balanceUSDT: float = 100.0,
+        dayForPrepper: int | None = None,
     ) -> None:
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size
@@ -33,6 +34,7 @@ class ConfigurationBacktesting(Configuration):
         self.taker_commision: float = taker_commission
         self.maker_commission: float = maker_commission
         self.balance = balanceUSDT
+        self.dayForPrepper = dayForPrepper
 
 
 # ShmSegmentsSubclasses
@@ -46,6 +48,8 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         entry_qty: float = 0.01,
         TProi: float = 1.0,
         SLroi: float = 1.0,
+        slippage: float = 0.0005,
+        latencyMs: int = 100,
     ) -> None:
         self.scale: int = 10**scale
         self.leverage: int = leverage
@@ -54,6 +58,8 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.entryQty: int = round(entry_qty * 1000)
         self.TProi: int = round(TProi * 1000)
         self.SLroi: int = round(SLroi * 1000)
+        self.slipage: int = round(slippage * 1000)
+        self.latency: int = latencyMs
 
         self.lines: int = 10000
         self.cols: int = TradeParam._TradeParamCount
@@ -88,10 +94,15 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         chart_interval: ChartInterval = ChartInterval._H,
         chart_range: int = 1,
         fp_lines: int = 10001,
+        save_headers_as_csv: bool = False,
+        analysis_safe_lagMs: int = 100,
     ) -> None:
         self.intervalMs = chart_interval
         self.bar_count = self.get_bar_count(day=chart_range)
         self.fpLines = fp_lines
+        self.save_headers = save_headers_as_csv
+        self.analysis_safe_lagMs = analysis_safe_lagMs
+
         self.fpCols = self.bar_count * 2
         self.fpPanelCols = self.fpCols + self.get_panel_count_cols()
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
@@ -159,7 +170,9 @@ class ConfigurationMetrics(ConfigurationSHMSegments):
         self.pricePrecision = self.lot_size[1], self.lot_size[1] + INT64
         self.qtyPrecision = self.pricePrecision[1], self.pricePrecision[1] + INT64
         self.time_to_sleep = self.qtyPrecision[1], self.qtyPrecision[1] + INT64
-        return self.time_to_sleep[1]
+        self.timeLastTrade = self.time_to_sleep[1], self.time_to_sleep[1] + INT64
+        self.timeStartReading = self.timeLastTrade[1], self.timeLastTrade[1] + INT64
+        return self.timeStartReading[1]
 
 
 class ConfigurationMonitoring(ConfigurationSHMSegments):

@@ -30,9 +30,12 @@ class StatusCodes(IntEnum):
     UNVALID_DATA = "_update_cells[ aggTradeData[price,qty or timestamp] < 0 ]"
     FP_IDX_FILLED = "FootprintWriter: update: array[fpCols] < idx or idx < 0"
     FP_IDY_FILLED = "FootprintWriter: update: array[fpLines] < idy or idy < 0"
+    # Logic
+    ANALYSIS_LAG_MORE_SAFE_LAG = (
+        "Analysis lag[endReadingTime - StartReadingTime] > AnalysisSafeLagMs"
+    )
     # PARSING/LOGIC
     FP_RE_INIT = "Footprint re-initializated"
-    # - - -
     # WSS/SIM
     BIG_RAW_DATA = (
         "wss: _set_raw_data: size/len raw_data > data_cell_size_in_ring_buffer"

@@ -31,10 +31,13 @@ class AggTradeSim(msgspec.Struct):
 
 
 class DataPrepper:
-    def __init__(self, symbol: str, lock: Lock, mode: bm) -> None:
+    def __init__(
+        self, symbol: str, lock: Lock, mode: bm, dayForPrepper: int | None
+    ) -> None:
         self.symbol: str = symbol.upper()
         self.lock: Lock = lock
         self.mode: bm = mode
+        self.dayFP: int | None = dayForPrepper
 
         self.datadir: str = DATA_PATH
         self.typeData: str = DATA_TYPE_AGGTRADES_PATH
@@ -54,7 +57,12 @@ class DataPrepper:
     def run_prepper_engine(self) -> None:
         try:
             data_paths: list[str] = self.get_data_paths()
+            limit = len(data_paths) if self.dayFP is None else self.dayFP
+            counter = 0
             for path in data_paths:
+                if counter >= limit:
+                    break
+
                 with open(file=path, mode="r") as f:
                     next(f)
                     for line in f:
@@ -85,6 +93,8 @@ class DataPrepper:
                         self.ntt = int(data[5])
                         self.queue.append(obj)
 
+                counter += 1
+
             self.complete = True
 
         except Exception as e:
@@ -110,10 +120,15 @@ class WssSimAgent:
         self.task_status: memoryview = manager.task_status
         self.proc_status: memoryview = manager.proc_status
 
+        self.cfgBT = self.manager.cfgBacktesting
+        self.dayForPrepper = self.cfgBT.dayForPrepper
         self.mode: bm = manager.mode
         self.lock: Lock = Lock()
         self.prepper: DataPrepper = DataPrepper(
-            symbol=self.manager.symbol, lock=self.lock, mode=self.mode
+            symbol=self.manager.symbol,
+            lock=self.lock,
+            mode=self.mode,
+            dayForPrepper=self.dayForPrepper,
         )
 
         self.ottrade: int = 0  # new time trade
