@@ -19,11 +19,13 @@ class LogicAgent:
         self,
         manager: AgentManager,
         reader: FootprintReader,
+        is_base_reader: bool,
         pre_sleep_logic: Lock,
         general_event: Event,
     ) -> None:
         self.manager: AgentManager = manager
         self.reader: FootprintReader = reader
+        self.is_base_reader: bool = is_base_reader
         self.pre_sleep_logic: Lock = pre_sleep_logic
         self.wait_main: Event = general_event
 
@@ -59,6 +61,9 @@ class LogicAgent:
                     )
                     if isinstance(task, bool):
                         if task:
+                            if task_status[0] & scs.COMPLETE:
+                                self.reader.final_actions()
+
                             return
 
                     elif task & scs.FP_RE_INIT:
@@ -70,6 +75,9 @@ class LogicAgent:
                     init_session = False
 
                 reader.check_update()
+
+    def complete(self) -> bool:
+        return self.reader.spare_flag[0] == 0
 
     def _alarm_clock(self, task_status: memoryview, pre_sleep_logic: Lock) -> None:
         flag = self.reader.spare_flag
@@ -91,22 +99,26 @@ class LogicAgent:
         pre_sleep_logic.acquire()
 
 
-def resolve_reader(manager: AgentManager, execution_event: Event):
-    paths = []
+def resolve_reader(
+    manager: AgentManager, execution_event: Event
+) -> tuple[FootprintReader, bool]:
+    paths: list[str] = []
     for p in os.listdir(ALGORITHM_PATH):
         if p.endswith(".py"):
             paths.append(f"{ALGORITHM_PATH}/{p}")
 
+    obj, is_base_reader = BaseFootprintReader, True
     for path in paths:
-        result = get_plugin(path, manager, execution_event)
+        result = get_plugin(path=path)
         if result:
-            return result
+            obj, is_base_reader = result, False
 
-    return BaseFootprintReader(manager=manager, execution_event=execution_event)
+    reader = obj(manager=manager, execution_event=execution_event)
+    return reader, is_base_reader
 
 
 @error_handler()
-def get_plugin(path: str, manager: AgentManager, execution_event: Event):
+def get_plugin(path: str) -> None | type[FootprintReader]:
     module_name = os.path.splitext(os.path.basename(path))[0]
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is not None and spec.loader is not None:
@@ -115,7 +127,7 @@ def get_plugin(path: str, manager: AgentManager, execution_event: Event):
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if issubclass(obj, FootprintReader):
                 if obj is not FootprintReader:
-                    return obj(manager=manager, execution_event=execution_event)
+                    return obj
 
 
 @manager_office()
@@ -125,10 +137,11 @@ def run_logic(
     general_event: Event,
     **kwargs,
 ) -> None:
-    reader = resolve_reader(kwargs["manager"], execution_event)
+    reader, is_base_reader = resolve_reader(kwargs["manager"], execution_event)
     agent = LogicAgent(
         kwargs["manager"],
         reader=reader,
+        is_base_reader=is_base_reader,
         pre_sleep_logic=logic_lock,
         general_event=general_event,
     )

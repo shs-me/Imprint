@@ -1,4 +1,5 @@
-from abc import ABC
+import time
+from abc import ABC, abstractmethod
 from multiprocessing.synchronize import Event
 
 import numpy as np
@@ -6,6 +7,7 @@ from numba import njit
 from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
+from core.constant import FIND_PATTERNS_META_DATA
 from core.engine.agents_utils.utils import FPconverter
 from core.settings import BarHeaders as bh
 from core.settings import OrderFlag as of
@@ -59,6 +61,11 @@ class FootprintReader(ABC):
             trade_param=self.trade_par,
             cfgFP=self.cfgFP,
         )
+        self.fpmd: NDArray | None = self._init_find_patterns_metadata()
+
+    @abstractmethod
+    def _init_find_patterns_metadata(self) -> None | NDArray:
+        pass
 
     def _init_array(self) -> None:
         self.fp: NDArray[int64] = np.ndarray(
@@ -114,6 +121,18 @@ class FootprintReader(ABC):
         self.executeBuf[self.writerId] = new_cell if new_cell < self.cell_amount else 0
         if self.execution_event.is_set() is False:
             self.execution_event.set()
+
+    # Agent Methods's
+    def final_actions(self) -> None:
+        if bool(np.all(self.space[:] == [self.con.fpLines, self.con.fpCols, 0, 0])):
+            pass
+        else:
+            while self.spare_flag[0] != 1:
+                time.sleep(0)
+
+        self.check_update()
+        if self.fpmd is not None:
+            np.save(FIND_PATTERNS_META_DATA, self.fpmd)
 
     # - - Footprint Analysis/Update Methods - -
     def check_update(self) -> None:

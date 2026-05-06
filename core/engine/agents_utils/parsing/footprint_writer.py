@@ -67,6 +67,7 @@ class FootprintWriter:
             trade_param=self.trade_par,
             cfgFP=self.cfgFootprint,
         )
+        self.last_idx = memoryview(bytearray(8)).cast("q")
 
     def _init_array(self) -> None:
         self.footprint: NDArray[int64] = np.ndarray(
@@ -107,7 +108,7 @@ class FootprintWriter:
         self.footprint.fill(0)
         self.headers.fill(0)
         self.meta_data.fill(0)
-        self.last_idx: int = 0
+        self.last_idx[0] = 0
         self.space[:] = self.con.fpLines, self.con.fpCols, 0, 0
 
         self.con.init_session(price, timestamp)
@@ -122,6 +123,7 @@ class FootprintWriter:
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
+                self.last_idx[0] = idx
                 update_footprint_and_headers_and_indicators_and_coords(
                     price=price,
                     qty=qty,
@@ -142,11 +144,11 @@ class FootprintWriter:
                 )
 
             else:
-                self.space_is_read()
+                self.wait_read_space()
                 self.set_proc_sc(code=scs.FP_IDY_FILLED)
 
         else:
-            self.space_is_read()
+            self.wait_read_space()
             self.set_proc_sc(code=scs.FP_IDX_FILLED)
 
         return copy_to(
@@ -160,13 +162,17 @@ class FootprintWriter:
             spare_flag=self.spare_flag,
         )
 
-    def space_is_read(self) -> None:
+    def wait_read_space(self) -> None:
         while self.spare_flag[0] != 0 and self.task_status[0] == 0:
             time.sleep(0)
 
     # For Agent Method's
     def pre_re_init(self) -> None:
-        self.space_is_read()
+        self.wait_read_space()
+        self.save_headersArray()
+        self.set_proc_sc(scs.FP_RE_INIT)
+
+    def save_headersArray(self) -> None:
         if self.save_headers:
             os.makedirs(self.base_fp_dump_path, exist_ok=True)
             headers_save_path = (
@@ -174,7 +180,23 @@ class FootprintWriter:
             )
             np.save(headers_save_path, self.headers)
 
-        self.set_proc_sc(scs.FP_RE_INIT)
+    def final_actions(self) -> None:
+        self.wait_read_space()
+        if bool(np.all(self.space[:] == [self.con.fpLines, self.con.fpCols, 0, 0])):
+            pass
+        else:
+            copy_to(
+                idxVP=self.idxVP,
+                fp=self.footprint,
+                dirty_fp=self.dirty_footprint,
+                hr=self.headers,
+                dirty_hr=self.dirty_headers,
+                space=self.space,
+                space_flag=self.space_flag,
+                spare_flag=self.spare_flag,
+            )
+        if (self.last_idx[0] & ~1) == (self.cfgFootprint.fpCols - 1 & ~1):
+            self.save_headersArray()
 
 
 @njit(cache=True)

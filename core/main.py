@@ -106,7 +106,7 @@ class RunMain(CoreResources):
             )
             p.start()
             self.procs[kwargs["proc_id"]]["proc"] = p
-            logger.success(f"-- Core -- | Process [{name}], started.")
+            logger.success(f"-- Core -- | Process [{name}: pid[{p.pid}]], started.")
             return True
 
         else:

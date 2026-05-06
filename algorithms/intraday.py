@@ -1,5 +1,6 @@
 from multiprocessing.synchronize import Event
 
+import numpy as np
 from numpy import int32, int64, intp
 from numpy.typing import NDArray
 
@@ -11,6 +12,10 @@ from core.utils.monitoring.agent_manager import AgentManager
 class IntraDay(FootprintReader):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager, execution_event)
+        self.row = 0
+
+    def _init_find_patterns_metadata(self) -> None | NDArray:
+        return np.zeros(shape=(1000, 4), dtype=int64)
 
     def _update_fp_static_state(self) -> None:
         super()._update_fp_static_state()
@@ -35,42 +40,19 @@ class IntraDay(FootprintReader):
         HIGH_AUCTION = fpStates[0] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
         LOW_AUCTION = fpStates[-1] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
 
-        if self.P_shape(HIGH=HIGH, LOW=LOW, VAL=VAL):
-            # print(
-            #    "P-shape: "
-            #    f"O:{_.get_price(OPEN)}"
-            #    f" | H:{_.get_price(HIGH)}"
-            #    f" | L:{_.get_price(LOW)}"
-            #    f" | C:{_.get_price(CLOSE)}"
-            #    f" | VAH:{_.get_price(VAH)}"
-            #    f" | POC:{_.get_price(POC)}"
-            #    f" | VAL:{_.get_price(VAL)}"
-            #    f" | TIME:{_.get_time(lidx, isoformat=True)}",
-            # )
+        if self.P_shape(OPEN, HIGH, LOW, CLOSE, VAL):
+            if self.fpmd is not None:
+                self.fpmd[self.row, 0] = _.openTime(idx)
+                self.fpmd[self.row, 1] = _.to_nPrice(POC)
+                self.fpmd[self.row, 2] = _.to_nPrice(VAL)
+                self.fpmd[self.row, 3] = _.to_nPrice(VAH)
+                self.row += 1
+
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
                 time_ms=_.time_ms(idx),
                 is_long=True,
                 is_buy=True,
-            )
-
-        if self.b_shape(HIGH=HIGH, LOW=LOW, VAH=VAH):
-            # print(
-            #    "b-shape: "
-            #    f"O:{_.get_price(OPEN)}"
-            #    f" | H:{_.get_price(HIGH)}"
-            #    f" | L:{_.get_price(LOW)}"
-            #    f" | C:{_.get_price(CLOSE)}"
-            #    f" | VAH:{_.get_price(VAH)}"
-            #    f" | POC:{_.get_price(POC)}"
-            #    f" | VAL:{_.get_price(VAL)}"
-            #    f" | TIME:{_.get_time(lidx, isoformat=True)}",
-            # )
-            self.send_signal(
-                nPrice=int(_.to_nPrice(CLOSE)),
-                time_ms=_.time_ms(idx),
-                is_long=False,
-                is_buy=False,
             )
 
     def bar_state_mask(
@@ -87,14 +69,12 @@ class IntraDay(FootprintReader):
         state = sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION
         return self.fp_state[IDYmin:IDYmax, self.con.idxVP] & state
 
-    def P_shape(self, HIGH: int64, LOW: int64, VAL: intp) -> bool:
-        if LOW - VAL >= ((LOW - HIGH) * 0.7):
-            return True
-
-        return False
-
-    def b_shape(self, HIGH: int64, LOW: int64, VAH: intp) -> bool:
-        if VAH - HIGH >= ((LOW - HIGH) * 0.7):
-            return True
+    def P_shape(
+        self, OPEN: int64, HIGH: int64, LOW: int64, CLOSE: int64, VAL: intp
+    ) -> bool:
+        if OPEN > VAL:
+            if VAL - HIGH <= ((LOW - HIGH) * 0.3):
+                if CLOSE > VAL:
+                    return True
 
         return False

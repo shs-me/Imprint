@@ -85,6 +85,9 @@ class ParserAgent:
                     task: bool | int = self.check_base_task(complete=self.complete())
                     if isinstance(task, bool):
                         if task:
+                            if task_status[0] & scs.COMPLETE:
+                                self.final_actions()
+
                             return
 
                     elif task & scs.FP_RE_INIT:
@@ -107,6 +110,14 @@ class ParserAgent:
 
     def complete(self) -> bool:
         return self.WriterCellCounter[0] == self.ReaderCellCounter[0]
+
+    def final_actions(self) -> None:
+        self.writer.final_actions()
+        self.timeStartReading[0] = time.perf_counter_ns()
+        if self.backtesting and self.btMode != bm.REAL_TIME_SIM:
+            return
+
+        self.wake_up_logic.release()
 
     def _alarm_clock(
         self,

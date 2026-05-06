@@ -73,7 +73,6 @@ class MainManager:
         self.sleep_all = general_event
         # - - -
         self.sleep_all.set()
-        print(self.procs)
         while True:
             scs_sem.acquire(timeout=60)
             if date.today() > self.startDate:

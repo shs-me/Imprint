@@ -87,27 +87,28 @@ class AgentManager:
                 time.sleep(0.001)
 
             task_sc: int = self.task_status[0]
-            return_data: int | None = task_sc
+            _return_data, _clear_task, _set_proc_sc = task_sc, True, None
             if task_sc & scs.EXIT:
-                self.set_proc_sc(task_sc)
-                return_data = True
+                _return_data, _set_proc_sc = True, task_sc
 
             elif task_sc & scs.COMPLETE:
-                if complete:
-                    self.set_proc_sc(task_sc)
-                    return_data = True
-                else:
-                    return False
+                _return_data, _clear_task, _set_proc_sc = (
+                    (True, False, task_sc) if complete else (False, False, None)
+                )
 
             elif task_sc & scs.GC_COLLECT:
                 gc.collect()
-                return_data = False
+                _return_data = False
 
             elif task_sc & scs.RUN:
-                return_data = False
+                _return_data = False
 
-            self.clear_task_sc(task_sc)
-            return return_data
+            if _clear_task:
+                self.clear_task_sc(task_sc)
+            if _set_proc_sc:
+                self.set_proc_sc(_set_proc_sc)
+
+            return _return_data
 
         else:
             return False

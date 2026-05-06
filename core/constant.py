@@ -18,6 +18,7 @@ BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
 EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
 # Core Constant
 ALGORITHM_PATH = "algorithms"
+FIND_PATTERNS_META_DATA = f"{ALGORITHM_PATH}/meta_data"
 # Data Download Constant
 DATA_PATH = "data"
 DATA_TYPE_AGGTRADES_PATH = "aggTrades"
