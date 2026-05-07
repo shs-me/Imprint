@@ -1,5 +1,5 @@
 import time
-from multiprocessing.synchronize import Event, Lock
+from multiprocessing.synchronize import Event
 
 import msgspec
 from msgspec.json import Decoder
@@ -25,13 +25,13 @@ class ParserAgent:
         manager: AgentManager,
         writer: FootprintWriter,
         pre_sleep_wss: Event,
-        wake_up_logic: Lock,
+        wake_up_logic: Event,
         general_event: Event,
     ) -> None:
         self.manager: AgentManager = manager
         self.writer: FootprintWriter = writer
         self.pre_sleep_wss: Event = pre_sleep_wss
-        self.wake_up_logic: Lock = wake_up_logic
+        self.wake_up_logic: Event = wake_up_logic
         self.wait_main: Event = general_event
 
         self.set_proc_sc = manager.set_proc_sc
@@ -76,18 +76,19 @@ class ParserAgent:
         data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
         cell_amount = self.cell_amount
         # - - -
-        update_cells, alarm_clock = self._update_cells, self._alarm_clock
+        get_trade_data, alarm_clock = self._get_trade_data, self._alarm_clock
         #  - - -
         while True:
-            self.init_session = True
+            is_real: bool = self.btMode == bm.REAL_TIME_SIM
+            init_session: bool = False
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
-                    task: bool | int = self.check_base_task(complete=self.complete())
+                    task: bool | int = self.check_base_task(self.complete())
                     if isinstance(task, bool):
                         if task:
                             if task_status[0] & scs.COMPLETE:
-                                self.final_actions()
-
+                                self.final_actions(is_real)
+                                pass
                             return
 
                     elif task & scs.FP_RE_INIT:
@@ -95,7 +96,7 @@ class ParserAgent:
                         break
 
                 alarm_clock(task_status, RCellC, WCellC, pre_sleep_wss)
-                update_cells(
+                if trade := get_trade_data(
                     raw_buf=raw_buf,
                     WCellC=WCellC,
                     RCellC=RCellC,
@@ -104,20 +105,37 @@ class ParserAgent:
                     data_offset=data_offset,
                     dataHeader_offset=dataHeader_offset,
                     decoder=decoder,
-                    writer=writer,
-                    wake_up_logic=wake_up_logic,
-                )
+                ):
+                    if init_session is False:
+                        init_session = writer.init_session(
+                            price=trade.p, timestamp=trade.T
+                        )
+                    if writer.update(
+                        price=trade.p,
+                        qty=trade.q,
+                        timestamp=trade.T,
+                        is_sell=trade.m,
+                    ):
+                        self.timeStartReading[0] = time.perf_counter_ns()
+                        if is_real:
+                            wake_up_logic.set()
+
+                    if is_real and (WCellC[0] == RCellC[0]):
+                        pre_sleep_wss.clear()
 
     def complete(self) -> bool:
         return self.WriterCellCounter[0] == self.ReaderCellCounter[0]
 
-    def final_actions(self) -> None:
-        self.writer.final_actions()
-        self.timeStartReading[0] = time.perf_counter_ns()
-        if self.backtesting and self.btMode != bm.REAL_TIME_SIM:
-            return
+    def final_actions(self, is_real: bool) -> None:
+        self.writer.wait_read_space()
+        if not self.writer.space_is_read():
+            if self.writer._copy_to():
+                self.timeStartReading[0] = time.perf_counter_ns()
+                if is_real:
+                    self.wake_up_logic.set()
 
-        self.wake_up_logic.release()
+        self.writer.final_actions()
+        self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
         self,
@@ -126,20 +144,20 @@ class ParserAgent:
         WCellC: memoryview,
         pre_sleep_wss: Event,
     ) -> None:
-        if self.backtesting:
-            mode, ZERO_SLEEP = self.btMode, bm.ZERO_SLEEP
-            if mode == bm.NONE_STOP or mode == ZERO_SLEEP:
-                while WCellC[0] == RCellC[0] and task_status[0] == 0:
-                    if mode == ZERO_SLEEP:
-                        time.sleep(0)
-                return
+        if self.backtesting and (
+            self.btMode == bm.NONE_STOP or self.btMode == bm.ZERO_SLEEP
+        ):
+            mode_is_zero_sleep = self.btMode == bm.ZERO_SLEEP
+            while WCellC[0] == RCellC[0] and task_status[0] == 0:
+                if mode_is_zero_sleep:
+                    time.sleep(0)
 
-        if WCellC[0] == RCellC[0] and task_status[0] == 0:
-            pre_sleep_wss.clear()
-            if WCellC[0] == RCellC[0] and task_status[0] == 0:
-                pre_sleep_wss.wait()
+            return
 
-    def _update_cells(
+        if WCellC[0] == RCellC[0]:
+            pre_sleep_wss.wait()
+
+    def _get_trade_data(
         self,
         raw_buf: memoryview,
         WCellC: memoryview,
@@ -149,9 +167,7 @@ class ParserAgent:
         data_offset: int,
         dataHeader_offset: int,
         decoder: Decoder[AggTrade],
-        writer: FootprintWriter,
-        wake_up_logic: Lock,
-    ) -> None:
+    ) -> None | AggTrade:
         if WCellC[0] != RCellC[0]:
             cell: int = RCellC[0]
             lrd: int = raw_buf[cell + dataHeader_offset]
@@ -162,38 +178,22 @@ class ParserAgent:
             if trade.p < 0 or trade.q < 0 or trade.T < 0:
                 self.set_proc_sc(code=scs.UNVALID_DATA)
                 return
-            else:
-                if self.init_session:
-                    if writer.init_session(price=trade.p, timestamp=trade.T):
-                        self.init_session = False
-                    else:
-                        return
 
-                if writer.update(
-                    price=trade.p,
-                    qty=trade.q,
-                    timestamp=trade.T,
-                    is_sell=trade.m,
-                ):
-                    self.timeStartReading[0] = time.perf_counter_ns()
-                    if self.backtesting and self.btMode != bm.REAL_TIME_SIM:
-                        return
-
-                    wake_up_logic.release()
+            return trade
 
 
 @manager_office()
 def run_parsing(
     parsing_event: Event,
-    logic_lock: Lock,
+    logic_event: Event,
     general_event: Event,
     **kwargs,
 ) -> None:
-    writer: FootprintWriter = FootprintWriter(kwargs["manager"], guarantee=logic_lock)
+    writer: FootprintWriter = FootprintWriter(kwargs["manager"])
     agent: ParserAgent = ParserAgent(
         kwargs["manager"],
         writer=writer,
-        wake_up_logic=logic_lock,
+        wake_up_logic=logic_event,
         pre_sleep_wss=parsing_event,
         general_event=general_event,
     )

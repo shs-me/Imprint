@@ -102,6 +102,8 @@ class ExecutionAgent:
                     task: bool | int = self.check_base_task(complete=self.complete())
                     if isinstance(task, bool):
                         if task:
+                            if task_status[0] & scs.COMPLETE:
+                                self.final_actions()
                             return
 
                 alarm_clock(WB_1, RB_1, WB_2, RB_2)
@@ -114,6 +116,9 @@ class ExecutionAgent:
 
     def complete(self) -> bool:
         return self.WB_1[0] == self.RB_1[0] and self.WB_2[0] == self.RB_2[0]
+
+    def final_actions(self) -> None:
+        self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview

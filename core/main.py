@@ -1,8 +1,7 @@
 import inspect
 import os
-from multiprocessing import Event, Lock, Process, Semaphore
+from multiprocessing import Event, Process, Semaphore
 from multiprocessing.synchronize import Event as EventT
-from multiprocessing.synchronize import Lock as LockT
 from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
 
@@ -33,8 +32,7 @@ class RunMain(CoreResources):
         self.execution_event: EventT = Event()
         self.parsing_event: EventT = Event()
         self.sc_sem: SemT = Semaphore(0)
-        self.logic_lock: LockT = Lock()
-        self.logic_lock.acquire(block=False)
+        self.logic_event: EventT = Event()
         # Variable's
         self.procs: dict = {}
         self.rest = RestAgent(

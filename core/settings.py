@@ -1,11 +1,11 @@
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
-from multiprocessing.synchronize import Event, Lock, Semaphore
+from multiprocessing.synchronize import Event, Semaphore
 from typing import Protocol, TypedDict
 
 
 class CoreResources(Protocol):
     parsing_event: Event
-    logic_lock: Lock
+    logic_event: Event
     execution_event: Event
     general_event: Event
     sc_sem: Semaphore

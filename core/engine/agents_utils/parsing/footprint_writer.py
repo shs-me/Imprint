@@ -1,7 +1,6 @@
 import os
 import time
 from math import sqrt
-from multiprocessing.synchronize import Lock
 
 import numpy as np
 from numba import njit
@@ -33,8 +32,8 @@ BarHeader_HeadersCount: int = int(BarHeaders._HeadersCount)
 
 
 class FootprintWriter:
-    def __init__(self, manager: AgentManager, guarantee: Lock) -> None:
-        self.manager, self.guarantee = manager, guarantee
+    def __init__(self, manager: AgentManager) -> None:
+        self.manager = manager
         self.set_proc_sc = manager.set_proc_sc
         self.task_status = manager.task_status
         # Footprint
@@ -67,7 +66,8 @@ class FootprintWriter:
             trade_param=self.trade_par,
             cfgFP=self.cfgFootprint,
         )
-        self.last_idx = memoryview(bytearray(8)).cast("q")
+        self.last_idx: memoryview = memoryview(bytearray(8)).cast("q")
+        self.defaultSpace: list[int] = [self.con.fpLines, self.con.fpCols, 0, 0]
 
     def _init_array(self) -> None:
         self.footprint: NDArray[int64] = np.ndarray(
@@ -109,7 +109,7 @@ class FootprintWriter:
         self.headers.fill(0)
         self.meta_data.fill(0)
         self.last_idx[0] = 0
-        self.space[:] = self.con.fpLines, self.con.fpCols, 0, 0
+        self.space[:] = self.defaultSpace
 
         self.con.init_session(price, timestamp)
 
@@ -144,13 +144,19 @@ class FootprintWriter:
                 )
 
             else:
-                self.wait_read_space()
                 self.set_proc_sc(code=scs.FP_IDY_FILLED)
 
         else:
             self.wait_read_space()
             self.set_proc_sc(code=scs.FP_IDX_FILLED)
 
+        return self._copy_to()
+
+    def wait_read_space(self) -> None:
+        while self.spare_flag[0] != 0:
+            time.sleep(0.000001)
+
+    def _copy_to(self) -> bool:
         return copy_to(
             idxVP=self.idxVP,
             fp=self.footprint,
@@ -162,16 +168,7 @@ class FootprintWriter:
             spare_flag=self.spare_flag,
         )
 
-    def wait_read_space(self) -> None:
-        while self.spare_flag[0] != 0 and self.task_status[0] == 0:
-            time.sleep(0)
-
     # For Agent Method's
-    def pre_re_init(self) -> None:
-        self.wait_read_space()
-        self.save_headersArray()
-        self.set_proc_sc(scs.FP_RE_INIT)
-
     def save_headersArray(self) -> None:
         if self.save_headers:
             os.makedirs(self.base_fp_dump_path, exist_ok=True)
@@ -180,21 +177,15 @@ class FootprintWriter:
             )
             np.save(headers_save_path, self.headers)
 
-    def final_actions(self) -> None:
+    def pre_re_init(self) -> None:
         self.wait_read_space()
-        if bool(np.all(self.space[:] == [self.con.fpLines, self.con.fpCols, 0, 0])):
-            pass
-        else:
-            copy_to(
-                idxVP=self.idxVP,
-                fp=self.footprint,
-                dirty_fp=self.dirty_footprint,
-                hr=self.headers,
-                dirty_hr=self.dirty_headers,
-                space=self.space,
-                space_flag=self.space_flag,
-                spare_flag=self.spare_flag,
-            )
+        self.save_headersArray()
+        self.set_proc_sc(scs.FP_RE_INIT)
+
+    def space_is_read(self) -> bool:
+        return bool(np.all(self.space[:] == self.defaultSpace))
+
+    def final_actions(self) -> None:
         if (self.last_idx[0] & ~1) == (self.cfgFootprint.fpCols - 1 & ~1):
             self.save_headersArray()
 
@@ -290,7 +281,7 @@ def copy_to(
         fp[IDYmin:IDYmax, IDXmin:IDXmax] = dirty_fp[IDYmin:IDYmax, IDXmin:IDXmax]
         fp[IDYmin:IDYmax, idxVP:] = dirty_fp[IDYmin:IDYmax, idxVP:]
 
-        space_flag[0], spare_flag[0] = 1 if buf == 0 else 0, 1
+        space_flag[0], spare_flag[0] = (1 if (buf == 0) else 0), 1
         return True
 
     return False

@@ -14,7 +14,7 @@ from core.settings import BacktestingMode as bm
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
-from core.utils.monitoring.status_codes import StatusCodes as sc
+from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class AggTradeSim(msgspec.Struct):
@@ -170,15 +170,17 @@ class WssSimAgent:
             # - - -
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
-                    task: bool | int = self.check_base_task(complete=prepper.complete)
+                    task: bool | int = self.check_base_task(self.complete())
                     if isinstance(task, bool):
                         if task:
+                            if task_status[0] & scs.COMPLETE:
+                                self.final_actions()
                             return
 
                 if prepper.error is None:
                     if not prepper.queue:
                         if prepper.complete:
-                            self.set_proc_sc(code=sc.DATA_PREPPERED)
+                            self.set_proc_sc(code=scs.DATA_PREPPERED)
                         if self.lock.locked():
                             self.lock.release()
 
@@ -206,6 +208,12 @@ class WssSimAgent:
                         raise RuntimeError(prepper.error)
                 else:
                     return
+
+    def complete(self) -> bool:
+        return self.prepper.complete and not self.prepper.queue
+
+    def final_actions(self) -> None:
+        self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
         self,
@@ -269,7 +277,7 @@ class WssSimAgent:
             return True
 
         else:
-            self.set_proc_sc(code=sc.BIG_RAW_DATA)
+            self.set_proc_sc(code=scs.BIG_RAW_DATA)
             return False
 
 

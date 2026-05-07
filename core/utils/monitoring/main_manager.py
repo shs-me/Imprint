@@ -126,12 +126,11 @@ class MainManager:
 
                 elif sc & scs.FP_IDY_FILLED:
                     logger.warning(f"{v['proc_name']} | {scs.FP_IDY_FILLED.label}")
-                    for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):
-                        self.set_task_sc_to_proc(scs.FP_RE_INIT, task_id)
+                    self.set_task_sc_to_procs(scs.EXIT)
 
                 elif sc & scs.FP_RE_INIT:
                     logger.success(f"{v['proc_name']} | {scs.FP_RE_INIT.label}")
-                    self.set_task_sc_to_procs(scs.RUN)
+                    self.set_task_sc_to_proc(scs.RUN, v["task_id"])
 
                 # Logic
                 elif sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:

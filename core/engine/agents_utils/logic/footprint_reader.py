@@ -1,5 +1,4 @@
-import time
-from abc import ABC, abstractmethod
+from abc import ABC
 from multiprocessing.synchronize import Event
 
 import numpy as np
@@ -7,7 +6,7 @@ from numba import njit
 from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
-from core.constant import FIND_PATTERNS_META_DATA
+from core.constant import ALGORITHMS_METADATA
 from core.engine.agents_utils.utils import FPconverter
 from core.settings import BarHeaders as bh
 from core.settings import OrderFlag as of
@@ -61,11 +60,7 @@ class FootprintReader(ABC):
             trade_param=self.trade_par,
             cfgFP=self.cfgFP,
         )
-        self.fpmd: NDArray | None = self._init_find_patterns_metadata()
-
-    @abstractmethod
-    def _init_find_patterns_metadata(self) -> None | NDArray:
-        pass
+        self.defaultSpace: list[int] = [self.con.fpLines, self.con.fpCols, 0, 0]
 
     def _init_array(self) -> None:
         self.fp: NDArray[int64] = np.ndarray(
@@ -90,12 +85,15 @@ class FootprintReader(ABC):
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFP.space)],
         )
+        # - - -
+        self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
 
-    def init_session(self) -> None:
+    def init_session(self) -> bool:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
         self.fp_state.fill(0)
         self.last_idx = 0
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
+        return True
 
     # - - Strategy Methods - -
     def send_signal(
@@ -123,16 +121,11 @@ class FootprintReader(ABC):
             self.execution_event.set()
 
     # Agent Methods's
-    def final_actions(self) -> None:
-        if bool(np.all(self.space[:] == [self.con.fpLines, self.con.fpCols, 0, 0])):
-            pass
-        else:
-            while self.spare_flag[0] != 1:
-                time.sleep(0)
+    def space_is_read(self) -> bool:
+        return bool(np.all(self.space[:] == self.defaultSpace))
 
-        self.check_update()
-        if self.fpmd is not None:
-            np.save(FIND_PATTERNS_META_DATA, self.fpmd)
+    def final_actions(self) -> None:
+        np.save(ALGORITHMS_METADATA, self.algorithm_metadata)
 
     # - - Footprint Analysis/Update Methods - -
     def check_update(self) -> None:
@@ -144,7 +137,7 @@ class FootprintReader(ABC):
         IDYmax: int64
         IDXmax: int64
 
-        oldBuf: int = 1 if self.space_flag[0] == 0 else 0
+        oldBuf: int = 1 if (self.space_flag[0] == 0) else 0
         IDYmin, IDXmin, IDYmax, IDXmax = self.space[oldBuf, :]
 
         self._update_cluster(IDYmin=IDYmin, IDYmax=IDYmax, IDXmin=IDXmin, IDXmax=IDXmax)
@@ -161,7 +154,7 @@ class FootprintReader(ABC):
                 self._update_fp_static_state()
                 self.last_idx = idx
 
-        self.space[oldBuf, :] = self.con.fpLines, self.con.fpCols, 0, 0
+        self.space[oldBuf, :] = self.defaultSpace
 
     # - - Cluster - -
     def _update_cluster(
@@ -290,9 +283,13 @@ def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, i
         if 0 <= up_idx or down_idx < max_len:
             vol_up = vp_slice[up_idx] if 0 <= up_idx else 0
             vol_down = vp_slice[down_idx] if down_idx < max_len else 0
-            up_idx -= 1 if vol_up > vol_down or vol_up == vol_down else 0
-            down_idx += 1 if vol_down > vol_up or vol_down == vol_up else 0
-            current_vol += vol_up + vol_down
+            if vol_up > vol_down or vol_up == vol_down:
+                up_idx -= 1
+                current_vol += vol_up
+
+            if vol_down > vol_up or vol_down == vol_up:
+                down_idx += 1
+                current_vol += vol_down
 
         else:
             break

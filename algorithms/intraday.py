@@ -1,6 +1,5 @@
 from multiprocessing.synchronize import Event
 
-import numpy as np
 from numpy import int32, int64, intp
 from numpy.typing import NDArray
 
@@ -12,10 +11,8 @@ from core.utils.monitoring.agent_manager import AgentManager
 class IntraDay(FootprintReader):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager, execution_event)
+        self.algorithm_metadata.resize((1500, 4))
         self.row = 0
-
-    def _init_find_patterns_metadata(self) -> None | NDArray:
-        return np.zeros(shape=(1000, 4), dtype=int64)
 
     def _update_fp_static_state(self) -> None:
         super()._update_fp_static_state()
@@ -39,15 +36,13 @@ class IntraDay(FootprintReader):
 
         HIGH_AUCTION = fpStates[0] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
         LOW_AUCTION = fpStates[-1] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
+        self.algorithm_metadata[self.row, 0] = _.openTime(idx)
+        self.algorithm_metadata[self.row, 1] = _.to_nPrice(POC)
+        self.algorithm_metadata[self.row, 2] = _.to_nPrice(VAL)
+        self.algorithm_metadata[self.row, 3] = _.to_nPrice(VAH)
+        self.row += 1
 
         if self.P_shape(OPEN, HIGH, LOW, CLOSE, VAL):
-            if self.fpmd is not None:
-                self.fpmd[self.row, 0] = _.openTime(idx)
-                self.fpmd[self.row, 1] = _.to_nPrice(POC)
-                self.fpmd[self.row, 2] = _.to_nPrice(VAL)
-                self.fpmd[self.row, 3] = _.to_nPrice(VAH)
-                self.row += 1
-
             self.send_signal(
                 nPrice=int(_.to_nPrice(CLOSE)),
                 time_ms=_.time_ms(idx),

@@ -92,8 +92,8 @@ class AgentManager:
                 _return_data, _set_proc_sc = True, task_sc
 
             elif task_sc & scs.COMPLETE:
-                _return_data, _clear_task, _set_proc_sc = (
-                    (True, False, task_sc) if complete else (False, False, None)
+                _return_data, _clear_task = (
+                    (True, False) if complete else (False, False)
                 )
 
             elif task_sc & scs.GC_COLLECT:

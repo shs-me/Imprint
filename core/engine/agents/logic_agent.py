@@ -2,7 +2,7 @@ import importlib.util
 import inspect
 import os
 import time
-from multiprocessing.synchronize import Event, Lock
+from multiprocessing.synchronize import Event
 
 from core.constant import ALGORITHM_PATH
 from core.engine.agents_utils.logic.example import BaseFootprintReader
@@ -20,13 +20,13 @@ class LogicAgent:
         manager: AgentManager,
         reader: FootprintReader,
         is_base_reader: bool,
-        pre_sleep_logic: Lock,
+        pre_sleep_logic: Event,
         general_event: Event,
     ) -> None:
         self.manager: AgentManager = manager
         self.reader: FootprintReader = reader
         self.is_base_reader: bool = is_base_reader
-        self.pre_sleep_logic: Lock = pre_sleep_logic
+        self.pre_sleep_logic: Event = pre_sleep_logic
         self.wait_main: Event = general_event
 
         self.set_proc_sc = manager.set_proc_sc
@@ -47,56 +47,65 @@ class LogicAgent:
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
         # LocalLinks
-        reader = self.reader
+        reader, flag = self.reader, self.reader.spare_flag
         pre_sleep_logic, alarm_clock = self.pre_sleep_logic, self._alarm_clock
         # - - -
         proc_status, task_status = self.proc_status, self.task_status
         # - - -
         while True:
-            init_session = True
+            is_real: bool = self.btMode == bm.REAL_TIME_SIM
+            init_session: bool = False
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
-                    task: bool | int = self.check_base_task(
-                        complete=reader.spare_flag[0] == 0
-                    )
+                    task: bool | int = self.check_base_task(self.complete())
                     if isinstance(task, bool):
                         if task:
                             if task_status[0] & scs.COMPLETE:
-                                self.reader.final_actions()
+                                self.final_actions()
 
                             return
 
                     elif task & scs.FP_RE_INIT:
                         break
 
-                alarm_clock(task_status, pre_sleep_logic)
-                if init_session:
-                    reader.init_session()
-                    init_session = False
+                alarm_clock(flag, pre_sleep_logic)
+                if init_session is False:
+                    init_session = reader.init_session()
 
                 reader.check_update()
+                if is_real:
+                    pre_sleep_logic.clear()
+
+                flag[0] = 0
 
     def complete(self) -> bool:
-        return self.reader.spare_flag[0] == 0
+        return self.reader.space_is_read()
 
-    def _alarm_clock(self, task_status: memoryview, pre_sleep_logic: Lock) -> None:
-        flag = self.reader.spare_flag
-        if self.backtesting:
-            mode, ZeroSleep = self.btMode, bm.ZERO_SLEEP
-            if mode == bm.NONE_STOP or mode == ZeroSleep:
-                flag[0] = 0
-                while flag[0] == 0 and task_status[0] == 0:
-                    if mode == ZeroSleep:
-                        time.sleep(0)
+    def final_actions(self) -> None:
+        if not self.reader.space_is_read():
+            self.reader.check_update()
+            self.reader.spare_flag[0] = 0
 
-                return
+        self.reader.final_actions()
+        self.set_proc_sc(scs.COMPLETE)
 
-        flag[0] = 0
+    def _alarm_clock(self, flag: memoryview, pre_sleep_logic: Event) -> None:
+        if self.backtesting and (
+            (self.btMode == bm.NONE_STOP) or (self.btMode == bm.ZERO_SLEEP)
+        ):
+            mode_is_zero_sleep = self.btMode == bm.ZERO_SLEEP
+            while flag[0] != 1:
+                if mode_is_zero_sleep:
+                    time.sleep(0.0000001)
+
+            return
+
         lag = (time.perf_counter_ns() - self.timeStartReading[0]) // 1_000_000
         if lag > self.analysis_safe_lagMs:
             self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
-        pre_sleep_logic.acquire()
+        if flag[0] != 1:
+            pre_sleep_logic.wait()
 
 
 def resolve_reader(
@@ -132,7 +141,7 @@ def get_plugin(path: str) -> None | type[FootprintReader]:
 
 @manager_office()
 def run_logic(
-    logic_lock: Lock,
+    logic_event: Event,
     execution_event: Event,
     general_event: Event,
     **kwargs,
@@ -142,7 +151,7 @@ def run_logic(
         kwargs["manager"],
         reader=reader,
         is_base_reader=is_base_reader,
-        pre_sleep_logic=logic_lock,
+        pre_sleep_logic=logic_event,
         general_event=general_event,
     )
     agent.run_logic_engine()
