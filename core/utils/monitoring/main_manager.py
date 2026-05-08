@@ -74,14 +74,15 @@ class MainManager:
         # - - -
         self.sleep_all.set()
         while True:
-            scs_sem.acquire(timeout=60)
-            if date.today() > self.startDate:
-                self.set_task_sc_to_procs(scs.GC_COLLECT)
-
             if bool(len(procs)):
-                if self.procs_is_alive():
-                    if self.check_process_status_code():
-                        continue
+                scs_sem.acquire(timeout=60)
+                if date.today() > self.startDate:
+                    self.set_task_sc_to_procs(scs.GC_COLLECT)
+
+                if bool(len(procs)):
+                    if self.procs_is_alive():
+                        if self.check_process_status_code():
+                            continue
 
             return
 

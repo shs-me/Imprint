@@ -82,6 +82,12 @@ class StateFlags(IntFlag):
     BIG_TRADE = auto()
 
 
+class CachedIDYstaticStatesFlags(IntEnum):
+    VWAP, UPPER_BB, LOWER_BB = 0, auto(), auto()
+    POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
+    _CountCachedStates = auto()
+
+
 class SignalSetup(IntEnum):
     BUY, SELL = 0, 1
     OPEN, CLOSE = 0, 1

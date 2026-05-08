@@ -31,7 +31,7 @@ class FPconverter:
         self.nBasePrice: int = (
             self.to_nPrice(price) if isinstance(price, float) else price
         )
-        self.baseTimestamp: int = timestamp
+        self.baseTimestamp: int = timestamp - (timestamp % self.ims)
         self.center: int = self.fpLines // 2
 
     @overload

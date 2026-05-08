@@ -34,21 +34,31 @@ class IntraDay(FootprintReader):
         POC: intp = (bid & sf.POC_BAR).argmax() + HIGH
         VAL: intp = (bid & sf.VAL_BAR).argmax() + HIGH
 
-        HIGH_AUCTION = fpStates[0] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
-        LOW_AUCTION = fpStates[-1] & (sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION)
-        self.algorithm_metadata[self.row, 0] = _.openTime(idx)
-        self.algorithm_metadata[self.row, 1] = _.to_nPrice(POC)
-        self.algorithm_metadata[self.row, 2] = _.to_nPrice(VAL)
-        self.algorithm_metadata[self.row, 3] = _.to_nPrice(VAH)
-        self.row += 1
+        high_auction_is_finished = bool(fpStates[0] & sf.FINISHED_AUCTION)
+        low_auction_is_finished = bool(fpStates[-1] & sf.FINISHED_AUCTION)
 
-        if self.P_shape(OPEN, HIGH, LOW, CLOSE, VAL):
-            self.send_signal(
-                nPrice=int(_.to_nPrice(CLOSE)),
-                time_ms=_.time_ms(idx),
-                is_long=True,
-                is_buy=True,
-            )
+        if high_auction_is_finished or low_auction_is_finished:
+            if high_auction_is_finished:
+                self.algorithm_metadata[self.row, 0] = _.openTime(idx)
+                self.algorithm_metadata[self.row, 1] = _.to_nPrice(CLOSE)
+                self.send_signal(
+                    nPrice=int(_.to_nPrice(CLOSE)),
+                    time_ms=_.time_ms(idx),
+                    is_long=False,
+                    is_buy=False,
+                )
+
+            if low_auction_is_finished:
+                self.algorithm_metadata[self.row, 0] = _.openTime(idx)
+                self.algorithm_metadata[self.row, 2] = _.to_nPrice(CLOSE)
+                self.send_signal(
+                    nPrice=int(_.to_nPrice(CLOSE)),
+                    time_ms=_.time_ms(idx),
+                    is_long=True,
+                    is_buy=True,
+                )
+
+            self.row += 1
 
     def bar_state_mask(
         self, IDYmin: int64, IDYmax: int64, idxBid: int
@@ -63,13 +73,3 @@ class IntraDay(FootprintReader):
     def fp_state_mask(self, IDYmin: int64, IDYmax: int64) -> NDArray[int32]:
         state = sf.FINISHED_AUCTION | sf.UNFINISHED_AUCTION
         return self.fp_state[IDYmin:IDYmax, self.con.idxVP] & state
-
-    def P_shape(
-        self, OPEN: int64, HIGH: int64, LOW: int64, CLOSE: int64, VAL: intp
-    ) -> bool:
-        if OPEN > VAL:
-            if VAL - HIGH <= ((LOW - HIGH) * 0.3):
-                if CLOSE > VAL:
-                    return True
-
-        return False

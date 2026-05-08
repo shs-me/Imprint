@@ -1,5 +1,6 @@
 from abc import ABC
 from multiprocessing.synchronize import Event
+from typing import Any
 
 import numpy as np
 from numba import njit
@@ -9,6 +10,7 @@ from numpy.typing import NDArray
 from core.constant import ALGORITHMS_METADATA
 from core.engine.agents_utils.utils import FPconverter
 from core.settings import BarHeaders as bh
+from core.settings import CachedIDYstaticStatesFlags as cssf
 from core.settings import OrderFlag as of
 from core.settings import SpaceCoords as sc
 from core.settings import StateFlags as sf
@@ -68,11 +70,10 @@ class FootprintReader(ABC):
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFP.footprint)],
         )
-        self.fp_state: NDArray[int32] = np.ndarray(
+        self.fp_state: NDArray[int32] = np.zeros(
             shape=(self.cfgFP.fpLines, self.cfgFP.fpPanelCols),
             dtype=int32,
         )
-        self.fp_state.fill(0)
         #  - - -
         self.headers: NDArray[int64] = np.ndarray(
             shape=(self.cfgFP.bar_count, bh._HeadersCount),
@@ -87,6 +88,10 @@ class FootprintReader(ABC):
         )
         # - - -
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
+        # - - -
+        self.cachedStatesIDY: NDArray[int32] = np.zeros(
+            (cssf._CountCachedStates,), dtype=int32
+        )
 
     def init_session(self) -> bool:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
@@ -239,6 +244,7 @@ class FootprintReader(ABC):
     # - - Footprint: Static - -
     def _update_fp_static_state(self) -> None:
         _, fp, fp_state = self.con, self.fp, self.fp_state
+        caching = self.cachedStatesIDY
         # - - -
         lidx, idxLevel = self.last_idx, _.idxVP
         HIGH: int64 = _.to_idy(_.highNprice(lidx))
@@ -247,17 +253,19 @@ class FootprintReader(ABC):
         state_1 = sf.VWAP | sf.LOWER_BB | sf.UPPER_BB
         state_2 = sf.POC_BAR | sf.VAL_FP | sf.VAH_FP
         state_3 = sf.UNFINISHED_AUCTION | sf.FINISHED_AUCTION
-        fp_state[:, idxLevel] &= ~(state_1 | state_2 | state_3)
+        fp_state[:, idxLevel] &= ~(state_1 | state_2)
+        fp_state[HIGH : LOW + 1, idxLevel] &= ~(state_3)
         # Update VWAP+BB
-        vwap: int64 = _.vwap(lidx)
-        bb_lower: int64 = _.vwap_bb_lower(lidx)
-        bb_upper: int64 = _.vwap_bb_upper(lidx)
-        fp_state[_.to_idy(vwap), idxLevel] |= sf.VWAP
-        fp_state[_.to_idy(bb_lower), idxLevel] |= sf.LOWER_BB
-        fp_state[_.to_idy(bb_upper), idxLevel] |= sf.UPPER_BB
+        caching[cssf.VWAP] = vwap = _.to_idy(_.vwap(lidx))
+        caching[cssf.LOWER_BB] = bb_lower = _.to_idy(_.vwap_bb_lower(lidx))
+        caching[cssf.UPPER_BB] = bb_upper = _.to_idy(_.vwap_bb_upper(lidx))
+        fp_state[vwap, idxLevel] |= sf.VWAP
+        fp_state[bb_lower, idxLevel] |= sf.LOWER_BB
+        fp_state[bb_upper, idxLevel] |= sf.UPPER_BB
         # Update POC + VA
         poc: intp = np.argmax(fp[:, _.idxVP])
         vah, val = calc_value_area(vp_slice=fp[:, _.idxVP], center_idx=poc)
+        caching[cssf.POC_FP : cssf.VAL_FP + 1] = poc, vah, val
         fp_state[poc, idxLevel] |= sf.POC_FP
         fp_state[vah, idxLevel] |= sf.VAH_FP
         fp_state[val, idxLevel] |= sf.VAL_FP
@@ -295,3 +303,21 @@ def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, i
             break
 
     return up_idx + 1, down_idx - 1
+
+
+@njit(cache=True)
+def binary_search(arr: NDArray[Any], item: Any) -> int | None:
+    if len(arr.shape) == 1:
+        low: int = 0
+        high: int = len(arr) - 1
+        while low <= high:
+            mid: int = (low + high) // 2
+            value: Any = arr[mid]
+            if value == item:
+                return mid
+            elif value > item:
+                high = mid - 1
+            else:
+                low = mid + 1
+
+    return None

@@ -178,4 +178,4 @@ class TradeManager:
                 "TakeProfits": temp["TakeProfits"],
                 "StopLosses": temp["StopLosses"],
             }
-        return nMargin * _, nPnl
+        return -nMargin, nPnl
