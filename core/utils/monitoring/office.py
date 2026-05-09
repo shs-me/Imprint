@@ -26,8 +26,11 @@ def manager_office(main: bool = False):
                         return
                     else:
                         shm, shm_buf = temp
+                        kwargs["shm_name"] = shm.name
             else:
-                if (temp := shm_init(create=False)) is None:
+                if (
+                    temp := shm_init(create=False, shm_name=kwargs.pop("shm_name"))
+                ) is None:
                     return
                 else:
                     shm, shm_buf = temp
@@ -93,7 +96,7 @@ def configurations_init(**kwargs) -> dict:
             if issubclass(obj.__class__, ConfigurationSHMSegments):
                 kwargs["segments"][name] = slice(
                     offset,
-                    (offset := (offset + obj.shm_size)),  # type: ignore # reportAttributeAccessIssue
+                    (offset := (offset + obj.shm_size)),  # type: ignore | reportAttributeAccessIssue
                 )
                 kwargs["segments"]["subclasses"].append(name)
 
@@ -103,17 +106,17 @@ def configurations_init(**kwargs) -> dict:
 
 @error_handler()
 def shm_init(
-    create: bool, size: int = 0, name: str = "GridCore"
+    create: bool, size: int = 0, **kwargs
 ) -> tuple[SharedMemory, memoryview] | None:
     if create:
-        shm = SharedMemory(name=name, size=size, create=True)
+        shm = SharedMemory(size=size, create=True)
         if shm.buf is not None:
             shm_buf = shm.buf
             shm_buf[:] = b"\x00" * shm.size
             return shm, shm_buf
 
     else:
-        shm = SharedMemory(name=name)
+        shm = SharedMemory(name=kwargs["shm_name"])
         if shm.buf is not None:
             shm_buf = shm.buf
             return shm, shm_buf
