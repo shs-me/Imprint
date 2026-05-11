@@ -1,6 +1,6 @@
 from multiprocessing.synchronize import Event
 
-from numpy import int32, int64, intp
+from numpy import int32, int64
 from numpy.typing import NDArray
 
 from core.engine.agents_utils.logic.footprint_reader import FootprintReader
@@ -14,25 +14,22 @@ class IntraDay(FootprintReader):
         self.algorithm_metadata.resize((1500, 4))
         self.row = 0
 
-    def _update_fp_static_state(self) -> None:
-        super()._update_fp_static_state()
+    def _update_closed_bar_and_fp(self) -> None:
+        super()._update_closed_bar_and_fp()
         self.check_pattern()
 
     def check_pattern(self) -> None:
         idx, _ = self.last_idx, self.con
 
-        OPEN: int64 = _.to_idy(_.openNprice(idx))
-        HIGH: int64 = _.to_idy(_.highNprice(idx))
-        LOW: int64 = _.to_idy(_.lowNprice(idx))
-        CLOSE: int64 = _.to_idy(_.closeNprice(idx))
+        _OPEN: int64 = _.to_idy(_.openNprice(idx))
+        _HIGH: int64 = _.to_idy(_.highNprice(idx))
+        _LOW: int64 = _.to_idy(_.lowNprice(idx))
+        _CLOSE: int64 = _.to_idy(_.closeNprice(idx))
+        _VAH, _POC, _VAL = _.vah(idx), _.poc(idx), _.val(idx)
 
-        fpStates = self.fp_state_mask(IDYmin=HIGH, IDYmax=LOW + 1)
-        barStates = self.bar_state_mask(IDYmin=HIGH, IDYmax=LOW + 1, idxBid=idx)
-        bid, ask = barStates[:, 0], barStates[:, 1]
-
-        VAH: intp = (bid & sf.VAH_BAR).argmax() + HIGH
-        POC: intp = (bid & sf.POC_BAR).argmax() + HIGH
-        VAL: intp = (bid & sf.VAL_BAR).argmax() + HIGH
+        fpStates = self.fp_state_mask(IDYmin=_HIGH, IDYmax=_LOW + 1)
+        barStates = self.bar_state_mask(IDYmin=_HIGH, IDYmax=_LOW + 1, idxBid=idx)
+        _bid, _ask = barStates[:, 0], barStates[:, 1]
 
         high_auction_is_finished = bool(fpStates[0] & sf.FINISHED_AUCTION)
         low_auction_is_finished = bool(fpStates[-1] & sf.FINISHED_AUCTION)
@@ -40,9 +37,9 @@ class IntraDay(FootprintReader):
         if high_auction_is_finished or low_auction_is_finished:
             if high_auction_is_finished:
                 self.algorithm_metadata[self.row, 0] = _.openTime(idx)
-                self.algorithm_metadata[self.row, 1] = _.to_nPrice(CLOSE)
+                self.algorithm_metadata[self.row, 1] = _.to_nPrice(_CLOSE)
                 self.send_signal(
-                    nPrice=int(_.to_nPrice(CLOSE)),
+                    nPrice=int(_.to_nPrice(_CLOSE)),
                     time_ms=_.time_ms(idx),
                     is_long=False,
                     is_buy=False,
@@ -50,9 +47,9 @@ class IntraDay(FootprintReader):
 
             if low_auction_is_finished:
                 self.algorithm_metadata[self.row, 0] = _.openTime(idx)
-                self.algorithm_metadata[self.row, 2] = _.to_nPrice(CLOSE)
+                self.algorithm_metadata[self.row, 2] = _.to_nPrice(_CLOSE)
                 self.send_signal(
-                    nPrice=int(_.to_nPrice(CLOSE)),
+                    nPrice=int(_.to_nPrice(_CLOSE)),
                     time_ms=_.time_ms(idx),
                     is_long=True,
                     is_buy=True,

@@ -95,7 +95,7 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         chart_range: int = 1,
         fp_lines: int = 10001,
         save_headers_as_csv: bool = False,
-        analysis_safe_lagMs: int = 100,
+        analysis_safe_lagMs: int = 50,
     ) -> None:
         self.intervalMs = chart_interval
         self.bar_count = self.get_bar_count(day=chart_range)

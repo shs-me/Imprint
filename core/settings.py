@@ -43,7 +43,7 @@ class ClosePosition(TypedDict):
 
 
 class BacktestingMode(IntEnum):
-    REAL_TIME_SIM, ZERO_SLEEP, NONE_STOP = 0, 1, 2
+    REAL_TIME_SIM, ZERO_SLEEP, NONE_STOP = 0, auto(), auto()
 
 
 class OrderFlag(IntFlag):
@@ -66,7 +66,6 @@ class StateFlags(IntFlag):
     # Footprint: Static
     VWAP, UPPER_BB, LOWER_BB = auto(), auto(), auto()
     POC_FP, VAL_FP, VAH_FP = auto(), auto(), auto()
-
     # Bar States
     OPEN, CLOSE, HIGH, LOW = auto(), auto(), auto(), auto()
     # Bar: Indicators
@@ -74,15 +73,13 @@ class StateFlags(IntFlag):
     # Bar: Context
     UNFINISHED_AUCTION, FINISHED_AUCTION = auto(), auto()
     ABSORPTION, EXHAUSTION = auto(), auto()
-
     # Bid/Ask States
     DELTA_DOMINATION, ZERO_PRINT, IMBALANCE = auto(), auto(), auto()
-
     # Cluster States
     BIG_TRADE = auto()
 
 
-class CachedIDYstaticStatesFlags(IntEnum):
+class CachedStatesData(IntEnum):
     VWAP, UPPER_BB, LOWER_BB = 0, auto(), auto()
     POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
     _CountCachedStates = auto()
@@ -107,8 +104,14 @@ class BarHeaders(IntEnum):
     Volume, Delta, CVD = auto(), auto(), auto()
     VWAP, VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto(), auto()
     OpenTime, LastTradeTime = auto(), auto()
-    CountTrade = auto()
+    CountTrade, ATR = auto(), auto()
+    POC, VAH, VAL = auto(), auto(), auto()
     _HeadersCount = auto()
+
+
+class BarHeadersMetadata(IntEnum):
+    VWAP_W, VWAP_PW, VWAP_P2W = 0, auto(), auto()
+    _Count = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)

@@ -36,13 +36,6 @@ class LogicAgent:
 
         self.backtesting: bool = manager.backtesting
         self.btMode: bm = manager.mode
-        # Footprint
-        self.analysis_safe_lagMs = self.manager.cfgFootprint.analysis_safe_lagMs
-        # Metrics
-        self.cfgMetrics = self.manager.cfgMetrics
-        self.timeStartReading = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.timeStartReading)
-        ].cast("q")
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
@@ -72,9 +65,12 @@ class LogicAgent:
                 if init_session is False:
                     init_session = reader.init_session()
 
-                reader.check_update()
+                reader.update_states()
                 if is_real:
                     pre_sleep_logic.clear()
+
+                if reader.lag_is_safe is False:
+                    self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
                 flag[0] = 0
 
@@ -83,7 +79,7 @@ class LogicAgent:
 
     def final_actions(self) -> None:
         if not self.reader.space_is_read():
-            self.reader.check_update()
+            self.reader.update_states()
             self.reader.spare_flag[0] = 0
 
         self.reader.final_actions()
@@ -99,10 +95,6 @@ class LogicAgent:
                     time.sleep(0.0000001)
 
             return
-
-        lag = (time.perf_counter_ns() - self.timeStartReading[0]) // 1_000_000
-        if lag > self.analysis_safe_lagMs:
-            self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
         if flag[0] != 1:
             pre_sleep_logic.wait()

@@ -1,5 +1,5 @@
-import time
 from multiprocessing.synchronize import Event
+from time import perf_counter_ns, sleep
 
 import msgspec
 from msgspec.json import Decoder
@@ -116,7 +116,7 @@ class ParserAgent:
                         timestamp=trade.T,
                         is_sell=trade.m,
                     ):
-                        self.timeStartReading[0] = time.perf_counter_ns()
+                        self.timeStartReading[0] = perf_counter_ns()
                         if is_real:
                             wake_up_logic.set()
 
@@ -130,7 +130,7 @@ class ParserAgent:
         self.writer.wait_read_space()
         if not self.writer.space_is_read():
             if self.writer._copy_to():
-                self.timeStartReading[0] = time.perf_counter_ns()
+                self.timeStartReading[0] = perf_counter_ns()
                 if is_real:
                     self.wake_up_logic.set()
 
@@ -150,7 +150,7 @@ class ParserAgent:
             mode_is_zero_sleep = self.btMode == bm.ZERO_SLEEP
             while WCellC[0] == RCellC[0] and task_status[0] == 0:
                 if mode_is_zero_sleep:
-                    time.sleep(0)
+                    sleep(0)
 
             return
 

@@ -167,8 +167,8 @@ class ExecutionAgent:
             self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
             return
 
-        nPriceTP = nPrice * self.TProi // 1000
-        nPriceSL = nPrice * self.TProi // 1000
+        nPriceTP = nPrice * (1 + self.TProi) // 1000
+        nPriceSL = nPrice * (1 + self.SLroi) // 1000
 
         self.rest.send_new_batchOrder(
             price=self.con.to_price(nPrice),
