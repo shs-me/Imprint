@@ -47,6 +47,8 @@ class LogicAgent:
         # - - -
         while True:
             is_real: bool = self.btMode == bm.REAL_TIME_SIM
+            pass_lag_limit: int = 3
+            pass_lag: int = 0
             init_session: bool = False
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
@@ -69,8 +71,10 @@ class LogicAgent:
                 if is_real:
                     pre_sleep_logic.clear()
 
-                if reader.lag_is_safe is False:
-                    self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
+                if reader.lag_is_safe() is False:
+                    pass_lag += 1
+                    if pass_lag >= pass_lag_limit:
+                        self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
                 flag[0] = 0
 

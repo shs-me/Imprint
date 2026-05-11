@@ -43,6 +43,7 @@ class IntraDay(FootprintReader):
                     time_ms=_.time_ms(idx),
                     is_long=False,
                     is_buy=False,
+                    pass_lag=True,
                 )
 
             if low_auction_is_finished:
@@ -53,6 +54,7 @@ class IntraDay(FootprintReader):
                     time_ms=_.time_ms(idx),
                     is_long=True,
                     is_buy=True,
+                    pass_lag=True,
                 )
 
             self.row += 1

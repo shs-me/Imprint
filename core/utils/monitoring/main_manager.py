@@ -78,6 +78,7 @@ class MainManager:
                 scs_sem.acquire(timeout=60)
                 if date.today() > self.startDate:
                     self.set_task_sc_to_procs(scs.GC_COLLECT)
+                    self.startDate = date.today()
 
                 if bool(len(procs)):
                     if self.procs_is_alive():

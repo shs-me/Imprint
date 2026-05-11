@@ -1,5 +1,5 @@
 from multiprocessing.synchronize import Event
-from time import perf_counter_ns, sleep
+from time import sleep
 
 import msgspec
 from msgspec.json import Decoder
@@ -56,11 +56,6 @@ class ParserAgent:
         self.ReaderCellCounter: memoryview[int] = self.manager.raw_buf[
             slice(*self.cfgRaw.ReaderCellCounter)
         ].cast("q")
-        # Metrics
-        self.cfgMetrics = self.manager.cfgMetrics
-        self.timeStartReading = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.timeStartReading)
-        ].cast("q")
 
     @error_handler(set_status_code=True)
     def run_parsing_engine(self) -> None:
@@ -116,7 +111,6 @@ class ParserAgent:
                         timestamp=trade.T,
                         is_sell=trade.m,
                     ):
-                        self.timeStartReading[0] = perf_counter_ns()
                         if is_real:
                             wake_up_logic.set()
 
@@ -130,7 +124,6 @@ class ParserAgent:
         self.writer.wait_read_space()
         if not self.writer.space_is_read():
             if self.writer._copy_to():
-                self.timeStartReading[0] = perf_counter_ns()
                 if is_real:
                     self.wake_up_logic.set()
 

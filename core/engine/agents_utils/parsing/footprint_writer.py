@@ -1,6 +1,6 @@
 import os
 from math import sqrt
-from time import sleep
+from time import perf_counter_ns, sleep
 
 import numpy as np
 from numba import njit
@@ -38,6 +38,9 @@ class FootprintWriter:
         ].cast("q")
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
+        self.timeStartReading = self.manager.metrics_buf[
+            slice(*self.cfgMetrics.timeStartReading)
+        ].cast("q")
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
             self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
         ].cast("q")
@@ -79,12 +82,10 @@ class FootprintWriter:
             shape=(self.cfgFootprint.bar_count, c.BH_HeadersCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
-            order="F",
         )
         self.dirty_headers: NDArray[int64] = np.ndarray(
             shape=(self.cfgFootprint.bar_count, c.BH_HeadersCount),
             dtype=int64,
-            order="F",
         )
         # - - -
         self.space: NDArray[int64] = np.ndarray(
@@ -149,16 +150,20 @@ class FootprintWriter:
             sleep(0.000001)
 
     def _copy_to(self) -> bool:
-        return copy_to(
-            idxVP=self.idxVP,
-            fp=self.footprint,
-            dirty_fp=self.dirty_footprint,
-            hr=self.headers,
-            dirty_hr=self.dirty_headers,
-            space=self.space,
-            space_flag=self.space_flag,
-            spare_flag=self.spare_flag,
-        )
+        if self.spare_flag[0] == 0:
+            copy_to(
+                idxVP=self.idxVP,
+                fp=self.footprint,
+                dirty_fp=self.dirty_footprint,
+                hr=self.headers,
+                dirty_hr=self.dirty_headers,
+                space=self.space,
+                space_flag=self.space_flag,
+            )
+            self.timeStartReading[0] = perf_counter_ns()
+            self.spare_flag[0] = 1
+            return True
+        return False
 
     # For Agent Method's
     def save_headersArray(self) -> None:
@@ -223,7 +228,7 @@ def update_footprint_and_headers_and_indicators_and_coords(
     dirty_hr[bar, c.BH_CountTrade] += 1
     dirty_hr[bar, c.BH_Volume] += nQty
     dirty_hr[bar, c.BH_Delta] += -nQty if is_sell else nQty
-    if bar != 0:
+    if bar > 0:
         oldBar: int = bar - 1
         dirty_hr[bar, c.BH_CVD] = dirty_hr[bar, c.BH_Delta] + dirty_hr[oldBar, c.BH_CVD]
     else:
@@ -260,19 +265,12 @@ def copy_to(
     dirty_hr: NDArray[int64],
     space: NDArray[int64],
     space_flag: memoryview,
-    spare_flag: memoryview,
-) -> bool:
-    if spare_flag[0] == 0:  # IF True: Change buffer and copy value's to pure array's
-        buf: int = space_flag[0]
-        idYmin, idXmin, idYmax, idXmax = space[buf, :]
+) -> None:
+    buf: int = space_flag[0]
+    idYmin, idXmin, idYmax, idXmax = space[buf, :]
 
-        idxMin, idxMax = (idXmin & ~1) // 2, ((idXmax - 1) & ~1) // 2 + 1
-        hr[idxMin:idxMax, :] = dirty_hr[idxMin:idxMax, :]
-
-        fp[idYmin:idYmax, idXmin:idXmax] = dirty_fp[idYmin:idYmax, idXmin:idXmax]
-        fp[idYmin:idYmax, idxVP:] = dirty_fp[idYmin:idYmax, idxVP:]
-
-        space_flag[0], spare_flag[0] = (1 if (buf == 0) else 0), 1
-        return True
-
-    return False
+    idxMin, idxMax = (idXmin & ~1) // 2, ((idXmax - 1) & ~1) // 2 + 1
+    hr[idxMin:idxMax, :] = dirty_hr[idxMin:idxMax, :]
+    fp[idYmin:idYmax, idXmin:idXmax] = dirty_fp[idYmin:idYmax, idXmin:idXmax]
+    fp[idYmin:idYmax, idxVP:] = dirty_fp[idYmin:idYmax, idxVP:]
+    space_flag[0] = 1 if (buf == 0) else 0

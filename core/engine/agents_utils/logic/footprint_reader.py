@@ -22,7 +22,9 @@ class FootprintReader(ABC):
 
         # Footprint
         self.cfgFP = self.manager.cfgFootprint
-        self.analysis_safe_lagMs = self.manager.cfgFootprint.analysis_safe_lagMs
+        self.analysis_safe_lag_microsecond = (
+            self.manager.cfgFootprint.analysis_safe_lag_microsecond
+        )
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFP.flag : self.cfgFP.flag + 1
         ]
@@ -81,7 +83,6 @@ class FootprintReader(ABC):
             shape=(self.cfgFP.bar_count, c.BH_HeadersCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFP.headers)],
-            order="F",
         )
         #  - - -
         self.space: NDArray[int64] = np.ndarray(
@@ -99,14 +100,13 @@ class FootprintReader(ABC):
     def init_session(self) -> bool:
         nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
         self.fp_state.fill(0)
-        self.last_idx = 0
+        self.last_idx: int = 0
         self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
         return True
 
     def lag_is_safe(self) -> bool:
-        lag = (time.perf_counter_ns() - self.timeStartReading[0]) // 1_000_000
-        print(lag, flush=True)
-        return True if (lag < self.analysis_safe_lagMs) else False
+        lag: int = (time.perf_counter_ns() - self.timeStartReading[0]) // 1_000
+        return True if (lag < self.analysis_safe_lag_microsecond) else False
 
     # - - Strategy Methods - -
     def send_signal(
@@ -115,7 +115,11 @@ class FootprintReader(ABC):
         time_ms: int,
         is_long: bool,
         is_buy: bool,
+        pass_lag: bool,
     ) -> None:
+        if not pass_lag and not self.lag_is_safe:
+            return
+
         orderParam = 0
 
         orderParam |= of.LONG if is_long else of.SHORT

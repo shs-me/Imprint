@@ -95,13 +95,13 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         chart_range: int = 1,
         fp_lines: int = 10001,
         save_headers_as_csv: bool = False,
-        analysis_safe_lagMs: int = 50,
+        analysis_safe_lag_microsecond: int = 10_000,
     ) -> None:
         self.intervalMs = chart_interval
         self.bar_count = self.get_bar_count(day=chart_range)
         self.fpLines = fp_lines
         self.save_headers = save_headers_as_csv
-        self.analysis_safe_lagMs = analysis_safe_lagMs
+        self.analysis_safe_lag_microsecond = analysis_safe_lag_microsecond
 
         self.fpCols = self.bar_count * 2
         self.fpPanelCols = self.fpCols + self.get_panel_count_cols()
@@ -119,7 +119,7 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.footprint = OFFSET, OFFSET + (self.fpLines * self.fpPanelCols * INT64)
         self.headers = (
             self.footprint[1],
-            self.footprint[1] + (BarHeaders._HeadersCount * self.bar_count * INT64),
+            self.footprint[1] + (self.bar_count * BarHeaders._HeadersCount * INT64),
         )
 
         self.meta_data = (self.headers[1], self.headers[1] + (6 * FLOAT64))
