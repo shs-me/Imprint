@@ -23,7 +23,7 @@ def download_data(
 if __name__ == "__main__":
     symbol = "DASHUSDT"
     cfgFootprint = ConfigurationFootprint(
-        chart_interval=ChartInterval._5M, save_headers_as_csv=False
+        chart_interval=ChartInterval._5M, save_headers_as_csv=True
     )
     cfgBacktesting = ConfigurationBacktesting(dayForPrepper=7)
     kwargs = get_configs_kwargs(cfgFootprint, cfgBacktesting)

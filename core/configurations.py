@@ -130,7 +130,8 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.basePrice = self.space[1], self.space[1] + INT64
         self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64
 
-        self.flag = self.baseTimestamp[1]
+        self.fp_shm_name = self.baseTimestamp[1], self.baseTimestamp[1] + 14
+        self.flag = self.fp_shm_name[1]
         self.spare_flag = self.flag + UBYTE
         return self.spare_flag
 
