@@ -138,9 +138,6 @@ class FootprintReader(ABC):
             self.execution_event.set()
 
     # Agent Methods's
-    def space_is_read(self) -> bool:
-        return bool(np.all(self.space[:] == self.defaultSpace))
-
     def final_actions(self) -> None:
         np.save(c.ALGORITHMS_METADATA, self.algorithm_metadata)
 
@@ -158,6 +155,7 @@ class FootprintReader(ABC):
             self._update_bar(idYmin, idYmax, idxBid, idxAsk)
 
         self.space[oldBuf, :] = self.defaultSpace
+        # print(self.space[:], "r", flush=True)
 
     def _update_clusters(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64

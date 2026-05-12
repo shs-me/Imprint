@@ -56,6 +56,11 @@ class ParserAgent:
         self.ReaderCellCounter: memoryview[int] = self.manager.raw_buf[
             slice(*self.cfgRaw.ReaderCellCounter)
         ].cast("q")
+        # Metrics
+        self.cfgMetrics = self.manager.cfgMetrics
+        self.tradesParsed: memoryview = self.manager.metrics_buf[
+            self.cfgMetrics.tradesParsed[0] : self.cfgMetrics.tradesParsed[1] + 1
+        ]
 
     @error_handler(set_status_code=True)
     def run_parsing_engine(self) -> None:
@@ -123,10 +128,12 @@ class ParserAgent:
     def final_actions(self, is_real: bool) -> None:
         self.writer.wait_read_space()
         if not self.writer.space_is_read():
-            if self.writer._copy_to():
+            if self.writer.copy_to():
                 if is_real:
                     self.wake_up_logic.set()
 
+        self.writer.wait_read_space()
+        self.tradesParsed[0] = 1
         self.writer.final_actions()
         self.set_proc_sc(scs.COMPLETE)
 

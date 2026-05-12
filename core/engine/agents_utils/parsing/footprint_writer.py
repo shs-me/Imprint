@@ -143,15 +143,15 @@ class FootprintWriter:
             self.set_proc_sc(code=scs.FP_IDX_FILLED)
 
         self.counterTicks[0] += 1
-        return self._copy_to()
+        return self.copy_to()
 
     def wait_read_space(self) -> None:
-        while self.spare_flag[0] != 0:
+        while self.spare_flag[0] == 1:
             sleep(0.000001)
 
-    def _copy_to(self) -> bool:
+    def copy_to(self) -> bool:
         if self.spare_flag[0] == 0:
-            copy_to(
+            _copy_to(
                 idxVP=self.idxVP,
                 fp=self.footprint,
                 dirty_fp=self.dirty_footprint,
@@ -257,7 +257,7 @@ def update_footprint_and_headers_and_indicators_and_coords(
 
 
 @njit(cache=True)
-def copy_to(
+def _copy_to(
     idxVP: int,
     fp: NDArray[int64],
     dirty_fp: NDArray[int64],
@@ -273,4 +273,6 @@ def copy_to(
     hr[idxMin:idxMax, :] = dirty_hr[idxMin:idxMax, :]
     fp[idYmin:idYmax, idXmin:idXmax] = dirty_fp[idYmin:idYmax, idXmin:idXmax]
     fp[idYmin:idYmax, idxVP:] = dirty_fp[idYmin:idYmax, idxVP:]
+
+    # print(space[:], "w")
     space_flag[0] = 1 if (buf == 0) else 0

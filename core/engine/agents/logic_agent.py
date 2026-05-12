@@ -36,11 +36,17 @@ class LogicAgent:
 
         self.backtesting: bool = manager.backtesting
         self.btMode: bm = manager.mode
+        # Metrics
+        self.cfgMetrics = self.manager.cfgMetrics
+        self.tradesParsed: memoryview = self.manager.metrics_buf[
+            self.cfgMetrics.tradesParsed[0] : self.cfgMetrics.tradesParsed[1] + 1
+        ]
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
         # LocalLinks
         reader, flag = self.reader, self.reader.spare_flag
+        tradesParsed = self.tradesParsed
         pre_sleep_logic, alarm_clock = self.pre_sleep_logic, self._alarm_clock
         # - - -
         proc_status, task_status = self.proc_status, self.task_status
@@ -63,44 +69,43 @@ class LogicAgent:
                     elif task & scs.FP_RE_INIT:
                         break
 
-                alarm_clock(flag, pre_sleep_logic)
-                if init_session is False:
-                    init_session = reader.init_session()
+                alarm_clock(flag, tradesParsed, pre_sleep_logic)
+                if flag[0] == 1:
+                    if init_session is False:
+                        init_session = reader.init_session()
 
-                reader.update_states()
-                if is_real:
-                    pre_sleep_logic.clear()
+                    reader.update_states()
+                    if is_real:
+                        pre_sleep_logic.clear()
 
-                if reader.lag_is_safe() is False:
-                    pass_lag += 1
-                    if pass_lag >= pass_lag_limit:
-                        self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
+                    if reader.lag_is_safe() is False:
+                        pass_lag += 1
+                        if pass_lag >= pass_lag_limit:
+                            self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
-                flag[0] = 0
+                    flag[0] = 0
 
     def complete(self) -> bool:
-        return self.reader.space_is_read()
+        return self.tradesParsed[0] == 1
 
     def final_actions(self) -> None:
-        if not self.reader.space_is_read():
-            self.reader.update_states()
-            self.reader.spare_flag[0] = 0
-
         self.reader.final_actions()
         self.set_proc_sc(scs.COMPLETE)
 
-    def _alarm_clock(self, flag: memoryview, pre_sleep_logic: Event) -> None:
+    def _alarm_clock(
+        self, flag: memoryview, tradesParsed: memoryview, pre_sleep_logic: Event
+    ) -> None:
         if self.backtesting and (
             (self.btMode == bm.NONE_STOP) or (self.btMode == bm.ZERO_SLEEP)
         ):
             mode_is_zero_sleep = self.btMode == bm.ZERO_SLEEP
-            while flag[0] != 1:
+            while flag[0] == 0 and tradesParsed[0] == 0:
                 if mode_is_zero_sleep:
                     time.sleep(0.0000001)
 
             return
 
-        if flag[0] != 1:
+        if flag[0] == 0 and tradesParsed[0] == 0:
             pre_sleep_logic.wait()
 
 

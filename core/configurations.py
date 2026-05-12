@@ -95,7 +95,7 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         chart_range: int = 1,
         fp_lines: int = 10001,
         save_headers_as_csv: bool = False,
-        analysis_safe_lag_microsecond: int = 10_000,
+        analysis_safe_lag_microsecond: int = 50_000,
     ) -> None:
         self.intervalMs = chart_interval
         self.bar_count = self.get_bar_count(day=chart_range)
@@ -172,7 +172,8 @@ class ConfigurationMetrics(ConfigurationSHMSegments):
         self.time_to_sleep = self.qtyPrecision[1], self.qtyPrecision[1] + INT64
         self.timeLastTrade = self.time_to_sleep[1], self.time_to_sleep[1] + INT64
         self.timeStartReading = self.timeLastTrade[1], self.timeLastTrade[1] + INT64
-        return self.timeStartReading[1]
+        self.tradesParsed = self.timeStartReading[1], self.timeStartReading[1] + UBYTE
+        return self.tradesParsed[1]
 
 
 class ConfigurationMonitoring(ConfigurationSHMSegments):
