@@ -121,6 +121,10 @@ class MainManager:
                     logger.warning(f"{v['proc_name']} | {scs.UNVALID_DATA.label}")
                     self.set_task_sc_to_procs(scs.EXIT)
 
+                elif sc & scs.BUF_DFM_FILLED:
+                    logger.warning(f"{v['proc_name']} | {scs.BUF_DFM_FILLED.label}")
+                    self.set_task_sc_to_procs(scs.EXIT)
+
                 elif sc & scs.FP_IDX_FILLED:
                     logger.warning(f"{v['proc_name']} | {scs.FP_IDX_FILLED.label}")
                     for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):

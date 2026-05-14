@@ -27,9 +27,10 @@ class StatusCodes(IntEnum):
     GC_COLLECT = "Collect garbage"
     # - - -
     # PARSING
-    UNVALID_DATA = "_update_cells[ aggTradeData[price,qty or timestamp] < 0 ]"
-    FP_IDX_FILLED = "FootprintWriter: update: array[fpCols] < idx or idx < 0"
-    FP_IDY_FILLED = "FootprintWriter: update: array[fpLines] < idy or idy < 0"
+    UNVALID_DATA = "AggTrade Data[price, qty or timestamp] < 0"
+    FP_IDX_FILLED = "Array[fpCols] < IDX or IDX < 0"
+    FP_IDY_FILLED = "Array[fpLines] < IDY or IDY < 0"
+    BUF_DFM_FILLED = "Buffer for matching engine filled: new_row_id > dfmLines"
     # Logic
     ANALYSIS_LAG_MORE_SAFE_LAG = (
         "Analysis lag[endReadingTime - StartReadingTime] > AnalysisSafeLagMs"

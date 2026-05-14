@@ -42,23 +42,6 @@ class ClosePosition(TypedDict):
     StopLosses: dict
 
 
-class BacktestingMode(IntEnum):
-    REAL_TIME_SIM, ZERO_SLEEP, NONE_STOP = 0, auto(), auto()
-
-
-class OrderFlag(IntFlag):
-    # Position Side
-    LONG, SHORT = auto(), auto()
-    # Side
-    BUY, SELL = auto(), auto()
-    # Type
-    LIMIT, MARKET = auto(), auto()
-    # TIF
-    GTC = auto()
-    # Status
-    NEW, FILLED, CANCELED = auto(), auto(), auto()
-
-
 class StateFlags(IntFlag):
     # Footprint States
     # Footprint: RealTime
@@ -79,45 +62,16 @@ class StateFlags(IntFlag):
     BIG_TRADE = auto()
 
 
-class CachedStatesData(IntEnum):
-    VWAP, UPPER_BB, LOWER_BB = 0, auto(), auto()
-    POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
-    _CountCachedStates = auto()
-
-
-class SignalSetup(IntEnum):
-    BUY, SELL = 0, 1
-    OPEN, CLOSE = 0, 1
-    MARKET, LIMIT = 0, 1
-
-
-@verify(CONTINUOUS, UNIQUE)
-class TradeParam(IntEnum):
-    N_Price, N_Qty = 0, auto()
-    Timestamp, OrderParam = auto(), auto()
-    _TradeParamCount = auto()
-
-
-@verify(CONTINUOUS, UNIQUE)
-class BarHeaders(IntEnum):
-    Open, High, Low, Close = 0, auto(), auto(), auto()
-    Volume, Delta, CVD = auto(), auto(), auto()
-    VWAP, VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto(), auto()
-    OpenTime, LastTradeTime = auto(), auto()
-    CountTrade, ATR = auto(), auto()
-    POC, VAH, VAL = auto(), auto(), auto()
-    _HeadersCount = auto()
-
-
-class BarHeadersMetadata(IntEnum):
-    VWAP_W, VWAP_PW, VWAP_P2W = 0, auto(), auto()
-    _Count = auto()
-
-
-@verify(CONTINUOUS, UNIQUE)
-class SpaceCoords(IntEnum):
-    IDYmin, IDXmin, IDYmax, IDXmax = 0, auto(), auto(), auto()
-    _CoordsCount = auto()
+class OrderFlag(IntFlag):
+    # Position Side
+    LONG, SHORT = auto(), auto()
+    # Side
+    BUY, SELL = auto(), auto()
+    # Type
+    LIMIT, MARKET = auto(), auto()
+    MARKET_TRIGER, LIMIT_TRIGER = auto(), auto()
+    # Status
+    NEW, FILLED, CANCELED = auto(), auto(), auto()
 
 
 class ChartInterval(IntEnum):
@@ -136,3 +90,58 @@ class ChartInterval(IntEnum):
     _15M = 15 * 60 * 1000
     _30M = 30 * 60 * 1000
     _H = 1 * 60 * 60 * 1000
+
+
+@verify(CONTINUOUS, UNIQUE)
+class CachedStatesData(IntEnum):
+    VWAP, UPPER_BB, LOWER_BB = 0, auto(), auto()
+    POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class ActiveOrders(IntEnum):
+    nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
+    orderID = auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class TradeParam(IntEnum):
+    nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
+    nCommission, orderID = auto(), auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class BarHeaders(IntEnum):
+    Open, High, Low, Close = 0, auto(), auto(), auto()
+    Volume, Delta, CVD = auto(), auto(), auto()
+    VWAP, VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto(), auto()
+    OpenTime, LastTradeTime = auto(), auto()
+    CountTrade, ATR = auto(), auto()
+    POC, VAH, VAL = auto(), auto(), auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class BarHeadersMetadata(IntEnum):
+    VWAP_W, VWAP_PW, VWAP_P2W = 0, auto(), auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class SpaceCoords(IntEnum):
+    IDYmin, IDXmin, IDYmax, IDXmax = 0, auto(), auto(), auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class DataForMatching(IntEnum):
+    nPrice, startTimestamp, endTimestamp = 0, auto(), auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class BacktestingMode(IntEnum):
+    REAL_TIME_SIM, ZERO_SLEEP, NONE_STOP = 0, auto(), auto()

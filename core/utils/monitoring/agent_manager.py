@@ -77,10 +77,6 @@ class AgentManager:
             slice(*self.cfgMonitoring.procs_buf)
         ].cast("q")
 
-        self.time_to_sleep_buf = self.metrics_buf[
-            slice(*self.cfgMetrics.time_to_sleep)
-        ].cast("q")
-
     def check_base_task(self, complete: bool) -> bool | int:
         if self.task_status[0] != 0 or self.proc_status[0] != 0:
             while self.task_status[0] == 0:

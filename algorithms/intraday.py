@@ -40,7 +40,7 @@ class IntraDay(FootprintReader):
                 self.algorithm_metadata[self.row, 1] = _.to_nPrice(_CLOSE)
                 self.send_signal(
                     nPrice=int(_.to_nPrice(_CLOSE)),
-                    time_ms=_.time_ms(idx),
+                    time_ms=int(_.lastTradeTime(idx)),
                     is_long=False,
                     is_buy=False,
                     pass_lag=True,
@@ -51,7 +51,7 @@ class IntraDay(FootprintReader):
                 self.algorithm_metadata[self.row, 2] = _.to_nPrice(_CLOSE)
                 self.send_signal(
                     nPrice=int(_.to_nPrice(_CLOSE)),
-                    time_ms=_.time_ms(idx),
+                    time_ms=int(_.lastTradeTime(idx)),
                     is_long=True,
                     is_buy=True,
                     pass_lag=True,

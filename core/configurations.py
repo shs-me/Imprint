@@ -1,6 +1,12 @@
 from abc import ABC
 
-from core.settings import BarHeaders, ChartInterval, SpaceCoords, TradeParam
+from core.settings import (
+    BarHeaders,
+    ChartInterval,
+    DataForMatching,
+    SpaceCoords,
+    TradeParam,
+)
 
 UBYTE = 1
 INT64 = 8
@@ -50,6 +56,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         SLroi: float = 1.0,
         slippage: float = 0.0005,
         latencyMs: int = 100,
+        tradesLines: int = 10000,
     ) -> None:
         self.scale: int = 10**scale
         self.leverage: int = leverage
@@ -58,11 +65,11 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.entryQty: int = round(entry_qty * 1000)
         self.TProi: int = round(TProi * 1000)
         self.SLroi: int = round(SLroi * 1000)
-        self.slipage: int = round(slippage * 1000)
+        self.slipage: int = round(slippage * 10000)
         self.latency: int = latencyMs
 
-        self.lines: int = 10000
-        self.cols: int = TradeParam._TradeParamCount
+        self.tradesLines: int = 10000
+        self.tradesCols: int = TradeParam._ConstantCount
         self.cell_amount: int = 128
 
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
@@ -119,13 +126,13 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.footprint = OFFSET, OFFSET + (self.fpLines * self.fpPanelCols * INT64)
         self.headers = (
             self.footprint[1],
-            self.footprint[1] + (self.bar_count * BarHeaders._HeadersCount * INT64),
+            self.footprint[1] + (self.bar_count * BarHeaders._ConstantCount * INT64),
         )
 
         self.meta_data = (self.headers[1], self.headers[1] + (6 * FLOAT64))
         self.space = (
             self.meta_data[1],
-            self.meta_data[1] + (SpaceCoords._CoordsCount * 2 * INT64),
+            self.meta_data[1] + (SpaceCoords._ConstantCount * 2 * INT64),
         )
         self.basePrice = self.space[1], self.space[1] + INT64
         self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64
@@ -133,7 +140,8 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         self.fp_shm_name = self.baseTimestamp[1], self.baseTimestamp[1] + 14
         self.flag = self.fp_shm_name[1]
         self.spare_flag = self.flag + UBYTE
-        return self.spare_flag
+        self.space_read = self.spare_flag + UBYTE
+        return self.space_read
 
 
 class ConfigurationRingRawBuf(ConfigurationSHMSegments):
@@ -162,7 +170,10 @@ class ConfigurationRingRawBuf(ConfigurationSHMSegments):
 
 
 class ConfigurationMetrics(ConfigurationSHMSegments):
-    def __init__(self) -> None:
+    def __init__(self, dataForMatchingLines: int = 500_000) -> None:
+        self.dfmLines = dataForMatchingLines
+        self.dfmCols = DataForMatching._ConstantCount
+
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
@@ -170,9 +181,19 @@ class ConfigurationMetrics(ConfigurationSHMSegments):
         self.lot_size = self.tick_size[1], self.tick_size[1] + INT64
         self.pricePrecision = self.lot_size[1], self.lot_size[1] + INT64
         self.qtyPrecision = self.pricePrecision[1], self.pricePrecision[1] + INT64
-        self.time_to_sleep = self.qtyPrecision[1], self.qtyPrecision[1] + INT64
-        self.timeLastTrade = self.time_to_sleep[1], self.time_to_sleep[1] + INT64
-        self.timeStartReading = self.timeLastTrade[1], self.timeLastTrade[1] + INT64
+
+        self.dfm_1 = (
+            self.qtyPrecision[1],
+            self.qtyPrecision[1] + (self.dfmLines * self.dfmCols * INT64),
+        )
+        self.dfm_2 = (
+            self.dfm_1[1],
+            self.dfm_1[1] + (self.dfmLines * self.dfmCols * INT64),
+        )
+        self.dfm_1_row_id = (self.dfm_2[1], self.dfm_2[1] + INT64)
+        self.dfm_2_row_id = (self.dfm_1_row_id[1], self.dfm_1_row_id[1] + INT64)
+
+        self.timeStartReading = (self.dfm_2_row_id[1], self.dfm_2_row_id[1] + INT64)
         self.tradesParsed = self.timeStartReading[1], self.timeStartReading[1] + UBYTE
         return self.tradesParsed[1]
 

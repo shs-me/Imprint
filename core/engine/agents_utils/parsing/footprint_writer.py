@@ -16,14 +16,15 @@ from core.utils.monitoring.status_codes import StatusCodes as scs
 BHM_VWAP_W: int = int(BarHeadersMetadata.VWAP_W)
 BHM_VWAP_PW: int = int(BarHeadersMetadata.VWAP_PW)
 BHM_VWAP_P2W: int = int(BarHeadersMetadata.VWAP_P2W)
-BHM_HeadersCount: int = int(BarHeadersMetadata._Count)
+BHM_ConstantCount: int = int(BarHeadersMetadata._ConstantCount)
 
 
 class FootprintWriter:
     def __init__(self, manager: AgentManager) -> None:
         self.manager = manager
-        self.set_proc_sc = manager.set_proc_sc
-        self.task_status = manager.task_status
+        self.set_proc_sc = self.manager.set_proc_sc
+        self.task_status = self.manager.task_status
+        self.backtesting: bool = self.manager.backtesting
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
         self.save_headers: bool = self.cfgFootprint.save_headers
@@ -38,7 +39,14 @@ class FootprintWriter:
         ].cast("q")
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
-        self.timeStartReading = self.manager.metrics_buf[
+        self.dfmLines: int = self.cfgMetrics.dfmLines
+        self.dfm_1RID: memoryview = self.manager.metrics_buf[
+            slice(*self.cfgMetrics.dfm_1_row_id)
+        ].cast("q")
+        self.dfm_2RID: memoryview = self.manager.metrics_buf[
+            slice(*self.cfgMetrics.dfm_2_row_id)
+        ].cast("q")
+        self.timeStartReading: memoryview = self.manager.metrics_buf[
             slice(*self.cfgMetrics.timeStartReading)
         ].cast("q")
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
@@ -73,25 +81,36 @@ class FootprintWriter:
         )
         # - - -
         self.meta_data: NDArray[float64] = np.ndarray(
-            shape=(2, BHM_HeadersCount),
+            shape=(2, BHM_ConstantCount),
             dtype=float64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.meta_data)],
         )
         # - - -
         self.headers: NDArray[int64] = np.ndarray(
-            shape=(self.cfgFootprint.bar_count, c.BH_HeadersCount),
+            shape=(self.cfgFootprint.bar_count, c.BH_ConstantCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.headers)],
         )
         self.dirty_headers: NDArray[int64] = np.ndarray(
-            shape=(self.cfgFootprint.bar_count, c.BH_HeadersCount),
+            shape=(self.cfgFootprint.bar_count, c.BH_ConstantCount),
             dtype=int64,
         )
         # - - -
         self.space: NDArray[int64] = np.ndarray(
-            (2, SpaceCoords._CoordsCount),
+            shape=(2, SpaceCoords._ConstantCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFootprint.space)],
+        )
+        # - - -
+        self.dfm_1: NDArray[int64] = np.ndarray(
+            shape=(self.cfgMetrics.dfmLines, self.cfgMetrics.dfmCols),
+            dtype=int64,
+            buffer=self.manager.metrics_buf[slice(*self.cfgMetrics.dfm_1)],
+        )
+        self.dfm_2: NDArray[int64] = np.ndarray(
+            shape=(self.cfgMetrics.dfmLines, self.cfgMetrics.dfmCols),
+            dtype=int64,
+            buffer=self.manager.metrics_buf[slice(*self.cfgMetrics.dfm_2)],
         )
 
     def init_session(self, price: float, timestamp: int) -> bool:
@@ -116,6 +135,10 @@ class FootprintWriter:
         if idx is not None:
             if idy is not None:
                 self.last_idx[0] = idx
+                if self.backtesting:
+                    if self.update_dfm(nPrice, timestamp) is False:
+                        return False
+
                 update_footprint_and_headers_and_indicators_and_coords(
                     price=price,
                     qty=qty,
@@ -144,6 +167,30 @@ class FootprintWriter:
 
         self.counterTicks[0] += 1
         return self.copy_to()
+
+    def update_dfm(self, nPrice: int, timestamp: int) -> bool:
+        buf: int = self.space_flag[0]
+        dfm, dfm_rid = (
+            (self.dfm_1, self.dfm_1RID) if (buf == 0) else (self.dfm_2, self.dfm_2RID)
+        )
+        rid: int = dfm_rid[0]
+        if rid > 0:
+            pre_rid: int = rid - 1
+            if dfm[pre_rid, c.DFM_nPrice] == nPrice:
+                dfm[pre_rid, c.DFM_endTimestamp] = timestamp
+                return True
+
+        dfm[rid, c.DFM_nPrice] = nPrice
+        dfm[rid, c.DFM_startTimestamp] = timestamp
+        dfm[rid, c.DFM_endTimestamp] = timestamp
+
+        new_rid: int = rid + 1
+        if new_rid >= self.dfmLines:
+            self.set_proc_sc(scs.BUF_DFM_FILLED)
+            return False
+        else:
+            dfm_rid[0] = new_rid
+            return True
 
     def wait_read_space(self) -> None:
         while self.spare_flag[0] == 1:
@@ -274,5 +321,4 @@ def _copy_to(
     fp[idYmin:idYmax, idXmin:idXmax] = dirty_fp[idYmin:idYmax, idXmin:idXmax]
     fp[idYmin:idYmax, idxVP:] = dirty_fp[idYmin:idYmax, idxVP:]
 
-    # print(space[:], "w")
     space_flag[0] = 1 if (buf == 0) else 0

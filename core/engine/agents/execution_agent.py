@@ -1,9 +1,10 @@
 from multiprocessing.synchronize import Event
 
+from core import constant as c
 from core.engine.agents.rest_agent import RestAgent
+from core.engine.agents_utils.execution.matching_engine import MatchingEngine
 from core.engine.agents_utils.execution.trade_manager import TradeManager
 from core.engine.agents_utils.utils import TradeConverter
-from core.settings import OrderFlag
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
@@ -31,6 +32,8 @@ class ExecutionAgent:
         self.cfgBT = self.manager.cfgBacktesting
         # Strategy
         self.cfgST = self.manager.cfgStrategy
+        self.TProi = self.cfgST.TProi
+        self.SLroi = self.cfgST.SLroi
         self.cell_amount: int = self.cfgST.cell_amount
         self.readerId: int = self.cfgST.reader[1] // 8 - 1
         self.writerId: int = self.cfgST.writer[1] // 8 - 1
@@ -63,28 +66,29 @@ class ExecutionAgent:
         """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
         self.priceMult: float = (10**self.pricePrec) + 1e-9
-        self.qtyMult: float = 10**self.qtyPrec + 1e-9
-
+        self.qtyMult: float = (10**self.qtyPrec) + 1e-9
+        # Footprint
+        self.cfgFP = self.manager.cfgFootprint
+        self._space_read: memoryview = self.manager.footprint_buf[
+            self.cfgFP.space_read : self.cfgFP.space_read + 1
+        ]
         # Variable's
-        self.con = TradeConverter(trade_param=self.trade_par, cfgStrategy=self.cfgST)
-        self.trade_manager = TradeManager(manager=self.manager, converter=self.con)
         self.rest: RestAgent = RestAgent(
             symbol=self.symbol, backtesting=self.backtesting, cfgBacktesting=self.cfgBT
         )
-
-        self.minOrderNsize: int = round(
-            self.rest.get_min_order_size_usdt() * self.con.scale
+        self.con: TradeConverter = TradeConverter(
+            trade_param=self.trade_par, cfgStrategy=self.cfgST
         )
-        self.startNbalance: int = round(self.rest.get_balance() * self.con.scale)
-        self.nBalance: int = self.startNbalance
-        self.lockedNbalance: int = 0
-        self.maxLockNbalance: int = self.cfgST.maxLockBalance
-        self.maxLossNbalance: int = (
-            self.startNbalance * self.cfgST.maxLossBalance // 1000
+        self.tm: TradeManager = TradeManager(manager=self.manager, converter=self.con)
+        self.me: MatchingEngine = MatchingEngine(
+            manager=self.manager, con=self.con, tm=self.tm
         )
-
-        self.TProi = self.cfgST.TProi
-        self.SLroi = self.cfgST.SLroi
+        self.con.init_session(
+            startBalance=self.rest.get_balance(),
+            minOrderSize=self.rest.get_min_order_size_usdt(),
+            takerCommission=self.rest.get_commission(is_maker=False),
+            makerCommission=self.rest.get_commission(is_maker=True),
+        )
 
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:
@@ -92,6 +96,7 @@ class ExecutionAgent:
         proc_status, task_status = self.proc_status, self.task_status
         # - - -
         WB_1, RB_1, WB_2, RB_2 = self.WB_1, self.RB_1, self.WB_2, self.RB_2
+        space_read = self._space_read
         # - - -
         alarm_clock = self._alarm_clock
         # - - -
@@ -108,24 +113,35 @@ class ExecutionAgent:
 
                 alarm_clock(WB_1, RB_1, WB_2, RB_2)
 
-                while WB_1[0] != RB_1[0] or WB_2[0] != RB_2[0]:
-                    if WB_2[0] != RB_2[0]:
-                        self._check_executed_buf()
-                    if WB_1[0] != RB_1[0]:
-                        self._check_execute_buf()
+                if WB_2[0] != RB_2[0]:
+                    self._check_executed_buf()
+                if WB_1[0] != RB_1[0]:
+                    self._check_execute_buf()
+
+                if self.backtesting and (self._space_read[0] == 1):
+                    self.me.execute_limit_orders()
+                    self.tm.prepare_trades()
+                    self.check_risk_management()
+                    self._space_read[0] = 0
+                    self.me.dfm_RRid[0] = 0
 
     def complete(self) -> bool:
-        return self.WB_1[0] == self.RB_1[0] and self.WB_2[0] == self.RB_2[0]
+        return (
+            self.WB_1[0] == self.RB_1[0]
+            and self.WB_2[0] == self.RB_2[0]
+            and self._space_read[0] == 0
+        )
 
     def final_actions(self) -> None:
+        print(self.tm.closePositions)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
-        if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
+        if (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and self._space_read[0] == 0:
             self.execution_event.clear()
-            if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
+            if (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and self._space_read[0] == 0:
                 self.execution_event.wait()
 
     def _check_executed_buf(self) -> None:
@@ -143,43 +159,81 @@ class ExecutionAgent:
         #  - - -
 
     def _check_execute_buf(self) -> None:
-        cell: int = self.executeBuf[self.readerId]
+        _, buf, rid = self.con, self.executeBuf, self.readerId
+        # - - -
+        if not self.check_risk_management():
+            return
+
+        cell: int = buf[rid]
         start: int = cell * self.signal_size + self.offset
 
-        _nPrice = self.executeBuf[start + self.nPriceId]
-        _time_ms = self.executeBuf[start + self.time_msId]
-        orderParam = self.executeBuf[start + self.orderParamId]
+        _nPrice: int = buf[start + self.nPriceId]
+        _time_ms: int = buf[start + self.time_msId]
+        orderParam: int = buf[start + self.orderParamId]
 
-        new_cell = cell + 1
-        self.executeBuf[self.readerId] = new_cell if new_cell < self.cell_amount else 0
-        #  - - -
-        if self.maxLossNbalance >= self.nBalance:
-            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
-            return
-
-        if self.lockedNbalance >= (self.nBalance * self.maxLockNbalance // 1000):
-            return
-
-        nPrice: int = self.con.to_nPrice(self.con.to_fpPrice(_nPrice))
-        nQty: int = self.con.get_nQty(nPrice, self.nBalance - self.lockedNbalance)
-
-        if (nPrice * nQty // self.con.scale) <= self.minOrderNsize:
-            self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
-            return
-
-        nPriceTP = nPrice * (1 + self.TProi) // 1000
-        nPriceSL = nPrice * (1 + self.SLroi) // 1000
-
-        self.rest.send_new_batchOrder(
-            price=self.con.to_price(nPrice),
-            qty=self.con.to_qty(nQty),
-            tpPrice=self.con.to_price(nPriceTP),
-            slPrice=self.con.to_price(nPriceSL),
-            is_long=bool(orderParam & OrderFlag.LONG),
-            is_buy=bool(orderParam & OrderFlag.BUY),
-            is_market=True,
-        )
+        new_cell: int = cell + 1
+        buf[rid] = new_cell if new_cell < self.cell_amount else 0
         # - - -
+        is_long: bool = bool(orderParam & c.OF_LONG)
+        is_buy: bool = bool(orderParam & c.OF_BUY)
+        is_market: bool = bool(orderParam & c.OF_MARKET)
+
+        nPrice: int = _.to_nPrice(_.to_fpPrice(_nPrice))
+        nQty: int = _.entryNqtyWithLeverage(nPrice)
+
+        if self.backtesting:
+            temp = self.me.find_market_order_data(_time_ms)
+            print(temp, _time_ms)
+            if temp is not None:
+                fpNprice, row = temp
+                self.me.execute_limit_orders(highWrow=row)
+                self.tm.prepare_trades()
+                if not self.check_risk_management():
+                    return
+                entryNprice = self.me.execute_market_order(
+                    fpNprice, nQty, _time_ms, is_long, is_buy
+                )
+                self.tm.prepare_trades()
+                if not self.check_risk_management():
+                    return
+                nPriceTP = _.TProiNprice(entryNprice, is_long)
+                tpOrderParam = 0
+                tpOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
+                tpOrderParam |= c.OF_SELL if is_long else c.OF_BUY
+                tpOrderParam |= c.OF_LIMIT
+                tpOrderParam |= c.OF_NEW
+                self.tm.update_orders_array(
+                    nPriceTP, nQty, _time_ms + 50, tpOrderParam, None, None
+                )
+                nPriceSL = _.SLroiNprice(entryNprice, is_long)
+                slOrderParam = 0
+                slOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
+                slOrderParam |= c.OF_SELL if is_long else c.OF_BUY
+                slOrderParam |= c.OF_MARKET_TRIGER
+                slOrderParam |= c.OF_NEW
+                self.tm.update_orders_array(
+                    nPriceSL, nQty, _time_ms + 50, slOrderParam, None, None
+                )
+                self.tm.prepare_trades()
+
+        else:
+            pass
+
+    def check_risk_management(self) -> bool:
+        _ = self.con
+        # - - -
+        if not (_.lossNbalanceLimit >= _.nBalance):
+            if not (_.lockedNbalance >= _.lockedNbalanceLimit):
+                if not ((_.leverage * _.entryNominalNqty) <= _.minOrderNsize):
+                    return True
+                else:
+                    self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
+            else:
+                pass
+        else:
+            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
+
+        return False
 
 
 @manager_office()

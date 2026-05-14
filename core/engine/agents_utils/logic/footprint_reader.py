@@ -80,13 +80,13 @@ class FootprintReader(ABC):
         )
         #  - - -
         self.headers: NDArray[int64] = np.ndarray(
-            shape=(self.cfgFP.bar_count, c.BH_HeadersCount),
+            shape=(self.cfgFP.bar_count, c.BH_ConstantCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFP.headers)],
         )
         #  - - -
         self.space: NDArray[int64] = np.ndarray(
-            (2, sc._CoordsCount),
+            (2, sc._ConstantCount),
             dtype=int64,
             buffer=self.manager.footprint_buf[slice(*self.cfgFP.space)],
         )
@@ -94,7 +94,7 @@ class FootprintReader(ABC):
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
         # - - -
         self.cachedStatesData: NDArray[int32] = np.zeros(
-            (c.CSD_CountCachedStates,), dtype=int32
+            (c.CSD_ConstantCount,), dtype=int32
         )
 
     def init_session(self) -> bool:
@@ -155,7 +155,6 @@ class FootprintReader(ABC):
             self._update_bar(idYmin, idYmax, idxBid, idxAsk)
 
         self.space[oldBuf, :] = self.defaultSpace
-        # print(self.space[:], "r", flush=True)
 
     def _update_clusters(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
@@ -384,22 +383,3 @@ def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, i
             break
 
     return up_idx + 1, down_idx - 1
-
-
-# - - -
-@njit(cache=True)
-def binary_search(arr: NDArray[Any], item: Any) -> int | None:
-    if len(arr.shape) == 1:
-        low: int = 0
-        high: int = len(arr) - 1
-        while low <= high:
-            mid: int = (low + high) // 2
-            value: Any = arr[mid]
-            if value == item:
-                return mid
-            elif value > item:
-                high = mid - 1
-            else:
-                low = mid + 1
-
-    return None

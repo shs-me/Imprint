@@ -29,7 +29,10 @@ class RestAgent:
             return self.lot_size
 
     def get_min_order_size_usdt(self) -> float:
-        return self.minOrderSizeUsdt
+        if self.backtesting:
+            return self.minOrderSizeUsdt
+        else:
+            return self.minOrderSizeUsdt
 
     # User Data
     def get_balance(self, free: bool = True) -> float:
@@ -44,24 +47,10 @@ class RestAgent:
         else:
             return self.makerCommission if is_maker else self.takerCommission
 
-    def send_new_batchOrder(
-        self,
-        price: float,
-        qty: float,
-        tpPrice: float,
-        slPrice: float,
-        is_long: bool,
-        is_buy: bool,
-        is_market: bool,
-    ) -> tuple[dict, dict, dict]:
-        if self.backtesting:
-            return ({}, {}, {})
-
-        else:
-            return ({}, {}, {})
+    def send_new_order(
+        self, price: float, qty: float, is_long: bool, is_buy: bool, is_market: bool
+    ) -> tuple:
+        return ()
 
     def cancel_new_order(self, orderId: int) -> tuple:
-        if self.backtesting:
-            return orderId, round(time.time() * 1000)
-        else:
-            return ()
+        return ()

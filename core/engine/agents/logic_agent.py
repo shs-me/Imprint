@@ -41,6 +41,11 @@ class LogicAgent:
         self.tradesParsed: memoryview = self.manager.metrics_buf[
             self.cfgMetrics.tradesParsed[0] : self.cfgMetrics.tradesParsed[1] + 1
         ]
+        # Footprint
+        self.cfgFP = self.manager.cfgFootprint
+        self._space_read: memoryview = self.manager.footprint_buf[
+            self.cfgFP.space_read : self.cfgFP.space_read + 1
+        ]
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
@@ -82,6 +87,13 @@ class LogicAgent:
                         pass_lag += 1
                         if pass_lag >= pass_lag_limit:
                             self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
+
+                    if self.backtesting:
+                        self._space_read[0] = 1
+                        if self.reader.execution_event.is_set() is False:
+                            self.reader.execution_event.set()
+                            while self._space_read[0] == 1:
+                                time.sleep(0)
 
                     flag[0] = 0
 

@@ -1,4 +1,12 @@
-from core.settings import BarHeaders, CachedStatesData, StateFlags
+from core.settings import (
+    ActiveOrders,
+    BarHeaders,
+    CachedStatesData,
+    DataForMatching,
+    OrderFlag,
+    StateFlags,
+    TradeParam,
+)
 
 # - - URL'S - -
 # Derivatives Trading (USDS Futures)
@@ -53,7 +61,7 @@ BH_ATR: int = int(BarHeaders.ATR)
 BH_POC: int = int(BarHeaders.POC)
 BH_VAH: int = int(BarHeaders.VAH)
 BH_VAL: int = int(BarHeaders.VAL)
-BH_HeadersCount: int = int(BarHeaders._HeadersCount)
+BH_ConstantCount: int = int(BarHeaders._ConstantCount)
 
 # StateFlag
 SF_BID_DELTA_DOMINATION_FP: int = int(StateFlags.BID_DELTA_DOMINATION_FP)
@@ -87,8 +95,43 @@ CSD_LOWER_BB: int = int(CachedStatesData.LOWER_BB)
 CSD_POC_FP: int = int(CachedStatesData.POC_FP)
 CSD_VAH_FP: int = int(CachedStatesData.VAH_FP)
 CSD_VAL_FP: int = int(CachedStatesData.VAL_FP)
-CSD_CountCachedStates: int = int(CachedStatesData._CountCachedStates)
+CSD_ConstantCount: int = int(CachedStatesData._ConstantCount)
 
+# DataForMatching
+DFM_nPrice: int = int(DataForMatching.nPrice)
+DFM_startTimestamp: int = int(DataForMatching.startTimestamp)
+DFM_endTimestamp: int = int(DataForMatching.endTimestamp)
+DFM_ConstantCount: int = int(DataForMatching._ConstantCount)
+
+# Active Orders
+AO_nPrice: int = int(ActiveOrders.nPrice)
+AO_nQty: int = int(ActiveOrders.nQty)
+AO_timestamp: int = int(ActiveOrders.timestamp)
+AO_orderParam: int = int(ActiveOrders.orderParam)
+AO_orderID: int = int(ActiveOrders.orderID)
+AO_ConstantCount: int = int(ActiveOrders._ConstantCount)
+
+# Trade Param
+TP_nPrice: int = int(TradeParam.nPrice)
+TP_nQty: int = int(TradeParam.nQty)
+TP_timestamp: int = int(TradeParam.timestamp)
+TP_orderParam: int = int(TradeParam.orderParam)
+TP_orderID: int = int(TradeParam.orderID)
+TP_commission: int = int(TradeParam.nCommission)
+TP_ConstantCount: int = int(TradeParam._ConstantCount)
+
+# OrderFlag
+OF_LONG: int = int(OrderFlag.LONG)
+OF_SHORT: int = int(OrderFlag.SHORT)
+OF_BUY: int = int(OrderFlag.BUY)
+OF_SELL: int = int(OrderFlag.SELL)
+OF_LIMIT: int = int(OrderFlag.LIMIT)
+OF_MARKET: int = int(OrderFlag.MARKET)
+OF_MARKET_TRIGER: int = int(OrderFlag.MARKET_TRIGER)
+OF_LIMIT_TRIGER: int = int(OrderFlag.LIMIT_TRIGER)
+OF_NEW: int = int(OrderFlag.NEW)
+OF_FILLED: int = int(OrderFlag.FILLED)
+OF_CANCELED: int = int(OrderFlag.CANCELED)
 
 # Tool's setup
 ATR_PERIOD: int = 14
