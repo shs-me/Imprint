@@ -128,7 +128,7 @@ def _execute_limit_orders(
     if rRow >= wRow:
         return
 
-    _nPrice, _nQty, _timestamp, _orderParam, _nCommission, _orderID = 0, 0, 0, 0, 0, 0
+    _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID = 0, 0, 0, 0, 0, 0
     for _row in range(rRow, wRow):
         nPrice: int = round(
             round((dfm[_row, c.DFM_nPrice] / priceMult), pricePrec) * scale
@@ -147,64 +147,57 @@ def _execute_limit_orders(
 
             aoRow = aoRow - _diff_for_row
 
-            _tpNprice: int = ao[aoRow, c.AO_nPrice, 0]
-            _tpNqty: int = ao[aoRow, c.AO_nQty, 0]
-            _tpOrderParam: int = ao[aoRow, c.AO_orderParam, 0]
-            _tpOrderID: int = ao[aoRow, c.AO_orderID, 0]
-            _tpIsBuy: bool = bool(_tpOrderParam & c.OF_BUY)
+            tpNprice: int = ao[aoRow, c.AO_nPrice, 0]
+            tpNqty: int = ao[aoRow, c.AO_nQty, 0]
+            tpOrderParam: int = ao[aoRow, c.AO_orderParam, 0]
+            tpOrderID: int = ao[aoRow, c.AO_orderID, 0]
+            tpIsBuy: bool = bool(tpOrderParam & c.OF_BUY)
 
-            _slNprice: int = ao[aoRow, c.AO_nPrice, 1]
-            _slNqty: int = ao[aoRow, c.AO_nQty, 1]
-            _slOrderParam: int = ao[aoRow, c.AO_orderParam, 1]
-            _slOrderID: int = ao[aoRow, c.AO_orderID, 1]
-            _slIsBuy: bool = bool(_tpOrderParam & c.OF_BUY)
+            slNprice: int = ao[aoRow, c.AO_nPrice, 1]
+            slNqty: int = ao[aoRow, c.AO_nQty, 1]
+            slOrderParam: int = ao[aoRow, c.AO_orderParam, 1]
+            slOrderID: int = ao[aoRow, c.AO_orderID, 1]
+            slIsBuy: bool = bool(tpOrderParam & c.OF_BUY)
 
-            if (_tpIsBuy and (nPrice <= _tpNprice)) or (
-                not _tpIsBuy and (nPrice >= _tpNprice)
+            if (tpIsBuy and (nPrice <= tpNprice)) or (
+                not tpIsBuy and (nPrice >= tpNprice)
             ):
-                _nPrice = _tpNprice
-                _nCommission = _tpNqty * makerNcommission // 1000
-                _timestamp = int(startTimestamp)
-                _orderParam = _tpOrderParam
-                _orderID = _tpOrderID
-                _executed = True
-                _cancelSL = True
+                _nPrice, _nQty, _timestamp = tpNprice, tpNqty, int(startTimestamp)
+                _orderParam, _orderID = tpOrderParam, tpOrderID
+                _nCom = tpNqty * makerNcommission // 1000
 
-            if (_slIsBuy and (nPrice >= _slNprice)) or (
-                not _slIsBuy and (nPrice <= _slNprice)
+                _executed, _cancelSL = True, True
+
+            if (slIsBuy and (nPrice >= slNprice)) or (
+                not slIsBuy and (nPrice <= slNprice)
             ):
-                slipageTicks: int = nPrice * slipage // 10000
-                _nPrice = nPrice + (slipageTicks if _slIsBuy else -slipageTicks)
-                _nCommission = _slNqty * takerNcommission // 10000
-                _timestamp = int(endTimestamp)
-                _orderParam = _slOrderParam
-                _orderID = _slOrderID
-                _executed = True
-                _cancelSL = False
+                slipageTicks = nPrice * slipage // 10000
+                _nPrice = nPrice + (slipageTicks if slIsBuy else -slipageTicks)
+                _nQty, _timestamp = slNqty, int(endTimestamp)
+                _orderParam, _orderID = slOrderParam, slOrderID
+                _nCom = slNqty * takerNcommission // 1000
+
+                _executed, _cancelSL = True, False
 
             if _executed:
-                ohRow = ohWRow[0]
                 _orderParam &= ~(c.OF_NEW)
                 _orderParam |= c.OF_FILLED
 
-                oh[ohRow, c.TP_nPrice] = _nPrice
-                oh[ohRow, c.TP_nQty] = _nQty
-                oh[ohRow, c.TP_timestamp] = _timestamp
-                oh[ohRow, c.TP_orderParam] = _orderParam
-                oh[ohRow, c.TP_commission] = _nCommission
-                oh[ohRow, c.TP_orderID] = _orderID
+                ohRow = ohWRow[0]
+                oh[ohRow, :] = _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID
                 ohWRow[0] += 1
 
-                ohRow = ohWRow[0]
-                _orderParam_ = _slOrderParam if _cancelSl else _tpOrderParam
+                _orderParam_ = slOrderParam if _cancelSl else tpOrderParam
                 _orderParam_ &= ~(c.OF_NEW)
                 _orderParam_ |= c.OF_CANCELED
-                oh[ohRow, c.TP_nPrice] = _slNprice if _cancelSl else _tpNprice
-                oh[ohRow, c.TP_nQty] = _slNqty if _cancelSl else _tpNqty
+
+                ohRow = ohWRow[0]
+                oh[ohRow, c.TP_nPrice] = slNprice if _cancelSl else tpNprice
+                oh[ohRow, c.TP_nQty] = slNqty if _cancelSl else tpNqty
                 oh[ohRow, c.TP_timestamp] = _timestamp
                 oh[ohRow, c.TP_orderParam] = _orderParam_
                 oh[ohRow, c.TP_commission] = None
-                oh[ohRow, c.TP_orderID] = _slOrderID if _cancelSl else _tpOrderID
+                oh[ohRow, c.TP_orderID] = slOrderID if _cancelSl else tpOrderID
                 ohWRow[0] += 1
 
                 if ((aoWrow - 1) - aoRow) > 0:
@@ -227,13 +220,13 @@ def _binary_search(
         mid: int = (low + high) // 2
         startTimestamp: int = dfm[mid, c.DFM_startTimestamp]
         endTimestamp: int = dfm[mid, c.DFM_endTimestamp]
+        print(timestamp, startTimestamp, endTimestamp)
         if startTimestamp <= timestamp <= endTimestamp:
             return dfm[mid, c.DFM_nPrice], mid
-        elif timestamp < startTimestamp:
+        elif timestamp < endTimestamp:
             high = mid - 1
         else:
             low = mid + 1
 
-    if high >= 0:
-        return dfm[high, c.DFM_nPrice], high
-    return None
+    print()
+    return (dfm[high, c.DFM_nPrice], high) if high >= 0 else None

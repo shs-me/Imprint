@@ -183,7 +183,7 @@ class TradeConverter:
         self._minOrderNsize: int = 0
         self._takerNcommission: int = 0
         self._makerNcommission: int = 0
-
+        self._last_order_id: int = 0
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = trade_param[:]
         self.priceMult: float = (10**self.pricePrec) + 1e-9
         self.qtyMult: float = 10**self.qtyPrec + 1e-9
@@ -283,6 +283,15 @@ class TradeConverter:
 
     def to_nRoi(self, nPnl: int, nMargin: int) -> int:
         return (nPnl * self.scale) // nMargin * 100 // self.scale
+
+    @property
+    def lastOrderId(self) -> int:
+        return self._last_order_id
+
+    @property
+    def newOrderId(self) -> int:
+        self._last_order_id += 1
+        return self._last_order_id
 
     def to_fpPrice(self, nPrice: int) -> float:
         return round((nPrice / self.priceMult), self.pricePrec)

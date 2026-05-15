@@ -51,15 +51,16 @@ class TradeManager:
         oh[ohWRow[0], c.TP_timestamp] = timestamp
         oh[ohWRow[0], c.TP_orderParam] = orderParam
         oh[ohWRow[0], c.TP_commission] = nCommission
-        oh[ohWRow[0], c.TP_orderID] = orderID if orderID else ohWRow[0]
+        oh[ohWRow[0], c.TP_orderID] = orderID if orderID else self.con.newOrderId
         ohWRow[0] += 1
         if bool(orderParam & c.OF_NEW):
             side, row = (0, 0) if bool(orderParam & c.OF_LIMIT) else (1, 1)
-            ao[aoWRow[0], c.AO_nPrice, side] = nPrice
-            ao[aoWRow[0], c.AO_nQty, side] = nQty
-            ao[aoWRow[0], c.AO_timestamp, side] = timestamp
-            ao[aoWRow[0], c.AO_orderParam, side] = orderParam
-            ao[aoWRow[0], c.AO_orderID, side] = orderID if orderID else aoWRow[0]
+            wRow = aoWRow[0]
+            ao[wRow, c.AO_nPrice, side] = nPrice
+            ao[wRow, c.AO_nQty, side] = nQty
+            ao[wRow, c.AO_timestamp, side] = timestamp
+            ao[wRow, c.AO_orderParam, side] = orderParam
+            ao[wRow, c.AO_orderID, side] = orderID if orderID else self.con.newOrderId
             aoWRow[0] += row
 
     def prepare_trades(self) -> None:
@@ -78,6 +79,7 @@ class TradeManager:
             orderID: int = oh[rRow, c.TP_orderID]
 
             nMargin: int = _.to_margin(nPrice=nPrice, nQty=nQty)
+            # print(nMargin, nPrice, nQty, rRow, oh[rRow, :])
             time: str = _.to_strftime(timestamp)
             # Position Side
             is_long: bool = bool(orderParam & OrderFlag.LONG)

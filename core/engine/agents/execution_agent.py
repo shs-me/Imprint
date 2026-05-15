@@ -1,3 +1,4 @@
+import pprint
 from multiprocessing.synchronize import Event
 
 from core import constant as c
@@ -58,6 +59,9 @@ class ExecutionAgent:
 
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
+        self.tradesParsed: memoryview = self.manager.metrics_buf[
+            slice(*self.cfgMetrics.tradesParsed)
+        ]
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
             self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
         ].cast("q")
@@ -130,14 +134,18 @@ class ExecutionAgent:
             self.WB_1[0] == self.RB_1[0]
             and self.WB_2[0] == self.RB_2[0]
             and self._space_read[0] == 0
+            and self.tradesParsed[0] == 1
         )
 
     def final_actions(self) -> None:
         print(
             self.con.nBalance / self.con.scale,
             self.con.lockedNbalance / self.con.scale,
+            len(self.tm.openPositions),
             len(self.tm.closePositions),
+            self.con.lastOrderId,
         )
+        # pprint.pp(self.tm.orders_history[: self.tm.ohWRow[0] :])
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
