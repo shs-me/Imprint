@@ -122,11 +122,13 @@ def _execute_limit_orders(
     pricePrec: int,
     highWrow: int | None,
 ) -> None:
+    oh, ao = orders_history, active_orders
     wRow: int = highWrow if highWrow else dfmRID[0]
     rRow: int = dfm_nRID[0]
     if rRow >= wRow:
         return
 
+    _nPrice, _nQty, _timestamp, _orderParam, _nCommission, _orderID = 0, 0, 0, 0, 0, 0
     for _row in range(rRow, wRow):
         nPrice: int = round(
             round((dfm[_row, c.DFM_nPrice] / priceMult), pricePrec) * scale
@@ -136,63 +138,80 @@ def _execute_limit_orders(
 
         aoWrow: int = aoWRow[0]
         _diff_for_row: int = 0
-        _nCommission: int = 0
-        _timestamp: int = 0
         for aoRow in range(aoWrow):
             if not bool(np.any(active_orders[:aoWrow, 0])):
                 return
 
             _executed = False
+            _cancelSl = True
+
             aoRow = aoRow - _diff_for_row
 
-            _nPrice: int = active_orders[aoRow, c.AO_nPrice]
-            _nQty: int = active_orders[aoRow, c.AO_nQty]
-            _orderParam: int = active_orders[aoRow, c.AO_orderParam]
+            _tpNprice: int = ao[aoRow, c.AO_nPrice, 0]
+            _tpNqty: int = ao[aoRow, c.AO_nQty, 0]
+            _tpOrderParam: int = ao[aoRow, c.AO_orderParam, 0]
+            _tpOrderID: int = ao[aoRow, c.AO_orderID, 0]
+            _tpIsBuy: bool = bool(_tpOrderParam & c.OF_BUY)
 
-            is_limit: bool = bool(_orderParam & c.OF_LIMIT)
-            is_market_triger: bool = bool(_orderParam & c.OF_MARKET_TRIGER)
-            is_buy: bool = bool(_orderParam & c.OF_BUY)
+            _slNprice: int = ao[aoRow, c.AO_nPrice, 1]
+            _slNqty: int = ao[aoRow, c.AO_nQty, 1]
+            _slOrderParam: int = ao[aoRow, c.AO_orderParam, 1]
+            _slOrderID: int = ao[aoRow, c.AO_orderID, 1]
+            _slIsBuy: bool = bool(_tpOrderParam & c.OF_BUY)
 
-            if is_limit:
-                if (is_buy and (nPrice <= _nPrice)) or (
-                    not is_buy and (nPrice >= _nPrice)
-                ):
-                    _nPrice = _nPrice
-                    _nCommission = _nQty * makerNcommission // 1000
-                    _timestamp = int(startTimestamp)
-                    _executed = True
+            if (_tpIsBuy and (nPrice <= _tpNprice)) or (
+                not _tpIsBuy and (nPrice >= _tpNprice)
+            ):
+                _nPrice = _tpNprice
+                _nCommission = _tpNqty * makerNcommission // 1000
+                _timestamp = int(startTimestamp)
+                _orderParam = _tpOrderParam
+                _orderID = _tpOrderID
+                _executed = True
+                _cancelSL = True
 
-            elif is_market_triger:
-                if (is_buy and (nPrice >= _nPrice)) or (
-                    not is_buy and (nPrice <= _nPrice)
-                ):
-                    slipageTicks: int = nPrice * slipage // 10000
-                    _nPrice = nPrice + (slipageTicks if is_buy else -slipageTicks)
-                    _nCommission = _nQty * takerNcommission // 10000
-                    _timestamp = int(endTimestamp)
-                    _executed = True
+            if (_slIsBuy and (nPrice >= _slNprice)) or (
+                not _slIsBuy and (nPrice <= _slNprice)
+            ):
+                slipageTicks: int = nPrice * slipage // 10000
+                _nPrice = nPrice + (slipageTicks if _slIsBuy else -slipageTicks)
+                _nCommission = _slNqty * takerNcommission // 10000
+                _timestamp = int(endTimestamp)
+                _orderParam = _slOrderParam
+                _orderID = _slOrderID
+                _executed = True
+                _cancelSL = False
 
             if _executed:
+                ohRow = ohWRow[0]
                 _orderParam &= ~(c.OF_NEW)
                 _orderParam |= c.OF_FILLED
 
-                orders_history[ohWRow[0], c.TP_nPrice] = _nPrice
-                orders_history[ohWRow[0], c.TP_nQty] = _nQty
-                orders_history[ohWRow[0], c.TP_timestamp] = _timestamp
-                orders_history[ohWRow[0], c.TP_orderParam] = _orderParam
-                orders_history[ohWRow[0], c.TP_commission] = _nCommission
-                orders_history[ohWRow[0], c.TP_orderID] = active_orders[
-                    aoRow, c.AO_orderID
-                ]
+                oh[ohRow, c.TP_nPrice] = _nPrice
+                oh[ohRow, c.TP_nQty] = _nQty
+                oh[ohRow, c.TP_timestamp] = _timestamp
+                oh[ohRow, c.TP_orderParam] = _orderParam
+                oh[ohRow, c.TP_commission] = _nCommission
+                oh[ohRow, c.TP_orderID] = _orderID
+                ohWRow[0] += 1
+
+                ohRow = ohWRow[0]
+                _orderParam_ = _slOrderParam if _cancelSl else _tpOrderParam
+                _orderParam_ &= ~(c.OF_NEW)
+                _orderParam_ |= c.OF_CANCELED
+                oh[ohRow, c.TP_nPrice] = _slNprice if _cancelSl else _tpNprice
+                oh[ohRow, c.TP_nQty] = _slNqty if _cancelSl else _tpNqty
+                oh[ohRow, c.TP_timestamp] = _timestamp
+                oh[ohRow, c.TP_orderParam] = _orderParam_
+                oh[ohRow, c.TP_commission] = None
+                oh[ohRow, c.TP_orderID] = _slOrderID if _cancelSl else _tpOrderID
                 ohWRow[0] += 1
 
                 if ((aoWrow - 1) - aoRow) > 0:
-                    active_orders[aoRow : aoWrow - 1, :] = active_orders[
-                        aoRow + 1 : aoWrow, :
-                    ]
-                    active_orders[aoWrow - 1, :] = None
+                    ao[aoRow : aoWrow - 1, :, :] = ao[aoRow + 1 : aoWrow, :, :]
+                    ao[aoWrow - 1, :, :] = None
                 else:
-                    active_orders[aoRow, :] = None
+                    ao[aoRow, :, :] = None
 
                 aoWRow[0] -= 1
                 _diff_for_row += 1
@@ -210,7 +229,11 @@ def _binary_search(
         endTimestamp: int = dfm[mid, c.DFM_endTimestamp]
         if startTimestamp <= timestamp <= endTimestamp:
             return dfm[mid, c.DFM_nPrice], mid
-        elif timestamp < endTimestamp:
+        elif timestamp < startTimestamp:
             high = mid - 1
         else:
             low = mid + 1
+
+    if high >= 0:
+        return dfm[high, c.DFM_nPrice], dfm[high, c.DFM_nPrice]
+    return None

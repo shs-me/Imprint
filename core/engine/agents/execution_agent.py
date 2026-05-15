@@ -134,7 +134,9 @@ class ExecutionAgent:
 
     def final_actions(self) -> None:
         print(
-            self.con.nBalance / self.con.scale, self.con.lockedNbalance / self.con.scale
+            self.con.nBalance / self.con.scale,
+            self.con.lockedNbalance / self.con.scale,
+            len(self.tm.closePositions),
         )
         self.set_proc_sc(scs.COMPLETE)
 
@@ -144,7 +146,7 @@ class ExecutionAgent:
         if (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and self._space_read[0] == 0:
             self.execution_event.clear()
             if (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and self._space_read[0] == 0:
-                self.execution_event.wait()
+                self.execution_event.wait(timeout=60)
 
     def _check_executed_buf(self) -> None:
         cell: int = self.executedBuf[self.readerId]
@@ -179,8 +181,8 @@ class ExecutionAgent:
         is_market: bool = bool(orderParam & c.OF_MARKET)
 
         if self.backtesting:
-            temp = self.me.find_market_order_data(_time_ms)
-            print(temp, _time_ms)
+            timestamp = _time_ms + _.latencyMs
+            temp = self.me.find_market_order_data(timestamp)
             if temp is not None:
                 fpNprice, row = temp
                 self.me.execute_limit_orders(highWrow=row)
@@ -192,7 +194,7 @@ class ExecutionAgent:
                 nQty: int = _.entryNqtyWithLeverage(nPrice)
 
                 entryNprice = self.me.execute_market_order(
-                    fpNprice, nQty, _time_ms, is_long, is_buy
+                    fpNprice, nQty, timestamp, is_long, is_buy
                 )
                 self.tm.prepare_trades()
                 if not self.check_risk_management():
@@ -204,7 +206,7 @@ class ExecutionAgent:
                 tpOrderParam |= c.OF_LIMIT
                 tpOrderParam |= c.OF_NEW
                 self.tm.update_orders_array(
-                    nPriceTP, nQty, _time_ms + 50, tpOrderParam, None, None
+                    nPriceTP, nQty, timestamp + 10, tpOrderParam, None, None
                 )
                 nPriceSL = _.SLdevNprice(entryNprice, is_long)
                 slOrderParam = 0
@@ -213,7 +215,7 @@ class ExecutionAgent:
                 slOrderParam |= c.OF_MARKET_TRIGER
                 slOrderParam |= c.OF_NEW
                 self.tm.update_orders_array(
-                    nPriceSL, nQty, _time_ms + 50, slOrderParam, None, None
+                    nPriceSL, nQty, timestamp + 10, slOrderParam, None, None
                 )
                 self.tm.prepare_trades()
 

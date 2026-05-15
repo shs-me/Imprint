@@ -27,8 +27,9 @@ class TradeManager:
             shape=(self.lines, self.cols), dtype=object_
         )
         self.active_orders: NDArray[object_] = np.ndarray(
-            shape=(self.lines, c.AO_ConstantCount), dtype=object_
+            shape=(self.lines, c.AO_ConstantCount, 2), dtype=object_
         )
+
         self.ohRRow: memoryview = memoryview(bytearray(8)).cast("q")
         self.ohWRow: memoryview = memoryview(bytearray(8)).cast("q")
         self.aoWRow: memoryview = memoryview(bytearray(8)).cast("q")
@@ -53,12 +54,13 @@ class TradeManager:
         oh[ohWRow[0], c.TP_orderID] = orderID if orderID else ohWRow[0]
         ohWRow[0] += 1
         if bool(orderParam & c.OF_NEW):
-            ao[aoWRow[0], c.AO_nPrice] = nPrice
-            ao[aoWRow[0], c.AO_nQty] = nQty
-            ao[aoWRow[0], c.AO_timestamp] = timestamp
-            ao[aoWRow[0], c.AO_orderParam] = orderParam
-            ao[aoWRow[0], c.AO_orderID] = orderID if orderID else aoWRow[0]
-            aoWRow[0] += 1
+            side, row = (0, 0) if bool(orderParam & c.OF_LIMIT) else (1, 1)
+            ao[aoWRow[0], c.AO_nPrice, side] = nPrice
+            ao[aoWRow[0], c.AO_nQty, side] = nQty
+            ao[aoWRow[0], c.AO_timestamp, side] = timestamp
+            ao[aoWRow[0], c.AO_orderParam, side] = orderParam
+            ao[aoWRow[0], c.AO_orderID, side] = orderID if orderID else aoWRow[0]
+            aoWRow[0] += row
 
     def prepare_trades(self) -> None:
         ohRRow, ohWRow, aoWRow = self.ohRRow, self.ohWRow, self.aoWRow

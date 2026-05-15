@@ -29,8 +29,8 @@ class ConfigurationBacktesting(Configuration):
         tick_size: str = "0.01",
         lot_size: str = "0.001",
         minOrderSizeUSDT: float = 5.0,
-        taker_commission: float = 0.002,
-        maker_commission: float = 0.0015,
+        taker_commission: float = 0.005,
+        maker_commission: float = 0.002,
         balanceUSDT: float = 100.0,
         dayForPrepper: int | None = None,
     ) -> None:
@@ -95,7 +95,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
             self.executeBuf[1],
             self.executeBuf[1] + self.executedBuf_size,
         )
-        return self.executeBuf[1]
+        return self.executedBuf[1]
 
 
 class ConfigurationFootprint(ConfigurationSHMSegments):

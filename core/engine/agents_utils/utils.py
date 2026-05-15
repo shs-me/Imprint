@@ -168,6 +168,7 @@ class TradeConverter:
         self.trade_param = trade_param
         self.cfgST = cfgStrategy
 
+        self.latencyMs: int = self.cfgST.latency
         self.leverage: int = self.cfgST.leverage
         self.slipage: int = self.cfgST.slipage
         self.scale: int = self.cfgST.scale
