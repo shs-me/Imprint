@@ -21,8 +21,6 @@ class TradeManager:
         # Variable's
         self.openPositions: dict[str, OpenPosition] = {}
         self.closePositions: dict[int, ClosePosition] = {}
-        self.weight: int = 0
-        self.p_weight: int = 0
 
     def _init_array(self) -> None:
         self.orders_history: NDArray[object_] = np.ndarray(
@@ -65,6 +63,7 @@ class TradeManager:
     def prepare_trades(self) -> None:
         ohRRow, ohWRow, aoWRow = self.ohRRow, self.ohWRow, self.aoWRow
         oh, ao, _ = self.orders_history, self.active_orders, self.con
+        op, cp = self.openPositions, self.closePositions
         # - - -
         while ohRRow[0] != ohWRow[0]:
             rRow, wRow = ohRRow[0], ohWRow[0]
@@ -94,40 +93,43 @@ class TradeManager:
             if is_filled:
                 position = "LONG" if is_long else "SHORT"
                 if (is_buy and is_long) or (is_sell and is_short):
-                    if self.openPositions.get(position, None) is None:
-                        self.openPositions[position] = {
+                    if op.get(position, None) is None:
+                        op[position] = {
                             "positionSide": position,
                             "openTime": time,
                             "entryNprice": 0,
+                            "entryNpriceWeight": 0,
+                            "entryNpricePWeight": 0,
                             "nQuantity": 0,
                             "nominalNqty": 0,
                             "tempNqty": 0,
                             "nominalNcommission": 0,
-                            "laverage": self.con.leverage,
+                            "leverage": _.leverage,
                             "realizedPNL": 0.0,
                             "realizedROI": 0.0,
                             "TakeProfits": {},
                             "StopLosses": {},
                         }
 
-                    self.openPositions[position]["nQuantity"] += nQty
-                    self.openPositions[position]["nominalNqty"] += nPrice * nQty
-                    self.openPositions[position]["tempNqty"] += nQty
-                    self.openPositions[position]["nominalNcommission"] += commission
-
-                    self.weight = self.weight + nQty
-                    self.p_weight = self.p_weight + (nPrice * nQty)
-                    self.openPositions[position]["entryNprice"] = (
-                        self.p_weight // self.weight
+                    op[position]["nQuantity"] += nQty
+                    op[position]["nominalNqty"] += nPrice * nQty // _.scale
+                    op[position]["tempNqty"] += nQty
+                    op[position]["nominalNcommission"] += commission
+                    op[position]["entryNpriceWeight"] += nQty
+                    op[position]["entryNpricePWeight"] += nPrice * nQty
+                    op[position]["entryNprice"] = (
+                        op[position]["entryNpricePWeight"]
+                        // op[position]["entryNpriceWeight"]
                     )
 
                     lockBalance, balance = nMargin, 0
 
                 elif (is_sell and is_long) or (is_buy and is_short):
-                    price: float = self.con.to_price(nPrice)
-                    qty: float = self.con.to_qty(nQty)
-                    eNprice: int = self.openPositions[position]["entryNprice"]
-                    nPnl: int = self.con.to_nPnl(
+                    price: float = _.to_price(nPrice)
+                    qty: float = _.to_qty(nQty)
+                    eNprice: int = op[position]["entryNprice"]
+                    _nMargin: int = _.to_margin(nPrice=eNprice, nQty=nQty)
+                    nPnl: int = _.to_nPnl(
                         closeNprice=nPrice,
                         entryNprice=eNprice,
                         is_long=is_long,
@@ -135,18 +137,18 @@ class TradeManager:
                         nCommission=commission,
                     )
                     side = "TakeProfits" if (nPnl > 0) else "StopLosses"
-                    pnl: float = nPnl / self.con.scale
-                    roi = self.con.to_nRoi(nPnl, nMargin) / self.con.scale
+                    pnl: float = nPnl / _.scale
+                    roi = _.to_nRoi(nPnl, _nMargin) / 100
 
-                    self.openPositions[position]["realizedPNL"] += pnl
-                    self.openPositions[position]["realizedROI"] += roi
-                    self.openPositions[position]["tempNqty"] -= nQty
+                    op[position]["realizedPNL"] += pnl
+                    op[position]["realizedROI"] += roi
+                    op[position]["tempNqty"] -= nQty
 
-                    self.openPositions[position][side] = {
+                    op[position][side] = {
                         rRow: {
                             "time": time,
                             "entryPrice": price,
-                            "commission": commission,
+                            "commission": _.to_qty(commission),
                             "qtyUSD": price * qty,
                             "qty": qty,
                             "realizedPNL": pnl,
@@ -154,26 +156,25 @@ class TradeManager:
                         }
                     }
 
-                    if self.openPositions[position]["tempNqty"] == 0:
-                        temp = self.openPositions.pop(position)
-                        self.closePositions[rRow] = {
+                    if op[position]["tempNqty"] == 0:
+                        temp = op.pop(position)
+                        cp[rRow] = {
                             "positionSide": temp["positionSide"],
                             "openTime": temp["openTime"],
                             "closeTime": time,
-                            "entryPrice": self.con.to_price(eNprice),
+                            "entryPrice": _.to_price(eNprice),
                             "closePrice": price,
-                            "quantity": self.con.to_qty(temp["nQuantity"]),
-                            "nominalQty": self.con.to_qty(temp["nominalNqty"]),
-                            "nominalCommission": self.con.to_qty(
-                                temp["nominalNcommission"]
-                            ),
-                            "laverage": temp["laverage"],
+                            "quantity": _.to_qty(temp["nQuantity"]),
+                            "nominalQty": _.to_qty(temp["nominalNqty"]),
+                            "nominalCommission": _.to_qty(temp["nominalNcommission"]),
+                            "leverage": temp["leverage"],
                             "realizedPNL": temp["realizedPNL"],
                             "realizedROI": temp["realizedROI"],
                             "TakeProfits": temp["TakeProfits"],
                             "StopLosses": temp["StopLosses"],
                         }
-                    lockBalance, balance = -nMargin, nPnl
+
+                    lockBalance, balance = -_nMargin, nPnl
 
             elif is_new and ((is_buy and is_long) or (is_sell and is_short)):
                 lockBalance, balance = nMargin, 0
@@ -181,8 +182,8 @@ class TradeManager:
             elif is_canceled and ((is_buy and is_long) or (is_sell and is_short)):
                 lockBalance, balance = -nMargin, 0
 
-            _.setLockedNbalance(lockBalance)
-            _.setNbalance(balance)
+            _.lockedNbalance = lockBalance
+            _.nBalance = balance
 
             ohRRow[0] += 1
 

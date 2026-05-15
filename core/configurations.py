@@ -48,12 +48,12 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
     def __init__(
         self,
         scale: int = 20,
-        leverage: int = 25,
+        leverage: int = 20,
         maxLockBalance: float = 0.5,
         maxLossBalance: float = 0.5,
         entry_qty: float = 0.01,
-        TProi: float = 1.0,
-        SLroi: float = 1.0,
+        TPdev: float = 0.05,
+        SLdev: float = 0.05,
         slippage: float = 0.0005,
         latencyMs: int = 100,
         tradesLines: int = 10000,
@@ -63,8 +63,8 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.maxLockBalance: int = round(maxLockBalance * 1000)
         self.maxLossBalance: int = round(maxLossBalance * 1000)
         self.entryQty: int = round(entry_qty * 1000)
-        self.TProi: int = round(TProi * 1000)
-        self.SLroi: int = round(SLroi * 1000)
+        self.TPdev: int = round(TPdev * 1000)
+        self.SLdev: int = round(SLdev * 1000)
         self.slipage: int = round(slippage * 10000)
         self.latency: int = latencyMs
 
@@ -91,7 +91,10 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.executedBuf_size = self.offset + self.executed_size * self.cell_amount
 
         self.executeBuf = OFFSET, OFFSET + self.signal_buf_size
-        self.executedBuf = self.executeBuf[1], self.executeBuf[1] + self.signal_buf_size
+        self.executedBuf = (
+            self.executeBuf[1],
+            self.executeBuf[1] + self.executedBuf_size,
+        )
         return self.executeBuf[1]
 
 

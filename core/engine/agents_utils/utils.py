@@ -171,8 +171,8 @@ class TradeConverter:
         self.leverage: int = self.cfgST.leverage
         self.slipage: int = self.cfgST.slipage
         self.scale: int = self.cfgST.scale
-        self._tpRoi: int = self.cfgST.TProi
-        self._slRoi: int = self.cfgST.SLroi
+        self._tpDev: int = self.cfgST.TPdev
+        self._slDev: int = self.cfgST.SLdev
         self._entryQty: int = self.cfgST.entryQty
         self._maxLockNbalance: int = self.cfgST.maxLockBalance
         self._maxLossNbalance: int = self.cfgST.maxLossBalance
@@ -199,17 +199,18 @@ class TradeConverter:
         self._takerNcommission = round(takerCommission * 10000)
         self._makerNcommission = round(makerCommission * 10000)
 
-        self.setNbalance(self.startNbalance)
-        self.setLockedNbalance(0)
+        self.nBalance = self.startNbalance
+        self.lockedNbalance = 0
 
     @property
     def nBalance(self) -> int:
         return int.from_bytes(self._nBalance[:])
 
-    def setNbalance(self, nValue: int) -> None:
-        self._nBalance[:] = (int.from_bytes(self._nBalance[:]) + nValue).to_bytes(
-            length=16
-        )
+    @nBalance.setter
+    def nBalance(self, nValue: int) -> None:
+        self._nBalance[:] = (
+            int.from_bytes(self._nBalance[:], signed=True) + nValue
+        ).to_bytes(length=16, signed=True)
 
     @property
     def startNbalance(self) -> int:
@@ -223,14 +224,15 @@ class TradeConverter:
     def lockedNbalance(self) -> int:
         return int.from_bytes(self._lockedNbalance[:])
 
+    @lockedNbalance.setter
+    def lockedNbalance(self, nValue: int) -> None:
+        self._lockedNbalance[:] = (
+            int.from_bytes(self._lockedNbalance[:], signed=True) + nValue
+        ).to_bytes(length=16, signed=True)
+
     @property
     def lockedNbalanceLimit(self) -> int:
         return int.from_bytes(self._nBalance[:]) * self._maxLockNbalance // 1000
-
-    def setLockedNbalance(self, nValue: int) -> None:
-        self._lockedNbalance[:] = (
-            int.from_bytes(self._lockedNbalance[:]) + nValue
-        ).to_bytes(length=16)
 
     @property
     def freeNbalance(self) -> int:
@@ -258,12 +260,12 @@ class TradeConverter:
     def to_margin(self, nPrice: int, nQty: int) -> int:
         return (nQty * nPrice) // self.scale // self.leverage
 
-    def TProiNprice(self, nPrice: int, is_long: bool) -> int:
-        tpTicks: int = nPrice * self._tpRoi // 1000
+    def TPdevNprice(self, nPrice: int, is_long: bool) -> int:
+        tpTicks: int = nPrice * self._tpDev // 1000
         return nPrice + (tpTicks if is_long else -tpTicks)
 
-    def SLroiNprice(self, nPrice: int, is_long: bool) -> int:
-        slTicks: int = nPrice * self._slRoi // 1000
+    def SLdevNprice(self, nPrice: int, is_long: bool) -> int:
+        slTicks: int = nPrice * self._slDev // 1000
         return nPrice + (-slTicks if is_long else slTicks)
 
     def to_nPnl(
@@ -274,7 +276,9 @@ class TradeConverter:
         nQty: int,
         nCommission: int,
     ) -> int:
-        return (closeNprice - entryNprice) * (1 if is_long else -1) * nQty - nCommission
+        return (
+            (closeNprice - entryNprice) * (1 if is_long else -1)
+        ) * nQty // self.scale - nCommission
 
     def to_nRoi(self, nPnl: int, nMargin: int) -> int:
         return (nPnl * self.scale) // nMargin * 100 // self.scale

@@ -39,7 +39,7 @@ class LogicAgent:
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
         self.tradesParsed: memoryview = self.manager.metrics_buf[
-            self.cfgMetrics.tradesParsed[0] : self.cfgMetrics.tradesParsed[1] + 1
+            slice(*self.cfgMetrics.tradesParsed)
         ]
         # Footprint
         self.cfgFP = self.manager.cfgFootprint

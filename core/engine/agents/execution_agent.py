@@ -32,8 +32,6 @@ class ExecutionAgent:
         self.cfgBT = self.manager.cfgBacktesting
         # Strategy
         self.cfgST = self.manager.cfgStrategy
-        self.TProi = self.cfgST.TProi
-        self.SLroi = self.cfgST.SLroi
         self.cell_amount: int = self.cfgST.cell_amount
         self.readerId: int = self.cfgST.reader[1] // 8 - 1
         self.writerId: int = self.cfgST.writer[1] // 8 - 1
@@ -119,11 +117,13 @@ class ExecutionAgent:
                     self._check_execute_buf()
 
                 if self.backtesting and (self._space_read[0] == 1):
-                    self.me.execute_limit_orders()
-                    self.tm.prepare_trades()
-                    self.check_risk_management()
-                    self._space_read[0] = 0
-                    self.me.dfm_RRid[0] = 0
+                    if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
+                        self.me.execute_limit_orders()
+                        self.tm.prepare_trades()
+                        self.check_risk_management()
+                        self._space_read[0] = 0
+                        self.me.dfm_RRid[0] = 0
+                        self.me.dfmRID[0] = 0
 
     def complete(self) -> bool:
         return (
@@ -133,7 +133,9 @@ class ExecutionAgent:
         )
 
     def final_actions(self) -> None:
-        print(self.tm.closePositions)
+        print(
+            self.con.nBalance / self.con.scale, self.con.lockedNbalance / self.con.scale
+        )
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
@@ -161,9 +163,6 @@ class ExecutionAgent:
     def _check_execute_buf(self) -> None:
         _, buf, rid = self.con, self.executeBuf, self.readerId
         # - - -
-        if not self.check_risk_management():
-            return
-
         cell: int = buf[rid]
         start: int = cell * self.signal_size + self.offset
 
@@ -173,13 +172,11 @@ class ExecutionAgent:
 
         new_cell: int = cell + 1
         buf[rid] = new_cell if new_cell < self.cell_amount else 0
-        # - - -
+        if not self.check_risk_management():
+            return
         is_long: bool = bool(orderParam & c.OF_LONG)
         is_buy: bool = bool(orderParam & c.OF_BUY)
         is_market: bool = bool(orderParam & c.OF_MARKET)
-
-        nPrice: int = _.to_nPrice(_.to_fpPrice(_nPrice))
-        nQty: int = _.entryNqtyWithLeverage(nPrice)
 
         if self.backtesting:
             temp = self.me.find_market_order_data(_time_ms)
@@ -190,13 +187,17 @@ class ExecutionAgent:
                 self.tm.prepare_trades()
                 if not self.check_risk_management():
                     return
+
+                nPrice: int = _.to_nPrice(_.to_fpPrice(_nPrice))
+                nQty: int = _.entryNqtyWithLeverage(nPrice)
+
                 entryNprice = self.me.execute_market_order(
                     fpNprice, nQty, _time_ms, is_long, is_buy
                 )
                 self.tm.prepare_trades()
                 if not self.check_risk_management():
                     return
-                nPriceTP = _.TProiNprice(entryNprice, is_long)
+                nPriceTP = _.TPdevNprice(entryNprice, is_long)
                 tpOrderParam = 0
                 tpOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
                 tpOrderParam |= c.OF_SELL if is_long else c.OF_BUY
@@ -205,7 +206,7 @@ class ExecutionAgent:
                 self.tm.update_orders_array(
                     nPriceTP, nQty, _time_ms + 50, tpOrderParam, None, None
                 )
-                nPriceSL = _.SLroiNprice(entryNprice, is_long)
+                nPriceSL = _.SLdevNprice(entryNprice, is_long)
                 slOrderParam = 0
                 slOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
                 slOrderParam |= c.OF_SELL if is_long else c.OF_BUY

@@ -15,11 +15,13 @@ class OpenPosition(TypedDict):
     positionSide: str
     openTime: str
     entryNprice: int
+    entryNpriceWeight: int
+    entryNpricePWeight: int
     nQuantity: int
     nominalNqty: int
     tempNqty: int
     nominalNcommission: int
-    laverage: int
+    leverage: int
     realizedPNL: float
     realizedROI: float
     TakeProfits: dict
@@ -35,7 +37,7 @@ class ClosePosition(TypedDict):
     quantity: float
     nominalQty: float
     nominalCommission: float
-    laverage: int
+    leverage: int
     realizedPNL: float
     realizedROI: float
     TakeProfits: dict

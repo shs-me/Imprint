@@ -52,13 +52,18 @@ class MatchingEngine:
             buffer=self.manager.metrics_buf[slice(*self.cfgMetrics.dfm_2)],
         )
 
+    @property
+    def dfm(self) -> NDArray[int64]:
+        return self.dfm_2 if (self.space_flag[0] == 0) else self.dfm_1
+
+    @property
+    def dfmRID(self) -> memoryview:
+        return self.dfm_2RID if (self.space_flag[0] == 0) else self.dfm_1RID
+
     def find_market_order_data(self, timestamp: int) -> tuple[int, int] | None:
-        buf = self.space_flag[0]
-        dfm, dfm_rid = (
-            (self.dfm_1, self.dfm_1RID) if (buf == 0) else (self.dfm_2, self.dfm_2RID)
+        return _binary_search(
+            dfm=self.dfm, timestamp=timestamp, high=self.dfmRID[0] - 1
         )
-        highRow: int = dfm_rid[0]
-        return _binary_search(dfm=dfm, timestamp=timestamp, high=highRow)
 
     def execute_market_order(
         self, fpNprice: int, nQty: int, timestamp: int, is_long: bool, is_buy: bool
@@ -84,11 +89,8 @@ class MatchingEngine:
     def execute_limit_orders(self, highWrow: int | None = None) -> None:
         if self.tm.have_active_orders:
             _execute_limit_orders(
-                space_flag=self.space_flag,
-                dfm_1=self.dfm_1,
-                dfm_2=self.dfm_2,
-                dfm_1RID=self.dfm_1RID,
-                dfm_2RID=self.dfm_2RID,
+                dfm=self.dfm,
+                dfmRID=self.dfmRID,
                 dfm_nRID=self.dfm_RRid,
                 active_orders=self.tm.active_orders,
                 orders_history=self.tm.orders_history,
@@ -105,11 +107,8 @@ class MatchingEngine:
 
 
 def _execute_limit_orders(
-    space_flag: memoryview,
-    dfm_1: NDArray[int64],
-    dfm_2: NDArray[int64],
-    dfm_1RID: memoryview,
-    dfm_2RID: memoryview,
+    dfm: NDArray[int64],
+    dfmRID: memoryview,
     dfm_nRID: memoryview,
     active_orders: NDArray[object_],
     orders_history: NDArray[object_],
@@ -123,10 +122,7 @@ def _execute_limit_orders(
     pricePrec: int,
     highWrow: int | None,
 ) -> None:
-    buf: int = 1 if (space_flag[0] == 0) else 0
-    dfm, dfm_rid = (dfm_1, dfm_1RID) if (buf == 0) else (dfm_2, dfm_2RID)
-
-    wRow: int = highWrow if highWrow else dfm_rid[0]
+    wRow: int = highWrow if highWrow else dfmRID[0]
     rRow: int = dfm_nRID[0]
     if rRow >= wRow:
         return
@@ -150,30 +146,29 @@ def _execute_limit_orders(
             aoRow = aoRow - _diff_for_row
 
             _nPrice: int = active_orders[aoRow, c.AO_nPrice]
-            _nQty: int = active_orders[aoRow, c.AO_orderParam]
+            _nQty: int = active_orders[aoRow, c.AO_nQty]
             _orderParam: int = active_orders[aoRow, c.AO_orderParam]
 
             is_limit: bool = bool(_orderParam & c.OF_LIMIT)
             is_market_triger: bool = bool(_orderParam & c.OF_MARKET_TRIGER)
             is_buy: bool = bool(_orderParam & c.OF_BUY)
 
-            if (is_buy and (nPrice >= _nPrice)) or (not is_buy and (nPrice <= _nPrice)):
-                if is_limit:
+            if is_limit:
+                if (is_buy and (nPrice <= _nPrice)) or (
+                    not is_buy and (nPrice >= _nPrice)
+                ):
                     _nPrice = _nPrice
                     _nCommission = _nQty * makerNcommission // 1000
                     _timestamp = int(startTimestamp)
                     _executed = True
 
-                elif is_market_triger:
+            elif is_market_triger:
+                if (is_buy and (nPrice >= _nPrice)) or (
+                    not is_buy and (nPrice <= _nPrice)
+                ):
                     slipageTicks: int = nPrice * slipage // 10000
                     _nPrice = nPrice + (slipageTicks if is_buy else -slipageTicks)
                     _nCommission = _nQty * takerNcommission // 10000
-                    _timestamp = int(endTimestamp)
-                    _executed = True
-
-                else:
-                    _nPrice = _nPrice
-                    _nCommission = _nQty * makerNcommission // 1000
                     _timestamp = int(endTimestamp)
                     _executed = True
 
@@ -219,4 +214,3 @@ def _binary_search(
             high = mid - 1
         else:
             low = mid + 1
-        print(mid, high, timestamp, startTimestamp, endTimestamp)

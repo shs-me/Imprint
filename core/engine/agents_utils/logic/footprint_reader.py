@@ -1,7 +1,6 @@
 import time
 from abc import ABC
 from multiprocessing.synchronize import Event
-from typing import Any
 
 import numpy as np
 from numba import njit
@@ -117,7 +116,7 @@ class FootprintReader(ABC):
         is_buy: bool,
         pass_lag: bool,
     ) -> None:
-        if not pass_lag and not self.lag_is_safe:
+        if not pass_lag and not self.lag_is_safe():
             return
 
         orderParam = 0
@@ -340,7 +339,7 @@ def _update_bar_states(
     headers = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
     indicators = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
     clear_mask = ~(headers | indicators)
-    fp_state[_highY : _highY + 1, idxBid] &= clear_mask
+    fp_state[_highY : _lowY + 1, idxBid] &= clear_mask
     # Update OHLC
     fp_state[_openY, idxBid] |= c.SF_OPEN
     fp_state[_highY, idxBid] |= c.SF_HIGH
