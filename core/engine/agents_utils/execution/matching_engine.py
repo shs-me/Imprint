@@ -235,5 +235,5 @@ def _binary_search(
             low = mid + 1
 
     if high >= 0:
-        return dfm[high, c.DFM_nPrice], dfm[high, c.DFM_nPrice]
+        return dfm[high, c.DFM_nPrice], high
     return None
