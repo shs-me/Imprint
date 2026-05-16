@@ -128,6 +128,7 @@ def _execute_limit_orders(
 
     if aoWRow[0] == 0:
         dfm_nRID[0] = wRow
+        return
 
     _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID = 0, 0, 0, 0, 0, 0
     oh, ao = orders_history, active_orders
