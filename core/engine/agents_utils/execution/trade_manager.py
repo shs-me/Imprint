@@ -190,7 +190,3 @@ class TradeManager:
             _.nBalance = balance
 
             ohRRow[0] += 1
-
-    @property
-    def have_active_orders(self) -> bool:
-        return bool(np.any(self.active_orders[: self.aoWRow[0], 0]))

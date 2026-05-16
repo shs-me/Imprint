@@ -90,22 +90,21 @@ class MatchingEngine:
         return nPrice
 
     def execute_limit_orders(self, highWrow: int | None = None) -> None:
-        if self.tm.have_active_orders:
-            _execute_limit_orders(
-                dfm=self.dfm,
-                dfm_nRID=self.dfm_RRid,
-                active_orders=self.tm.active_orders,
-                orders_history=self.tm.orders_history,
-                ohWRow=self.tm.ohWRow,
-                aoWRow=self.tm.aoWRow,
-                takerNcommission=self.con.takerNcommission,
-                makerNcommission=self.con.makerNcommission,
-                slipage=self.con.slipage,
-                scale=self.con.scale,
-                priceMult=self.con.priceMult,
-                pricePrec=self.con.pricePrec,
-                highWrow=highWrow if (highWrow is not None) else self.dfmRID[0],
-            )
+        _execute_limit_orders(
+            dfm=self.dfm,
+            dfm_nRID=self.dfm_RRid,
+            active_orders=self.tm.active_orders,
+            orders_history=self.tm.orders_history,
+            ohWRow=self.tm.ohWRow,
+            aoWRow=self.tm.aoWRow,
+            takerNcommission=self.con.takerNcommission,
+            makerNcommission=self.con.makerNcommission,
+            slipage=self.con.slipage,
+            scale=self.con.scale,
+            priceMult=self.con.priceMult,
+            pricePrec=self.con.pricePrec,
+            highWrow=highWrow if (highWrow is not None) else self.dfmRID[0],
+        )
 
 
 def _execute_limit_orders(
@@ -127,6 +126,9 @@ def _execute_limit_orders(
     if rRow >= wRow:
         return
 
+    if aoWRow[0] >= 0:
+        dfm_nRID[0] = wRow
+
     _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID = 0, 0, 0, 0, 0, 0
     oh, ao = orders_history, active_orders
     # - - -
@@ -141,7 +143,7 @@ def _execute_limit_orders(
         _diff_for_row: int = 0
         for aoRow in range(aoWrow):
             if aoWRow[0] == 0:
-                dfm_nRID[0] += 1
+                dfm_nRID[0] = wRow
                 return
 
             executed, cancelSL = False, True

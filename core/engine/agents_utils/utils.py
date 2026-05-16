@@ -205,13 +205,13 @@ class TradeConverter:
 
     @property
     def nBalance(self) -> int:
-        return int.from_bytes(self._nBalance[:])
+        return int.from_bytes(self._nBalance[:], byteorder="big", signed=True)
 
     @nBalance.setter
     def nBalance(self, nValue: int) -> None:
         self._nBalance[:] = (
-            int.from_bytes(self._nBalance[:], signed=True) + nValue
-        ).to_bytes(length=16, signed=True)
+            int.from_bytes(self._nBalance[:], byteorder="big", signed=True) + nValue
+        ).to_bytes(length=16, byteorder="big", signed=True)
 
     @property
     def startNbalance(self) -> int:
@@ -223,13 +223,14 @@ class TradeConverter:
 
     @property
     def lockedNbalance(self) -> int:
-        return int.from_bytes(self._lockedNbalance[:])
+        return int.from_bytes(self._lockedNbalance[:], byteorder="big", signed=True)
 
     @lockedNbalance.setter
     def lockedNbalance(self, nValue: int) -> None:
         self._lockedNbalance[:] = (
-            int.from_bytes(self._lockedNbalance[:], signed=True) + nValue
-        ).to_bytes(length=16, signed=True)
+            int.from_bytes(self._lockedNbalance[:], byteorder="big", signed=True)
+            + nValue
+        ).to_bytes(length=16, byteorder="big", signed=True)
 
     @property
     def lockedNbalanceLimit(self) -> int:
