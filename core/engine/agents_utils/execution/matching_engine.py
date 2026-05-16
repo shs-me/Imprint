@@ -62,7 +62,10 @@ class MatchingEngine:
 
     def find_market_order_data(self, timestamp: int) -> tuple[int, int] | None:
         return _binary_search(
-            dfm=self.dfm, timestamp=timestamp, high=self.dfmRID[0] - 1
+            dfm=self.dfm,
+            timestamp=timestamp,
+            high=self.dfmRID[0] - 1,
+            low=self.dfm_RRid[0],
         )
 
     def execute_market_order(
@@ -90,7 +93,6 @@ class MatchingEngine:
         if self.tm.have_active_orders:
             _execute_limit_orders(
                 dfm=self.dfm,
-                dfmRID=self.dfmRID,
                 dfm_nRID=self.dfm_RRid,
                 active_orders=self.tm.active_orders,
                 orders_history=self.tm.orders_history,
@@ -102,13 +104,12 @@ class MatchingEngine:
                 scale=self.con.scale,
                 priceMult=self.con.priceMult,
                 pricePrec=self.con.pricePrec,
-                highWrow=highWrow,
+                highWrow=highWrow if (highWrow is not None) else self.dfmRID[0],
             )
 
 
 def _execute_limit_orders(
     dfm: NDArray[int64],
-    dfmRID: memoryview,
     dfm_nRID: memoryview,
     active_orders: NDArray[object_],
     orders_history: NDArray[object_],
@@ -120,15 +121,15 @@ def _execute_limit_orders(
     scale: int,
     priceMult: float,
     pricePrec: int,
-    highWrow: int | None,
+    highWrow: int,
 ) -> None:
-    oh, ao = orders_history, active_orders
-    wRow: int = highWrow if highWrow else dfmRID[0]
-    rRow: int = dfm_nRID[0]
+    rRow, wRow = dfm_nRID[0], highWrow
     if rRow >= wRow:
         return
 
     _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID = 0, 0, 0, 0, 0, 0
+    oh, ao = orders_history, active_orders
+    # - - -
     for _row in range(rRow, wRow):
         nPrice: int = round(
             round((dfm[_row, c.DFM_nPrice] / priceMult), pricePrec) * scale
@@ -139,12 +140,11 @@ def _execute_limit_orders(
         aoWrow: int = aoWRow[0]
         _diff_for_row: int = 0
         for aoRow in range(aoWrow):
-            if not bool(np.any(active_orders[:aoWrow, 0])):
+            if aoWRow[0] == 0:
+                dfm_nRID[0] += 1
                 return
 
-            _executed = False
-            _cancelSl = True
-
+            executed, cancelSL = False, True
             aoRow = aoRow - _diff_for_row
 
             tpNprice: int = ao[aoRow, c.AO_nPrice, 0]
@@ -157,7 +157,7 @@ def _execute_limit_orders(
             slNqty: int = ao[aoRow, c.AO_nQty, 1]
             slOrderParam: int = ao[aoRow, c.AO_orderParam, 1]
             slOrderID: int = ao[aoRow, c.AO_orderID, 1]
-            slIsBuy: bool = bool(tpOrderParam & c.OF_BUY)
+            slIsBuy: bool = bool(slOrderParam & c.OF_BUY)
 
             if (tpIsBuy and (nPrice <= tpNprice)) or (
                 not tpIsBuy and (nPrice >= tpNprice)
@@ -166,9 +166,9 @@ def _execute_limit_orders(
                 _orderParam, _orderID = tpOrderParam, tpOrderID
                 _nCom = tpNqty * makerNcommission // 1000
 
-                _executed, _cancelSL = True, True
+                executed, cancelSL = True, True
 
-            if (slIsBuy and (nPrice >= slNprice)) or (
+            elif (slIsBuy and (nPrice >= slNprice)) or (
                 not slIsBuy and (nPrice <= slNprice)
             ):
                 slipageTicks = nPrice * slipage // 10000
@@ -177,9 +177,9 @@ def _execute_limit_orders(
                 _orderParam, _orderID = slOrderParam, slOrderID
                 _nCom = slNqty * takerNcommission // 1000
 
-                _executed, _cancelSL = True, False
+                executed, cancelSL = True, False
 
-            if _executed:
+            if executed:
                 _orderParam &= ~(c.OF_NEW)
                 _orderParam |= c.OF_FILLED
 
@@ -187,17 +187,17 @@ def _execute_limit_orders(
                 oh[ohRow, :] = _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID
                 ohWRow[0] += 1
 
-                _orderParam_ = slOrderParam if _cancelSl else tpOrderParam
+                _orderParam_ = slOrderParam if cancelSL else tpOrderParam
                 _orderParam_ &= ~(c.OF_NEW)
                 _orderParam_ |= c.OF_CANCELED
 
                 ohRow = ohWRow[0]
-                oh[ohRow, c.TP_nPrice] = slNprice if _cancelSl else tpNprice
-                oh[ohRow, c.TP_nQty] = slNqty if _cancelSl else tpNqty
+                oh[ohRow, c.TP_nPrice] = slNprice if cancelSL else tpNprice
+                oh[ohRow, c.TP_nQty] = slNqty if cancelSL else tpNqty
                 oh[ohRow, c.TP_timestamp] = _timestamp
                 oh[ohRow, c.TP_orderParam] = _orderParam_
                 oh[ohRow, c.TP_commission] = None
-                oh[ohRow, c.TP_orderID] = slOrderID if _cancelSl else tpOrderID
+                oh[ohRow, c.TP_orderID] = slOrderID if cancelSL else tpOrderID
                 ohWRow[0] += 1
 
                 if ((aoWrow - 1) - aoRow) > 0:
@@ -216,11 +216,11 @@ def _execute_limit_orders(
 def _binary_search(
     dfm: NDArray[int64], timestamp: int, high: int, low: int = 0
 ) -> tuple[int, int] | None:
+    max_idx = high
     while low <= high:
         mid: int = (low + high) // 2
         startTimestamp: int = dfm[mid, c.DFM_startTimestamp]
         endTimestamp: int = dfm[mid, c.DFM_endTimestamp]
-        print(timestamp, startTimestamp, endTimestamp)
         if startTimestamp <= timestamp <= endTimestamp:
             return dfm[mid, c.DFM_nPrice], mid
         elif timestamp < endTimestamp:
@@ -228,5 +228,4 @@ def _binary_search(
         else:
             low = mid + 1
 
-    print()
-    return (dfm[high, c.DFM_nPrice], high) if high >= 0 else None
+    return (dfm[low, c.DFM_nPrice], low) if (low <= max_idx) else None
