@@ -1,3 +1,4 @@
+import pprint
 from multiprocessing.synchronize import Event
 
 from core import constant as c
@@ -122,11 +123,10 @@ class ExecutionAgent:
 
                 if self.backtesting and (self._space_read[0] == 1):
                     if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
-                        self.me.execute_limit_orders()
-                        self.tm.prepare_trades()
+                        self.me.prepare_dfm(None)
                         self.check_risk_management()
-                        self.me.dfmRID[0] = 0
-                        self.me.dfm_RRid[0] = 0
+                        self.me.dfmWid[0] = 0
+                        self.me.dfmRid[0] = 0
                         self._space_read[0] = 0
 
     def complete(self) -> bool:
@@ -145,8 +145,9 @@ class ExecutionAgent:
             len(self.tm.closePositions),
             self.con.lastOrderId,
             len(self.pending_orders),
+            flush=True,
         )
-        # pprint.pp(self.tm.orders_history[: self.tm.ohWRow[0] :])
+
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
@@ -184,25 +185,15 @@ class ExecutionAgent:
         new_cell: int = cell + 1
         buf[rid] = new_cell if new_cell < self.cell_amount else 0
 
-        if not self.check_risk_management():
-            return
-
-        is_long, is_buy = bool(orderParam & c.OF_LONG), bool(orderParam & c.OF_BUY)
-
-        if self.backtesting:
-            if (temp := self.me.find_market_order_data(timestamp)) is not None:
-                fpNprice, row = temp
-                self.me.execute_limit_orders(highWrow=row)
-                self.tm.prepare_trades()
+        if self.check_risk_management():
+            if self.backtesting:
+                self.me.prepare_dfm(timestamp)
                 if self.check_risk_management():
                     nQty: int = _.entryNqtyWithLeverage(nPrice)
-                    self.open_position_sim(fpNprice, nQty, timestamp, is_long, is_buy)
+                    self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
 
             else:
-                self.pending_orders.append([nPrice, timestamp, is_long, is_buy])
-
-        else:
-            pass
+                pass
 
     def check_risk_management(self) -> bool:
         _ = self.con
@@ -219,38 +210,6 @@ class ExecutionAgent:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
 
         return False
-
-    def open_position_sim(
-        self, fpNprice: int, nQty: int, timestamp: int, is_long: bool, is_buy: bool
-    ) -> None:
-        _ = self.con
-        # - - -
-        entryNprice = self.me.execute_market_order(
-            fpNprice, nQty, timestamp, is_long, is_buy
-        )
-        self.tm.prepare_trades()
-        if not self.check_risk_management():
-            return
-
-        nPriceTP = _.TPdevNprice(entryNprice, is_long)
-        tpOrderParam = 0
-        tpOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
-        tpOrderParam |= c.OF_SELL if is_long else c.OF_BUY
-        tpOrderParam |= c.OF_LIMIT | c.OF_NEW
-        self.tm.update_orders_array(
-            nPriceTP, nQty, timestamp + 10, tpOrderParam, None, None
-        )
-
-        nPriceSL = _.SLdevNprice(entryNprice, is_long)
-        slOrderParam = 0
-        slOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
-        slOrderParam |= c.OF_SELL if is_long else c.OF_BUY
-        slOrderParam |= c.OF_MARKET_TRIGER | c.OF_NEW
-        self.tm.update_orders_array(
-            nPriceSL, nQty, timestamp + 10, slOrderParam, None, None
-        )
-
-        self.tm.prepare_trades()
 
 
 @manager_office()

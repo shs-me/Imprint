@@ -1,10 +1,15 @@
 import numpy as np
 from numba import njit
-from numpy import int64, object_
+from numpy import int64
 from numpy.typing import NDArray
 
 from core import constant as c
-from core.engine.agents_utils.execution.trade_manager import TradeManager
+from core.engine.agents_utils.execution.trade_manager import (
+    OPEN_ORDER,
+    SL_ORDER,
+    TP_ORDER,
+    TradeManager,
+)
 from core.engine.agents_utils.utils import TradeConverter
 from core.utils.monitoring.agent_manager import AgentManager
 
@@ -37,7 +42,6 @@ class MatchingEngine:
             slice(*self.cfgMetrics.timeStartReading)
         ].cast("q")
         # Variable's
-        self.dfm_RRid: memoryview = memoryview(bytearray(8)).cast("q")
         self._init_array()
 
     def _init_array(self) -> None:
@@ -51,184 +55,169 @@ class MatchingEngine:
             dtype=int64,
             buffer=self.manager.metrics_buf[slice(*self.cfgMetrics.dfm_2)],
         )
+        self.dfmRid: memoryview = memoryview(bytearray(8)).cast("q")
 
     @property
     def dfm(self) -> NDArray[int64]:
         return self.dfm_2 if (self.space_flag[0] == 0) else self.dfm_1
 
     @property
-    def dfmRID(self) -> memoryview:
+    def dfmWid(self) -> memoryview:
         return self.dfm_2RID if (self.space_flag[0] == 0) else self.dfm_1RID
 
-    def find_market_order_data(self, timestamp: int) -> tuple[int, int] | None:
-        return _binary_search(
-            dfm=self.dfm,
-            timestamp=timestamp,
-            high=self.dfmRID[0] - 1,
-            low=self.dfm_RRid[0],
-        )
-
-    def execute_market_order(
-        self, fpNprice: int, nQty: int, timestamp: int, is_long: bool, is_buy: bool
-    ) -> int:
-        _ = self.con
+    def prepare_dfm(self, timestamp: int | None) -> None:
+        aoWRow, dfmWid, dfmRid = self.tm.aoWRow, self.dfmWid, self.dfmRid
+        _, dfm = self.con, self.dfm
         # - - -
-        nPrice: int = _.to_nPrice(_.to_fpPrice(fpNprice))
-        slipageTicks: int = nPrice * _.slipage // 10000
-        nPrice = nPrice + (slipageTicks if is_buy else -slipageTicks)
-        nCommission: int = nQty * _.takerNcommission // 10000
+        if timestamp is not None:
+            if timestamp <= dfm[dfmWid[0], c.DFM_endTimestamp]:
+                wRow = find_row(timestamp, dfm, dfmWid[0])
+            else:
+                wRow = dfmWid[0]
+        else:
+            wRow = dfmWid[0]
 
-        orderParam: int = 0
-        orderParam |= c.OF_LONG if is_long else c.OF_SHORT
-        orderParam |= c.OF_BUY if is_buy else c.OF_SELL
-        orderParam |= c.OF_MARKET
+        rRow = dfmRid[0] = wRow if (aoWRow[0] == 0) else dfmRid[0]
+        if rRow < wRow:
+            for row in range(rRow, wRow):
+                nPrice: int = _.to_nPrice(_.to_fpPrice(dfm[row, c.DFM_endTimestamp]))
+                endTimestamp: int = int(dfm[row, c.DFM_endTimestamp])
+
+                if aoWRow[0] == 0:
+                    return
+
+                aoWrow: int = aoWRow[0]
+                for aoRow in range(aoWrow):
+                    if self.check_open_order(aoRow, nPrice, endTimestamp) is False:
+                        if self.check_tp_order(aoRow, nPrice, endTimestamp):
+                            if self.check_sl_order(aoRow, nPrice, endTimestamp):
+                                continue
+
+                        aoWRow[0] -= 1
+
+                dfmRid[0] += 1
+
+    def check_open_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
+        ao, _ = self.tm.active_orders, self.con
+        # - - -
+        if ao[OPEN_ORDER, aoRow, c.AO_nPrice] is None:
+            return False
+
+        timestamp: int = ao[OPEN_ORDER, aoRow, c.AO_timestamp]
+        if timestamp > endTimestamp:
+            return True
+
+        nPrice: int = ao[OPEN_ORDER, aoRow, c.AO_nPrice]
+        nQty: int = ao[OPEN_ORDER, aoRow, c.AO_nQty]
+        orderParam: int = ao[OPEN_ORDER, aoRow, c.AO_orderParam]
+
+        is_market: bool = bool(orderParam & c.OF_MARKET)
+        is_buy: bool = bool(orderParam & c.OF_BUY)
+
+        is_maker = False
+        if is_market:
+            slipageTicks = nPrice * self.con.slipage // 10000
+            nPrice = nPrice + (slipageTicks if is_buy else -slipageTicks)
+        else:
+            if (is_buy and (_nPrice <= nPrice)) or (not is_buy and (_nPrice >= nPrice)):
+                is_maker = True
+            else:
+                return True
+
+        nCommission: int = (
+            nQty * (_.makerNcommission if is_maker else _.takerNcommission) // 1000
+        )
+        orderParam &= ~(c.OF_NEW)
         orderParam |= c.OF_FILLED
-
-        self.tm.update_orders_array(
-            nPrice, nQty, timestamp, orderParam, nCommission, orderID=None
+        self.tm.update_orders_history(
+            nPrice, nQty, int(endTimestamp), orderParam, None, nCommission
         )
-        return nPrice
+        ao[OPEN_ORDER, aoRow, :] = None
 
-    def execute_limit_orders(self, highWrow: int | None = None) -> None:
-        _execute_limit_orders(
-            dfm=self.dfm,
-            dfm_nRID=self.dfm_RRid,
-            active_orders=self.tm.active_orders,
-            orders_history=self.tm.orders_history,
-            ohWRow=self.tm.ohWRow,
-            aoWRow=self.tm.aoWRow,
-            takerNcommission=self.con.takerNcommission,
-            makerNcommission=self.con.makerNcommission,
-            slipage=self.con.slipage,
-            scale=self.con.scale,
-            priceMult=self.con.priceMult,
-            pricePrec=self.con.pricePrec,
-            highWrow=highWrow if (highWrow is not None) else self.dfmRID[0],
+        nPriceTP = _.TPdevNprice(nPrice, is_buy)
+        tpOrderParam = 0
+        tpOrderParam |= c.OF_LONG if is_buy else c.OF_SHORT
+        tpOrderParam |= c.OF_SELL if is_buy else c.OF_BUY
+        tpOrderParam |= c.OF_LIMIT | c.OF_NEW
+        timestamp = int(endTimestamp + _.latencyMs)
+        self.tm.set_active_order(
+            nPriceTP, nQty, timestamp, tpOrderParam, None, aoRow, is_tp=True
+        )
+        nPriceSL = _.SLdevNprice(nPrice, is_buy)
+        slOrderParam = 0
+        slOrderParam |= c.OF_LONG if is_buy else c.OF_SHORT
+        slOrderParam |= c.OF_SELL if is_buy else c.OF_BUY
+        slOrderParam |= c.OF_MARKET_TRIGER | c.OF_NEW
+        self.tm.set_active_order(
+            nPriceSL, nQty, timestamp, slOrderParam, None, aoRow, is_tp=False
         )
 
+        self.tm.prepare_trades()
+        return True
 
-def _execute_limit_orders(
-    dfm: NDArray[int64],
-    dfm_nRID: memoryview,
-    active_orders: NDArray[object_],
-    orders_history: NDArray[object_],
-    ohWRow: memoryview,
-    aoWRow: memoryview,
-    takerNcommission: int,
-    makerNcommission: int,
-    slipage: int,
-    scale: int,
-    priceMult: float,
-    pricePrec: int,
-    highWrow: int,
-) -> None:
-    rRow, wRow = dfm_nRID[0], highWrow
-    if rRow >= wRow:
-        return
+    def check_tp_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
+        ao, _ = self.tm.active_orders, self.con
+        # - - -
+        timestamp: int = ao[TP_ORDER, aoRow, c.AO_timestamp]
+        if timestamp > endTimestamp:
+            return True
 
-    if aoWRow[0] == 0:
-        dfm_nRID[0] = wRow
-        return
+        nPrice: int = ao[TP_ORDER, aoRow, c.AO_nPrice]
+        nQty: int = ao[TP_ORDER, aoRow, c.AO_nQty]
+        orderParam: int = ao[TP_ORDER, aoRow, c.AO_orderParam]
 
-    _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID = 0, 0, 0, 0, 0, 0
-    oh, ao = orders_history, active_orders
-    # - - -
-    for _row in range(rRow, wRow):
-        nPrice: int = round(
-            round((dfm[_row, c.DFM_nPrice] / priceMult), pricePrec) * scale
-        )
-        startTimestamp: int64 = dfm[_row, c.DFM_startTimestamp]
-        endTimestamp: int64 = dfm[_row, c.DFM_endTimestamp]
+        is_buy: bool = bool(orderParam & c.OF_BUY)
 
-        aoWrow: int = aoWRow[0]
-        _diff_for_row: int = 0
-        for aoRow in range(aoWrow):
-            if aoWRow[0] == 0:
-                dfm_nRID[0] = wRow
-                return
+        if (is_buy and (_nPrice <= nPrice)) or (not is_buy and (_nPrice >= nPrice)):
+            nCommission: int = nQty * _.makerNcommission // 1000
+            orderParam &= ~(c.OF_NEW)
+            orderParam |= c.OF_FILLED
+            self.tm.update_orders_history(
+                nPrice, nQty, int(endTimestamp), orderParam, None, nCommission
+            )
+            ao[TP_ORDER, aoRow, :] = None
+            self.cancel_active_order(aoRow, int(endTimestamp), SL_ORDER)
+            return False
+        return True
 
-            executed, cancelSL = False, True
-            aoRow = aoRow - _diff_for_row
+    def check_sl_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
+        ao, _ = self.tm.active_orders, self.con
+        # - - -
+        timestamp: int = ao[SL_ORDER, aoRow, c.AO_timestamp]
+        if timestamp > endTimestamp:
+            return True
 
-            tpNprice: int = ao[aoRow, c.AO_nPrice, 0]
-            tpNqty: int = ao[aoRow, c.AO_nQty, 0]
-            tpOrderParam: int = ao[aoRow, c.AO_orderParam, 0]
-            tpOrderID: int = ao[aoRow, c.AO_orderID, 0]
-            tpIsBuy: bool = bool(tpOrderParam & c.OF_BUY)
+        nPrice: int = ao[SL_ORDER, aoRow, c.AO_nPrice]
+        nQty: int = ao[SL_ORDER, aoRow, c.AO_nQty]
+        orderParam: int = ao[SL_ORDER, aoRow, c.AO_orderParam]
 
-            slNprice: int = ao[aoRow, c.AO_nPrice, 1]
-            slNqty: int = ao[aoRow, c.AO_nQty, 1]
-            slOrderParam: int = ao[aoRow, c.AO_orderParam, 1]
-            slOrderID: int = ao[aoRow, c.AO_orderID, 1]
-            slIsBuy: bool = bool(slOrderParam & c.OF_BUY)
+        is_buy: bool = bool(orderParam & c.OF_BUY)
 
-            if (tpIsBuy and (nPrice <= tpNprice)) or (
-                not tpIsBuy and (nPrice >= tpNprice)
-            ):
-                _nPrice, _nQty, _timestamp = tpNprice, tpNqty, int(startTimestamp)
-                _orderParam, _orderID = tpOrderParam, tpOrderID
-                _nCom = tpNqty * makerNcommission // 1000
+        if (is_buy and (_nPrice >= nPrice)) or (not is_buy and (_nPrice <= nPrice)):
+            nCommission: int = nQty * _.takerNcommission // 1000
+            orderParam &= ~(c.OF_NEW)
+            orderParam |= c.OF_FILLED
+            self.tm.update_orders_history(
+                nPrice, nQty, int(endTimestamp), orderParam, None, nCommission
+            )
+            ao[SL_ORDER, aoRow, :] = None
+            self.cancel_active_order(aoRow, int(endTimestamp), TP_ORDER)
+            return False
+        return True
 
-                executed, cancelSL = True, True
+    def cancel_active_order(self, aoRow: int, timestamp: int, typeOrder: int) -> None:
+        nPrice: int = self.tm.active_orders[typeOrder, aoRow, c.AO_nPrice]
+        nQty: int = self.tm.active_orders[typeOrder, aoRow, c.AO_nQty]
+        orderParam: int = self.tm.active_orders[typeOrder, aoRow, c.AO_orderParam]
 
-            elif (slIsBuy and (nPrice >= slNprice)) or (
-                not slIsBuy and (nPrice <= slNprice)
-            ):
-                slipageTicks = nPrice * slipage // 10000
-                _nPrice = nPrice + (slipageTicks if slIsBuy else -slipageTicks)
-                _nQty, _timestamp = slNqty, int(endTimestamp)
-                _orderParam, _orderID = slOrderParam, slOrderID
-                _nCom = slNqty * takerNcommission // 1000
+        orderParam &= ~(c.OF_NEW)
+        orderParam |= c.OF_CANCELED
 
-                executed, cancelSL = True, False
-
-            if executed:
-                _orderParam &= ~(c.OF_NEW)
-                _orderParam |= c.OF_FILLED
-
-                ohRow = ohWRow[0]
-                oh[ohRow, :] = _nPrice, _nQty, _timestamp, _orderParam, _nCom, _orderID
-                ohWRow[0] += 1
-
-                _orderParam_ = slOrderParam if cancelSL else tpOrderParam
-                _orderParam_ &= ~(c.OF_NEW)
-                _orderParam_ |= c.OF_CANCELED
-
-                ohRow = ohWRow[0]
-                oh[ohRow, c.TP_nPrice] = slNprice if cancelSL else tpNprice
-                oh[ohRow, c.TP_nQty] = slNqty if cancelSL else tpNqty
-                oh[ohRow, c.TP_timestamp] = _timestamp
-                oh[ohRow, c.TP_orderParam] = _orderParam_
-                oh[ohRow, c.TP_commission] = None
-                oh[ohRow, c.TP_orderID] = slOrderID if cancelSL else tpOrderID
-                ohWRow[0] += 1
-
-                if ((aoWrow - 1) - aoRow) > 0:
-                    ao[aoRow : aoWrow - 1, :, :] = ao[aoRow + 1 : aoWrow, :, :]
-                    ao[aoWrow - 1, :, :] = None
-                else:
-                    ao[aoRow, :, :] = None
-
-                aoWRow[0] -= 1
-                _diff_for_row += 1
-
-        dfm_nRID[0] += 1
+        self.tm.update_orders_history(nPrice, nQty, timestamp, orderParam, None)
+        self.tm.prepare_trades()
+        self.tm.active_orders[typeOrder, aoRow, :] = None
 
 
 @njit(cache=True)
-def _binary_search(
-    dfm: NDArray[int64], timestamp: int, high: int, low: int = 0
-) -> tuple[int, int] | None:
-    max_idx = high
-    while low <= high:
-        mid: int = (low + high) // 2
-        startTimestamp: int = dfm[mid, c.DFM_startTimestamp]
-        endTimestamp: int = dfm[mid, c.DFM_endTimestamp]
-        if startTimestamp <= timestamp <= endTimestamp:
-            return dfm[mid, c.DFM_nPrice], mid
-        elif timestamp < endTimestamp:
-            high = mid - 1
-        else:
-            low = mid + 1
-
-    return (dfm[low, c.DFM_nPrice], low) if (low <= max_idx) else None
+def find_row(timestamp: int, dfm: NDArray[int64], dfmWrow: int) -> int:
+    return np.where(dfm[:dfmWrow, c.DFM_endTimestamp] >= timestamp)[0][0]

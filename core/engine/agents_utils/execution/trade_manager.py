@@ -7,6 +7,10 @@ from core.engine.agents_utils.utils import TradeConverter
 from core.settings import ClosePosition, OpenPosition, OrderFlag
 from core.utils.monitoring.agent_manager import AgentManager
 
+OPEN_ORDER: int = 0
+TP_ORDER: int = 1
+SL_ORDER: int = 2
+
 
 class TradeManager:
     def __init__(self, manager: AgentManager, converter: TradeConverter) -> None:
@@ -27,41 +31,46 @@ class TradeManager:
             shape=(self.lines, self.cols), dtype=object_
         )
         self.active_orders: NDArray[object_] = np.ndarray(
-            shape=(self.lines, c.AO_ConstantCount, 2), dtype=object_
+            shape=(3, self.lines, c.AO_ConstantCount), dtype=object_
         )
 
         self.ohRRow: memoryview = memoryview(bytearray(8)).cast("q")
         self.ohWRow: memoryview = memoryview(bytearray(8)).cast("q")
         self.aoWRow: memoryview = memoryview(bytearray(8)).cast("q")
 
-    def update_orders_array(
+    def update_orders_history(
         self,
         nPrice: int,
         nQty: int,
         timestamp: int,
         orderParam: int,
-        nCommission: int | None,
         orderID: int | None,
+        nCommission: int = 0,
     ) -> None:
-        ohWRow, aoWRow = self.ohWRow, self.aoWRow
-        oh, ao = self.orders_history, self.active_orders
+        order_param: list[int] = [nPrice, nQty, timestamp, orderParam, nCommission]
+        order_param.append(orderID if (orderID is not None) else self.con.newOrderId)
+        self.orders_history[self.ohWRow[0], :] = order_param
+        self.ohWRow[0] += 1
+
+    def set_active_order(
+        self,
+        nPrice: int,
+        nQty: int,
+        timestamp: int,
+        orderParam: int,
+        orderID: int | None = None,
+        openWrow: int | None = None,
+        is_tp: bool = True,
+    ) -> None:
+        _, ao = self.con, self.active_orders
         # - - -
-        oh[ohWRow[0], c.TP_nPrice] = nPrice
-        oh[ohWRow[0], c.TP_nQty] = nQty
-        oh[ohWRow[0], c.TP_timestamp] = timestamp
-        oh[ohWRow[0], c.TP_orderParam] = orderParam
-        oh[ohWRow[0], c.TP_commission] = nCommission
-        oh[ohWRow[0], c.TP_orderID] = orderID if orderID else self.con.newOrderId
-        ohWRow[0] += 1
-        if bool(orderParam & c.OF_NEW):
-            side, row = (0, 0) if bool(orderParam & c.OF_LIMIT) else (1, 1)
-            wRow = aoWRow[0]
-            ao[wRow, c.AO_nPrice, side] = nPrice
-            ao[wRow, c.AO_nQty, side] = nQty
-            ao[wRow, c.AO_timestamp, side] = timestamp
-            ao[wRow, c.AO_orderParam, side] = orderParam
-            ao[wRow, c.AO_orderID, side] = orderID if orderID else self.con.newOrderId
-            aoWRow[0] += row
+        order_param: list[int] = [nPrice, nQty, timestamp, orderParam]
+        order_param.append(orderID if (orderID is not None) else _.newOrderId)
+        if openWrow is None:
+            ao[OPEN_ORDER, self.aoWRow[0], :] = order_param
+            self.aoWRow[0] += 1
+        else:
+            ao[(TP_ORDER if is_tp else SL_ORDER), openWrow, :] = order_param
 
     def prepare_trades(self) -> None:
         ohRRow, ohWRow, aoWRow = self.ohRRow, self.ohWRow, self.aoWRow
