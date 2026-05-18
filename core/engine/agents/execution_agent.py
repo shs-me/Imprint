@@ -92,8 +92,6 @@ class ExecutionAgent:
             makerCommission=self.rest.get_commission(is_maker=True),
         )
 
-        self.pending_orders: list = []
-
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:
         # LocalLinks
@@ -144,7 +142,6 @@ class ExecutionAgent:
             len(self.tm.openPositions),
             len(self.tm.closePositions),
             self.con.lastOrderId,
-            len(self.pending_orders),
             flush=True,
         )
 

@@ -86,14 +86,19 @@ class MatchingEngine:
                 if aoWRow[0] == 0:
                     return
 
-                aoWrow: int = aoWRow[0]
-                for aoRow in range(aoWrow):
+                aoRow = 0
+                while aoRow == aoWRow[0]:
                     if self.check_open_order(aoRow, nPrice, endTimestamp) is False:
                         if self.check_tp_order(aoRow, nPrice, endTimestamp):
                             if self.check_sl_order(aoRow, nPrice, endTimestamp):
+                                aoRow += 1
                                 continue
 
+                        self.compact_active_orders(aoRow)
                         aoWRow[0] -= 1
+
+                    else:
+                        aoRow += 1
 
                 dfmRid[0] += 1
 
@@ -216,6 +221,13 @@ class MatchingEngine:
         self.tm.update_orders_history(nPrice, nQty, timestamp, orderParam, None)
         self.tm.prepare_trades()
         self.tm.active_orders[typeOrder, aoRow, :] = None
+
+    def compact_active_orders(self, aoRow: int) -> None:
+        ao, aoWRow = self.tm.active_orders, self.tm.aoWRow
+        # - - -
+        if (aoWRow[0] - 1) > aoRow:
+            ao[:, aoRow : aoWRow[0] - 1, :] = ao[:, aoRow + 1 : aoWRow[0], :]
+            ao[:, aoWRow[0] - 1, :] = None
 
 
 @njit(cache=True)
