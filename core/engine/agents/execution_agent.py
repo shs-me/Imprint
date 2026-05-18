@@ -145,7 +145,7 @@ class ExecutionAgent:
             self.tm.aoWRow[0],
             flush=True,
         )
-
+        # pprint.pprint(self.tm.closePositions)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(

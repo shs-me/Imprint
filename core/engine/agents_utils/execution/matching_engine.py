@@ -80,7 +80,7 @@ class MatchingEngine:
         rRow = dfmRid[0] = wRow if (aoWRow[0] == 0) else dfmRid[0]
         if rRow < wRow:
             for row in range(rRow, wRow):
-                nPrice: int = _.to_nPrice(_.to_fpPrice(dfm[row, c.DFM_endTimestamp]))
+                nPrice: int = _.to_nPrice(_.to_fpPrice(dfm[row, c.DFM_nPrice]))
                 endTimestamp: int = int(dfm[row, c.DFM_endTimestamp])
 
                 if aoWRow[0] == 0:
