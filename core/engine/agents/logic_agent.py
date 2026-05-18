@@ -101,6 +101,10 @@ class LogicAgent:
         return self.tradesParsed[0] == 1
 
     def final_actions(self) -> None:
+        if self.backtesting:
+            if self.reader.execution_event.is_set() is False:
+                self.reader.execution_event.set()
+
         self.reader.final_actions()
         self.set_proc_sc(scs.COMPLETE)
 

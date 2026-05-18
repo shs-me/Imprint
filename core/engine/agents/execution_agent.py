@@ -119,21 +119,18 @@ class ExecutionAgent:
                 if WB_1[0] != RB_1[0]:
                     self._check_execute_buf()
 
-                if self.backtesting and (self._space_read[0] == 1):
+                if self.backtesting:
                     if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
-                        self.me.prepare_dfm(None)
-                        self.check_risk_management()
-                        self.me.dfmWid[0] = 0
-                        self.me.dfmRid[0] = 0
-                        self._space_read[0] = 0
-                        print(task_status[0] == 0)
+                        if self._space_read[0] == 1:
+                            self.me.prepare_dfm(None)
+                            self.check_risk_management()
+                            self.me.dfmWid[0] = 0
+                            self.me.dfmRid[0] = 0
+                            self._space_read[0] = 0
 
     def complete(self) -> bool:
-        return (
-            self.WB_1[0] == self.RB_1[0]
-            and self.WB_2[0] == self.RB_2[0]
-            and self._space_read[0] == 0
-            and self.tradesParsed[0] == 1
+        return ((self.WB_1[0] == self.RB_1[0]) and (self.WB_2[0] == self.RB_2[0])) and (
+            (self._space_read[0] == 0) and (self.tradesParsed[0] == 1)
         )
 
     def final_actions(self) -> None:
@@ -146,7 +143,7 @@ class ExecutionAgent:
             self.tm.aoWRow[0],
             flush=True,
         )
-        pprint.pprint(self.tm.closePositions)
+        # pprint.pprint(self.tm.closePositions)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
