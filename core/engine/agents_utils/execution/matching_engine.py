@@ -87,7 +87,7 @@ class MatchingEngine:
                     return
 
                 aoRow = 0
-                while aoRow == aoWRow[0]:
+                while aoRow < aoWRow[0]:
                     if self.check_open_order(aoRow, nPrice, endTimestamp) is False:
                         if self.check_tp_order(aoRow, nPrice, endTimestamp):
                             if self.check_sl_order(aoRow, nPrice, endTimestamp):

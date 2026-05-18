@@ -142,6 +142,7 @@ class ExecutionAgent:
             len(self.tm.openPositions),
             len(self.tm.closePositions),
             self.con.lastOrderId,
+            self.tm.aoWRow[0],
             flush=True,
         )
 
