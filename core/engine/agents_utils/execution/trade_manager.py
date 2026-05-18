@@ -72,6 +72,8 @@ class TradeManager:
         else:
             ao[(TP_ORDER if is_tp else SL_ORDER), openWrow, :] = order_param
 
+        self.update_orders_history(nPrice, nQty, timestamp, orderParam, None)
+
     def prepare_trades(self) -> None:
         ohRRow, ohWRow, aoWRow = self.ohRRow, self.ohWRow, self.aoWRow
         oh, ao, _ = self.orders_history, self.active_orders, self.con
@@ -135,8 +137,6 @@ class TradeManager:
                         // op[position]["entryNpriceWeight"]
                     )
 
-                    lockBalance, balance = nMargin, 0
-
                 elif (is_sell and is_long) or (is_buy and is_short):
                     price: float = _.to_price(nPrice)
                     qty: float = _.to_qty(nQty)
@@ -157,16 +157,14 @@ class TradeManager:
                     op[position]["realizedROI"] += roi
                     op[position]["tempNqty"] -= nQty
 
-                    op[position][side] = {
-                        rRow: {
-                            "time": time,
-                            "entryPrice": price,
-                            "commission": _.to_qty(commission),
-                            "qtyUSD": price * qty,
-                            "qty": qty,
-                            "realizedPNL": pnl,
-                            "realizedROI": roi,
-                        }
+                    op[position][side][rRow] = {
+                        "price": price,
+                        "qtyUSD": price * qty,
+                        "qty": qty,
+                        "realizedPNL": pnl,
+                        "realizedROI": roi,
+                        "commission": _.to_qty(commission),
+                        "time": time,
                     }
 
                     if op[position]["tempNqty"] == 0:

@@ -126,6 +126,7 @@ class ExecutionAgent:
                         self.me.dfmWid[0] = 0
                         self.me.dfmRid[0] = 0
                         self._space_read[0] = 0
+                        print(task_status[0] == 0)
 
     def complete(self) -> bool:
         return (
@@ -145,7 +146,7 @@ class ExecutionAgent:
             self.tm.aoWRow[0],
             flush=True,
         )
-        # pprint.pprint(self.tm.closePositions)
+        pprint.pprint(self.tm.closePositions)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
@@ -185,7 +186,7 @@ class ExecutionAgent:
 
         if self.check_risk_management():
             if self.backtesting:
-                self.me.prepare_dfm(timestamp)
+                self.me.prepare_dfm(timestamp - _.latencyMs)
                 if self.check_risk_management():
                     nQty: int = _.entryNqtyWithLeverage(nPrice)
                     self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)

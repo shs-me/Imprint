@@ -92,8 +92,8 @@ class LogicAgent:
                         self._space_read[0] = 1
                         if self.reader.execution_event.is_set() is False:
                             self.reader.execution_event.set()
-                            while self._space_read[0] == 1:
-                                time.sleep(0)
+                        while self._space_read[0] == 1:
+                            time.sleep(0)
 
                     flag[0] = 0
 

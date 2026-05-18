@@ -70,7 +70,7 @@ class MatchingEngine:
         _, dfm = self.con, self.dfm
         # - - -
         if timestamp is not None:
-            if timestamp <= dfm[dfmWid[0], c.DFM_endTimestamp]:
+            if timestamp <= dfm[dfmWid[0] - 1, c.DFM_endTimestamp]:
                 wRow = find_row(timestamp, dfm, dfmWid[0])
             else:
                 wRow = dfmWid[0]
@@ -84,6 +84,7 @@ class MatchingEngine:
                 endTimestamp: int = int(dfm[row, c.DFM_endTimestamp])
 
                 if aoWRow[0] == 0:
+                    dfmRid[0] = wRow
                     return
 
                 aoRow = 0
