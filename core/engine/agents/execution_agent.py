@@ -143,7 +143,6 @@ class ExecutionAgent:
             self.tm.aoWRow[0],
             flush=True,
         )
-        # pprint.pprint(self.tm.closePositions)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
@@ -186,6 +185,7 @@ class ExecutionAgent:
                 self.me.prepare_dfm(timestamp - _.latencyMs)
                 if self.check_risk_management():
                     nQty: int = _.entryNqtyWithLeverage(nPrice)
+                    orderParam |= c.OF_NEW | c.OF_MARKET
                     self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
 
             else:
