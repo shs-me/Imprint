@@ -11,7 +11,7 @@ from core.utils.monitoring.agent_manager import AgentManager
 class IntraDay(FootprintReader):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager, execution_event)
-        self.algorithm_metadata.resize((1500, 4))
+        self.algorithm_metadata.resize((100000, 4))
         self.row = 0
 
     def _update_closed_bar_and_fp(self) -> None:

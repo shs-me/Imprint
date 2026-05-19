@@ -1,4 +1,4 @@
-import pprint
+import time
 from multiprocessing.synchronize import Event
 
 from core import constant as c
@@ -6,6 +6,7 @@ from core.engine.agents.rest_agent import RestAgent
 from core.engine.agents_utils.execution.matching_engine import MatchingEngine
 from core.engine.agents_utils.execution.trade_manager import TradeManager
 from core.engine.agents_utils.utils import TradeConverter
+from core.settings import BacktestingMode
 from core.utils.handlers import error_handler
 from core.utils.monitoring.agent_manager import AgentManager
 from core.utils.monitoring.office import manager_office
@@ -13,11 +14,7 @@ from core.utils.monitoring.status_codes import StatusCodes as scs
 
 
 class ExecutionAgent:
-    def __init__(
-        self,
-        manager: AgentManager,
-        execution_event: Event,
-    ) -> None:
+    def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         self.manager: AgentManager = manager
         self.execution_event: Event = execution_event
 
@@ -31,6 +28,7 @@ class ExecutionAgent:
 
         # Backtesting
         self.cfgBT = self.manager.cfgBacktesting
+        self.btMode = self.manager.mode
         # Strategy
         self.cfgST = self.manager.cfgStrategy
         self.cell_amount: int = self.cfgST.cell_amount
@@ -102,7 +100,7 @@ class ExecutionAgent:
         alarm_clock = self._alarm_clock
         # - - -
         while True:
-            # - - -
+            is_real: bool = self.btMode == BacktestingMode.REAL_TIME_SIM
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
                     task: bool | int = self.check_base_task(complete=self.complete())
@@ -112,7 +110,7 @@ class ExecutionAgent:
                                 self.final_actions()
                             return
 
-                alarm_clock(WB_1, RB_1, WB_2, RB_2)
+                alarm_clock(WB_1, RB_1, WB_2, RB_2, is_real)
 
                 if WB_2[0] != RB_2[0]:
                     self._check_executed_buf()
@@ -146,8 +144,21 @@ class ExecutionAgent:
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
+        self,
+        WB_1: memoryview,
+        RB_1: memoryview,
+        WB_2: memoryview,
+        RB_2: memoryview,
+        is_real: bool,
     ) -> None:
+        if self.backtesting and not is_real:
+            while (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and (
+                (self._space_read[0] == 0) and (self.tradesParsed[0] == 0)
+            ):
+                time.sleep(0)
+
+            return
+
         if (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and self._space_read[0] == 0:
             self.execution_event.clear()
             if (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and self._space_read[0] == 0:
@@ -194,18 +205,16 @@ class ExecutionAgent:
     def check_risk_management(self) -> bool:
         _ = self.con
         # - - -
-        if not (_.lossNbalanceLimit >= _.nBalance):
-            if not (_.lockedNbalance >= _.lockedNbalanceLimit):
-                if not ((_.leverage * _.entryNominalNqty) <= _.minOrderNsize):
-                    return True
-                else:
-                    self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
-            else:
-                pass
-        else:
+        if _.lossNbalanceLimit >= _.nBalance:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
+            return False
+        if _.lockedNbalance >= _.lockedNbalanceLimit:
+            pass
+        if (_.leverage * _.entryNominalNqty) <= _.minOrderNsize:
+            self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
+            return False
 
-        return False
+        return True
 
 
 @manager_office()

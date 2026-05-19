@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 
 from core import constant as c
 from core.engine.agents_utils.utils import FPconverter
+from core.settings import BacktestingMode
 from core.settings import OrderFlag as of
 from core.settings import SpaceCoords as sc
 from core.utils.monitoring.agent_manager import AgentManager
@@ -19,6 +20,8 @@ class FootprintReader(ABC):
         self.manager: AgentManager = manager
         self.execution_event: Event = execution_event
 
+        self.backtesting = self.manager.backtesting
+        self.is_real = self.manager.mode == BacktestingMode.REAL_TIME_SIM
         # Footprint
         self.cfgFP = self.manager.cfgFootprint
         self.analysis_safe_lag_microsecond = (
@@ -109,15 +112,11 @@ class FootprintReader(ABC):
 
     # - - Strategy Methods - -
     def send_signal(
-        self,
-        nPrice: int,
-        time_ms: int,
-        is_long: bool,
-        is_buy: bool,
-        pass_lag: bool,
+        self, nPrice: int, time_ms: int, is_long: bool, is_buy: bool, pass_lag: bool
     ) -> None:
-        if not pass_lag and not self.lag_is_safe():
-            return
+        if not pass_lag:
+            if not self.lag_is_safe():
+                return
 
         orderParam = 0
 
@@ -133,8 +132,9 @@ class FootprintReader(ABC):
 
         new_cell = cell + 1
         self.executeBuf[self.writerId] = new_cell if new_cell < self.cell_amount else 0
-        if self.execution_event.is_set() is False:
-            self.execution_event.set()
+        if self.backtesting and self.is_real:
+            if self.execution_event.is_set() is False:
+                self.execution_event.set()
 
     # Agent Methods's
     def final_actions(self) -> None:

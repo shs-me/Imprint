@@ -1,6 +1,7 @@
 from abc import ABC
 
 from core.settings import (
+    ActiveOrders,
     BarHeaders,
     ChartInterval,
     DataForMatching,
@@ -33,6 +34,8 @@ class ConfigurationBacktesting(Configuration):
         maker_commission: float = 0.002,
         balanceUSDT: float = 100.0,
         dayForPrepper: int | None = None,
+        startDateForPrepper: str | None = None,
+        endDateForPrepper: str | None = None,
     ) -> None:
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size
@@ -40,7 +43,8 @@ class ConfigurationBacktesting(Configuration):
         self.taker_commision: float = taker_commission
         self.maker_commission: float = maker_commission
         self.balance = balanceUSDT
-        self.dayForPrepper = dayForPrepper
+        self.startDateForPrepper = startDateForPrepper
+        self.endDateForPrepper = endDateForPrepper
 
 
 # ShmSegmentsSubclasses
@@ -49,14 +53,15 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self,
         scale: int = 20,
         leverage: int = 20,
-        maxLockBalance: float = 0.5,
-        maxLossBalance: float = 0.5,
+        maxLockBalance: float = 0.1,
+        maxLossBalance: float = 0.2,
         entry_qty: float = 0.01,
         TPdev: float = 0.05,
         SLdev: float = 0.05,
         slippage: float = 0.0005,
         latencyMs: int = 100,
-        tradesLines: int = 10000,
+        countOrderHistory: int = 10000,
+        countActiveOrder: int = 100,
     ) -> None:
         self.scale: int = 10**scale
         self.leverage: int = leverage
@@ -68,8 +73,10 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.slipage: int = round(slippage * 10000)
         self.latency: int = latencyMs
 
-        self.tradesLines: int = 10000
-        self.tradesCols: int = TradeParam._ConstantCount
+        self.ordersHistoryLines: int = countOrderHistory
+        self.ordersHistoryCols: int = TradeParam._ConstantCount
+        self.activeOrdersLines: int = countActiveOrder
+        self.activeOrdersCols: int = ActiveOrders._ConstantCount
         self.cell_amount: int = 128
 
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096

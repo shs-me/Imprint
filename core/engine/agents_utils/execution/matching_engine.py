@@ -26,9 +26,6 @@ class MatchingEngine:
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
-        # Strategy
-        self.cfgStrategy = self.manager.cfgStrategy
-        self.tradesLines: int = self.cfgStrategy.tradesLines
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
         self.dfmLines: int = self.cfgMetrics.dfmLines

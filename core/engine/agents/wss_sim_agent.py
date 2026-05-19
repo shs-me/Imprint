@@ -32,12 +32,18 @@ class AggTradeSim(msgspec.Struct):
 
 class DataPrepper:
     def __init__(
-        self, symbol: str, lock: Lock, mode: bm, dayForPrepper: int | None
+        self,
+        symbol: str,
+        lock: Lock,
+        mode: bm,
+        startDateForPrepper: str | None,
+        endDateForPrepper: str | None,
     ) -> None:
         self.symbol: str = symbol.upper()
         self.lock: Lock = lock
         self.mode: bm = mode
-        self.dayFP: int | None = dayForPrepper
+        self.startDFP: str | None = startDateForPrepper
+        self.endDFP: str | None = endDateForPrepper
 
         self.datadir: str = DATA_PATH
         self.typeData: str = DATA_TYPE_AGGTRADES_PATH
@@ -57,12 +63,7 @@ class DataPrepper:
     def run_prepper_engine(self) -> None:
         try:
             data_paths: list[str] = self.get_data_paths()
-            limit = len(data_paths) if self.dayFP is None else self.dayFP
-            counter = 0
             for path in data_paths:
-                if counter >= limit:
-                    break
-
                 with open(file=path, mode="r") as f:
                     next(f)
                     for line in f:
@@ -93,8 +94,6 @@ class DataPrepper:
                         self.ntt = int(data[5])
                         self.queue.append(obj)
 
-                counter += 1
-
             self.complete = True
 
         except Exception as e:
@@ -102,9 +101,16 @@ class DataPrepper:
             self.is_running = False
 
     def get_data_paths(self) -> list[str]:
-        paths = [p for p in os.listdir(self.base_path) if p.endswith(".csv")]
-        dates = sorted([date.fromisoformat(p.split(".")[0]) for p in paths])
-        return [f"{self.base_path}/{date.isoformat(d)}.csv" for d in dates]
+        paths: list[str] = [p for p in os.listdir(self.base_path) if p.endswith(".csv")]
+        dates: list[date] = sorted([date.fromisoformat(p.split(".")[0]) for p in paths])
+        startDate: date = (
+            dates[0] if (self.startDFP is None) else date.fromisoformat(self.startDFP)
+        )
+        endDate: date = (
+            dates[-1] if (self.endDFP is None) else date.fromisoformat(self.endDFP)
+        )
+        needDates: list[date] = [d for d in dates if (startDate <= d <= endDate)]
+        return [f"{self.base_path}/{date.isoformat(d)}.csv" for d in needDates]
 
 
 class WssSimAgent:
@@ -121,14 +127,14 @@ class WssSimAgent:
         self.proc_status: memoryview = manager.proc_status
 
         self.cfgBT = self.manager.cfgBacktesting
-        self.dayForPrepper = self.cfgBT.dayForPrepper
         self.mode: bm = manager.mode
         self.lock: Lock = Lock()
         self.prepper: DataPrepper = DataPrepper(
             symbol=self.manager.symbol,
             lock=self.lock,
             mode=self.mode,
-            dayForPrepper=self.dayForPrepper,
+            startDateForPrepper=self.cfgBT.startDateForPrepper,
+            endDateForPrepper=self.cfgBT.endDateForPrepper,
         )
 
         self.ottrade: int = 0  # new time trade

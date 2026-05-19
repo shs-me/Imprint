@@ -67,7 +67,7 @@ class LogicAgent:
                     if isinstance(task, bool):
                         if task:
                             if task_status[0] & scs.COMPLETE:
-                                self.final_actions()
+                                self.final_actions(is_real)
 
                             return
 
@@ -90,8 +90,10 @@ class LogicAgent:
 
                     if self.backtesting:
                         self._space_read[0] = 1
-                        if self.reader.execution_event.is_set() is False:
-                            self.reader.execution_event.set()
+                        if is_real:
+                            if self.reader.execution_event.is_set() is False:
+                                self.reader.execution_event.set()
+
                         while self._space_read[0] == 1:
                             time.sleep(0)
 
@@ -100,8 +102,8 @@ class LogicAgent:
     def complete(self) -> bool:
         return self.tradesParsed[0] == 1
 
-    def final_actions(self) -> None:
-        if self.backtesting:
+    def final_actions(self, is_real: bool) -> None:
+        if self.backtesting and is_real:
             if self.reader.execution_event.is_set() is False:
                 self.reader.execution_event.set()
 
@@ -117,7 +119,7 @@ class LogicAgent:
             mode_is_zero_sleep = self.btMode == bm.ZERO_SLEEP
             while flag[0] == 0 and tradesParsed[0] == 0:
                 if mode_is_zero_sleep:
-                    time.sleep(0.0000001)
+                    time.sleep(0)
 
             return
 

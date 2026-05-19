@@ -1,4 +1,8 @@
-from core.configurations import ConfigurationBacktesting, ConfigurationFootprint
+from core.configurations import (
+    ConfigurationBacktesting,
+    ConfigurationFootprint,
+    ConfigurationStrategy,
+)
 from core.main import run_core
 from core.settings import BacktestingMode as bm
 from core.settings import ChartInterval
@@ -25,7 +29,19 @@ if __name__ == "__main__":
     cfgFootprint = ConfigurationFootprint(
         chart_interval=ChartInterval._5M, save_headers_as_csv=False
     )
-    cfgBacktesting = ConfigurationBacktesting(dayForPrepper=1)
-    kwargs = get_configs_kwargs(cfgFootprint, cfgBacktesting)
+    cfgBacktesting = ConfigurationBacktesting(
+        balanceUSDT=1000,
+        startDateForPrepper="2025-10-01",
+        endDateForPrepper="2025-10-30",
+    )
+    cfgStrategy = ConfigurationStrategy(
+        leverage=50,
+        maxLossBalance=0.2,
+        maxLockBalance=0.1,
+        entry_qty=0.005,
+        TPdev=0.02,
+        SLdev=0.02,
+    )
+    kwargs = get_configs_kwargs(cfgFootprint, cfgBacktesting, cfgStrategy)
 
     run_core(backtesting=True, mode=bm.ZERO_SLEEP, symbol=symbol, **kwargs)

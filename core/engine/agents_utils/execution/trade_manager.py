@@ -2,7 +2,6 @@ import numpy as np
 from numpy import object_
 from numpy.typing import NDArray
 
-from core import constant as c
 from core.engine.agents_utils.utils import TradeConverter
 from core.settings import ClosePosition, OpenPosition, OrderFlag
 from core.utils.monitoring.agent_manager import AgentManager
@@ -17,9 +16,10 @@ class TradeManager:
         self.manager: AgentManager = manager
         self.con: TradeConverter = converter
 
-        # Strategy
-        self.lines: int = self.con.cfgST.tradesLines
-        self.cols: int = self.con.cfgST.tradesCols
+        self.ohLines = self.con.cfgST.ordersHistoryLines
+        self.ohCols = self.con.cfgST.ordersHistoryCols
+        self.aoLines = self.con.cfgST.activeOrdersLines
+        self.aoCols = self.con.cfgST.activeOrdersCols
         self._init_array()
 
         # Variable's
@@ -28,10 +28,10 @@ class TradeManager:
 
     def _init_array(self) -> None:
         self.orders_history: NDArray[object_] = np.ndarray(
-            shape=(self.lines, self.cols), dtype=object_
+            shape=(self.ohLines, self.ohCols), dtype=object_
         )
         self.active_orders: NDArray[object_] = np.ndarray(
-            shape=(3, self.lines, c.AO_ConstantCount), dtype=object_
+            shape=(3, self.aoLines, self.aoCols), dtype=object_
         )
 
         self.ohRRow: memoryview = memoryview(bytearray(8)).cast("q")
@@ -47,10 +47,18 @@ class TradeManager:
         orderID: int | None,
         nCommission: int = 0,
     ) -> None:
+        ohWRow, oh, _ = self.ohWRow, self.orders_history, self.con
+        # - - -
         order_param: list[int] = [nPrice, nQty, timestamp, orderParam, nCommission]
-        order_param.append(orderID if (orderID is not None) else self.con.newOrderId)
-        self.orders_history[self.ohWRow[0], :] = order_param
-        self.ohWRow[0] += 1
+        order_param.append(orderID if (orderID is not None) else _.newOrderId)
+        oh[ohWRow[0], :] = order_param
+        ohWRow[0] += 1
+        if ohWRow[0] >= oh.shape[0]:
+            oldLines = oh.shape[0]
+            self.orders_history = np.resize(
+                oh, new_shape=((oldLines + self.ohLines), self.ohCols)
+            )
+            self.orders_history[oldLines - 1 :, :] = None
 
     def set_active_order(
         self,
@@ -62,52 +70,51 @@ class TradeManager:
         openWrow: int | None = None,
         is_tp: bool = True,
     ) -> None:
-        _, ao = self.con, self.active_orders
+        _, ao, aoWRow = self.con, self.active_orders, self.aoWRow
         # - - -
         order_param: list[int] = [nPrice, nQty, timestamp, orderParam]
         order_param.append(orderID if (orderID is not None) else _.newOrderId)
         if openWrow is None:
-            ao[OPEN_ORDER, self.aoWRow[0], :] = order_param
-            self.aoWRow[0] += 1
+            ao[OPEN_ORDER, aoWRow[0], :] = order_param
+            aoWRow[0] += 1
+            if aoWRow[0] >= ao.shape[1]:
+                oldLines = ao.shape[1]
+                self.active_orders = np.resize(
+                    ao, new_shape=(3, (oldLines + self.aoLines), self.aoCols)
+                )
+                self.active_orders[:, oldLines - 1 :, :] = None
         else:
             ao[(TP_ORDER if is_tp else SL_ORDER), openWrow, :] = order_param
 
         self.update_orders_history(nPrice, nQty, timestamp, orderParam, None)
 
     def prepare_trades(self) -> None:
-        ohRRow, ohWRow, aoWRow = self.ohRRow, self.ohWRow, self.aoWRow
-        oh, ao, _ = self.orders_history, self.active_orders, self.con
-        op, cp = self.openPositions, self.closePositions
+        nPrice: int
+        nQty: int
+        timestamp: int
+        orderParam: int
+        nCommission: int
+        orderID: int
+
+        oh, ohRRow, ohWRow = self.orders_history, self.ohRRow, self.ohWRow
+        _, op, cp = self.con, self.openPositions, self.closePositions
         # - - -
         while ohRRow[0] != ohWRow[0]:
-            rRow, wRow = ohRRow[0], ohWRow[0]
-
-            nPrice: int = oh[rRow, c.TP_nPrice]
-            nQty: int = oh[rRow, c.TP_nQty]
-            timestamp: int = oh[rRow, c.TP_timestamp]
-            orderParam: int = oh[rRow, c.TP_orderParam]
-            commission: int = oh[rRow, c.TP_commission]
-            orderID: int = oh[rRow, c.TP_orderID]
-
-            nMargin: int = _.to_margin(nPrice=nPrice, nQty=nQty)
-            # print(nMargin, nPrice, nQty, rRow, oh[rRow, :])
-            time: str = _.to_strftime(timestamp)
-            # Position Side
+            nPrice, nQty, timestamp, orderParam, nCommission, orderID = oh[ohRRow[0], :]
             is_long: bool = bool(orderParam & OrderFlag.LONG)
-            is_short: bool = bool(orderParam & OrderFlag.SHORT)
-            # Side
             is_buy: bool = bool(orderParam & OrderFlag.BUY)
-            is_sell: bool = bool(orderParam & OrderFlag.SELL)
-            # Status
+
             is_new: bool = bool(orderParam & OrderFlag.NEW)
             is_filled: bool = bool(orderParam & OrderFlag.FILLED)
             is_canceled: bool = bool(orderParam & OrderFlag.CANCELED)
 
-            lockBalance: int = 0
-            balance: int = 0
+            is_open: bool = (is_buy and is_long) or (not is_buy and not is_long)
+            nMargin: int = _.to_margin(nPrice=nPrice, nQty=nQty)
+            lockBalance, balance = 0, 0
             if is_filled:
+                time: str = _.to_strftime(timestamp)
                 position = "LONG" if is_long else "SHORT"
-                if (is_buy and is_long) or (is_sell and is_short):
+                if is_open:
                     if op.get(position, None) is None:
                         op[position] = {
                             "positionSide": position,
@@ -129,7 +136,7 @@ class TradeManager:
                     op[position]["nQuantity"] += nQty
                     op[position]["nominalNqty"] += nPrice * nQty // _.scale
                     op[position]["tempNqty"] += nQty
-                    op[position]["nominalNcommission"] += commission
+                    op[position]["nominalNcommission"] += nCommission
                     op[position]["entryNpriceWeight"] += nQty
                     op[position]["entryNpricePWeight"] += nPrice * nQty
                     op[position]["entryNprice"] = (
@@ -137,7 +144,7 @@ class TradeManager:
                         // op[position]["entryNpriceWeight"]
                     )
 
-                elif (is_sell and is_long) or (is_buy and is_short):
+                else:
                     price: float = _.to_price(nPrice)
                     qty: float = _.to_qty(nQty)
                     eNprice: int = op[position]["entryNprice"]
@@ -147,7 +154,7 @@ class TradeManager:
                         entryNprice=eNprice,
                         is_long=is_long,
                         nQty=nQty,
-                        nCommission=commission,
+                        nCommission=nCommission,
                     )
                     side = "TakeProfits" if (nPnl > 0) else "StopLosses"
                     pnl: float = nPnl / _.scale
@@ -157,19 +164,19 @@ class TradeManager:
                     op[position]["realizedROI"] += roi
                     op[position]["tempNqty"] -= nQty
 
-                    op[position][side][rRow] = {
+                    op[position][side][orderID] = {
                         "price": price,
                         "qtyUSD": price * qty,
                         "qty": qty,
                         "realizedPNL": pnl,
                         "realizedROI": roi,
-                        "commission": _.to_qty(commission),
+                        "commission": _.to_qty(nCommission),
                         "time": time,
                     }
 
                     if op[position]["tempNqty"] == 0:
                         temp = op.pop(position)
-                        cp[rRow] = {
+                        cp[orderID] = {
                             "positionSide": temp["positionSide"],
                             "openTime": temp["openTime"],
                             "closeTime": time,
@@ -187,10 +194,10 @@ class TradeManager:
 
                     lockBalance, balance = -_nMargin, nPnl
 
-            elif is_new and ((is_buy and is_long) or (is_sell and is_short)):
+            elif is_new and is_open:
                 lockBalance, balance = nMargin, 0
 
-            elif is_canceled and ((is_buy and is_long) or (is_sell and is_short)):
+            elif is_canceled and is_open:
                 lockBalance, balance = -nMargin, 0
 
             _.lockedNbalance = lockBalance
