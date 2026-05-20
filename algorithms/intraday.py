@@ -36,8 +36,8 @@ class IntraDay(FootprintReader):
 
         if high_auction_is_finished or low_auction_is_finished:
             if high_auction_is_finished:
-                self.algorithm_metadata[self.row, 0] = _.openTime(idx)
-                self.algorithm_metadata[self.row, 1] = _.to_nPrice(_CLOSE)
+                # self.algorithm_metadata[self.row, 0] = _.openTime(idx)
+                # self.algorithm_metadata[self.row, 1] = _.to_nPrice(_CLOSE)
                 self.send_signal(
                     nPrice=int(_.to_nPrice(_CLOSE)),
                     time_ms=int(_.lastTradeTime(idx)),
@@ -47,8 +47,8 @@ class IntraDay(FootprintReader):
                 )
 
             if low_auction_is_finished:
-                self.algorithm_metadata[self.row, 0] = _.openTime(idx)
-                self.algorithm_metadata[self.row, 2] = _.to_nPrice(_CLOSE)
+                # self.algorithm_metadata[self.row, 0] = _.openTime(idx)
+                # self.algorithm_metadata[self.row, 2] = _.to_nPrice(_CLOSE)
                 self.send_signal(
                     nPrice=int(_.to_nPrice(_CLOSE)),
                     time_ms=int(_.lastTradeTime(idx)),

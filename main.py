@@ -31,16 +31,16 @@ if __name__ == "__main__":
     )
     cfgBacktesting = ConfigurationBacktesting(
         balanceUSDT=1000,
-        startDateForPrepper="2025-10-01",
-        endDateForPrepper="2025-10-30",
+        startDateForPrepper="2026-01-01",
+        endDateForPrepper="2026-01-01",
     )
     cfgStrategy = ConfigurationStrategy(
-        leverage=50,
+        leverage=20,
         maxLossBalance=0.2,
-        maxLockBalance=0.1,
+        maxLockBalance=0.2,
         entry_qty=0.005,
-        TPdev=0.02,
-        SLdev=0.02,
+        TPdev=0.05,
+        SLdev=0.05,
     )
     kwargs = get_configs_kwargs(cfgFootprint, cfgBacktesting, cfgStrategy)
 

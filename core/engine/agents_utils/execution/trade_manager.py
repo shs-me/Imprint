@@ -2,6 +2,7 @@ import numpy as np
 from numpy import object_
 from numpy.typing import NDArray
 
+from core import constant as c
 from core.engine.agents_utils.utils import TradeConverter
 from core.settings import ClosePosition, OpenPosition, OrderFlag
 from core.utils.monitoring.agent_manager import AgentManager
@@ -38,6 +39,10 @@ class TradeManager:
         self.ohWRow: memoryview = memoryview(bytearray(8)).cast("q")
         self.aoWRow: memoryview = memoryview(bytearray(8)).cast("q")
 
+    def final_action(self, save_orders_history: bool = False) -> None:
+        if save_orders_history:
+            np.save(c.ORDERS_HISTORY_DUMP_PATH, self.orders_history)
+
     def update_orders_history(
         self,
         nPrice: int,
@@ -58,7 +63,7 @@ class TradeManager:
             self.orders_history = np.resize(
                 oh, new_shape=((oldLines + self.ohLines), self.ohCols)
             )
-            self.orders_history[oldLines - 1 :, :] = None
+            self.orders_history[oldLines:, :] = None
 
     def set_active_order(
         self,
@@ -82,7 +87,7 @@ class TradeManager:
                 self.active_orders = np.resize(
                     ao, new_shape=(3, (oldLines + self.aoLines), self.aoCols)
                 )
-                self.active_orders[:, oldLines - 1 :, :] = None
+                self.active_orders[:, oldLines:, :] = None
         else:
             ao[(TP_ORDER if is_tp else SL_ORDER), openWrow, :] = order_param
 
@@ -145,9 +150,9 @@ class TradeManager:
                     )
 
                 else:
-                    price: float = _.to_price(nPrice)
-                    qty: float = _.to_qty(nQty)
+                    closePrice: float = _.to_price(nPrice)
                     eNprice: int = op[position]["entryNprice"]
+                    entryPrice: float = _.to_price(eNprice)
                     _nMargin: int = _.to_margin(nPrice=eNprice, nQty=nQty)
                     nPnl: int = _.to_nPnl(
                         closeNprice=nPrice,
@@ -158,20 +163,22 @@ class TradeManager:
                     )
                     side = "TakeProfits" if (nPnl > 0) else "StopLosses"
                     pnl: float = nPnl / _.scale
-                    roi = _.to_nRoi(nPnl, _nMargin) / 100
+                    roi = _.to_roi(nPnl, _nMargin)
 
                     op[position]["realizedPNL"] += pnl
                     op[position]["realizedROI"] += roi
                     op[position]["tempNqty"] -= nQty
 
+                    qty: float = _.to_qty(nQty)
                     op[position][side][orderID] = {
-                        "price": price,
-                        "qtyUSD": price * qty,
-                        "qty": qty,
+                        "closeTime": time,
+                        "closePrice": closePrice,
+                        "entryPrice": entryPrice,
                         "realizedPNL": pnl,
-                        "realizedROI": roi,
+                        "realizedROI": f"{roi:.2f}",
                         "commission": _.to_qty(nCommission),
-                        "time": time,
+                        "qtyUSD": closePrice * qty,
+                        "qty": qty,
                     }
 
                     if op[position]["tempNqty"] == 0:
@@ -181,13 +188,13 @@ class TradeManager:
                             "openTime": temp["openTime"],
                             "closeTime": time,
                             "entryPrice": _.to_price(eNprice),
-                            "closePrice": price,
+                            "closePrice": closePrice,
                             "quantity": _.to_qty(temp["nQuantity"]),
                             "nominalQty": _.to_qty(temp["nominalNqty"]),
                             "nominalCommission": _.to_qty(temp["nominalNcommission"]),
                             "leverage": temp["leverage"],
                             "realizedPNL": temp["realizedPNL"],
-                            "realizedROI": temp["realizedROI"],
+                            "realizedROI": f"{temp['realizedROI']:.2f}",
                             "TakeProfits": temp["TakeProfits"],
                             "StopLosses": temp["StopLosses"],
                         }

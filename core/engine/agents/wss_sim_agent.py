@@ -42,6 +42,8 @@ class DataPrepper:
         self.symbol: str = symbol.upper()
         self.lock: Lock = lock
         self.mode: bm = mode
+        self.is_real: bool = self.mode == bm.REAL_TIME_SIM
+        self.is_zero_sleep: bool = self.mode == bm.ZERO_SLEEP
         self.startDFP: str | None = startDateForPrepper
         self.endDFP: str | None = endDateForPrepper
 
@@ -71,9 +73,10 @@ class DataPrepper:
                             break
 
                         while len(self.queue) == self.queue.maxlen:
-                            if self.mode == bm.NONE_STOP or self.mode == bm.ZERO_SLEEP:
-                                time.sleep(0.001)
-                            elif self.mode == bm.REAL_TIME_SIM:
+                            if not self.is_real:
+                                if self.is_zero_sleep:
+                                    time.sleep(0.001)
+                            else:
                                 self.lock.acquire()
 
                         data: list[str] = line.strip().split(sep=",")
@@ -128,6 +131,8 @@ class WssSimAgent:
 
         self.cfgBT = self.manager.cfgBacktesting
         self.mode: bm = manager.mode
+        self.is_real: bool = self.mode == bm.REAL_TIME_SIM
+        self.is_zero_sleep: bool = self.mode == bm.ZERO_SLEEP
         self.lock: Lock = Lock()
         self.prepper: DataPrepper = DataPrepper(
             symbol=self.manager.symbol,
@@ -228,12 +233,14 @@ class WssSimAgent:
         cell_amount: int,
         safe_lag: int,
     ) -> None:
-        if self.mode == bm.ZERO_SLEEP or self.mode == bm.NONE_STOP:
+        if not self.is_real:
             while ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
-                if self.mode == bm.ZERO_SLEEP:
-                    time.sleep(0)
-
-        elif self.mode == bm.REAL_TIME_SIM:
+                if self.task_status[0] == 0:
+                    if self.is_zero_sleep:
+                        time.sleep(0)
+                else:
+                    return
+        else:
             if ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
                 writer_cell = WCellC[0]  # debug
                 reader_cell = RCellC[0]  # debug
@@ -270,20 +277,23 @@ class WssSimAgent:
         data_offset: int,
         dataHeader_offset: int,
     ) -> bool:
-        raw_data: bytes = queue.popleft()
-        if (lrd := len(raw_data)) < data_size:  # lrd: Len Raw Data
-            cell: int = WCellC[0]
+        if queue:
+            raw_data: bytes = queue.popleft()
+            if (lrd := len(raw_data)) < data_size:
+                cell: int = WCellC[0]
 
-            raw_buf[cell + dataHeader_offset] = lrd
-            start: int = cell * data_size + data_offset
-            raw_buf[start : start + lrd] = raw_data
+                raw_buf[cell + dataHeader_offset] = lrd
+                start: int = cell * data_size + data_offset
+                raw_buf[start : start + lrd] = raw_data
 
-            new_cell = cell + 1
-            WCellC[0] = new_cell if new_cell < cell_amount else 0
-            return True
+                new_cell = cell + 1
+                WCellC[0] = new_cell if new_cell < cell_amount else 0
+                return True
 
+            else:
+                self.set_proc_sc(code=scs.BIG_RAW_DATA)
+                return False
         else:
-            self.set_proc_sc(code=scs.BIG_RAW_DATA)
             return False
 
 

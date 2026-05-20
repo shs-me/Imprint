@@ -1,3 +1,4 @@
+import pprint
 import time
 from multiprocessing.synchronize import Event
 
@@ -108,6 +109,7 @@ class ExecutionAgent:
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self.final_actions()
+
                             return
 
                 alarm_clock(WB_1, RB_1, WB_2, RB_2, is_real)
@@ -120,8 +122,7 @@ class ExecutionAgent:
                 if self.backtesting:
                     if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
                         if self._space_read[0] == 1:
-                            self.me.prepare_dfm(None)
-                            self.check_risk_management()
+                            self.start_matching(None)
                             self.me.dfmWid[0] = 0
                             self.me.dfmRid[0] = 0
                             self._space_read[0] = 0
@@ -132,6 +133,7 @@ class ExecutionAgent:
         )
 
     def final_actions(self) -> None:
+        self.tm.final_action(save_orders_history=True)
         print(
             self.con.nBalance / self.con.scale,
             self.con.lockedNbalance / self.con.scale,
@@ -141,6 +143,8 @@ class ExecutionAgent:
             self.tm.aoWRow[0],
             flush=True,
         )
+        # pprint.pprint(self.tm.closePositions)
+        # pprint.pprint(self.tm.openPositions)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
@@ -184,37 +188,42 @@ class ExecutionAgent:
         cell: int = buf[rid]
         start: int = cell * self.signal_size + self.offset
 
-        nPrice: int = _.to_nPrice(_.to_fpPrice(buf[start + self.nPriceId]))
+        nPrice: int = _.to_nPrice(buf[start + self.nPriceId])
         timestamp: int = buf[start + self.time_msId] + _.latencyMs
         orderParam: int = buf[start + self.orderParamId]
 
         new_cell: int = cell + 1
         buf[rid] = new_cell if new_cell < self.cell_amount else 0
 
-        if self.check_risk_management():
-            if self.backtesting:
-                self.me.prepare_dfm(timestamp - _.latencyMs)
-                if self.check_risk_management():
-                    nQty: int = _.entryNqtyWithLeverage(nPrice)
-                    orderParam |= c.OF_NEW | c.OF_MARKET
-                    self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
+        if _.lossNbalanceSafeLimit:
+            if _.lockedNbalanceSafeLimit:
+                if self.backtesting:
+                    if (nominalNqty := _.nominalEntryNqtyWithLeverage) is not None:
+                        if not self.start_matching(timestamp + _.latencyMs):
+                            return
 
+                        nQty: int = _.entryNqtyWithLeverage(nPrice, nominalNqty)
+                        orderParam |= c.OF_NEW | c.OF_MARKET
+                        self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
+
+                    else:
+                        self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
+                else:
+                    pass
             else:
                 pass
-
-    def check_risk_management(self) -> bool:
-        _ = self.con
-        # - - -
-        if _.lossNbalanceLimit >= _.nBalance:
+        else:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
-            return False
-        if _.lockedNbalance >= _.lockedNbalanceLimit:
-            pass
-        if (_.leverage * _.entryNominalNqty) <= _.minOrderNsize:
-            self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
-            return False
 
-        return True
+    def start_matching(self, timestamp: int | None) -> bool:
+        try:
+            self.me.prepare_dfm(timestamp)
+            return True
+        except RuntimeError:
+            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
+            pprint.pprint(self.tm.closePositions)
+            print(self.con.nBalance / self.con.scale, flush=True)
+            return False
 
 
 @manager_office()

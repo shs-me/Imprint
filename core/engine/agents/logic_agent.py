@@ -36,6 +36,8 @@ class LogicAgent:
 
         self.backtesting: bool = manager.backtesting
         self.btMode: bm = manager.mode
+        self.is_real: bool = self.btMode == bm.REAL_TIME_SIM
+        self.is_zero_sleep: bool = self.btMode == bm.ZERO_SLEEP
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
         self.tradesParsed: memoryview = self.manager.metrics_buf[
@@ -57,7 +59,7 @@ class LogicAgent:
         proc_status, task_status = self.proc_status, self.task_status
         # - - -
         while True:
-            is_real: bool = self.btMode == bm.REAL_TIME_SIM
+            is_real: bool = self.is_real
             pass_lag_limit: int = 3
             pass_lag: int = 0
             init_session: bool = False
@@ -82,11 +84,10 @@ class LogicAgent:
                     reader.update_states()
                     if is_real:
                         pre_sleep_logic.clear()
-
-                    if reader.lag_is_safe() is False:
-                        pass_lag += 1
-                        if pass_lag >= pass_lag_limit:
-                            self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
+                        if reader.lag_is_safe() is False:
+                            pass_lag += 1
+                            if pass_lag >= pass_lag_limit:
+                                self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
                     if self.backtesting:
                         self._space_read[0] = 1
@@ -95,7 +96,11 @@ class LogicAgent:
                                 self.reader.execution_event.set()
 
                         while self._space_read[0] == 1:
-                            time.sleep(0)
+                            if task_status[0] == 0:
+                                if self.is_zero_sleep:
+                                    time.sleep(0)
+                            else:
+                                break
 
                     flag[0] = 0
 
@@ -113,18 +118,16 @@ class LogicAgent:
     def _alarm_clock(
         self, flag: memoryview, tradesParsed: memoryview, pre_sleep_logic: Event
     ) -> None:
-        if self.backtesting and (
-            (self.btMode == bm.NONE_STOP) or (self.btMode == bm.ZERO_SLEEP)
-        ):
-            mode_is_zero_sleep = self.btMode == bm.ZERO_SLEEP
+        if not self.is_real:
             while flag[0] == 0 and tradesParsed[0] == 0:
-                if mode_is_zero_sleep:
-                    time.sleep(0)
-
-            return
-
-        if flag[0] == 0 and tradesParsed[0] == 0:
-            pre_sleep_logic.wait()
+                if self.task_status[0] == 0:
+                    if self.is_zero_sleep:
+                        time.sleep(0)
+                else:
+                    return
+        else:
+            if (flag[0] == 0) and (tradesParsed[0] == 0):
+                pre_sleep_logic.wait()
 
 
 def resolve_reader(

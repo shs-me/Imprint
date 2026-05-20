@@ -24,7 +24,9 @@ class WssAgent:
         self.task_status: memoryview = manager.task_status
 
         self.symbol: str = manager.symbol
-        self.wss_aggTrades_url = f"{WS_STREAMS_PROD_URL}{self.symbol.lower()}@aggTrade"
+        self.wss_aggTrades_url = (
+            f"{WS_STREAMS_PROD_URL}/ws/{self.symbol.lower()}@aggTrade"
+        )
         # InitGetRawData
         self.cfgRaw = self.manager.cfgRaw
         self.data_size: int = self.cfgRaw.data_size

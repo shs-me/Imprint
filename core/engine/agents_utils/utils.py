@@ -161,9 +161,7 @@ class FPconverter:
 
 class TradeConverter:
     def __init__(
-        self,
-        trade_param: memoryview,
-        cfgStrategy: ConfigurationStrategy,
+        self, trade_param: memoryview, cfgStrategy: ConfigurationStrategy
     ) -> None:
         self.trade_param = trade_param
         self.cfgST = cfgStrategy
@@ -171,15 +169,16 @@ class TradeConverter:
         self.latencyMs: int = self.cfgST.latency
         self.leverage: int = self.cfgST.leverage
         self.slipage: int = self.cfgST.slipage
-        self.scale: int = self.cfgST.scale
+        self._scalePrec: int = self.cfgST.scalePrec
+        self.scale: int = round(10**self._scalePrec)
         self._tpDev: int = self.cfgST.TPdev
         self._slDev: int = self.cfgST.SLdev
         self._entryQty: int = self.cfgST.entryQty
         self._maxLockNbalance: int = self.cfgST.maxLockBalance
         self._maxLossNbalance: int = self.cfgST.maxLossBalance
         self._startNbalance: int = 0
-        self._nBalance: memoryview = memoryview(bytearray(16))
-        self._lockedNbalance: memoryview = memoryview(bytearray(16))
+        self._nBalance: int = 0
+        self._lockedNbalance: int = 0
         self._minOrderNsize: int = 0
         self._takerNcommission: int = 0
         self._makerNcommission: int = 0
@@ -195,7 +194,7 @@ class TradeConverter:
         takerCommission: float,
         makerCommission: float,
     ) -> None:
-        self._startNbalance = round(startBalance * self.scale)
+        self.startNbalance = round(startBalance * self.scale)
         self._minOrderNsize = round(minOrderSize * self.scale)
         self._takerNcommission = round(takerCommission * 10000)
         self._makerNcommission = round(makerCommission * 10000)
@@ -204,60 +203,56 @@ class TradeConverter:
         self.lockedNbalance = 0
 
     @property
-    def nBalance(self) -> int:
-        return int.from_bytes(self._nBalance[:], byteorder="big", signed=True)
-
-    @nBalance.setter
-    def nBalance(self, nValue: int) -> None:
-        self._nBalance[:] = (
-            int.from_bytes(self._nBalance[:], byteorder="big", signed=True) + nValue
-        ).to_bytes(length=16, byteorder="big", signed=True)
-
-    @property
     def startNbalance(self) -> int:
         return self._startNbalance
 
+    @startNbalance.setter
+    def startNbalance(self, nValue: int) -> None:
+        self._startNbalance = nValue
+
     @property
-    def lossNbalanceLimit(self) -> int:
-        return self._startNbalance * self._maxLossNbalance // 1000
+    def nBalance(self) -> int:
+        return self._nBalance
+
+    @nBalance.setter
+    def nBalance(self, nValue: int) -> None:
+        self._nBalance += nValue
+        if not self.lossNbalanceSafeLimit:
+            raise RuntimeError
 
     @property
     def lockedNbalance(self) -> int:
-        return int.from_bytes(self._lockedNbalance[:], byteorder="big", signed=True)
+        return self._lockedNbalance
 
     @lockedNbalance.setter
     def lockedNbalance(self, nValue: int) -> None:
-        self._lockedNbalance[:] = (
-            int.from_bytes(self._lockedNbalance[:], byteorder="big", signed=True)
-            + nValue
-        ).to_bytes(length=16, byteorder="big", signed=True)
+        self._lockedNbalance += nValue
 
     @property
-    def lockedNbalanceLimit(self) -> int:
-        return int.from_bytes(self._nBalance[:]) * self._maxLockNbalance // 1000
-
-    @property
-    def freeNbalance(self) -> int:
+    def availableNbalance(self) -> int:
         return self.nBalance - self.lockedNbalance
 
     @property
-    def entryNominalNqty(self) -> int:
-        return self.freeNbalance * self._entryQty // 1000
+    def lossNbalanceSafeLimit(self) -> bool:
+        return self.nBalance > (
+            self.startNbalance - (self.startNbalance * self._maxLossNbalance // 1000)
+        )
 
     @property
-    def minOrderNsize(self) -> int:
-        return self._minOrderNsize
+    def lockedNbalanceSafeLimit(self) -> bool:
+        return self.lockedNbalance < (self._nBalance * self._maxLockNbalance // 1000)
 
     @property
-    def takerNcommission(self) -> int:
-        return self._takerNcommission
+    def nominalEntryNqty(self) -> int:
+        return self.availableNbalance * self._entryQty // 1000
 
     @property
-    def makerNcommission(self) -> int:
-        return self._makerNcommission
+    def nominalEntryNqtyWithLeverage(self) -> int | None:
+        if (qty := (self.leverage * self.nominalEntryNqty)) > self.minOrderNsize:
+            return qty
 
-    def entryNqtyWithLeverage(self, nPrice: int) -> int:
-        return (self.leverage * self.entryNominalNqty) * self.scale // nPrice
+    def entryNqtyWithLeverage(self, nPrice: int, nominalNqty: int) -> int:
+        return nominalNqty * self.scale // nPrice
 
     def to_margin(self, nPrice: int, nQty: int) -> int:
         return (nQty * nPrice) // self.scale // self.leverage
@@ -282,8 +277,8 @@ class TradeConverter:
             (closeNprice - entryNprice) * (1 if is_long else -1)
         ) * nQty // self.scale - nCommission
 
-    def to_nRoi(self, nPnl: int, nMargin: int) -> int:
-        return (nPnl * self.scale) // nMargin * 100 // self.scale
+    def to_roi(self, nPnl: int, nMargin: int) -> float:
+        return (nPnl / nMargin) * 100
 
     @property
     def lastOrderId(self) -> int:
@@ -294,29 +289,43 @@ class TradeConverter:
         self._last_order_id += 1
         return self._last_order_id
 
-    def to_fpPrice(self, nPrice: int) -> float:
-        return round((nPrice / self.priceMult), self.pricePrec)
+    @property
+    def minOrderNsize(self) -> int:
+        return self._minOrderNsize
 
-    def to_fpQty(self, nQty: int) -> float:
-        return round((nQty / self.qtyMult), self.qtyPrec)
+    @property
+    def takerNcommission(self) -> int:
+        return self._takerNcommission
 
-    def to_fpNprice(self, price: float) -> int:
-        return round(price * self.priceMult)
+    @property
+    def makerNcommission(self) -> int:
+        return self._makerNcommission
 
-    def to_fpNqty(self, qty: float) -> int:
-        return round(qty * self.qtyMult)
+    @overload
+    def to_nPrice(self, price: int) -> int: ...
+    @overload
+    def to_nPrice(self, price: float) -> int: ...
+    def to_nPrice(self, price: float | int) -> int:
+        if isinstance(price, float):
+            return round(price * self.scale)
+        else:
+            return price * (10 ** (self._scalePrec - self.pricePrec))
+
+    @overload
+    def to_nQty(self, qty: int) -> int: ...
+    @overload
+    def to_nQty(self, qty: float) -> int: ...
+    def to_nQty(self, qty: float | int) -> int:
+        if isinstance(qty, float):
+            return round(qty * self.scale)
+        else:
+            return qty * (10 ** (self._scalePrec - self.qtyPrec))
 
     def to_price(self, nPrice: int) -> float:
         return round((nPrice / self.scale), self.pricePrec)
 
     def to_qty(self, nQty: int) -> float:
         return round((nQty / self.scale), self.qtyPrec)
-
-    def to_nPrice(self, price: float) -> int:
-        return round(price * self.scale)
-
-    def to_nQty(self, qty: float) -> int:
-        return round(qty * self.scale)
 
     def to_strftime(self, timestamp_ms: int) -> str:
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(

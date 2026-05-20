@@ -29,16 +29,17 @@ BASE_UM_AGGTRADES_DAILY_URL = (
 # Logging
 LOGS_PATH = "logs"
 CORE_LOG_PATH = f"{LOGS_PATH}/core.log"
-# Debug
-DUMP_PATH = "dump"
-BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
-EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
 # Core
 ALGORITHM_PATH = "algorithms"
-ALGORITHMS_METADATA = f"{ALGORITHM_PATH}/metadata"
 # Data Download
 DATA_PATH = "data"
 DATA_TYPE_AGGTRADES_PATH = "aggTrades"
+# Dump
+DUMP_PATH = "dump"
+EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
+ORDERS_HISTORY_DUMP_PATH = f"{DUMP_PATH}/order_history.npy"
+BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
+ALGORITHM_METADATA_DUMP_PATH = f"{DUMP_PATH}/algorithm_metadata.npy"
 # Other
 DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH, ALGORITHM_PATH]
 

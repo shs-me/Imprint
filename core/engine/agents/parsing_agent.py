@@ -1,5 +1,5 @@
+import time
 from multiprocessing.synchronize import Event
-from time import sleep
 
 import msgspec
 from msgspec.json import Decoder
@@ -42,6 +42,8 @@ class ParserAgent:
         self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
         self.backtesting = manager.backtesting
         self.btMode = manager.mode
+        self.is_real: bool = self.btMode == bm.REAL_TIME_SIM
+        self.is_zero_sleep: bool = self.btMode == bm.ZERO_SLEEP
         # InitGetRawData
         self.cfgRaw = self.manager.cfgRaw
         self.data_size = self.cfgRaw.data_size
@@ -79,7 +81,7 @@ class ParserAgent:
         get_trade_data, alarm_clock = self._get_trade_data, self._alarm_clock
         #  - - -
         while True:
-            is_real: bool = self.btMode == bm.REAL_TIME_SIM
+            is_real: bool = self.is_real
             init_session: bool = False
             while True:
                 if proc_status[0] != 0 or task_status[0] != 0:
@@ -144,18 +146,17 @@ class ParserAgent:
         WCellC: memoryview,
         pre_sleep_wss: Event,
     ) -> None:
-        if self.backtesting and (
-            self.btMode == bm.NONE_STOP or self.btMode == bm.ZERO_SLEEP
-        ):
-            mode_is_zero_sleep = self.btMode == bm.ZERO_SLEEP
-            while WCellC[0] == RCellC[0] and task_status[0] == 0:
-                if mode_is_zero_sleep:
-                    sleep(0)
+        if not self.is_real:
+            while WCellC[0] == RCellC[0]:
+                if task_status[0] == 0:
+                    if self.is_zero_sleep:
+                        time.sleep(0)
+                else:
+                    return
 
-            return
-
-        if WCellC[0] == RCellC[0]:
-            pre_sleep_wss.wait()
+        else:
+            if WCellC[0] == RCellC[0]:
+                pre_sleep_wss.wait()
 
     def _get_trade_data(
         self,

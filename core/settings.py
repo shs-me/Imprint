@@ -39,7 +39,7 @@ class ClosePosition(TypedDict):
     nominalCommission: float
     leverage: int
     realizedPNL: float
-    realizedROI: float
+    realizedROI: str
     TakeProfits: dict
     StopLosses: dict
 

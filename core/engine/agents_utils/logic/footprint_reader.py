@@ -138,7 +138,7 @@ class FootprintReader(ABC):
 
     # Agent Methods's
     def final_actions(self) -> None:
-        np.save(c.ALGORITHMS_METADATA, self.algorithm_metadata)
+        np.save(c.ALGORITHM_METADATA_DUMP_PATH, self.algorithm_metadata)
 
     # - - Footprint Analysis/Update Methods - -
     def update_states(self) -> None:

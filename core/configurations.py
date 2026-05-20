@@ -51,7 +51,7 @@ class ConfigurationBacktesting(Configuration):
 class ConfigurationStrategy(ConfigurationSHMSegments):
     def __init__(
         self,
-        scale: int = 20,
+        scalePrec: int = 20,
         leverage: int = 20,
         maxLockBalance: float = 0.1,
         maxLossBalance: float = 0.2,
@@ -63,7 +63,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         countOrderHistory: int = 10000,
         countActiveOrder: int = 100,
     ) -> None:
-        self.scale: int = 10**scale
+        self.scalePrec: int = scalePrec
         self.leverage: int = leverage
         self.maxLockBalance: int = round(maxLockBalance * 1000)
         self.maxLossBalance: int = round(maxLossBalance * 1000)
@@ -77,7 +77,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.ordersHistoryCols: int = TradeParam._ConstantCount
         self.activeOrdersLines: int = countActiveOrder
         self.activeOrdersCols: int = ActiveOrders._ConstantCount
-        self.cell_amount: int = 128
+        self.cell_amount: int = 1000
 
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 

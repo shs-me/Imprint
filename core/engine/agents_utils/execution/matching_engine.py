@@ -77,7 +77,7 @@ class MatchingEngine:
         rRow = dfmRid[0] = wRow if (aoWRow[0] == 0) else dfmRid[0]
         if rRow < wRow:
             for row in range(rRow, wRow):
-                nPrice: int = _.to_nPrice(_.to_fpPrice(dfm[row, c.DFM_nPrice]))
+                nPrice: int = _.to_nPrice(int(dfm[row, c.DFM_nPrice]))
                 endTimestamp: int = int(dfm[row, c.DFM_endTimestamp])
 
                 if aoWRow[0] == 0:
@@ -115,12 +115,13 @@ class MatchingEngine:
         orderParam: int = ao[OPEN_ORDER, aoRow, c.AO_orderParam]
 
         is_market: bool = bool(orderParam & c.OF_MARKET)
+        is_long: bool = bool(orderParam & c.OF_LONG)
         is_buy: bool = bool(orderParam & c.OF_BUY)
 
         is_maker = False
         if is_market:
-            slipageTicks = nPrice * self.con.slipage // 10000
-            nPrice = nPrice + (slipageTicks if is_buy else -slipageTicks)
+            slipageTicks = _nPrice * self.con.slipage // 10000
+            nPrice = _nPrice + (slipageTicks if is_buy else -slipageTicks)
         else:
             if (is_buy and (_nPrice <= nPrice)) or (not is_buy and (_nPrice >= nPrice)):
                 is_maker = True
@@ -137,18 +138,18 @@ class MatchingEngine:
         )
         ao[OPEN_ORDER, aoRow, :] = None
 
-        nPriceTP = _.TPdevNprice(nPrice, is_buy)
+        nPriceTP = _.TPdevNprice(nPrice, is_long)
         tpOrderParam = 0
-        tpOrderParam |= c.OF_LONG if is_buy else c.OF_SHORT
+        tpOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
         tpOrderParam |= c.OF_SELL if is_buy else c.OF_BUY
         tpOrderParam |= c.OF_LIMIT | c.OF_NEW
         timestamp = int(endTimestamp + _.latencyMs)
         self.tm.set_active_order(
             nPriceTP, nQty, timestamp, tpOrderParam, None, aoRow, is_tp=True
         )
-        nPriceSL = _.SLdevNprice(nPrice, is_buy)
+        nPriceSL = _.SLdevNprice(nPrice, is_long)
         slOrderParam = 0
-        slOrderParam |= c.OF_LONG if is_buy else c.OF_SHORT
+        slOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
         slOrderParam |= c.OF_SELL if is_buy else c.OF_BUY
         slOrderParam |= c.OF_MARKET_TRIGER | c.OF_NEW
         self.tm.set_active_order(
@@ -197,6 +198,8 @@ class MatchingEngine:
         is_buy: bool = bool(orderParam & c.OF_BUY)
 
         if (is_buy and (_nPrice >= nPrice)) or (not is_buy and (_nPrice <= nPrice)):
+            slipageTicks = _nPrice * self.con.slipage // 10000
+            nPrice = _nPrice + (slipageTicks if is_buy else -slipageTicks)
             nCommission: int = nQty * _.takerNcommission // 1000
             orderParam &= ~(c.OF_NEW)
             orderParam |= c.OF_FILLED
