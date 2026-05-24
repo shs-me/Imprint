@@ -104,29 +104,31 @@ class TradeManager:
         # - - -
         _.nBalance = -nCommission
         if is_long:
-            _.longNqty += nQty if is_open else -nQty
             if is_open:
-                _.longWeight += nQty
-                _.longPweight += nPrice * nQty
-                _.longEntryNprice = _.longPweight // _.longWeight
+                _.longEntryNprice = (
+                    (_.longEntryNprice * _.longNqty) + (nPrice * nQty)
+                ) // (_.longNqty + nQty)
+                _.longNqty += nQty
             else:
                 _.lockedNbalance = -(_.to_nMargin(_.longEntryNprice, nQty))
                 _.nBalance = _.to_nPnl(nPrice, nQty, True)
+                _.longNqty -= nQty
 
             if _.longNqty == 0:
-                _.longWeight, _.longPweight, _.longEntryNprice = 0, 0, 0
+                _.longEntryNprice = 0
         else:
-            _.shortNqty += nQty if is_open else -nQty
             if is_open:
-                _.shortWeight += nQty
-                _.shortPweight += nPrice * nQty
-                _.shortEntryNprice = _.shortPweight // _.shortWeight
+                _.shortEntryNprice = (
+                    (_.shortEntryNprice * _.shortNqty) + (nPrice * nQty)
+                ) // (_.shortNqty + nQty)
+                _.shortNqty += nQty
             else:
                 _.lockedNbalance = -(_.to_nMargin(_.shortEntryNprice, nQty))
                 _.nBalance = _.to_nPnl(nPrice, nQty, False)
+                _.shortNqty -= nQty
 
             if _.shortNqty == 0:
-                _.shortWeight, _.shortPweight, _.shortEntryNprice = 0, 0, 0
+                _.shortEntryNprice = 0
 
     def final_action(self) -> None:
         if self.con.cfgST.saveOrdersHistory:

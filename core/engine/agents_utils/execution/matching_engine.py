@@ -205,7 +205,7 @@ class MatchingEngine:
             orderParam &= ~(c.OF_NEW)
             orderParam |= c.OF_FILLED
             nPrice = _.nPriceWithSlippage(_nPrice, is_buy)
-            nCommission: int = nQty * _.takerNcommission // 1000
+            nCommission: int = _.to_nCommission(nQty, False)
             tm.updatePosition(nPrice, nQty, nCommission, False, is_long)
             tm.update_orders_history(
                 nPrice, nQty, int(endTimestamp), orderParam, None, nCommission

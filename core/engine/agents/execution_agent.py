@@ -142,6 +142,7 @@ class ExecutionAgent:
             self.tm.aoWRow[0],
             flush=True,
         )
+        # print(self.tm.orders_history[self.tm.ohWRow[0] - 3 : self.tm.ohWRow[0] - 2, :])
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
@@ -195,11 +196,13 @@ class ExecutionAgent:
         if _.lossNbalanceSafeLimit:
             if _.lockedNbalanceSafeLimit:
                 if self.execution_sim:
-                    if (nominalNqty := _.nominalEntryNqtyWithLeverage) is not None:
+                    if _.nominalEntryNqtyWithLeverage is not None:
                         if not self.start_matching(timestamp):
                             return
 
-                        nQty: int = _.entryNqtyWithLeverage(nPrice, nominalNqty)
+                        nQty: int = _.entryNqtyWithLeverage(
+                            nPrice, _.nominalEntryNqtyWithLeverage
+                        )
                         is_market: bool = bool(orderParam & c.OF_MARKET)
                         if not is_market:
                             _.lockedNbalance = _.to_nMargin(nPrice, nQty)

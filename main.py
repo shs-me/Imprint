@@ -26,6 +26,7 @@ def download_data(
 
 if __name__ == "__main__":
     symbol = "DASHUSDT"
+    # download_data(symbol, 2025, 8, 28, 2025, 8, 30)
     cfgFootprint = ConfigurationFootprint(
         chart_interval=ChartInterval._5M,
         saveFootprintHeaders=False,
@@ -34,8 +35,8 @@ if __name__ == "__main__":
     cfgBacktesting = ConfigurationBacktesting(
         balanceUSDT=1000,
         execution_sim=True,
-        startDateForPrepper="2025-01-01",
-        endDateForPrepper="2025-08-28",
+        startDateForPrepper="2026-01-01",
+        endDateForPrepper="2026-01-01",
     )
     cfgStrategy = ConfigurationStrategy(
         leverage=20,

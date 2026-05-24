@@ -192,12 +192,8 @@ class TradeConverter:
         self.last_order_id: int = 0
         self.longNqty: int = 0
         self.longEntryNprice: int = 0
-        self.longWeight: int = 0
-        self.longPweight: int = 0
         self.shortNqty: int = 0
         self.shortEntryNprice: int = 0
-        self.shortWeight: int = 0
-        self.shortPweight: int = 0
 
     def init_session(
         self,
@@ -208,8 +204,8 @@ class TradeConverter:
     ) -> None:
         self.startNbalance = round(startBalance * self.scale)
         self.minOrderNsize = round(minOrderSize * self.scale)
-        self.takerNcommission = round(takerCommission * 10000)
-        self.makerNcommission = round(makerCommission * 10000)
+        self.takerNcommission = round(takerCommission * 10_000)
+        self.makerNcommission = round(makerCommission * 10_000)
 
         self.nBalance = self.startNbalance
 
@@ -303,7 +299,7 @@ class TradeConverter:
     def to_nCommission(self, nQty: int, is_maker: bool) -> int:
         return (
             nQty * (self.makerNcommission if is_maker else self.takerNcommission)
-        ) // 1000
+        ) // 10_000
 
     def to_nPrice(self, price: float | int) -> int:
         if isinstance(price, float):
