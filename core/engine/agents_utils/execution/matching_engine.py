@@ -67,8 +67,9 @@ class MatchingEngine:
         _, dfm = self.con, self.dfm
         # - - -
         if timestamp is not None:
-            if timestamp <= dfm[dfmWid[0] - 1, c.DFM_endTimestamp]:
-                wRow = find_row(timestamp, dfm, dfmWid[0])
+            if timestamp < dfm[dfmWid[0] - 1, c.DFM_endTimestamp]:
+                if (wRow := find_row(timestamp, dfm, dfmWid[0])) is None:
+                    raise ValueError
             else:
                 wRow = dfmWid[0]
         else:
@@ -82,61 +83,62 @@ class MatchingEngine:
 
                 if aoWRow[0] == 0:
                     dfmRid[0] = wRow
-                    return
+                    break
 
-                aoRow = 0
-                while aoRow < aoWRow[0]:
-                    if self.check_open_order(aoRow, nPrice, endTimestamp) is False:
-                        if self.check_tp_order(aoRow, nPrice, endTimestamp):
-                            if self.check_sl_order(aoRow, nPrice, endTimestamp):
-                                aoRow += 1
+                aoRrow = 0
+                while aoRrow < aoWRow[0]:
+                    if self.check_open_order(aoRrow, nPrice, endTimestamp) is False:
+                        if self.check_tp_order(aoRrow, nPrice, endTimestamp):
+                            if self.check_sl_order(aoRrow, nPrice, endTimestamp):
+                                aoRrow += 1
                                 continue
 
-                        self.compact_active_orders(aoRow)
+                        self.tm.compact_active_orders(aoRrow)
                         aoWRow[0] -= 1
 
                     else:
-                        aoRow += 1
+                        aoRrow += 1
 
                 dfmRid[0] += 1
 
+        _.unrealizedNpnl = _.to_nPrice(int(dfm[wRow - 1, c.DFM_nPrice]))
+
     def check_open_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
-        ao, _ = self.tm.active_orders, self.con
+        tm, _ = self.tm, self.con
         # - - -
-        if ao[OPEN_ORDER, aoRow, c.AO_nPrice] is None:
+        if tm.active_orders[OPEN_ORDER, aoRow, c.AO_nPrice] is None:
             return False
 
-        timestamp: int = ao[OPEN_ORDER, aoRow, c.AO_timestamp]
+        timestamp: int = tm.active_orders[OPEN_ORDER, aoRow, c.AO_timestamp]
         if timestamp > endTimestamp:
             return True
 
-        nPrice: int = ao[OPEN_ORDER, aoRow, c.AO_nPrice]
-        nQty: int = ao[OPEN_ORDER, aoRow, c.AO_nQty]
-        orderParam: int = ao[OPEN_ORDER, aoRow, c.AO_orderParam]
+        nPrice: int = tm.active_orders[OPEN_ORDER, aoRow, c.AO_nPrice]
+        nQty: int = tm.active_orders[OPEN_ORDER, aoRow, c.AO_nQty]
+        orderParam: int = tm.active_orders[OPEN_ORDER, aoRow, c.AO_orderParam]
 
         is_market: bool = bool(orderParam & c.OF_MARKET)
         is_long: bool = bool(orderParam & c.OF_LONG)
         is_buy: bool = bool(orderParam & c.OF_BUY)
 
-        is_maker = False
         if is_market:
-            slipageTicks = _nPrice * self.con.slipage // 10000
-            nPrice = _nPrice + (slipageTicks if is_buy else -slipageTicks)
+            nPrice = _.nPriceWithSlippage(_nPrice, is_buy)
+            _.lockedNbalance = _.to_nMargin(nPrice, nQty)
+            is_maker = False
         else:
             if (is_buy and (_nPrice <= nPrice)) or (not is_buy and (_nPrice >= nPrice)):
                 is_maker = True
             else:
                 return True
 
-        nCommission: int = (
-            nQty * (_.makerNcommission if is_maker else _.takerNcommission) // 1000
-        )
         orderParam &= ~(c.OF_NEW)
         orderParam |= c.OF_FILLED
-        self.tm.update_orders_history(
+        nCommission = _.to_nCommission(nQty, is_maker)
+        tm.updatePosition(nPrice, nQty, nCommission, True, is_long)
+        tm.update_orders_history(
             nPrice, nQty, int(endTimestamp), orderParam, None, nCommission
         )
-        ao[OPEN_ORDER, aoRow, :] = None
+        tm.active_orders[OPEN_ORDER, aoRow, :] = None
 
         nPriceTP = _.TPdevNprice(nPrice, is_long)
         tpOrderParam = 0
@@ -144,93 +146,78 @@ class MatchingEngine:
         tpOrderParam |= c.OF_SELL if is_buy else c.OF_BUY
         tpOrderParam |= c.OF_LIMIT | c.OF_NEW
         timestamp = int(endTimestamp + _.latencyMs)
-        self.tm.set_active_order(
+        tm.set_active_order(
             nPriceTP, nQty, timestamp, tpOrderParam, None, aoRow, is_tp=True
         )
+
         nPriceSL = _.SLdevNprice(nPrice, is_long)
         slOrderParam = 0
         slOrderParam |= c.OF_LONG if is_long else c.OF_SHORT
         slOrderParam |= c.OF_SELL if is_buy else c.OF_BUY
         slOrderParam |= c.OF_MARKET_TRIGER | c.OF_NEW
-        self.tm.set_active_order(
+        tm.set_active_order(
             nPriceSL, nQty, timestamp, slOrderParam, None, aoRow, is_tp=False
         )
-
-        self.tm.prepare_trades()
-        return True
+        return False
 
     def check_tp_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
-        ao, _ = self.tm.active_orders, self.con
+        tm, _ = self.tm, self.con
         # - - -
-        timestamp: int = ao[TP_ORDER, aoRow, c.AO_timestamp]
+        timestamp: int = tm.active_orders[TP_ORDER, aoRow, c.AO_timestamp]
         if timestamp > endTimestamp:
             return True
 
-        nPrice: int = ao[TP_ORDER, aoRow, c.AO_nPrice]
-        nQty: int = ao[TP_ORDER, aoRow, c.AO_nQty]
-        orderParam: int = ao[TP_ORDER, aoRow, c.AO_orderParam]
+        nPrice: int = tm.active_orders[TP_ORDER, aoRow, c.AO_nPrice]
+        nQty: int = tm.active_orders[TP_ORDER, aoRow, c.AO_nQty]
+        orderParam: int = tm.active_orders[TP_ORDER, aoRow, c.AO_orderParam]
 
+        is_long: bool = bool(orderParam & c.OF_LONG)
         is_buy: bool = bool(orderParam & c.OF_BUY)
 
         if (is_buy and (_nPrice <= nPrice)) or (not is_buy and (_nPrice >= nPrice)):
-            nCommission: int = nQty * _.makerNcommission // 1000
             orderParam &= ~(c.OF_NEW)
             orderParam |= c.OF_FILLED
-            self.tm.update_orders_history(
+            nCommission = _.to_nCommission(nQty, True)
+            tm.updatePosition(nPrice, nQty, nCommission, False, is_long)
+            tm.update_orders_history(
                 nPrice, nQty, int(endTimestamp), orderParam, None, nCommission
             )
-            ao[TP_ORDER, aoRow, :] = None
-            self.cancel_active_order(aoRow, int(endTimestamp), SL_ORDER)
+            tm.active_orders[TP_ORDER, aoRow, :] = None
+            tm.cancel_active_order(aoRow, int(endTimestamp), SL_ORDER)
             return False
         return True
 
     def check_sl_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
-        ao, _ = self.tm.active_orders, self.con
+        tm, _ = self.tm, self.con
         # - - -
-        timestamp: int = ao[SL_ORDER, aoRow, c.AO_timestamp]
+        timestamp: int = tm.active_orders[SL_ORDER, aoRow, c.AO_timestamp]
         if timestamp > endTimestamp:
             return True
 
-        nPrice: int = ao[SL_ORDER, aoRow, c.AO_nPrice]
-        nQty: int = ao[SL_ORDER, aoRow, c.AO_nQty]
-        orderParam: int = ao[SL_ORDER, aoRow, c.AO_orderParam]
+        nPrice: int = tm.active_orders[SL_ORDER, aoRow, c.AO_nPrice]
+        nQty: int = tm.active_orders[SL_ORDER, aoRow, c.AO_nQty]
+        orderParam: int = tm.active_orders[SL_ORDER, aoRow, c.AO_orderParam]
 
+        is_long: bool = bool(orderParam & c.OF_LONG)
         is_buy: bool = bool(orderParam & c.OF_BUY)
 
         if (is_buy and (_nPrice >= nPrice)) or (not is_buy and (_nPrice <= nPrice)):
-            slipageTicks = _nPrice * self.con.slipage // 10000
-            nPrice = _nPrice + (slipageTicks if is_buy else -slipageTicks)
-            nCommission: int = nQty * _.takerNcommission // 1000
             orderParam &= ~(c.OF_NEW)
             orderParam |= c.OF_FILLED
-            self.tm.update_orders_history(
+            nPrice = _.nPriceWithSlippage(_nPrice, is_buy)
+            nCommission: int = nQty * _.takerNcommission // 1000
+            tm.updatePosition(nPrice, nQty, nCommission, False, is_long)
+            tm.update_orders_history(
                 nPrice, nQty, int(endTimestamp), orderParam, None, nCommission
             )
-            ao[SL_ORDER, aoRow, :] = None
-            self.cancel_active_order(aoRow, int(endTimestamp), TP_ORDER)
+            tm.active_orders[SL_ORDER, aoRow, :] = None
+            tm.cancel_active_order(aoRow, int(endTimestamp), TP_ORDER)
             return False
         return True
 
-    def cancel_active_order(self, aoRow: int, timestamp: int, typeOrder: int) -> None:
-        nPrice: int = self.tm.active_orders[typeOrder, aoRow, c.AO_nPrice]
-        nQty: int = self.tm.active_orders[typeOrder, aoRow, c.AO_nQty]
-        orderParam: int = self.tm.active_orders[typeOrder, aoRow, c.AO_orderParam]
-
-        orderParam &= ~(c.OF_NEW)
-        orderParam |= c.OF_CANCELED
-
-        self.tm.update_orders_history(nPrice, nQty, timestamp, orderParam, None)
-        self.tm.prepare_trades()
-        self.tm.active_orders[typeOrder, aoRow, :] = None
-
-    def compact_active_orders(self, aoRow: int) -> None:
-        ao, aoWRow = self.tm.active_orders, self.tm.aoWRow
-        # - - -
-        if (aoWRow[0] - 1) > aoRow:
-            ao[:, aoRow : aoWRow[0] - 1, :] = ao[:, aoRow + 1 : aoWRow[0], :]
-            ao[:, aoWRow[0] - 1, :] = None
-
 
 @njit(cache=True)
-def find_row(timestamp: int, dfm: NDArray[int64], dfmWrow: int) -> int:
-    return np.where(dfm[:dfmWrow, c.DFM_endTimestamp] >= timestamp)[0][0]
+def find_row(timestamp: int, dfm: NDArray[int64], dfmWrow: int) -> int | None:
+    for i in range(dfmWrow):
+        if dfm[i, c.DFM_endTimestamp] >= timestamp:
+            return i + 1

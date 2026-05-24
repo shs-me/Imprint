@@ -75,7 +75,7 @@ class DataPrepper:
                         while len(self.queue) == self.queue.maxlen:
                             if not self.is_real:
                                 if self.is_zero_sleep:
-                                    time.sleep(0.001)
+                                    time.sleep(0)
                             else:
                                 self.lock.acquire()
 
@@ -235,11 +235,8 @@ class WssSimAgent:
     ) -> None:
         if not self.is_real:
             while ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
-                if self.task_status[0] == 0:
-                    if self.is_zero_sleep:
-                        time.sleep(0)
-                else:
-                    return
+                if self.is_zero_sleep:
+                    time.sleep(0)
         else:
             if ((WCellC[0] - RCellC[0] + cell_amount) % cell_amount) > safe_lag:
                 writer_cell = WCellC[0]  # debug

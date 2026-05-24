@@ -27,12 +27,15 @@ def download_data(
 if __name__ == "__main__":
     symbol = "DASHUSDT"
     cfgFootprint = ConfigurationFootprint(
-        chart_interval=ChartInterval._5M, save_headers_as_csv=False
+        chart_interval=ChartInterval._5M,
+        saveFootprintHeaders=False,
+        saveAlgorithmMetadata=False,
     )
     cfgBacktesting = ConfigurationBacktesting(
         balanceUSDT=1000,
-        startDateForPrepper="2026-01-01",
-        endDateForPrepper="2026-01-01",
+        execution_sim=True,
+        startDateForPrepper="2025-01-01",
+        endDateForPrepper="2025-08-28",
     )
     cfgStrategy = ConfigurationStrategy(
         leverage=20,
@@ -41,7 +44,10 @@ if __name__ == "__main__":
         entry_qty=0.005,
         TPdev=0.05,
         SLdev=0.05,
+        saveOrdersHistory=True,
     )
     kwargs = get_configs_kwargs(cfgFootprint, cfgBacktesting, cfgStrategy)
 
-    run_core(backtesting=True, mode=bm.ZERO_SLEEP, symbol=symbol, **kwargs)
+    run_core(
+        backtesting=True, execution=True, mode=bm.ZERO_SLEEP, symbol=symbol, **kwargs
+    )

@@ -29,19 +29,25 @@ class LogicAgent:
         self.pre_sleep_logic: Event = pre_sleep_logic
         self.wait_main: Event = general_event
 
-        self.set_proc_sc = manager.set_proc_sc
-        self.check_base_task = manager.check_base_task
-        self.task_status: memoryview = manager.task_status
-        self.proc_status: memoryview = manager.proc_status
+        self.set_proc_sc = self.manager.set_proc_sc
+        self.check_base_task = self.manager.check_base_task
+        self.task_status: memoryview = self.manager.task_status
+        self.proc_status: memoryview = self.manager.proc_status
 
-        self.backtesting: bool = manager.backtesting
-        self.btMode: bm = manager.mode
+        # Backtesting
+        self.cfgBT = self.manager.cfgBacktesting
+        self.backtesting: bool = self.manager.backtesting
+        self.btMode: bm = self.manager.mode
+        self.execution_sim = self.cfgBT.execution_sim
         self.is_real: bool = self.btMode == bm.REAL_TIME_SIM
         self.is_zero_sleep: bool = self.btMode == bm.ZERO_SLEEP
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
         self.tradesParsed: memoryview = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.tradesParsed)
+            self.cfgMetrics.tradesParsed : self.cfgMetrics.tradesParsed + 1
+        ]
+        self.footprintReaded: memoryview = self.manager.metrics_buf[
+            self.cfgMetrics.footprintReaded : self.cfgMetrics.footprintReaded + 1
         ]
         # Footprint
         self.cfgFP = self.manager.cfgFootprint
@@ -69,7 +75,7 @@ class LogicAgent:
                     if isinstance(task, bool):
                         if task:
                             if task_status[0] & scs.COMPLETE:
-                                self.final_actions(is_real)
+                                self.final_actions()
 
                             return
 
@@ -89,26 +95,24 @@ class LogicAgent:
                             if pass_lag >= pass_lag_limit:
                                 self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
-                    if self.backtesting:
+                    if self.execution_sim:
                         self._space_read[0] = 1
                         if is_real:
                             if self.reader.execution_event.is_set() is False:
                                 self.reader.execution_event.set()
 
                         while self._space_read[0] == 1:
-                            if task_status[0] == 0:
-                                if self.is_zero_sleep:
-                                    time.sleep(0)
-                            else:
-                                break
+                            if self.is_zero_sleep:
+                                time.sleep(0)
 
                     flag[0] = 0
 
     def complete(self) -> bool:
         return self.tradesParsed[0] == 1
 
-    def final_actions(self, is_real: bool) -> None:
-        if self.backtesting and is_real:
+    def final_actions(self) -> None:
+        self.footprintReaded[0] = 1
+        if self.is_real:
             if self.reader.execution_event.is_set() is False:
                 self.reader.execution_event.set()
 
@@ -120,11 +124,8 @@ class LogicAgent:
     ) -> None:
         if not self.is_real:
             while flag[0] == 0 and tradesParsed[0] == 0:
-                if self.task_status[0] == 0:
-                    if self.is_zero_sleep:
-                        time.sleep(0)
-                else:
-                    return
+                if self.is_zero_sleep:
+                    time.sleep(0)
         else:
             if (flag[0] == 0) and (tradesParsed[0] == 0):
                 pre_sleep_logic.wait()

@@ -164,28 +164,40 @@ class TradeConverter:
         self, trade_param: memoryview, cfgStrategy: ConfigurationStrategy
     ) -> None:
         self.trade_param = trade_param
-        self.cfgST = cfgStrategy
 
-        self.latencyMs: int = self.cfgST.latency
-        self.leverage: int = self.cfgST.leverage
-        self.slipage: int = self.cfgST.slipage
-        self._scalePrec: int = self.cfgST.scalePrec
-        self.scale: int = round(10**self._scalePrec)
-        self._tpDev: int = self.cfgST.TPdev
-        self._slDev: int = self.cfgST.SLdev
-        self._entryQty: int = self.cfgST.entryQty
-        self._maxLockNbalance: int = self.cfgST.maxLockBalance
-        self._maxLossNbalance: int = self.cfgST.maxLossBalance
-        self._startNbalance: int = 0
-        self._nBalance: int = 0
-        self._lockedNbalance: int = 0
-        self._minOrderNsize: int = 0
-        self._takerNcommission: int = 0
-        self._makerNcommission: int = 0
-        self._last_order_id: int = 0
         self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = trade_param[:]
         self.priceMult: float = (10**self.pricePrec) + 1e-9
         self.qtyMult: float = 10**self.qtyPrec + 1e-9
+
+        self.cfgST = cfgStrategy
+        self.latencyMs: int = self.cfgST.latency
+        self.leverage: int = self.cfgST.leverage
+        self.slipage: int = self.cfgST.slipage
+        self._entryQty: int = self.cfgST.entryQty
+        self._tpDev: int = self.cfgST.TPdev
+        self._slDev: int = self.cfgST.SLdev
+        self._maxLockNbalance: int = self.cfgST.maxLockBalance
+        self._maxLossNbalance: int = self.cfgST.maxLossBalance
+        self._scalePrec: int = self.cfgST.scalePrec
+        self.scale: int = round(10**self._scalePrec)
+        self.startNbalance: int = 0
+        self._nBalance: int = 0
+        self._lockedNbalance: int = 0
+        self.minOrderNsize: int = 0
+        self.takerNcommission: int = 0
+        self.makerNcommission: int = 0
+        self._unrealizedNpnl: int = 0
+        self.longUnrealizedNpnl: int = 0
+        self.shortUnrealizedNpnl: int = 0
+        self.last_order_id: int = 0
+        self.longNqty: int = 0
+        self.longEntryNprice: int = 0
+        self.longWeight: int = 0
+        self.longPweight: int = 0
+        self.shortNqty: int = 0
+        self.shortEntryNprice: int = 0
+        self.shortWeight: int = 0
+        self.shortPweight: int = 0
 
     def init_session(
         self,
@@ -195,20 +207,11 @@ class TradeConverter:
         makerCommission: float,
     ) -> None:
         self.startNbalance = round(startBalance * self.scale)
-        self._minOrderNsize = round(minOrderSize * self.scale)
-        self._takerNcommission = round(takerCommission * 10000)
-        self._makerNcommission = round(makerCommission * 10000)
+        self.minOrderNsize = round(minOrderSize * self.scale)
+        self.takerNcommission = round(takerCommission * 10000)
+        self.makerNcommission = round(makerCommission * 10000)
 
         self.nBalance = self.startNbalance
-        self.lockedNbalance = 0
-
-    @property
-    def startNbalance(self) -> int:
-        return self._startNbalance
-
-    @startNbalance.setter
-    def startNbalance(self, nValue: int) -> None:
-        self._startNbalance = nValue
 
     @property
     def nBalance(self) -> int:
@@ -254,8 +257,14 @@ class TradeConverter:
     def entryNqtyWithLeverage(self, nPrice: int, nominalNqty: int) -> int:
         return nominalNqty * self.scale // nPrice
 
-    def to_margin(self, nPrice: int, nQty: int) -> int:
-        return (nQty * nPrice) // self.scale // self.leverage
+    @property
+    def newOrderId(self) -> int:
+        self.last_order_id += 1
+        return self.last_order_id
+
+    def nPriceWithSlippage(self, nPrice: int, is_buy: bool) -> int:
+        slipageTicks = nPrice * self.slipage // 10_000
+        return nPrice + (slipageTicks if is_buy else -slipageTicks)
 
     def TPdevNprice(self, nPrice: int, is_long: bool) -> int:
         tpTicks: int = nPrice * self._tpDev // 1000
@@ -265,56 +274,43 @@ class TradeConverter:
         slTicks: int = nPrice * self._slDev // 1000
         return nPrice + (-slTicks if is_long else slTicks)
 
-    def to_nPnl(
-        self,
-        closeNprice: int,
-        entryNprice: int,
-        is_long: bool,
-        nQty: int,
-        nCommission: int,
-    ) -> int:
+    def to_nMargin(self, nPrice: int, nQty: int) -> int:
+        return (nQty * nPrice) // self.scale // self.leverage
+
+    def to_nPnl(self, closeNprice: int, nQty: int, is_long: bool) -> int:
+        diffNprice: int = (
+            closeNprice - (self.longEntryNprice if is_long else self.shortEntryNprice)
+        ) * (1 if is_long else -1)
+        return diffNprice * nQty // self.scale
+
+    @property
+    def unrealizedNpnl(self) -> int:
+        return self._unrealizedNpnl
+
+    @unrealizedNpnl.setter
+    def unrealizedNpnl(self, lastNprice: int) -> None:
+        if self.shortNqty or self.longNqty:
+            self.longUnrealizedNpnl = (
+                self.to_nPnl(lastNprice, self.longNqty, True) if self.longNqty else 0
+            )
+            self.shortUnrealizedNpnl = (
+                self.to_nPnl(lastNprice, self.shortNqty, False) if self.shortNqty else 0
+            )
+            self._unrealizedNpnl = self.longUnrealizedNpnl + self.shortUnrealizedNpnl
+        else:
+            self._unrealizedNpnl = 0
+
+    def to_nCommission(self, nQty: int, is_maker: bool) -> int:
         return (
-            (closeNprice - entryNprice) * (1 if is_long else -1)
-        ) * nQty // self.scale - nCommission
+            nQty * (self.makerNcommission if is_maker else self.takerNcommission)
+        ) // 1000
 
-    def to_roi(self, nPnl: int, nMargin: int) -> float:
-        return (nPnl / nMargin) * 100
-
-    @property
-    def lastOrderId(self) -> int:
-        return self._last_order_id
-
-    @property
-    def newOrderId(self) -> int:
-        self._last_order_id += 1
-        return self._last_order_id
-
-    @property
-    def minOrderNsize(self) -> int:
-        return self._minOrderNsize
-
-    @property
-    def takerNcommission(self) -> int:
-        return self._takerNcommission
-
-    @property
-    def makerNcommission(self) -> int:
-        return self._makerNcommission
-
-    @overload
-    def to_nPrice(self, price: int) -> int: ...
-    @overload
-    def to_nPrice(self, price: float) -> int: ...
     def to_nPrice(self, price: float | int) -> int:
         if isinstance(price, float):
             return round(price * self.scale)
         else:
             return price * (10 ** (self._scalePrec - self.pricePrec))
 
-    @overload
-    def to_nQty(self, qty: int) -> int: ...
-    @overload
-    def to_nQty(self, qty: float) -> int: ...
     def to_nQty(self, qty: float | int) -> int:
         if isinstance(qty, float):
             return round(qty * self.scale)
@@ -331,3 +327,6 @@ class TradeConverter:
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
+
+    def to_roi(self, nPnl: int, nMargin: int) -> float:
+        return (nPnl / nMargin) * 100

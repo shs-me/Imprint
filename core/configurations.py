@@ -33,7 +33,7 @@ class ConfigurationBacktesting(Configuration):
         taker_commission: float = 0.005,
         maker_commission: float = 0.002,
         balanceUSDT: float = 100.0,
-        dayForPrepper: int | None = None,
+        execution_sim: bool = False,
         startDateForPrepper: str | None = None,
         endDateForPrepper: str | None = None,
     ) -> None:
@@ -43,6 +43,7 @@ class ConfigurationBacktesting(Configuration):
         self.taker_commision: float = taker_commission
         self.maker_commission: float = maker_commission
         self.balance = balanceUSDT
+        self.execution_sim = execution_sim
         self.startDateForPrepper = startDateForPrepper
         self.endDateForPrepper = endDateForPrepper
 
@@ -62,6 +63,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         latencyMs: int = 100,
         countOrderHistory: int = 10000,
         countActiveOrder: int = 100,
+        saveOrdersHistory: bool = False,
     ) -> None:
         self.scalePrec: int = scalePrec
         self.leverage: int = leverage
@@ -72,6 +74,7 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         self.SLdev: int = round(SLdev * 1000)
         self.slipage: int = round(slippage * 10000)
         self.latency: int = latencyMs
+        self.saveOrdersHistory: bool = saveOrdersHistory
 
         self.ordersHistoryLines: int = countOrderHistory
         self.ordersHistoryCols: int = TradeParam._ConstantCount
@@ -111,14 +114,16 @@ class ConfigurationFootprint(ConfigurationSHMSegments):
         chart_interval: ChartInterval = ChartInterval._H,
         chart_range: int = 1,
         fp_lines: int = 10001,
-        save_headers_as_csv: bool = False,
         analysis_safe_lag_microsecond: int = 50_000,
+        saveFootprintHeaders: bool = False,
+        saveAlgorithmMetadata: bool = False,
     ) -> None:
         self.intervalMs = chart_interval
         self.bar_count = self.get_bar_count(day=chart_range)
         self.fpLines = fp_lines
-        self.save_headers = save_headers_as_csv
         self.analysis_safe_lag_microsecond = analysis_safe_lag_microsecond
+        self.saveFootprintHeaders = saveFootprintHeaders
+        self.saveAlgorithmMetadata = saveAlgorithmMetadata
 
         self.fpCols = self.bar_count * 2
         self.fpPanelCols = self.fpCols + self.get_panel_count_cols()
@@ -203,9 +208,10 @@ class ConfigurationMetrics(ConfigurationSHMSegments):
         self.dfm_1_row_id = (self.dfm_2[1], self.dfm_2[1] + INT64)
         self.dfm_2_row_id = (self.dfm_1_row_id[1], self.dfm_1_row_id[1] + INT64)
 
-        self.timeStartReading = (self.dfm_2_row_id[1], self.dfm_2_row_id[1] + INT64)
-        self.tradesParsed = self.timeStartReading[1], self.timeStartReading[1] + UBYTE
-        return self.tradesParsed[1]
+        self.timeStartReading = self.dfm_2_row_id[1], self.dfm_2_row_id[1] + INT64
+        self.tradesParsed = self.timeStartReading[1] + UBYTE
+        self.footprintReaded = self.tradesParsed + UBYTE
+        return self.footprintReaded
 
 
 class ConfigurationMonitoring(ConfigurationSHMSegments):

@@ -1,4 +1,3 @@
-import pprint
 import time
 from multiprocessing.synchronize import Event
 
@@ -30,6 +29,7 @@ class ExecutionAgent:
         # Backtesting
         self.cfgBT = self.manager.cfgBacktesting
         self.btMode = self.manager.mode
+        self.execution_sim = self.cfgBT.execution_sim
         # Strategy
         self.cfgST = self.manager.cfgStrategy
         self.cell_amount: int = self.cfgST.cell_amount
@@ -58,8 +58,8 @@ class ExecutionAgent:
 
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
-        self.tradesParsed: memoryview = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.tradesParsed)
+        self.footprintReaded: memoryview = self.manager.metrics_buf[
+            self.cfgMetrics.footprintReaded : self.cfgMetrics.footprintReaded + 1
         ]
         self.trade_par: memoryview[int] = self.manager.metrics_buf[
             self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
@@ -80,7 +80,7 @@ class ExecutionAgent:
         self.con: TradeConverter = TradeConverter(
             trade_param=self.trade_par, cfgStrategy=self.cfgST
         )
-        self.tm: TradeManager = TradeManager(manager=self.manager, converter=self.con)
+        self.tm: TradeManager = TradeManager(converter=self.con)
         self.me: MatchingEngine = MatchingEngine(
             manager=self.manager, con=self.con, tm=self.tm
         )
@@ -119,7 +119,7 @@ class ExecutionAgent:
                 if WB_1[0] != RB_1[0]:
                     self._check_execute_buf()
 
-                if self.backtesting:
+                if self.execution_sim:
                     if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
                         if self._space_read[0] == 1:
                             self.start_matching(None)
@@ -128,23 +128,20 @@ class ExecutionAgent:
                             self._space_read[0] = 0
 
     def complete(self) -> bool:
-        return ((self.WB_1[0] == self.RB_1[0]) and (self.WB_2[0] == self.RB_2[0])) and (
-            (self._space_read[0] == 0) and (self.tradesParsed[0] == 1)
-        )
+        return self.footprintReaded[0] == 1
 
     def final_actions(self) -> None:
-        self.tm.final_action(save_orders_history=True)
+        self.tm.final_action()
         print(
             self.con.nBalance / self.con.scale,
             self.con.lockedNbalance / self.con.scale,
-            len(self.tm.openPositions),
-            len(self.tm.closePositions),
-            self.con.lastOrderId,
+            self.con.unrealizedNpnl / self.con.scale,
+            self.con.longUnrealizedNpnl / self.con.scale,
+            self.con.shortUnrealizedNpnl / self.con.scale,
+            self.con.last_order_id,
             self.tm.aoWRow[0],
             flush=True,
         )
-        # pprint.pprint(self.tm.closePositions)
-        # pprint.pprint(self.tm.openPositions)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
@@ -155,9 +152,9 @@ class ExecutionAgent:
         RB_2: memoryview,
         is_real: bool,
     ) -> None:
-        if self.backtesting and not is_real:
+        if not is_real:
             while (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and (
-                (self._space_read[0] == 0) and (self.tradesParsed[0] == 0)
+                (self._space_read[0] == 0) and (self.footprintReaded[0] == 0)
             ):
                 time.sleep(0)
 
@@ -197,13 +194,18 @@ class ExecutionAgent:
 
         if _.lossNbalanceSafeLimit:
             if _.lockedNbalanceSafeLimit:
-                if self.backtesting:
+                if self.execution_sim:
                     if (nominalNqty := _.nominalEntryNqtyWithLeverage) is not None:
-                        if not self.start_matching(timestamp + _.latencyMs):
+                        if not self.start_matching(timestamp):
                             return
 
                         nQty: int = _.entryNqtyWithLeverage(nPrice, nominalNqty)
-                        orderParam |= c.OF_NEW | c.OF_MARKET
+                        is_market: bool = bool(orderParam & c.OF_MARKET)
+                        if not is_market:
+                            _.lockedNbalance = _.to_nMargin(nPrice, nQty)
+
+                        orderParam |= c.OF_NEW
+                        orderParam |= c.OF_MARKET if is_market else (c.OF_LIMIT)
                         self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
 
                     else:
@@ -221,8 +223,8 @@ class ExecutionAgent:
             return True
         except RuntimeError:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
-            pprint.pprint(self.tm.closePositions)
             print(self.con.nBalance / self.con.scale, flush=True)
+            self.tm.final_action()
             return False
 
 

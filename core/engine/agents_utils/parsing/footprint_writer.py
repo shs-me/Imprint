@@ -24,10 +24,13 @@ class FootprintWriter:
         self.manager = manager
         self.set_proc_sc = self.manager.set_proc_sc
         self.task_status = self.manager.task_status
+        # Backtesting
+        self.cfgBT = self.manager.cfgBacktesting
         self.backtesting: bool = self.manager.backtesting
+        self.execution_sim: bool = self.cfgBT.execution_sim
         # Footprint
         self.cfgFootprint = self.manager.cfgFootprint
-        self.save_headers: bool = self.cfgFootprint.save_headers
+        self.saveFootprintHeaders: bool = self.cfgFootprint.saveFootprintHeaders
         self.space_flag: memoryview[int] = self.manager.footprint_buf[
             self.cfgFootprint.flag : self.cfgFootprint.flag + 1
         ]
@@ -135,7 +138,7 @@ class FootprintWriter:
         if idx is not None:
             if idy is not None:
                 self.last_idx[0] = idx
-                if self.backtesting:
+                if self.execution_sim:
                     if self.update_dfm(nPrice, timestamp) is False:
                         return False
 
@@ -214,7 +217,7 @@ class FootprintWriter:
 
     # For Agent Method's
     def save_headersArray(self) -> None:
-        if self.save_headers:
+        if self.saveFootprintHeaders:
             os.makedirs(self.base_fp_dump_path, exist_ok=True)
             headers_save_path = (
                 f"{self.base_fp_dump_path}/{self.con.get_time(idx=0, strftime=True)}"

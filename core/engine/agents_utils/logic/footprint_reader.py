@@ -69,6 +69,7 @@ class FootprintReader(ABC):
             cfgFP=self.cfgFP,
         )
         self.defaultSpace: list[int] = [self.con.fpLines, self.con.fpCols, 0, 0]
+        self.amRow: int = 0
 
     def _init_array(self) -> None:
         self.fp: NDArray[int64] = np.ndarray(
@@ -112,16 +113,22 @@ class FootprintReader(ABC):
 
     # - - Strategy Methods - -
     def send_signal(
-        self, nPrice: int, time_ms: int, is_long: bool, is_buy: bool, pass_lag: bool
+        self,
+        nPrice: int,
+        time_ms: int,
+        is_long: bool,
+        is_buy: bool,
+        is_market: bool,
+        pass_lag: bool,
     ) -> None:
         if not pass_lag:
             if not self.lag_is_safe():
                 return
 
         orderParam = 0
-
         orderParam |= of.LONG if is_long else of.SHORT
         orderParam |= of.BUY if is_buy else of.SELL
+        orderParam |= of.MARKET if is_market else of.LIMIT
 
         cell: int = self.executeBuf[self.writerId]
         start: int = cell * self.signal_size + self.signal_offset
@@ -138,7 +145,10 @@ class FootprintReader(ABC):
 
     # Agent Methods's
     def final_actions(self) -> None:
-        np.save(c.ALGORITHM_METADATA_DUMP_PATH, self.algorithm_metadata)
+        if self.cfgFP.saveAlgorithmMetadata:
+            np.save(
+                c.ALGORITHM_METADATA_DUMP_PATH, self.algorithm_metadata[: self.amRow, :]
+            )
 
     # - - Footprint Analysis/Update Methods - -
     def update_states(self) -> None:

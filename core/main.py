@@ -24,6 +24,7 @@ class RunMain(CoreResources):
         self.baseKwargs: dict = kwargs
         self.symbol: str = kwargs["symbol"]
         self.backtesting: bool = kwargs["backtesting"]
+        self.execution: bool = kwargs["execution"]
         self.manager: MainManager = kwargs.pop("manager")
 
         self.cfgBacktesting = self.manager.cfgBacktesting
@@ -35,6 +36,7 @@ class RunMain(CoreResources):
         self.logic_event: EventT = Event()
         # Variable's
         self.procs: dict = {}
+        self.funcs: list[FunctionType] = []
         self.rest = RestAgent(
             symbol=self.symbol,
             backtesting=self.backtesting,
@@ -52,15 +54,14 @@ class RunMain(CoreResources):
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
 
-        self.funcs = [
-            run_logic,
-            run_parsing,
-            run_execution,
-            run_wss_sim if self.backtesting else run_wss,
-        ]
+        if self.execution:
+            self.funcs.append(run_execution)
+        self.funcs.append(run_logic)
+        self.funcs.append(run_parsing)
+        self.funcs.append((run_wss_sim if self.backtesting else run_wss))
 
-        self.ts = self.rest.get_tick_size()
-        self.ls = self.rest.get_lot_size()
+        self.ts: str = self.rest.get_tick_size()
+        self.ls: str = self.rest.get_lot_size()
         self.trade_par[2] = self.pricePrec = (
             len(self.ts.split(sep=".")[-1]) if "." in self.ts else 0
         )
@@ -134,6 +135,7 @@ class RunMain(CoreResources):
 @manager_office(main=True)
 def run_core(
     backtesting: bool = False,
+    execution: bool = False,
     mode: BacktestingMode = BacktestingMode.REAL_TIME_SIM,
     symbol: str = "DASHUSDT",
     **kwargs,
@@ -147,6 +149,7 @@ def run_core(
     )
 
     kwargs["backtesting"] = backtesting
+    kwargs["execution"] = execution
     kwargs["mode"] = mode
     kwargs["symbol"] = symbol
 

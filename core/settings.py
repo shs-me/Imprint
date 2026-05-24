@@ -11,39 +11,6 @@ class CoreResources(Protocol):
     sc_sem: Semaphore
 
 
-class OpenPosition(TypedDict):
-    positionSide: str
-    openTime: str
-    entryNprice: int
-    entryNpriceWeight: int
-    entryNpricePWeight: int
-    nQuantity: int
-    nominalNqty: int
-    tempNqty: int
-    nominalNcommission: int
-    leverage: int
-    realizedPNL: float
-    realizedROI: float
-    TakeProfits: dict
-    StopLosses: dict
-
-
-class ClosePosition(TypedDict):
-    positionSide: str
-    openTime: str
-    closeTime: str
-    entryPrice: float
-    closePrice: float
-    quantity: float
-    nominalQty: float
-    nominalCommission: float
-    leverage: int
-    realizedPNL: float
-    realizedROI: str
-    TakeProfits: dict
-    StopLosses: dict
-
-
 class StateFlags(IntFlag):
     # Footprint States
     # Footprint: RealTime
@@ -77,15 +44,6 @@ class OrderFlag(IntFlag):
 
 
 class ChartInterval(IntEnum):
-    """
-    Constant prefixs designations:
-        "S": second
-        "M": minute
-        "H: hour
-
-    All constant convert to millisecond.
-    """
-
     _30S = 30 * 1000
     _M = 1 * 60 * 1000
     _5M = 5 * 60 * 1000

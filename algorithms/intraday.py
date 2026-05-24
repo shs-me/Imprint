@@ -11,8 +11,7 @@ from core.utils.monitoring.agent_manager import AgentManager
 class IntraDay(FootprintReader):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager, execution_event)
-        self.algorithm_metadata.resize((100000, 4))
-        self.row = 0
+        self.algorithm_metadata.resize((100_000, 4))
 
     def _update_closed_bar_and_fp(self) -> None:
         super()._update_closed_bar_and_fp()
@@ -35,29 +34,30 @@ class IntraDay(FootprintReader):
         low_auction_is_finished = bool(fpStates[-1] & sf.FINISHED_AUCTION)
 
         if high_auction_is_finished or low_auction_is_finished:
+            self.algorithm_metadata[self.amRow, 0] = _.openTime(idx)
             if high_auction_is_finished:
-                # self.algorithm_metadata[self.row, 0] = _.openTime(idx)
-                # self.algorithm_metadata[self.row, 1] = _.to_nPrice(_CLOSE)
+                self.algorithm_metadata[self.amRow, 1] = _.to_nPrice(_CLOSE)
                 self.send_signal(
                     nPrice=int(_.to_nPrice(_CLOSE)),
                     time_ms=int(_.lastTradeTime(idx)),
                     is_long=False,
                     is_buy=False,
+                    is_market=True,
                     pass_lag=True,
                 )
 
             if low_auction_is_finished:
-                # self.algorithm_metadata[self.row, 0] = _.openTime(idx)
-                # self.algorithm_metadata[self.row, 2] = _.to_nPrice(_CLOSE)
+                self.algorithm_metadata[self.amRow, 2] = _.to_nPrice(_CLOSE)
                 self.send_signal(
                     nPrice=int(_.to_nPrice(_CLOSE)),
                     time_ms=int(_.lastTradeTime(idx)),
                     is_long=True,
                     is_buy=True,
+                    is_market=True,
                     pass_lag=True,
                 )
 
-            self.row += 1
+            self.amRow += 1
 
     def bar_state_mask(
         self, IDYmin: int64, IDYmax: int64, idxBid: int

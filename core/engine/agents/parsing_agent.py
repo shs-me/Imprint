@@ -61,7 +61,7 @@ class ParserAgent:
         # Metrics
         self.cfgMetrics = self.manager.cfgMetrics
         self.tradesParsed: memoryview = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.tradesParsed)
+            self.cfgMetrics.tradesParsed : self.cfgMetrics.tradesParsed + 1
         ]
 
     @error_handler(set_status_code=True)
@@ -148,11 +148,8 @@ class ParserAgent:
     ) -> None:
         if not self.is_real:
             while WCellC[0] == RCellC[0]:
-                if task_status[0] == 0:
-                    if self.is_zero_sleep:
-                        time.sleep(0)
-                else:
-                    return
+                if self.is_zero_sleep:
+                    time.sleep(0)
 
         else:
             if WCellC[0] == RCellC[0]:
