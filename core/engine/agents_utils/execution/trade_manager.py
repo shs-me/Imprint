@@ -105,9 +105,13 @@ class TradeManager:
         _.nBalance = -nCommission
         if is_long:
             if is_open:
-                _.longEntryNprice = (
-                    (_.longEntryNprice * _.longNqty) + (nPrice * nQty)
-                ) // (_.longNqty + nQty)
+                if _.longNqty > 0:
+                    _.longEntryNprice = (
+                        (_.longEntryNprice * _.longNqty) + (nPrice * nQty)
+                    ) // (_.longNqty + nQty)
+                else:
+                    _.longEntryNprice = nPrice
+
                 _.longNqty += nQty
             else:
                 _.lockedNbalance = -(_.to_nMargin(_.longEntryNprice, nQty))
@@ -116,11 +120,16 @@ class TradeManager:
 
             if _.longNqty == 0:
                 _.longEntryNprice = 0
+
         else:
             if is_open:
-                _.shortEntryNprice = (
-                    (_.shortEntryNprice * _.shortNqty) + (nPrice * nQty)
-                ) // (_.shortNqty + nQty)
+                if _.shortNqty > 0:
+                    _.shortEntryNprice = (
+                        (_.shortEntryNprice * _.shortNqty) + (nPrice * nQty)
+                    ) // (_.shortNqty + nQty)
+                else:
+                    _.shortEntryNprice = nPrice
+
                 _.shortNqty += nQty
             else:
                 _.lockedNbalance = -(_.to_nMargin(_.shortEntryNprice, nQty))

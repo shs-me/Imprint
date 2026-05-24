@@ -133,16 +133,15 @@ class ExecutionAgent:
     def final_actions(self) -> None:
         self.tm.final_action()
         print(
-            self.con.nBalance / self.con.scale,
-            self.con.lockedNbalance / self.con.scale,
-            self.con.unrealizedNpnl / self.con.scale,
-            self.con.longUnrealizedNpnl / self.con.scale,
-            self.con.shortUnrealizedNpnl / self.con.scale,
-            self.con.last_order_id,
-            self.tm.aoWRow[0],
+            f"Balance: {self.con.nBalance / self.con.scale} \n",
+            f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n",
+            f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n",
+            f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n",
+            f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n",
+            f"Count Orders in History: {self.con.last_order_id} \n",
+            f"Count Active Orders: {self.tm.aoWRow[0]} \n",
             flush=True,
         )
-        # print(self.tm.orders_history[self.tm.ohWRow[0] - 3 : self.tm.ohWRow[0] - 2, :])
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(
