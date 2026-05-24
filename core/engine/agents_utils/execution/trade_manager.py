@@ -21,11 +21,11 @@ class TradeManager:
         self._init_array()
 
     def _init_array(self) -> None:
-        self.orders_history: NDArray[object_] = np.ndarray(
-            shape=(self.ohLines, self.ohCols), dtype=object_
+        self.orders_history: NDArray[object_] = np.full(
+            shape=(self.ohLines, self.ohCols), fill_value=None, dtype=object_
         )
-        self.active_orders: NDArray[object_] = np.ndarray(
-            shape=(3, self.aoLines, self.aoCols), dtype=object_
+        self.active_orders: NDArray[object_] = np.full(
+            shape=(3, self.aoLines, self.aoCols), fill_value=None, dtype=object_
         )
 
         self.ohWRow: memoryview = memoryview(bytearray(8)).cast("q")
