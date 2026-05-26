@@ -137,7 +137,7 @@ class ParserAgent:
         self.writer.wait_read_space()
         self.tradesParsed[0] = 1
         self.writer.final_actions()
-        print(self.writer.counterTicks[0])
+        print(f"Count Prepped Ticks: {self.writer.counterTicks[0]}", flush=True)
         self.set_proc_sc(scs.COMPLETE)
 
     def _alarm_clock(

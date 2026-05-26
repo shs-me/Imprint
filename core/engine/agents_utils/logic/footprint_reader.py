@@ -157,11 +157,12 @@ class FootprintReader(ABC):
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
-            if idx > self.last_idx:
-                self._update_closed_bar_and_fp()
-                self.last_idx = idx
+            if self.con.volume(idx) > 0:
+                if idx > self.last_idx:
+                    self._update_closed_bar_and_fp()
+                    self.last_idx = idx
 
-            self._update_bar(idYmin, idYmax, idxBid, idxAsk)
+                self._update_bar(idYmin, idYmax, idxBid, idxAsk)
 
         self.space[oldBuf, :] = self.defaultSpace
 
