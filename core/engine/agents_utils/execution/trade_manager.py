@@ -139,6 +139,10 @@ class TradeManager:
             if _.shortNqty == 0:
                 _.shortEntryNprice = 0
 
+        if (_.longNqty == 0) and (_.shortNqty == 0) and (self.aoWRow[0] == 1):
+            if _.lockedNbalance > 0:
+                _.lockedNbalance = -(_.lockedNbalance)
+
     def final_action(self) -> None:
         if self.con.cfgST.saveOrdersHistory:
             np.save(

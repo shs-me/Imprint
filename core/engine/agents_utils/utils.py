@@ -295,6 +295,8 @@ class TradeConverter:
             self._unrealizedNpnl = self.longUnrealizedNpnl + self.shortUnrealizedNpnl
         else:
             self._unrealizedNpnl = 0
+            self.shortUnrealizedNpnl = 0
+            self.longUnrealizedNpnl = 0
 
     def to_nCommission(self, nQty: int, is_maker: bool) -> int:
         return (

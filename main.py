@@ -35,8 +35,8 @@ if __name__ == "__main__":
     cfgBacktesting = ConfigurationBacktesting(
         balanceUSDT=1000,
         execution_sim=True,
-        startDateForPrepper="2026-01-01",
-        endDateForPrepper="2026-03-30",
+        startDateForPrepper="2026-03-01",
+        endDateForPrepper="2026-03-01",
     )
     cfgStrategy = ConfigurationStrategy(
         leverage=50,
