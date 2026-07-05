@@ -1,4 +1,5 @@
 *.env
+*.egg-info
 .venv
 .ropeproject
 .pytest_cache
