@@ -1,35 +1,13 @@
 import os
-import traceback
 import zipfile
 from datetime import date
-from urllib import error, request
+from urllib import request
 
 from .. import constant as c
 
 
-def to_date(year: int, month: int, day: int) -> date:
-    return date(year, month, day)
-
-
-def download_file(url: str, path: str) -> None:
-    try:
-        dl_file = request.urlopen(url)
-        length = dl_file.getheader("content-length")
-        if length:
-            length = int(length)
-            blocksize = max(4096, length // 100)
-            with open(path, "wb") as out_file:
-                dl_progress = 0
-                while True:
-                    if not (buf := dl_file.read(blocksize)):
-                        break
-
-                    out_file.write(buf)
-                    dl_progress += len(buf)
-
-    except error.HTTPError:
-        traceback.print_exc()
-        pass
+def to_date(iso_f_dates: list[str]):
+    return [date.fromisoformat(d) for d in iso_f_dates]
 
 
 def download_aggTrade_hist_daily_data(
@@ -38,8 +16,8 @@ def download_aggTrade_hist_daily_data(
     base_path = f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}/{symbol.upper()}"
     os.makedirs(base_path, exist_ok=True)
 
-    curDate = startDate
     endDate = endDate if date.today() > endDate else date.today()
+    curDate = startDate
     while curDate < endDate:
         file_name = f"{symbol.upper()}-aggTrades-{curDate.isoformat()}"
         zip_path = f"{base_path}/{file_name}.zip"
@@ -66,15 +44,17 @@ def download_aggTrade_hist_daily_data(
     return True
 
 
-def download_data(
-    symbol: str,
-    startYear: int,
-    startMonth: int,
-    startDay: int,
-    endYear: int,
-    endMonth: int,
-    endDay: int,
-) -> None:
-    startDate = to_date(startYear, startMonth, startDay)
-    endDate = to_date(endYear, endMonth, endDay)
-    download_aggTrade_hist_daily_data(symbol, startDate, endDate)
+def download_file(url: str, path: str) -> None:
+    dl_file = request.urlopen(url)
+    length = dl_file.getheader("content-length")
+    if length:
+        length = int(length)
+        blocksize = max(4096, length // 100)
+        with open(path, "wb") as out_file:
+            dl_progress = 0
+            while True:
+                if not (buf := dl_file.read(blocksize)):
+                    break
+
+                out_file.write(buf)
+                dl_progress += len(buf)

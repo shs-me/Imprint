@@ -21,6 +21,7 @@ from .engine.mode.real.wss_agent import run_wss
 from .settings import CoreResources
 from .utils.monitoring.main_manager import MainManager
 from .utils.monitoring.office import manager_office
+from .utils.tools import download_aggTrade_hist_daily_data, to_date
 
 
 class RunMain(CoreResources):
@@ -48,11 +49,26 @@ class RunMain(CoreResources):
         ].cast("q")
         """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
 
-    def _init_session(self) -> None:
+    def check_dirs(self) -> None:
         for _dir in DIRS_LIST:
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
 
+    def check_data(self) -> None:
+        if self.backtesting:
+            try:
+                startDate, endDate = to_date(
+                    [
+                        self.manager.cfgBacktesting.startDateForPrepper,
+                        self.manager.cfgBacktesting.endDateForPrepper,
+                    ]
+                )
+            except ValueError as e:
+                return logger.error(f"-- Core -- | {e}")
+
+            download_aggTrade_hist_daily_data(self.symbol, startDate, endDate)
+
+    def init_funcs(self) -> None:
         if self.backtesting:
             self.rest = RestSimAgent(self.symbol, self.cfgBacktesting)
         else:
@@ -65,6 +81,7 @@ class RunMain(CoreResources):
         self.funcs.append(run_parsing_sim if self.backtesting else run_parsing)
         self.funcs.append((run_wss_sim if self.backtesting else run_wss))
 
+    def init_trade_param(self) -> None:
         self.ts: str = self.rest.get_tick_size()
         self.ls: str = self.rest.get_lot_size()
         self.trade_par[2] = self.pricePrec = (
@@ -77,7 +94,7 @@ class RunMain(CoreResources):
         self.trade_par[0] = round(float(self.ts) * self.priceMult)
         self.trade_par[1] = round(float(self.ls) * self.qtyMult)
 
-    def _get_kwargs_for_func(self, func: FunctionType) -> dict | None:
+    def get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)
         proc_id = len(self.procs)
         task_id = proc_id + 10
@@ -98,8 +115,8 @@ class RunMain(CoreResources):
         self.procs[proc_id] = {"proc_name": proc_name, "task_id": task_id}
         return kwargs
 
-    def _run_proc(self, func) -> bool:
-        kwargs = self._get_kwargs_for_func(func)
+    def run_proc(self, func) -> bool:
+        kwargs = self.get_kwargs_for_func(func)
         if isinstance(kwargs, dict):
             name: str = self.procs[kwargs["proc_id"]]["proc_name"]
             p = Process(
@@ -119,13 +136,18 @@ class RunMain(CoreResources):
 
     def run_core_engine(self) -> None:
         logger.info("-- Core -- | Started, init...")
-        self._init_session()
-        for func in self.funcs:
-            if self._run_proc(func=func) is False:
-                return
-
-        logger.info("-- Core -- | Init completed.")
         try:
+            self.check_dirs()
+            self.check_data()
+            self.init_funcs()
+            self.init_trade_param()
+
+            for func in self.funcs:
+                if self.run_proc(func=func) is False:
+                    return
+
+            logger.info("-- Core -- | Init completed.")
+
             self.manager.run(procs=self.procs, scs_sem=self.sc_sem)
         except KeyboardInterrupt:
             pass
@@ -142,6 +164,5 @@ def run_core(**kwargs) -> None:
         enqueue=True,
         format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
-
     state = RunMain(**kwargs)
     state.run_core_engine()

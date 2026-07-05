@@ -1,17 +1,12 @@
 from enum import Enum
 
-from ._core.configurations import (
-    ConfigurationBacktesting,
-    ConfigurationFootprint,
-    ConfigurationStrategy,
-)
+from ._core import configurations as con
 from ._core.main import run_core
 from ._core.settings import Timeframe
-from ._core.utils.tools import download_data
+from ._core.utils.handlers import error_handler
 
 __all__ = [
     "run",
-    "download_data",
     "Timeframe",
     "RunMode",
 ]
@@ -22,9 +17,10 @@ class RunMode(Enum):
     Real = False, True
 
 
+@error_handler()
 def run(
-    run_mode: RunMode,
-    timeframe: Timeframe,
+    run_mode: RunMode = RunMode.Backtesting,
+    timeframe: Timeframe = Timeframe._5M,
     symbol: str = "DASHUSDT",
     laverage: int = 20,
     max_loss_balance: float = 0.1,
@@ -45,8 +41,14 @@ def run(
     save_algorithm_metadata: bool = False,
 ) -> None:
     execution, backtesting = run_mode.value
+
+    kwargs = {}
+    kwargs["backtesting"] = backtesting
+    kwargs["execution"] = execution
+    kwargs["symbol"] = symbol
+
     args = (
-        ConfigurationBacktesting(
+        con.ConfigurationBacktesting(
             tick_size=sim_tick_size,
             lot_size=sim_lot_size,
             minOrderSizeUSDT=sim_min_order_size,
@@ -57,12 +59,12 @@ def run(
             startDateForPrepper=backtest_start_date,
             endDateForPrepper=backtest_end_date,
         ),
-        ConfigurationFootprint(
+        con.ConfigurationFootprint(
             timeframe=timeframe,
             saveFootprintHeaders=save_footprint_headers,
             saveAlgorithmMetadata=save_algorithm_metadata,
         ),
-        ConfigurationStrategy(
+        con.ConfigurationStrategy(
             leverage=laverage,
             maxLossBalance=max_loss_balance,
             maxLockBalance=max_lock_balance,
@@ -72,11 +74,6 @@ def run(
             saveOrdersHistory=save_orders_history,
         ),
     )
-
-    kwargs = {}
-    kwargs["backtesting"] = backtesting
-    kwargs["execution"] = execution
-    kwargs["symbol"] = symbol
 
     for obj in args:
         name = str(obj.__class__).split(".")[-1].removesuffix("'>")
