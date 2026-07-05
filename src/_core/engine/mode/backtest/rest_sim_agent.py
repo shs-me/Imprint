@@ -10,7 +10,7 @@ class RestSimAgent:
         self.lot_size: str = self.cfgBT.lot_size
         self.minOrderSizeUsdt: float = self.cfgBT.minOrderSizeUSDT
         self.makerCommission: float = self.cfgBT.maker_commission
-        self.takerCommission: float = self.cfgBT.taker_commision
+        self.takerCommission: float = self.cfgBT.taker_commission
         self.balance: float = self.cfgBT.balance
         self.orderId: int = 0
 

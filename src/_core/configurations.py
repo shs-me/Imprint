@@ -40,7 +40,7 @@ class ConfigurationBacktesting(Configuration):
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size
         self.minOrderSizeUSDT: float = minOrderSizeUSDT
-        self.taker_commision: float = taker_commission
+        self.taker_commission: float = taker_commission
         self.maker_commission: float = maker_commission
         self.balance = balanceUSDT
         self.execution_sim = execution_sim

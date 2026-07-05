@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
@@ -89,7 +89,14 @@ class Execution(ABC):
     def post_final_action(self) -> None:
         pass
 
+    @abstractmethod
     def alarm_clock(
+        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def post_check_bufs(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
         pass
@@ -107,7 +114,16 @@ class Execution(ABC):
         new_cell = cell + 1
         self.executedBuf[self.readerId] = new_cell if new_cell < self.cell_amount else 0
         #  - - -
-        self.data_prepare()
+        self.pre_executed_actions()
+        self.executed_action()
+
+    @abstractmethod
+    def pre_executed_actions(self) -> None:
+        pass
+
+    @abstractmethod
+    def executed_action(self) -> None:
+        pass
 
     def check_execute_buf(self) -> None:
         _, buf, rid = self.con, self.executeBuf, self.readerId
@@ -122,10 +138,11 @@ class Execution(ABC):
         new_cell: int = cell + 1
         buf[rid] = new_cell if (new_cell < self.cell_amount) else 0
 
+        self.pre_execute_actions()
         if _.lossNbalanceSafeLimit:
             if _.lockedNbalanceSafeLimit:
                 if _.nominalEntryNqtyWithLeverage is not None:
-                    self.signal_prepare(nPrice, timestamp, orderParam)
+                    self.execute_action(nPrice, timestamp, orderParam)
                 else:
                     self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
             else:
@@ -133,15 +150,12 @@ class Execution(ABC):
         else:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
 
-    def post_check_bufs(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
-    ) -> None:
+    @abstractmethod
+    def pre_execute_actions(self) -> None:
         pass
 
-    def signal_prepare(
+    @abstractmethod
+    def execute_action(
         self, nPrice: int, time_get_signal: int, orderParam: int
     ) -> None:
-        pass
-
-    def data_prepare(self) -> None:
         pass

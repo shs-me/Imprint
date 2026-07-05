@@ -30,24 +30,6 @@ class ExecutionAgent(Execution):
         )
         self.temp = 0
 
-    def stat(self) -> str:
-        return (
-            f"Balance: {self.con.nBalance / self.con.scale} \n"
-            f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
-            f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
-            f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
-            f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
-            f"Long Open Qty: {self.con.longNqty / self.con.scale} \n"
-            f"Short Open Qty: {self.con.shortNqty / self.con.scale} \n"
-            f"Count Orders in History: {self.con.last_order_id} \n"
-            f"Count Active Orders: {self.tm.aoWRow[0]} \n"
-            f"Count Open Positions: {self.temp}"
-        )
-
-    def post_final_action(self) -> None:
-        self.tm.final_action()
-        print(self.stat(), flush=True)
-
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
@@ -56,25 +38,23 @@ class ExecutionAgent(Execution):
         ):
             time.sleep(0)
 
-    def post_check_bufs(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
-    ) -> None:
-        if self.execution_sim:
-            if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
-                if self.space_read[0] == 1:
-                    self.start_matching(None)
-                    self.me.dfmWid[0] = 0
-                    self.me.dfmRid[0] = 0
-                    self.space_read[0] = 0
+    def pre_executed_actions(self) -> None:
+        pass
 
-    def signal_prepare(
+    def executed_action(self) -> None:
+        pass
+
+    def pre_execute_actions(self) -> None:
+        pass
+
+    def execute_action(
         self, nPrice: int, time_get_signal: int, orderParam: int
     ) -> None:
         _ = self.con
         # - - -
         if self.execution_sim:
             timestamp = time_get_signal + _.latencyMs
-            if self.start_matching(time_get_signal):
+            if self.start_matching(timestamp):
                 if (qty := _.nominalEntryNqtyWithLeverage) is not None:
                     nQty: int = _.entryNqtyWithLeverage(nPrice, qty)
                     is_market: bool = bool(orderParam & c.OF_MARKET)
@@ -95,6 +75,35 @@ class ExecutionAgent(Execution):
             print(self.stat(), flush=True)
             self.tm.final_action()
             return False
+
+    def post_check_bufs(
+        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
+    ) -> None:
+        if self.execution_sim:
+            if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
+                if self.space_read[0] == 1:
+                    self.start_matching(None)
+                    self.me.dfmWid[0] = 0
+                    self.me.dfmRid[0] = 0
+                    self.space_read[0] = 0
+
+    def stat(self) -> str:
+        return (
+            f"Balance: {self.con.nBalance / self.con.scale} \n"
+            f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
+            f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
+            f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
+            f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
+            f"Long Open Qty: {self.con.longNqty / self.con.scale} \n"
+            f"Short Open Qty: {self.con.shortNqty / self.con.scale} \n"
+            f"Count Orders in History: {self.con.last_order_id} \n"
+            f"Count Active Orders: {self.tm.aoWRow[0]} \n"
+            f"Count Open Positions: {self.temp}"
+        )
+
+    def post_final_action(self) -> None:
+        self.tm.final_action()
+        print(self.stat(), flush=True)
 
 
 @manager_office()

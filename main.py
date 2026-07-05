@@ -19,8 +19,8 @@ if __name__ == "__main__":
         sim_tick_size="0.01",
         sim_lot_size="0.001",
         backtest_start_date="2026-01-01",
-        backtest_end_date="2026-01-01",
-        save_orders_history=False,
+        backtest_end_date="2026-01-02",
+        save_orders_history=True,
         save_footprint_headers=False,
         save_algorithm_metadata=False,
     )

@@ -32,12 +32,23 @@ class ExecutionAgent(Execution):
             if (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0]):
                 self.execution_event.wait(timeout=60)
 
-    def signal_prepare(
+    def pre_executed_actions(self) -> None:
+        pass
+
+    def executed_action(self) -> None:
+        pass
+
+    def pre_execute_actions(self) -> None:
+        pass
+
+    def execute_action(
         self, nPrice: int, time_get_signal: int, orderParam: int
     ) -> None:
-        self.rest.send_new_order()
+        pass
 
-    def data_prepare(self) -> None:
+    def post_check_bufs(
+        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
+    ) -> None:
         pass
 
 
