@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gridcore"
+version = "0.1.0"
+description = "Ядро системы GridCore"
+
+# 1. Говорим, что поле dependencies теперь динамическое
+dynamic = ["dependencies"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# 2. Указываем setuptools, откуда именно читать это поле
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
