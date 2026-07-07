@@ -65,13 +65,15 @@ def agent_init(main: bool, shm_buf: memoryview, **kwargs):
         )
     else:
         manager = AgentManager(
-            symbol=kwargs.pop("symbol"),
             proc_id=kwargs.pop("proc_id"),
             task_id=kwargs.pop("task_id"),
             segments=kwargs.pop("segments"),
             configs=kwargs.pop("configs"),
             shm_buf=shm_buf,
             sc_sem=kwargs.pop("sc_sem"),
+            symbol=kwargs.pop("symbol"),
+            algorithm_module=kwargs.pop("algorithm_module"),
+            algorithm_package=kwargs.pop("algorithm_package"),
         )
     return manager
 

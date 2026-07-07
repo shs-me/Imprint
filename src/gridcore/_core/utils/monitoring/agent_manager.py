@@ -10,17 +10,21 @@ from .status_codes import StatusCodes as scs
 class AgentManager:
     def __init__(
         self,
-        symbol: str,
         proc_id: int,
         task_id: int,
         segments: dict[str, Any],
         configs: dict[str, Any],
         shm_buf: memoryview,
         sc_sem: Semaphore,
+        symbol: str,
+        algorithm_module: str,
+        algorithm_package: str,
     ) -> None:
         self.proc_id, self.task_id = proc_id, task_id
         self.sc_sem, self.shm_buf = sc_sem, shm_buf
         self.symbol = symbol
+        self.algorithm_module = algorithm_module
+        self.algorithm_package = algorithm_package
 
         self.segments_init(segments)
         self.configs_init(configs)

@@ -27,8 +27,6 @@ class ConfigurationSHMSegments(Configuration):
 class ConfigurationBacktesting(Configuration):
     def __init__(
         self,
-        startDateForPrepper: str,
-        endDateForPrepper: str,
         tick_size: str = "0.01",
         lot_size: str = "0.001",
         minOrderSizeUSDT: float = 5.0,
@@ -36,6 +34,8 @@ class ConfigurationBacktesting(Configuration):
         maker_commission: float = 0.002,
         balanceUSDT: float = 100.0,
         execution_sim: bool = False,
+        startDateForPrepper: str = "2026-01-01",
+        endDateForPrepper: str = "2026-01-01",
     ) -> None:
         self.tick_size: str = tick_size
         self.lot_size: str = lot_size

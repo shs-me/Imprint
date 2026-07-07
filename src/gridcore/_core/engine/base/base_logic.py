@@ -1,9 +1,7 @@
-import importlib.util
+import importlib
 import inspect
-import os
 from abc import ABC, abstractmethod
 
-from ...constant import ALGORITHM_PATH
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
 from ...utils.monitoring.status_codes import StatusCodes as scs
@@ -90,29 +88,10 @@ class Logic(ABC):
 
 
 def resolve_reader(manager: AgentManager, sync: Sync) -> FootprintReader:
-    paths: list[str] = []
-    for p in os.listdir(ALGORITHM_PATH):
-        if p.endswith(".py"):
-            paths.append(f"{ALGORITHM_PATH}/{p}")
+    module = importlib.import_module(manager.algorithm_module)
+    reader: type[FootprintReader] = BaseFootprintReader
+    for name, obj in inspect.getmembers(module, inspect.isclass):
+        if (name == manager.algorithm_package) and issubclass(obj, FootprintReader):
+            reader = obj
 
-    obj = BaseFootprintReader
-    for path in paths:
-        result = get_plugin(path=path)
-        if result:
-            obj = result
-
-    reader = obj(manager=manager, sync=sync)
-    return reader
-
-
-@error_handler()
-def get_plugin(path: str) -> None | type[FootprintReader]:
-    module_name = os.path.splitext(os.path.basename(path))[0]
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is not None and spec.loader is not None:
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        for name, obj in inspect.getmembers(module, inspect.isclass):
-            if issubclass(obj, FootprintReader):
-                if obj is not FootprintReader:
-                    return obj
+    return reader(manager, sync)

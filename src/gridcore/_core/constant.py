@@ -29,8 +29,6 @@ BASE_UM_AGGTRADES_DAILY_URL = (
 # Logging
 LOGS_PATH = "logs"
 CORE_LOG_PATH = f"{LOGS_PATH}/core.log"
-# Core
-ALGORITHM_PATH = "algorithms"
 # Data Download
 DATA_PATH = "data"
 DATA_TYPE_AGGTRADES_PATH = "aggTrades"
@@ -41,7 +39,7 @@ ORDERS_HISTORY_DUMP_PATH = f"{DUMP_PATH}/order_history.npy"
 BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
 ALGORITHM_METADATA_DUMP_PATH = f"{DUMP_PATH}/algorithm_metadata.npy"
 # Other
-DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH, ALGORITHM_PATH]
+DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH]
 
 # - - CORE - -
 # BarHeader

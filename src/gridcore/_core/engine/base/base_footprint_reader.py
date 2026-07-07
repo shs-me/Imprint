@@ -144,6 +144,12 @@ class FootprintReader(ABC):
         )
 
 
+class BaseFootprintReader(FootprintReader):
+    def __init__(self, manager: AgentManager, sync: Sync) -> None:
+        super().__init__(manager, sync)
+        self.temp = 0
+
+
 @njit(cache=True)
 def _update_clusters_states(
     idYmin: int64,
@@ -328,8 +334,3 @@ def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, i
             break
 
     return up_idx + 1, down_idx - 1
-
-
-class BaseFootprintReader(FootprintReader):
-    def __init__(self, manager: AgentManager, sync: Sync) -> None:
-        super().__init__(manager, sync)
