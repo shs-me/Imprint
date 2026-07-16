@@ -5,34 +5,37 @@ from numpy import float64, int64
 from numpy.typing import NDArray
 
 from .... import constant as c
-from ....configurations import ConfigurationFootprint
+from ....configurations import cfgFootprint
 
 
 class FPconverter:
     def __init__(
         self,
+        cfgFP: cfgFootprint,
         footprint: NDArray[int64],
         headers: NDArray[int64],
-        trade_param: memoryview,
-        cfgFP: ConfigurationFootprint,
+        price_prec: int,
+        qty_prec: int,
     ) -> None:
-        self.footprint, self.headers = footprint, headers
-        self.trade_par = trade_param
-        self.fpLines, self.fpCols = cfgFP.fpLines, cfgFP.fpCols
-        self.fpPanelCols, self.barCount = cfgFP.fpPanelCols, cfgFP.bar_count
-        self.ims = cfgFP.intervalMs
-        self.idxVP, self.idxDP = cfgFP.colVP, cfgFP.colDP
+        self.fp_rows: int = cfgFP.fp_rows
+        self.fp_cols: int = cfgFP.fp_cols
+        self.idxVP: int = cfgFP.colVP
+        self.idxDP: int = cfgFP.colDP
+        self.fp_panel_cols: int = cfgFP.fp_panel_cols
+        self.bar_count: int = cfgFP.bar_count
+        self.tims: int = cfgFP.timeframe_in_ms
+        self.footprint: NDArray[int64] = footprint
+        self.headers: NDArray[int64] = headers
 
-        self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
-        self.priceMult: float = 10**self.pricePrec + 1e-9
-        self.qtyMult: float = 10**self.qtyPrec + 1e-9
+        self.pricePrec, self.qtyPrec = price_prec, qty_prec
+        self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
 
     def init_session(self, price: float | int, timestamp: int):
         self.nBasePrice: int = (
             self.to_nPrice(price) if isinstance(price, float) else price
         )
-        self.baseTimestamp: int = timestamp - (timestamp % self.ims)
-        self.center: int = self.fpLines // 2
+        self.baseTimestamp: int = timestamp - (timestamp % self.tims)
+        self.center: int = self.fp_rows // 2
 
     @overload
     def to_idy(self, nPrice: int) -> int | None: ...
@@ -40,16 +43,16 @@ class FPconverter:
     def to_idy(self, nPrice: int64) -> int64: ...
     def to_idy(self, nPrice):
         idy: int | int64 = (self.nBasePrice - nPrice) + self.center
-        if 0 <= idy < self.fpLines:
+        if 0 <= idy < self.fp_rows:
             return idy
         else:
             return None
 
     def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
-        idx: int = (timestamp - self.baseTimestamp) // self.ims * 2 + (
+        idx: int = (timestamp - self.baseTimestamp) // self.tims * 2 + (
             0 if is_sell else 1
         )
-        if 0 <= idx < self.fpCols:
+        if 0 <= idx < self.fp_cols:
             return idx
         else:
             return None
@@ -93,9 +96,9 @@ class FPconverter:
     def get_time(self, idx: int, strftime: bool = True) -> str: ...
     def get_time(self, idx: int | int64, strftime: bool = False):
         if strftime:
-            return self.to_strftime((idx & ~1) // 2 * self.ims + self.baseTimestamp)
+            return self.to_strftime((idx & ~1) // 2 * self.tims + self.baseTimestamp)
         else:
-            return (idx & ~1) // 2 * self.ims + self.baseTimestamp
+            return (idx & ~1) // 2 * self.tims + self.baseTimestamp
 
     # Headers
     def _get_header(self, idx: int | int64, header: c.BarHeaders) -> int64:

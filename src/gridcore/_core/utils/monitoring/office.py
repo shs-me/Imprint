@@ -4,7 +4,7 @@ from functools import wraps
 from multiprocessing.shared_memory import SharedMemory
 
 from ... import configurations
-from ...configurations import Configuration, ConfigurationSHMSegments
+from ...configurations import Configuration, cfgSHMSegments
 from ..handlers import error_handler
 from .agent_manager import AgentManager
 from .main_manager import MainManager
@@ -59,8 +59,8 @@ def manager_office(main: bool = False):
 def agent_init(main: bool, shm_buf: memoryview, **kwargs):
     if main:
         manager = MainManager(
-            segments=kwargs["segments"],
-            configs=kwargs["configs"],
+            segments=kwargs["segments"].copy(),
+            configs=kwargs["configs"].copy(),
             shm_buf=shm_buf,
         )
     else:
@@ -87,13 +87,13 @@ def configurations_init(**kwargs) -> dict:
         if (
             issubclass(obj, Configuration)
             and obj is not Configuration
-            and obj is not ConfigurationSHMSegments
+            and obj is not cfgSHMSegments
         ):
             kwargs["configs"][name] = obj = (
                 kwargs.pop(name) if name in kwargs else obj()
             )
             kwargs["configs"]["subclasses"].append(name)
-            if issubclass(obj.__class__, ConfigurationSHMSegments):
+            if issubclass(obj.__class__, cfgSHMSegments):
                 kwargs["segments"][name] = slice(
                     offset,
                     (offset := (offset + obj.shm_size)),  # type: ignore | reportAttributeAccessIssue

@@ -1,28 +1,30 @@
 from datetime import datetime, timezone
 
-from ....configurations import ConfigurationStrategy
+from ....configurations import cfgStrategy
 
 
 class TradeConverter:
     def __init__(
-        self, trade_param: memoryview, cfgStrategy: ConfigurationStrategy
+        self,
+        cfgST: cfgStrategy,
+        price_prec: int,
+        qty_prec: int,
     ) -> None:
-        self.trade_param = trade_param
 
-        self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = trade_param[:]
-        self.priceMult: float = (10**self.pricePrec) + 1e-9
-        self.qtyMult: float = 10**self.qtyPrec + 1e-9
+        self.pricePrec, self.qtyPrec = price_prec, qty_prec
+        self.priceMult: int = 10**self.pricePrec
+        self.qtyMult: int = 10**self.qtyPrec
 
-        self.cfgST = cfgStrategy
+        self.cfgST = cfgST
         self.latencyMs: int = self.cfgST.latency
         self.leverage: int = self.cfgST.leverage
         self.slipage: int = self.cfgST.slipage
-        self._entryQty: int = self.cfgST.entryQty
-        self._tpDev: int = self.cfgST.TPdev
-        self._slDev: int = self.cfgST.SLdev
-        self._maxLockNbalance: int = self.cfgST.maxLockBalance
-        self._maxLossNbalance: int = self.cfgST.maxLossBalance
-        self._scalePrec: int = self.cfgST.scalePrec
+        self._entryQty: int = self.cfgST.entry_qty
+        self._tpDev: int = self.cfgST.tp_dev
+        self._slDev: int = self.cfgST.sl_dev
+        self._maxLockNbalance: int = self.cfgST.max_lock_balance
+        self._maxLossNbalance: int = self.cfgST.max_loss_balance
+        self._scalePrec: int = self.cfgST.scale_prec
         self.scale: int = round(10**self._scalePrec)
         self.startNbalance: int = 0
         self._nBalance: int = 0

@@ -2,7 +2,7 @@ import os
 import time
 import traceback
 from datetime import date
-from threading import Lock, Thread
+from threading import Thread
 
 import numpy as np
 from numpy import int64
@@ -18,7 +18,6 @@ class DataPrepper:
         startDate: str | None,
         endDate: str | None,
         priceMult: int,
-        lock: Lock,
     ) -> None:
         self.symbol: str = symbol.upper()
         self.startDate: str | None = startDate
@@ -29,10 +28,10 @@ class DataPrepper:
         self.typeData: str = c.DATA_TYPE_AGGTRADES_PATH
         self.base_path: str = f"{self.datadir}/{self.typeData}/{self.symbol}"
 
-        self.queue: NDArray[int64] = np.ndarray((10000, 2), dtype=int64)
-        self.rRowID: memoryview = memoryview(bytearray(8)).cast("q")
-        self.wRowID: memoryview = memoryview(bytearray(8)).cast("q")
-        self.max_row: int = self.queue.shape[0] - 1
+        self.dfm: NDArray[int64] = np.ndarray((100_000, 2), dtype=int64)
+        self.dfmWid: memoryview = memoryview(bytearray(8)).cast("q")
+        self.dfmRid: memoryview = memoryview(bytearray(8)).cast("q")
+        self.max_row: int = self.dfm.shape[0] - 1
         self.safe_lag: int = round(self.max_row * 0.1)
 
         self.is_running, self.complete = True, False
@@ -44,7 +43,7 @@ class DataPrepper:
 
     def run_prepper_engine(self) -> None:
         try:
-            wRowID, rRowID, queue = self.wRowID, self.rRowID, self.queue
+            dfmWid, dfmRid, dfm = self.dfmWid, self.dfmRid, self.dfm
             safe_lag, max_row, price_mult = self.safe_lag, self.max_row, self.priceMult
             # - - -
             data_paths: list[str] = self.get_data_paths()
@@ -55,16 +54,18 @@ class DataPrepper:
                         if not self.is_running:
                             break
 
-                        while ((wRowID[0] - rRowID[0] + max_row) % max_row) > safe_lag:
+                        while ((dfmWid[0] - dfmRid[0] + max_row) % max_row) > safe_lag:
                             time.sleep(0)
 
                         data: list[bytes] = line.split(b",")
-                        queue[wRowID[0], :] = (
+
+                        dfm[dfmWid[0], :] = (
                             round(float(data[1]) * price_mult),
                             int(data[5]),
                         )
-                        new_row = wRowID[0] + 1
-                        wRowID[0] = new_row if (new_row <= max_row) else 0
+
+                        new_row = dfmWid[0] + 1
+                        dfmWid[0] = new_row if (new_row <= max_row) else 0
 
             self.complete = True
 

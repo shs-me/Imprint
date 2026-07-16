@@ -12,22 +12,15 @@ from .base_sync import Sync
 class Logic(ABC):
     def __init__(self, manager: AgentManager, reader: FootprintReader) -> None:
         self.manager: AgentManager = manager
-        self.reader: FootprintReader = reader
-
         self.set_proc_sc = manager.set_proc_sc
         self.check_base_task = manager.check_base_task
         self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
-        cfgBT = manager.cfgBacktesting
-        self.execution_sim = cfgBT.execution_sim
+        self.reader: FootprintReader = reader
 
         cfgMetrics = manager.cfgMetrics
-        self.tradesParsed: memoryview = manager.metrics_buf[
-            cfgMetrics.tradesParsed : cfgMetrics.tradesParsed + 1
-        ]
-        self.footprintReaded: memoryview = manager.metrics_buf[
-            cfgMetrics.footprintReaded : cfgMetrics.footprintReaded + 1
-        ]
+        self.parsing_complete: memoryview = cfgMetrics.parsing_complete
+        self.logic_complete: memoryview = cfgMetrics.logic_complete
 
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
@@ -62,7 +55,7 @@ class Logic(ABC):
                     spareFlag[0] = 0
 
     def complete(self) -> bool:
-        return self.tradesParsed[0] == 1
+        return self.parsing_complete[0] == 1
 
     @abstractmethod
     def alarm_clock(self) -> None:
@@ -77,7 +70,7 @@ class Logic(ABC):
         pass
 
     def final_actions(self) -> None:
-        self.footprintReaded[0] = 1
+        self.parsing_complete[0] = 1
         self.post_final_action()
         self.reader.final_actions()
         self.set_proc_sc(scs.COMPLETE)
@@ -88,10 +81,12 @@ class Logic(ABC):
 
 
 def resolve_reader(manager: AgentManager, sync: Sync) -> FootprintReader:
-    module = importlib.import_module(manager.algorithm_module)
+    module = importlib.import_module(manager.cfgFootprint.algorithm_module)
     reader: type[FootprintReader] = BaseFootprintReader
     for name, obj in inspect.getmembers(module, inspect.isclass):
-        if (name == manager.algorithm_package) and issubclass(obj, FootprintReader):
+        if (name == manager.cfgFootprint.algorithm_package) and issubclass(
+            obj, FootprintReader
+        ):
             reader = obj
 
     return reader(manager, sync)

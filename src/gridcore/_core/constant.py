@@ -2,7 +2,6 @@ from .settings import (
     ActiveOrders,
     BarHeaders,
     CachedStatesData,
-    DataForMatching,
     OrderFlag,
     StateFlags,
     TradeParam,
@@ -95,12 +94,6 @@ CSD_POC_FP: int = int(CachedStatesData.POC_FP)
 CSD_VAH_FP: int = int(CachedStatesData.VAH_FP)
 CSD_VAL_FP: int = int(CachedStatesData.VAL_FP)
 CSD_ConstantCount: int = int(CachedStatesData._ConstantCount)
-
-# DataForMatching
-DFM_nPrice: int = int(DataForMatching.nPrice)
-DFM_startTimestamp: int = int(DataForMatching.startTimestamp)
-DFM_endTimestamp: int = int(DataForMatching.endTimestamp)
-DFM_ConstantCount: int = int(DataForMatching._ConstantCount)
 
 # Active Orders
 AO_nPrice: int = int(ActiveOrders.nPrice)

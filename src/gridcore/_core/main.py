@@ -32,22 +32,14 @@ class RunMain(CoreResources):
         self.execution: bool = kwargs["execution"]
         self.manager: MainManager = kwargs.pop("manager")
 
-        self.cfgBacktesting = self.manager.cfgBacktesting
-        # CoreResources
         self.general_event: EventT = Event()
         self.execution_event: EventT = Event()
         self.parsing_event: EventT = Event()
         self.logic_event: EventT = Event()
         self.sc_sem: SemT = Semaphore(0)
-        # Variable's
+
         self.procs: dict = {}
         self.funcs: list[FunctionType] = []
-        # Metrics
-        self.cfgMetrics = self.manager.cfgMetrics
-        self.trade_par: memoryview = self.manager.metrics_buf[
-            self.cfgMetrics.tick_size[0] : self.cfgMetrics.qtyPrecision[1]
-        ].cast("q")
-        """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
 
     def check_dirs(self) -> None:
         for _dir in DIRS_LIST:
@@ -59,8 +51,8 @@ class RunMain(CoreResources):
             try:
                 startDate, endDate = to_date(
                     [
-                        self.manager.cfgBacktesting.startDateForPrepper,
-                        self.manager.cfgBacktesting.endDateForPrepper,
+                        self.manager.cfgBacktesting.backtest_start_date,
+                        self.manager.cfgBacktesting.backtest_end_date,
                     ]
                 )
             except ValueError as e:
@@ -70,7 +62,7 @@ class RunMain(CoreResources):
 
     def init_funcs(self) -> None:
         if self.backtesting:
-            self.rest = RestSimAgent(self.symbol, self.cfgBacktesting)
+            self.rest = RestSimAgent(self.symbol, self.manager.cfgBacktesting)
         else:
             self.rest = RestAgent(self.symbol)
 
@@ -84,15 +76,15 @@ class RunMain(CoreResources):
     def init_trade_param(self) -> None:
         self.ts: str = self.rest.get_tick_size()
         self.ls: str = self.rest.get_lot_size()
-        self.trade_par[2] = self.pricePrec = (
-            len(self.ts.split(sep=".")[-1]) if "." in self.ts else 0
-        )
-        self.trade_par[3] = self.qtyPrec = (
-            len(self.ls.split(sep=".")[-1]) if "." in self.ls else 0
-        )
+        self.pricePrec = len(self.ts.split(sep=".")[-1]) if "." in self.ts else 0
+        self.qtyPrec = len(self.ls.split(sep=".")[-1]) if "." in self.ls else 0
         self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
-        self.trade_par[0] = round(float(self.ts) * self.priceMult)
-        self.trade_par[1] = round(float(self.ls) * self.qtyMult)
+
+        cfgMetrics = self.manager.cfgMetrics
+        cfgMetrics.price_precision.cast("q")[0] = self.pricePrec
+        cfgMetrics.qty_precision.cast("q")[0] = self.qtyPrec
+        cfgMetrics.tick_size.cast("q")[0] = round(float(self.ts) * self.priceMult)
+        cfgMetrics.lot_size.cast("q")[0] = round(float(self.ls) * self.qtyMult)
 
     def get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)

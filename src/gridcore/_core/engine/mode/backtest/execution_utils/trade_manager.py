@@ -14,10 +14,10 @@ class TradeManager:
     def __init__(self, converter: TradeConverter) -> None:
         self.con: TradeConverter = converter
 
-        self.ohLines = self.con.cfgST.ordersHistoryLines
-        self.ohCols = self.con.cfgST.ordersHistoryCols
-        self.aoLines = self.con.cfgST.activeOrdersLines
-        self.aoCols = self.con.cfgST.activeOrdersCols
+        self.ohLines = self.con.cfgST.orders_history_rows
+        self.ohCols = self.con.cfgST.orders_history_cols
+        self.aoLines = self.con.cfgST.active_orders_rows
+        self.aoCols = self.con.cfgST.active_orders_cols
         self._init_array()
 
     def _init_array(self) -> None:
@@ -144,7 +144,7 @@ class TradeManager:
                 _.lockedNbalance = -(_.lockedNbalance)
 
     def final_action(self) -> None:
-        if self.con.cfgST.saveOrdersHistory:
+        if self.con.cfgST.save_orders_history:
             np.save(
                 c.ORDERS_HISTORY_DUMP_PATH, self.orders_history[: self.ohWRow[0], :]
             )

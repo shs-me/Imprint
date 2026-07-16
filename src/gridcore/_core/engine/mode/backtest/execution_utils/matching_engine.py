@@ -1,11 +1,10 @@
-import numpy as np
 from numba import njit
 from numpy import int64
 from numpy.typing import NDArray
 
 from ..... import constant as c
-from .....utils.monitoring.agent_manager import AgentManager
 from ....base.utils.tm_con import TradeConverter
+from .data_prepper import DataPrepper
 from .trade_manager import (
     OPEN_ORDER,
     SL_ORDER,
@@ -16,92 +15,12 @@ from .trade_manager import (
 
 class MatchingEngine:
     def __init__(
-        self, manager: AgentManager, con: TradeConverter, tm: TradeManager
+        self, con: TradeConverter, tm: TradeManager, prepper: DataPrepper
     ) -> None:
-        self.manager: AgentManager = manager
         self.con: TradeConverter = con
         self.tm: TradeManager = tm
-        # Footprint
-        self.cfgFootprint = self.manager.cfgFootprint
-        self.space_flag: memoryview[int] = self.manager.footprint_buf[
-            self.cfgFootprint.flag : self.cfgFootprint.flag + 1
-        ]
-        # Metrics
-        self.cfgMetrics = self.manager.cfgMetrics
-        self.dfmLines: int = self.cfgMetrics.dfmLines
-        self.dfm_1RID: memoryview = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.dfm_1_row_id)
-        ].cast("q")
-        self.dfm_2RID: memoryview = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.dfm_2_row_id)
-        ].cast("q")
-        self.timeStartReading: memoryview = self.manager.metrics_buf[
-            slice(*self.cfgMetrics.timeStartReading)
-        ].cast("q")
-        # Variable's
-        self._init_array()
-
-    def _init_array(self) -> None:
-        self.dfm_1: NDArray[int64] = np.ndarray(
-            shape=(self.cfgMetrics.dfmLines, self.cfgMetrics.dfmCols),
-            dtype=int64,
-            buffer=self.manager.metrics_buf[slice(*self.cfgMetrics.dfm_1)],
-        )
-        self.dfm_2: NDArray[int64] = np.ndarray(
-            shape=(self.cfgMetrics.dfmLines, self.cfgMetrics.dfmCols),
-            dtype=int64,
-            buffer=self.manager.metrics_buf[slice(*self.cfgMetrics.dfm_2)],
-        )
-        self.dfmRid: memoryview = memoryview(bytearray(8)).cast("q")
-
-    @property
-    def dfm(self) -> NDArray[int64]:
-        return self.dfm_2 if (self.space_flag[0] == 0) else self.dfm_1
-
-    @property
-    def dfmWid(self) -> memoryview:
-        return self.dfm_2RID if (self.space_flag[0] == 0) else self.dfm_1RID
-
-    def prepare_dfm(self, timestamp: int | None) -> None:
-        aoWRow, dfmWid, dfmRid = self.tm.aoWRow, self.dfmWid, self.dfmRid
-        _, dfm = self.con, self.dfm
-        # - - -
-        if timestamp is not None:
-            if timestamp < dfm[dfmWid[0] - 1, c.DFM_endTimestamp]:
-                if (wRow := find_row(timestamp, dfm, dfmWid[0])) is None:
-                    raise ValueError
-            else:
-                wRow = dfmWid[0]
-        else:
-            wRow = dfmWid[0]
-
-        rRow = dfmRid[0] = wRow if (aoWRow[0] == 0) else dfmRid[0]
-        if rRow < wRow:
-            for row in range(rRow, wRow):
-                nPrice: int = _.to_nPrice(int(dfm[row, c.DFM_nPrice]))
-                endTimestamp: int = int(dfm[row, c.DFM_endTimestamp])
-
-                if aoWRow[0] == 0:
-                    dfmRid[0] = wRow
-                    break
-
-                aoRrow = 0
-                while aoRrow < aoWRow[0]:
-                    if self.check_open_order(aoRrow, nPrice, endTimestamp) is False:
-                        if self.check_tp_order(aoRrow, nPrice, endTimestamp):
-                            if self.check_sl_order(aoRrow, nPrice, endTimestamp):
-                                aoRrow += 1
-                                continue
-
-                        self.tm.compact_active_orders(aoRrow)
-                        aoWRow[0] -= 1
-
-                    else:
-                        aoRrow += 1
-
-                dfmRid[0] += 1
-
-        _.unrealizedNpnl = _.to_nPrice(int(dfm[wRow - 1, c.DFM_nPrice]))
+        self.prepper: DataPrepper = prepper
+        self.prepper.start()
 
     def check_open_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
         tm, _ = self.tm, self.con
@@ -216,8 +135,27 @@ class MatchingEngine:
         return True
 
 
-@njit(cache=True)
-def find_row(timestamp: int, dfm: NDArray[int64], dfmWrow: int) -> int | None:
-    for i in range(dfmWrow):
-        if dfm[i, c.DFM_endTimestamp] >= timestamp:
-            return i + 1
+@njit(cached=True)
+def matching(
+    timestamp: int,
+    orderBook: NDArray[int64],
+    dfm: NDArray[int64],
+    dfmRid: memoryview,
+    dfmWid: memoryview,
+) -> None:
+    _timestamp = 0
+    while _timestamp != timestamp:
+        while dfmRid[0] != dfmWid[0]:
+            nPrice, _timestamp = dfm[dfmRid[0], :]
+
+
+def processing_market_orders() -> None:
+    pass
+
+
+def processing_limit_orders() -> None:
+    pass
+
+
+def processing_cond_orders() -> None:
+    pass

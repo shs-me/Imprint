@@ -1,43 +1,34 @@
 from abc import ABC, abstractmethod
 
-from msgspec.json import Decoder
-
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
 from ...utils.monitoring.status_codes import StatusCodes as scs
 from .base_footprint_writer import FootprintWriter
-from .utils.data_structs import AggTrade
 
 
 class Parsing(ABC):
     def __init__(self, manager: AgentManager, writer: FootprintWriter) -> None:
-        self.manager, self.writer = manager, writer
-
+        self.manager: AgentManager = manager
         self.set_proc_sc = manager.set_proc_sc
         self.check_base_task = manager.check_base_task
         self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
+        self.writer: FootprintWriter = writer
+
         cfgRaw = self.manager.cfgRaw
-        self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
         self.data_size: int = cfgRaw.data_size
-        self.data_offset: int = cfgRaw.data[0]
-        self.dataHeader_offset: int = cfgRaw.dataHeader[0]
+        self.data_offset: int = cfgRaw.data_offset
+        self.data_header_offset: int = cfgRaw.data_header_offset
         self.cell_amount: int = cfgRaw.cell_amount
-        self.wCellC: memoryview[int] = self.manager.raw_buf[
-            slice(*cfgRaw.WriterCellCounter)
-        ].cast("q")
-        self.rCellC: memoryview[int] = self.manager.raw_buf[
-            slice(*cfgRaw.ReaderCellCounter)
-        ].cast("q")
+        self.wCellC: memoryview = cfgRaw.writer_id.cast("q")
+        self.rCellC: memoryview = cfgRaw.reader_id.cast("q")
 
         cfgMetrics = self.manager.cfgMetrics
-        self.tradesParsed: memoryview = self.manager.metrics_buf[
-            cfgMetrics.tradesParsed : cfgMetrics.tradesParsed + 1
-        ]
+        self.parsing_complete: memoryview = cfgMetrics.parsing_complete
 
         self.price: memoryview[float] = memoryview(bytearray(8)).cast("d")
         self.qty: memoryview[float] = memoryview(bytearray(8)).cast("d")
-        self.timestamp: memoryview[int] = memoryview(bytearray(8)).cast("q")
+        self.timestamp: memoryview = memoryview(bytearray(8)).cast("q")
         self.is_sell: bool = False
 
     @error_handler(set_status_code=True)
@@ -48,7 +39,7 @@ class Parsing(ABC):
         raw_buf = self.manager.raw_buf
         rCellC, wCellC = self.rCellC, self.wCellC
         data_size = self.data_size
-        data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
+        data_offset, data_header_offset = self.data_offset, self.data_header_offset
         cell_amount = self.cell_amount
         get_trade_data, alarm_clock = self.get_trade_data, self.alarm_clock
         update_success, post_update = self.update_success, self.post_update
@@ -79,10 +70,11 @@ class Parsing(ABC):
                     cell_amount=cell_amount,
                     data_size=data_size,
                     data_offset=data_offset,
-                    dataHeader_offset=dataHeader_offset,
+                    data_header_offset=data_header_offset,
                 ):
                     if init_session is False:
-                        init_session = writer.init_session(price[0], timestamp[0])
+                        writer.init_session(price[0], timestamp[0])
+                        init_session = True
 
                     if writer.update(price[0], qty[0], timestamp[0], is_sell):
                         update_success()
@@ -99,7 +91,7 @@ class Parsing(ABC):
                 self.post_final_action()
 
         self.writer.wait_read_space()
-        self.tradesParsed[0] = 1
+        self.parsing_complete[0] = 1
         self.writer.final_actions()
         self.set_proc_sc(scs.COMPLETE)
 
@@ -119,12 +111,12 @@ class Parsing(ABC):
         cell_amount: int,
         data_size: int,
         data_offset: int,
-        dataHeader_offset: int,
+        data_header_offset: int,
     ) -> bool:
         if wCellC[0] != rCellC[0]:
             cell: int = rCellC[0]
-            lrd: int = raw_buf[cell + dataHeader_offset]
-            start = cell * data_size + data_offset
+            lrd: int = raw_buf[cell + data_header_offset]
+            start: int = cell * data_size + data_offset
             new_cell: int = cell + 1
             self.set_trade_data(raw_buf[start : start + lrd])
             rCellC[0] = new_cell if new_cell < cell_amount else 0
