@@ -20,7 +20,6 @@ class MatchingEngine:
         self.con: TradeConverter = con
         self.tm: TradeManager = tm
         self.prepper: DataPrepper = prepper
-        self.prepper.start()
 
     def check_open_order(self, aoRow: int, _nPrice: int, endTimestamp: int) -> bool:
         tm, _ = self.tm, self.con

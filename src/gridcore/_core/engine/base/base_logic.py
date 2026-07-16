@@ -70,7 +70,7 @@ class Logic(ABC):
         pass
 
     def final_actions(self) -> None:
-        self.parsing_complete[0] = 1
+        self.logic_complete[0] = 1
         self.post_final_action()
         self.reader.final_actions()
         self.set_proc_sc(scs.COMPLETE)

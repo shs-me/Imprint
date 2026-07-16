@@ -67,8 +67,8 @@ def agent_init(main: bool, shm_buf: memoryview, **kwargs):
         manager = AgentManager(
             proc_id=kwargs.pop("proc_id"),
             task_id=kwargs.pop("task_id"),
-            segments=kwargs.pop("segments"),
-            configs=kwargs.pop("configs"),
+            segments=kwargs.pop("segments").copy(),
+            configs=kwargs.pop("configs").copy(),
             shm_buf=shm_buf,
             sc_sem=kwargs.pop("sc_sem"),
             symbol=kwargs.pop("symbol"),

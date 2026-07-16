@@ -91,7 +91,7 @@ class FootprintWriter(ABC):
         self.con.init_session(price, timestamp)
 
         self.base_nPrice[0] = self.con.nBasePrice
-        self.base_timestamp[1] = self.con.baseTimestamp
+        self.base_timestamp[0] = self.con.baseTimestamp
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         nPrice: int = self.con.to_nPrice(price)
