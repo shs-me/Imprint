@@ -76,6 +76,13 @@ class AgentManager:
                 if len(attr_val) == 2:
                     setattr(cfg_obj, attr_name, shm_buf[slice(*attr_val)])
 
+    def set_text(self, text: str) -> None:
+        text_buf: memoryview = self.cfgMetrics.text
+        b_text, start = text.encode(), self.proc_id * self.cfgMetrics.text_size
+        set_len, start = text_buf[start : start + 8].cast("q"), start + 8
+        set_len[0] = len(b_text)
+        text_buf[start : start + len(b_text)] = b_text
+
     def check_base_task(self, complete: bool) -> bool | int:
         if self.task_status[0] != 0 or self.proc_status[0] != 0:
             while self.task_status[0] == 0:

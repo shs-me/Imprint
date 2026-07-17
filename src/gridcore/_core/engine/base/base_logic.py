@@ -38,6 +38,8 @@ class Logic(ABC):
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self.final_actions()
+                                self.set_proc_sc(scs.COMPLETE)
+
                             return
 
                     elif task & scs.FP_RE_INIT:
@@ -73,7 +75,6 @@ class Logic(ABC):
         self.logic_complete[0] = 1
         self.post_final_action()
         self.reader.final_actions()
-        self.set_proc_sc(scs.COMPLETE)
 
     @abstractmethod
     def post_final_action(self) -> None:

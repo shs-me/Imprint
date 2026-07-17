@@ -49,6 +49,16 @@ class MainManager:
                 if len(attr_val) == 2:
                     setattr(cfg_obj, attr_name, shm_buf[slice(*attr_val)])
 
+    def get_text(self, proc_id: int) -> str:
+        text_buf: memoryview = self.cfgMetrics.text
+        start = proc_id * self.cfgMetrics.text_size
+        len_t, start = text_buf[start : start + 8].cast("q")[0], start + 8
+        text: str = f"{self.procs[proc_id]['proc_name']}: "
+        if len_t > 0:
+            text = text + bytes(text_buf[start : start + len_t]).decode()
+
+        return text
+
     def run(self, procs: dict[int, dict], scs_sem: Semaphore) -> None:
         self.procs = procs
         self.scs_sem = scs_sem
@@ -96,6 +106,7 @@ class MainManager:
 
                 elif sc & scs.COMPLETE:
                     logger.success(f"{v['proc_name']} | {scs.COMPLETE.label}")
+                    print(self.get_text(k), flush=True)
                     procs.pop(k)
                     break
 

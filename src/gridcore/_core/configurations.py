@@ -183,12 +183,15 @@ class cfgWssRingBuf(cfgSHMSegments):
 
 class cfgMetrics(cfgSHMSegments):
     def __init__(self) -> None:
+        self.text_size = 1024
+
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
         self.status: Any = OFFSET, OFFSET + (40 * INT64)
+        self.text: Any = self.status[1], self.status[1] + (5 * self.text_size)
 
-        self.tick_size: Any = self.status[1], self.status[1] + INT64
+        self.tick_size: Any = self.text[1], self.text[1] + INT64
         self.lot_size: Any = self.tick_size[1], self.tick_size[1] + INT64
         self.price_precision: Any = self.lot_size[1], self.lot_size[1] + INT64
         self.qty_precision: Any = (

@@ -27,7 +27,7 @@ class LogicAgent(Logic):
         pass
 
     def post_final_action(self) -> None:
-        print(f"Count Signals: {self.reader.temp}", flush=True)  # type: ignore
+        self.manager.set_text(f"Count Signals: {self.reader.temp}")  # type: ignore
 
 
 @manager_office()
