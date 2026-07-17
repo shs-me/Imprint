@@ -26,7 +26,7 @@ from .utils.tools import download_aggTrade_hist_daily_data, to_date
 
 class RunMain(CoreResources):
     def __init__(self, **kwargs) -> None:
-        self.baseKwargs: dict = kwargs
+        self.base_kwargs: dict = kwargs
         self.symbol: str = kwargs["symbol"]
         self.backtesting: bool = kwargs["backtesting"]
         self.execution: bool = kwargs["execution"]
@@ -89,7 +89,7 @@ class RunMain(CoreResources):
     def get_kwargs_for_func(self, func: FunctionType) -> dict | None:
         sig = inspect.signature(func)
         proc_id = len(self.procs)
-        task_id = proc_id + 10
+        task_id = proc_id + self.manager.cfgMetrics.count_procs
         proc_name = func.__name__.removeprefix("run_").upper()
         kwargs = {}
         for param_name in sig.parameters:
@@ -103,7 +103,7 @@ class RunMain(CoreResources):
                 logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
                 return None
 
-        kwargs = self.baseKwargs | kwargs
+        kwargs = self.base_kwargs | kwargs
         self.procs[proc_id] = {"proc_name": proc_name, "task_id": task_id}
         return kwargs
 

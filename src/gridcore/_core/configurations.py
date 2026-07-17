@@ -16,8 +16,8 @@ class BaseRingBuf(ABC):
         data_header_size: int = 8,
         cell_amount: int = 10_000,
     ) -> None:
-        self.data_size: int = 1024
-        self.data_header_size: int = 8
+        self.data_size: int = data_size
+        self.data_header_size: int = data_header_size
         self.cell_amount: int = cell_amount
 
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
@@ -156,15 +156,21 @@ class cfgFootprint(cfgSHMSegments):
 
 
 class cfgMetrics(cfgSHMSegments):
-    def __init__(self) -> None:
-        self.text_size = 1024
-
+    def __init__(
+        self,
+        count_procs: int = 10,
+        text_size: int = 1024,
+    ) -> None:
+        self.count_procs: int = count_procs
+        self.text_size: int = text_size
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
-        self.status: Any = OFFSET, OFFSET + (40 * INT64)
-        self.text: Any = self.status[1], self.status[1] + (5 * self.text_size)
-
+        self.status: Any = OFFSET, OFFSET + ((self.count_procs * 2) * INT64)
+        self.text: Any = (
+            self.status[1],
+            self.status[1] + (self.count_procs * self.text_size),
+        )
         self.tick_size: Any = self.text[1], self.text[1] + INT64
         self.lot_size: Any = self.tick_size[1], self.tick_size[1] + INT64
         self.price_precision: Any = self.lot_size[1], self.lot_size[1] + INT64
