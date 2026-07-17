@@ -3,10 +3,11 @@ import time
 from multiprocessing.synchronize import Semaphore
 
 from ... import configurations as cfg
+from .base_manager import Manager
 from .status_codes import StatusCodes as scs
 
 
-class AgentManager:
+class AgentManager(Manager):
     cfgBacktesting: cfg.cfgBacktesting
     cfgAccount: cfg.cfgAccount
     cfgFootprint: cfg.cfgFootprint
@@ -17,19 +18,19 @@ class AgentManager:
 
     def __init__(
         self,
+        segments: dict[str, slice],
+        shm_buf: memoryview,
+        configs: list,
         proc_id: int,
         task_id: int,
-        segments: dict[str, slice],
-        configs: list,
-        shm_buf: memoryview,
-        sc_sem: Semaphore,
         symbol: str,
+        sc_sem: Semaphore,
     ) -> None:
-        self._proc_id, self._task_id = proc_id, task_id
-        self._sc_sem, self._shm_buf = sc_sem, shm_buf
-        self._segments = segments
+        super().__init__(segments, shm_buf, configs)
 
-        self.configs_init(configs)
+        self._proc_id: int = proc_id
+        self._task_id: int = task_id
+        self._sc_sem: Semaphore = sc_sem
 
         self.symbol: str = symbol
         self.task_status: memoryview = self.cfgMetrics.status.cast("q")[
@@ -38,25 +39,6 @@ class AgentManager:
         self.proc_status: memoryview = self.cfgMetrics.status.cast("q")[
             proc_id : proc_id + 1
         ]
-
-    def configs_init(self, configs: list) -> None:
-        for attr_name, attr_type in self.__annotations__.items():
-            for obj in configs:
-                if isinstance(obj, attr_type):
-                    setattr(self, attr_name, obj)
-                    if issubclass(obj.__class__, cfg.cfgSHMSegments):
-                        self.bind_shm_segments(obj)
-                    break
-
-    def bind_shm_segments(self, cfg: object) -> None:
-        for attr_name in list(cfg.__dict__.keys()):
-            attr_val = getattr(cfg, attr_name)
-            if isinstance(attr_val, tuple):
-                if len(attr_val) == 2:
-                    shm: memoryview = self._shm_buf[
-                        self._segments[cfg.__class__.__name__]
-                    ]
-                    setattr(cfg, attr_name, shm[slice(*attr_val)])
 
     def set_text(self, text: str) -> None:
         text_buf: memoryview = self.cfgMetrics.text

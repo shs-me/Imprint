@@ -4,45 +4,24 @@ from multiprocessing.synchronize import Semaphore
 from loguru import logger
 
 from ... import configurations as cfg
+from .base_manager import Manager
 from .status_codes import StatusCodes as scs
 
 
-class MainManager:
+class MainManager(Manager):
     cfgBacktesting: cfg.cfgBacktesting
     cfgMetrics: cfg.cfgMetrics
 
     def __init__(
         self,
         segments: dict[str, slice],
-        configs: list,
         shm_buf: memoryview,
+        configs: list,
     ) -> None:
-        self.segments: dict[str, slice] = segments
-        self.shm_buf: memoryview = shm_buf
-
-        self.configs_init(configs)
+        super().__init__(segments, shm_buf, configs)
 
         self.startDate: date = date.today()
         self.status_buf: memoryview = self.cfgMetrics.status.cast("q")
-
-    def configs_init(self, configs: list) -> None:
-        for attr_name, attr_type in self.__annotations__.items():
-            for obj in configs:
-                if isinstance(obj, attr_type):
-                    setattr(self, attr_name, obj)
-                    if issubclass(obj.__class__, cfg.cfgSHMSegments):
-                        self.bind_shm_segments(obj)
-                    break
-
-    def bind_shm_segments(self, cfg: object) -> None:
-        for attr_name in list(cfg.__dict__.keys()):
-            attr_val = getattr(cfg, attr_name)
-            if isinstance(attr_val, tuple):
-                if len(attr_val) == 2:
-                    shm: memoryview = self.shm_buf[
-                        self.segments[cfg.__class__.__name__]
-                    ]
-                    setattr(cfg, attr_name, shm[slice(*attr_val)])
 
     def get_text(self, proc_id: int) -> str:
         text_buf: memoryview = self.cfgMetrics.text
