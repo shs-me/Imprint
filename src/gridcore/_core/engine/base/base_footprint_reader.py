@@ -29,8 +29,8 @@ class FootprintReader(ABC):
             cfgFP=cfgFP,
             footprint=self.fp,
             headers=self.headers,
-            price_prec=cfgMetrics.price_precision.cast("q"),
-            qty_prec=cfgMetrics.qty_precision.cast("q"),
+            price_prec=cfgMetrics.price_precision.cast("q")[0],
+            qty_prec=cfgMetrics.qty_precision.cast("q")[0],
         )
         self.defaultSpace: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
         self.amRow: int = 0

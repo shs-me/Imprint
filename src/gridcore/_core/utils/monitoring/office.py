@@ -1,5 +1,6 @@
 import gc
 import inspect
+from copy import deepcopy
 from functools import wraps
 from multiprocessing.shared_memory import SharedMemory
 
@@ -57,23 +58,22 @@ def manager_office(main: bool = False):
 
 
 def agent_init(main: bool, shm_buf: memoryview, **kwargs):
+    segments, configs = deepcopy(kwargs["segments"]), deepcopy(kwargs["configs"])
     if main:
         manager = MainManager(
-            segments=kwargs["segments"].copy(),
-            configs=kwargs["configs"].copy(),
+            segments=segments,
+            configs=configs,
             shm_buf=shm_buf,
         )
     else:
         manager = AgentManager(
-            proc_id=kwargs.pop("proc_id"),
-            task_id=kwargs.pop("task_id"),
-            segments=kwargs.pop("segments").copy(),
-            configs=kwargs.pop("configs").copy(),
+            proc_id=kwargs["proc_id"],
+            task_id=kwargs["task_id"],
+            segments=segments,
+            configs=configs,
             shm_buf=shm_buf,
-            sc_sem=kwargs.pop("sc_sem"),
-            symbol=kwargs.pop("symbol"),
-            algorithm_module=kwargs.pop("algorithm_module"),
-            algorithm_package=kwargs.pop("algorithm_package"),
+            sc_sem=kwargs["sc_sem"],
+            symbol=kwargs["symbol"],
         )
     return manager
 

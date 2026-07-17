@@ -17,8 +17,6 @@ class AgentManager:
         shm_buf: memoryview,
         sc_sem: Semaphore,
         symbol: str,
-        algorithm_module: str,
-        algorithm_package: str,
     ) -> None:
         self.proc_id, self.task_id = proc_id, task_id
         self.sc_sem, self.shm_buf = sc_sem, shm_buf

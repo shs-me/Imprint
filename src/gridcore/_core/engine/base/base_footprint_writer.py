@@ -40,8 +40,8 @@ class FootprintWriter(ABC):
             cfgFP=cfgFP,
             footprint=self.footprint,
             headers=self.headers,
-            price_prec=cfgMetrics.price_precision.cast("q"),
-            qty_prec=cfgMetrics.qty_precision.cast("q"),
+            price_prec=cfgMetrics.price_precision.cast("q")[0],
+            qty_prec=cfgMetrics.qty_precision.cast("q")[0],
         )
 
         self.last_idx: memoryview = memoryview(bytearray(8)).cast("q")

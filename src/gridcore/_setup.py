@@ -58,6 +58,8 @@ def run(
             timeframe=timeframe,
             save_fp_headers=save_footprint_headers,
             save_algorithm_metadata=save_algorithm_metadata,
+            algorithm_module=algorithm.__module__,
+            algorithm_package=algorithm.__name__,
         ),
         con.cfgStrategy(
             leverage=laverage,

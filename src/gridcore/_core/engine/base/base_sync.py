@@ -22,9 +22,7 @@ class Sync(ABC):
         self.orderParamId: int = cfgST.orderParam[1] // 8 - 1
         self.signal_size: int = cfgST.signal_size // 8
         self.signal_offset: int = cfgST.offset // 8
-        self.executeBuf: memoryview = manager.strategy_buf[
-            slice(*cfgST.executeBuf)
-        ].cast("q")
+        self.executeBuf: memoryview = cfgST.executeBuf.cast("q")
 
     def send_signal(
         self,
