@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
 
-from ....configurations import cfgStrategy
+from ....configurations import cfgAccount
 
 
 class TradeConverter:
     def __init__(
         self,
-        cfgST: cfgStrategy,
+        cfgAcount: cfgAccount,
         price_prec: int,
         qty_prec: int,
     ) -> None:
@@ -15,7 +15,7 @@ class TradeConverter:
         self.priceMult: int = 10**self.pricePrec
         self.qtyMult: int = 10**self.qtyPrec
 
-        self.cfgST = cfgST
+        self.cfgST = cfgAcount
         self.latencyMs: int = self.cfgST.latency
         self.leverage: int = self.cfgST.leverage
         self.slipage: int = self.cfgST.slipage

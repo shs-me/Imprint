@@ -28,7 +28,7 @@ class LogicAgent(Logic):
         self.logic_event: Event = logic_event
 
     def alarm_clock(self) -> None:
-        if (self.reader.spare_flag[0] == 0) and (self.tradesParsed[0] == 0):
+        if (self.reader.spare_flag[0] == 0) and (self.parsing_complete[0] == 0):
             if self.logic_event.is_set() is False:
                 self.logic_event.wait()
 

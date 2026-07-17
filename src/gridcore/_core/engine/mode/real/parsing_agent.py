@@ -1,12 +1,20 @@
 from multiprocessing.synchronize import Event
 
+from msgspec import Struct
 from msgspec.json import Decoder
 
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
 from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
 from ...base.base_parsing import Parsing
-from ...base.utils.data_structs import AggTrade
+
+
+# - - Binance Futures USDM
+class AggTrade(Struct):
+    T: int  # Trade time
+    p: float  # Price
+    q: float  # Quantity
+    m: bool  # Is buyer maker?
 
 
 class ParsingAgent(Parsing):

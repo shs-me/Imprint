@@ -9,6 +9,33 @@ INT64 = 8
 FLOAT64 = 8
 
 
+class BaseRingBuf(ABC):
+    def __init__(
+        self,
+        data_size: int = 1024,
+        data_header_size: int = 8,
+        cell_amount: int = 10_000,
+    ) -> None:
+        self.data_size: int = 1024
+        self.data_header_size: int = 8
+        self.cell_amount: int = cell_amount
+
+        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
+
+    def get_need_shm_size(self) -> int:
+        self.reader_id: Any = OFFSET, OFFSET + INT64
+        self.writer_id: Any = self.reader_id[1], self.reader_id[1] + INT64
+        self.data: Any = (
+            self.writer_id[1],
+            (self.cell_amount * self.data_size) + self.writer_id[1],
+        )
+        self.data_header: Any = (
+            self.data[1],
+            (self.cell_amount * self.data_header_size) + self.data[1],
+        )
+        return self.data_header[1]
+
+
 class Configuration(ABC):
     pass
 
@@ -35,11 +62,7 @@ class cfgBacktesting(Configuration):
         self.backtest_end_date: str = backtest_end_date
 
 
-class cfgSHMSegments(Configuration):
-    pass
-
-
-class cfgStrategy(cfgSHMSegments):
+class cfgAccount(Configuration):
     def __init__(
         self,
         leverage: int = 20,
@@ -72,32 +95,10 @@ class cfgStrategy(cfgSHMSegments):
         self.orders_history_cols: int = TradeParam._ConstantCount
         self.active_orders_rows: int = count_active_order
         self.active_orders_cols: int = ActiveOrders._ConstantCount
-        self.cell_amount: int = 1000
 
-        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
-    def get_need_shm_size(self) -> int:
-        self.reader = OFFSET, OFFSET + INT64
-        self.writer = self.reader[1], self.reader[1] + INT64
-        self.offset = self.writer[1]
-        self.nPrice = OFFSET, OFFSET + INT64
-        self.time_ms = self.nPrice[1], self.nPrice[1] + INT64
-        self.orderParam = self.time_ms[1], self.time_ms[1] + INT64
-        self.orderID = self.orderParam[1], self.orderParam[1] + INT64
-        self.commission = self.orderID[1], self.orderID[1] + INT64
-
-        self.signal_size = self.orderParam[1]
-        self.executed_size = self.commission[1]
-
-        self.signal_buf_size = self.offset + self.signal_size * self.cell_amount
-        self.executedBuf_size = self.offset + self.executed_size * self.cell_amount
-
-        self.executeBuf = OFFSET, OFFSET + self.signal_buf_size
-        self.executedBuf = (
-            self.executeBuf[1],
-            self.executeBuf[1] + self.executedBuf_size,
-        )
-        return self.executedBuf[1]
+class cfgSHMSegments(Configuration):
+    pass
 
 
 class cfgFootprint(cfgSHMSegments):
@@ -154,33 +155,6 @@ class cfgFootprint(cfgSHMSegments):
         return self.spare_flag[1]
 
 
-class cfgWssRingBuf(cfgSHMSegments):
-    def __init__(
-        self,
-        cell_amount: int = 10000,
-    ) -> None:
-        self.data_size: int = 256
-        self.header_size: int = 1
-        self.cell_amount: int = cell_amount
-        self.safe_lag: int = int(self.cell_amount * 0.9)
-        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
-
-    def get_need_shm_size(self) -> int:
-        self.reader_id: Any = OFFSET, OFFSET + INT64
-        self.writer_id: Any = self.reader_id[1], self.reader_id[1] + INT64
-        self.data: Any = (
-            self.writer_id[1],
-            (self.cell_amount * self.data_size) + self.writer_id[1],
-        )
-        self.data_header: Any = (
-            self.data[1],
-            (self.cell_amount * self.header_size) + self.data[1],
-        )
-        self.data_offset: int = self.data[0]
-        self.data_header_offset: int = self.data_header[0]
-        return self.data_header[1]
-
-
 class cfgMetrics(cfgSHMSegments):
     def __init__(self) -> None:
         self.text_size = 1024
@@ -212,3 +186,23 @@ class cfgMetrics(cfgSHMSegments):
             self.parsing_complete[1] + UBYTE,
         )
         return self.logic_complete[1]
+
+
+class cfgSignal(cfgSHMSegments, BaseRingBuf):
+    def __init__(self) -> None:
+        BaseRingBuf.__init__(self, data_size=24, data_header_size=1, cell_amount=10_000)
+
+
+class cfgUserStream(cfgSHMSegments, BaseRingBuf):
+    def __init__(self) -> None:
+        BaseRingBuf.__init__(
+            self, data_size=1024, data_header_size=8, cell_amount=10_000
+        )
+
+
+class cfgDataStream(cfgSHMSegments, BaseRingBuf):
+    def __init__(self) -> None:
+        BaseRingBuf.__init__(
+            self, data_size=256, data_header_size=1, cell_amount=10_000
+        )
+        self.safe_lag: int = int(self.cell_amount * 0.9)

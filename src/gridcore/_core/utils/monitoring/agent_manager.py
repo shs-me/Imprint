@@ -1,30 +1,37 @@
 import gc
 import time
 from multiprocessing.synchronize import Semaphore
-from typing import Any
 
 from ... import configurations as cfg
 from .status_codes import StatusCodes as scs
 
 
 class AgentManager:
+    cfgBacktesting: cfg.cfgBacktesting
+    cfgAccount: cfg.cfgAccount
+    cfgFootprint: cfg.cfgFootprint
+    cfgMetrics: cfg.cfgMetrics
+    cfgDataStream: cfg.cfgDataStream
+    cfgUserStream: cfg.cfgUserStream
+    cfgSignal: cfg.cfgSignal
+
     def __init__(
         self,
         proc_id: int,
         task_id: int,
-        segments: dict[str, Any],
-        configs: dict[str, Any],
+        segments: dict[str, slice],
+        configs: list,
         shm_buf: memoryview,
         sc_sem: Semaphore,
         symbol: str,
     ) -> None:
-        self.proc_id, self.task_id = proc_id, task_id
-        self.sc_sem, self.shm_buf = sc_sem, shm_buf
-        self.symbol: str = symbol
+        self._proc_id, self._task_id = proc_id, task_id
+        self._sc_sem, self._shm_buf = sc_sem, shm_buf
+        self._segments = segments
 
-        self.segments_init(segments)
         self.configs_init(configs)
 
+        self.symbol: str = symbol
         self.task_status: memoryview = self.cfgMetrics.status.cast("q")[
             task_id : task_id + 1
         ]
@@ -32,53 +39,28 @@ class AgentManager:
             proc_id : proc_id + 1
         ]
 
-    def segments_init(self, segments: dict[str, Any]) -> None:
-        _slice: slice
-        segments_subclasses: list[str] = segments.pop("subclasses")
-        for name, _slice in segments.items():
-            if name not in segments_subclasses:
-                raise ValueError(f"{name} not subclass {cfg.cfgSHMSegments.__name__}")
+    def configs_init(self, configs: list) -> None:
+        for attr_name, attr_type in self.__annotations__.items():
+            for obj in configs:
+                if isinstance(obj, attr_type):
+                    setattr(self, attr_name, obj)
+                    if issubclass(obj.__class__, cfg.cfgSHMSegments):
+                        self.bind_shm_segments(obj)
+                    break
 
-            elif name == cfg.cfgStrategy.__name__:
-                self.strategy_buf = self.shm_buf[_slice]
-            elif name == cfg.cfgFootprint.__name__:
-                self.footprint_buf = self.shm_buf[_slice]
-            elif name == cfg.cfgMetrics.__name__:
-                self.metrics_buf = self.shm_buf[_slice]
-            elif name == cfg.cfgWssRingBuf.__name__:
-                self.raw_buf = self.shm_buf[_slice]
-
-    def configs_init(self, configs: dict[str, Any]) -> None:
-        config_subclasses: list[str] = configs.pop("subclasses")
-        for name, obj in configs.items():
-            if name not in config_subclasses:
-                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
-
-            elif isinstance(obj, cfg.cfgBacktesting):
-                self.cfgBacktesting = obj
-            elif isinstance(obj, cfg.cfgStrategy):
-                self.cfgStrategy = obj
-                self.bind_shm_segments(self.cfgStrategy, self.strategy_buf)
-            elif isinstance(obj, cfg.cfgFootprint):
-                self.cfgFootprint = obj
-                self.bind_shm_segments(self.cfgFootprint, self.footprint_buf)
-            elif isinstance(obj, cfg.cfgMetrics):
-                self.cfgMetrics = obj
-                self.bind_shm_segments(self.cfgMetrics, self.metrics_buf)
-            elif isinstance(obj, cfg.cfgWssRingBuf):
-                self.cfgRaw = obj
-                self.bind_shm_segments(self.cfgRaw, self.raw_buf)
-
-    def bind_shm_segments(self, cfg_obj: object, shm_buf: memoryview) -> None:
-        for attr_name in list(cfg_obj.__dict__.keys()):
-            attr_val = getattr(cfg_obj, attr_name)
+    def bind_shm_segments(self, cfg: object) -> None:
+        for attr_name in list(cfg.__dict__.keys()):
+            attr_val = getattr(cfg, attr_name)
             if isinstance(attr_val, tuple):
                 if len(attr_val) == 2:
-                    setattr(cfg_obj, attr_name, shm_buf[slice(*attr_val)])
+                    shm: memoryview = self._shm_buf[
+                        self._segments[cfg.__class__.__name__]
+                    ]
+                    setattr(cfg, attr_name, shm[slice(*attr_val)])
 
     def set_text(self, text: str) -> None:
         text_buf: memoryview = self.cfgMetrics.text
-        b_text, start = text.encode(), self.proc_id * self.cfgMetrics.text_size
+        b_text, start = text.encode(), self._proc_id * self.cfgMetrics.text_size
         set_len, start = text_buf[start : start + 8].cast("q"), start + 8
         set_len[0] = len(b_text)
         text_buf[start : start + len(b_text)] = b_text
@@ -117,7 +99,7 @@ class AgentManager:
 
     def set_proc_sc(self, code: scs | int) -> None:
         self.proc_status[0] |= code
-        self.sc_sem.release()
+        self._sc_sem.release()
 
     def set_task_sc(self, code: scs | int) -> None:
         self.task_status[0] |= code
@@ -127,4 +109,4 @@ class AgentManager:
 
     def _for_error_action(self) -> None:
         self.proc_status[0] |= scs.ERROR
-        self.sc_sem.release()
+        self._sc_sem.release()

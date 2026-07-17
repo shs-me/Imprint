@@ -61,7 +61,7 @@ def run(
             algorithm_module=algorithm.__module__,
             algorithm_package=algorithm.__name__,
         ),
-        con.cfgStrategy(
+        con.cfgAccount(
             leverage=laverage,
             max_loss_balance=max_loss_balance,
             max_lock_balance=max_lock_balance,
@@ -73,7 +73,6 @@ def run(
     )
 
     for obj in args:
-        name = str(obj.__class__).split(".")[-1].removesuffix("'>")
-        kwargs[name] = obj
+        kwargs[obj.__class__.__name__] = obj
 
     run_core(**kwargs)

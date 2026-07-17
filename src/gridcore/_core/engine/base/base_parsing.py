@@ -15,13 +15,13 @@ class Parsing(ABC):
 
         self.writer: FootprintWriter = writer
 
-        cfgRaw = self.manager.cfgRaw
-        self.data_size: int = cfgRaw.data_size
-        self.data_offset: int = cfgRaw.data_offset
-        self.data_header_offset: int = cfgRaw.data_header_offset
-        self.cell_amount: int = cfgRaw.cell_amount
-        self.wCellC: memoryview = cfgRaw.writer_id.cast("q")
-        self.rCellC: memoryview = cfgRaw.reader_id.cast("q")
+        cfgDS = self.manager.cfgDataStream
+        self.cell_amount: int = cfgDS.cell_amount
+        self.data_size: int = cfgDS.data_size
+        self.data: memoryview = cfgDS.data
+        self.data_header: memoryview = cfgDS.data_header
+        self.wCellC: memoryview = cfgDS.writer_id.cast("q")
+        self.rCellC: memoryview = cfgDS.reader_id.cast("q")
 
         cfgMetrics = self.manager.cfgMetrics
         self.parsing_complete: memoryview = cfgMetrics.parsing_complete
@@ -36,10 +36,9 @@ class Parsing(ABC):
         # LocalLinks
         writer = self.writer
         proc_status, task_status = self.proc_status, self.task_status
-        raw_buf = self.manager.raw_buf
         rCellC, wCellC = self.rCellC, self.wCellC
-        data_size = self.data_size
-        data_offset, data_header_offset = self.data_offset, self.data_header_offset
+        data, data_size = self.data, self.data_size
+        data_header = self.data_header
         cell_amount = self.cell_amount
         get_trade_data, alarm_clock = self.get_trade_data, self.alarm_clock
         update_success, post_update = self.update_success, self.post_update
@@ -65,13 +64,12 @@ class Parsing(ABC):
                 alarm_clock()
 
                 if get_trade_data(
-                    raw_buf=raw_buf,
+                    data=data,
+                    data_header=data_header,
                     wCellC=wCellC,
                     rCellC=rCellC,
                     cell_amount=cell_amount,
                     data_size=data_size,
-                    data_offset=data_offset,
-                    data_header_offset=data_header_offset,
                 ):
                     if init_session is False:
                         writer.init_session(price[0], timestamp[0])
@@ -105,20 +103,19 @@ class Parsing(ABC):
 
     def get_trade_data(
         self,
-        raw_buf: memoryview,
+        data: memoryview,
+        data_header: memoryview,
         wCellC: memoryview,
         rCellC: memoryview,
         cell_amount: int,
         data_size: int,
-        data_offset: int,
-        data_header_offset: int,
     ) -> bool:
         if wCellC[0] != rCellC[0]:
             cell: int = rCellC[0]
-            lrd: int = raw_buf[cell + data_header_offset]
-            start: int = cell * data_size + data_offset
+            lrd: int = data_header[cell]
+            start: int = cell * data_size
             new_cell: int = cell + 1
-            self.set_trade_data(raw_buf[start : start + lrd])
+            self.set_trade_data(data[start : start + lrd])
             rCellC[0] = new_cell if new_cell < cell_amount else 0
 
             if (self.price[0] > 0) and (self.qty[0] > 0) and (self.timestamp[0] > 0):

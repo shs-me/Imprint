@@ -15,29 +15,27 @@ class Execution(ABC):
         self.check_base_task = manager.check_base_task
         self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
-        cfgST = manager.cfgStrategy
-        self.cell_amount: int = cfgST.cell_amount
-        self.readerId: int = cfgST.reader[1] // 8 - 1
-        self.writerId: int = cfgST.writer[1] // 8 - 1
-        self.offset: int = cfgST.offset // 8
-        self.nPriceId: int = cfgST.nPrice[1] // 8 - 1
-        self.time_msId: int = cfgST.time_ms[1] // 8 - 1
-        self.orderParamId: int = cfgST.orderParam[1] // 8 - 1
-        self.orderIdId: int = cfgST.orderID[1] // 8 - 1
-        self.commissionId: int = cfgST.commission[1] // 8 - 1
-        self.signal_size: int = cfgST.signal_size // 8
-        self.executeBuf = manager.strategy_buf[slice(*cfgST.executeBuf)].cast("q")
-        self.WB_1: memoryview = self.executeBuf[self.writerId : self.writerId + 1]
-        self.RB_1: memoryview = self.executeBuf[self.readerId : self.readerId + 1]
-        self.executed_size: int = cfgST.executed_size // 8
-        self.executedBuf = manager.strategy_buf[slice(*cfgST.executedBuf)].cast("q")
-        self.WB_2: memoryview = self.executedBuf[self.writerId : self.writerId + 1]
-        self.RB_2: memoryview = self.executedBuf[self.readerId : self.readerId + 1]
+        cfgAC = manager.cfgAccount
+        self.analysis_safe_lag_us: int = cfgAC.analysis_safe_lag_microsecond
+
+        cfgSN = manager.cfgSignal
+        self.sn_cell_amount: int = cfgSN.cell_amount
+        self.sn_data_size: int = cfgSN.data_size
+        self.sn_data: memoryview = cfgSN.data
+        self.WB_1: memoryview = cfgSN.writer_id.cast("q")
+        self.RB_1: memoryview = cfgSN.reader_id.cast("q")
+
+        cfgUS = manager.cfgUserStream
+        self.us_cell_amount: int = cfgUS.cell_amount
+        self.us_data_size: int = cfgUS.data_size
+        self.us_data: memoryview = cfgUS.data
+        self.WB_2: memoryview = cfgUS.writer_id.cast("q")
+        self.RB_2: memoryview = cfgUS.reader_id.cast("q")
 
         cfgMetrics = manager.cfgMetrics
         self.logic_complete: memoryview = cfgMetrics.logic_complete
         self.con: TradeConverter = TradeConverter(
-            cfgST=cfgST,
+            cfgAcount=cfgAC,
             price_prec=cfgMetrics.price_precision.cast("q"),
             qty_prec=cfgMetrics.qty_precision.cast("q"),
         )
@@ -95,20 +93,7 @@ class Execution(ABC):
         pass
 
     def check_executed_buf(self) -> None:
-        cell: int = self.executedBuf[self.readerId]
-        start: int = cell * self.executed_size + self.offset
-
-        _nPrice = self.executedBuf[start + self.nPriceId]
-        _time_ms = self.executedBuf[start + self.time_msId]
-        _orderParam = self.executedBuf[start + self.orderParamId]
-        _orderID = self.executedBuf[start + self.orderIdId]
-        _commission = self.executedBuf[start + self.commissionId]
-
-        new_cell = cell + 1
-        self.executedBuf[self.readerId] = new_cell if new_cell < self.cell_amount else 0
-        #  - - -
-        self.pre_executed_actions()
-        self.executed_action()
+        pass
 
     @abstractmethod
     def pre_executed_actions(self) -> None:
@@ -119,23 +104,20 @@ class Execution(ABC):
         pass
 
     def check_execute_buf(self) -> None:
-        _, buf, rid = self.con, self.executeBuf, self.readerId
+        _ = self.con
         # - - -
-        cell: int = buf[rid]
-        start: int = cell * self.signal_size + self.offset
-
-        nPrice: int = _.to_nPrice(buf[start + self.nPriceId])
-        timestamp: int = buf[start + self.time_msId]
-        orderParam: int = buf[start + self.orderParamId]
-
+        cell: int = self.RB_1[0]
+        start: int = cell * self.sn_data_size
+        get_data: memoryview = self.sn_data[start : start + self.sn_data_size].cast("q")
+        nPrice, timestamp, order_param = get_data[0], get_data[1], get_data[2]
         new_cell: int = cell + 1
-        buf[rid] = new_cell if (new_cell < self.cell_amount) else 0
+        self.RB_1[0] = new_cell if (new_cell < self.sn_cell_amount) else 0
 
         self.pre_execute_actions()
         if _.lossNbalanceSafeLimit:
             if _.lockedNbalanceSafeLimit:
                 if _.nominalEntryNqtyWithLeverage is not None:
-                    self.execute_action(nPrice, timestamp, orderParam)
+                    self.execute_action(nPrice, timestamp, order_param)
                 else:
                     self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
             else:

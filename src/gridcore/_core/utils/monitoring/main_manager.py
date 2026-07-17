@@ -1,6 +1,5 @@
 from datetime import date
 from multiprocessing.synchronize import Semaphore
-from typing import Any
 
 from loguru import logger
 
@@ -9,45 +8,41 @@ from .status_codes import StatusCodes as scs
 
 
 class MainManager:
+    cfgBacktesting: cfg.cfgBacktesting
+    cfgMetrics: cfg.cfgMetrics
+
     def __init__(
-        self, segments: dict[str, Any], configs: dict[str, Any], shm_buf: memoryview
+        self,
+        segments: dict[str, slice],
+        configs: list,
+        shm_buf: memoryview,
     ) -> None:
+        self.segments: dict[str, slice] = segments
         self.shm_buf: memoryview = shm_buf
-        self.startDate: date = date.today()
-        self.segments_init(segments)
+
         self.configs_init(configs)
+
+        self.startDate: date = date.today()
         self.status_buf: memoryview = self.cfgMetrics.status.cast("q")
 
-    def segments_init(self, segments: dict[str, Any]) -> None:
-        _slice: slice
-        segments_subclasses: list[str] = segments["subclasses"]
-        for name, _slice in segments.items():
-            if isinstance(_slice, list):
-                continue
-            if name not in segments_subclasses:
-                raise ValueError(f"{name} not subclass {cfg.cfgSHMSegments.__name__}")
-            elif name == cfg.cfgMetrics.__name__:
-                self.metrics_buf = self.shm_buf[_slice]
+    def configs_init(self, configs: list) -> None:
+        for attr_name, attr_type in self.__annotations__.items():
+            for obj in configs:
+                if isinstance(obj, attr_type):
+                    setattr(self, attr_name, obj)
+                    if issubclass(obj.__class__, cfg.cfgSHMSegments):
+                        self.bind_shm_segments(obj)
+                    break
 
-    def configs_init(self, configs: dict[str, Any]) -> None:
-        config_subclasses: list[str] = configs["subclasses"]
-        for name, obj in configs.items():
-            if isinstance(obj, list):
-                continue
-            if name not in config_subclasses:
-                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
-            elif isinstance(obj, cfg.cfgBacktesting):
-                self.cfgBacktesting = obj
-            elif isinstance(obj, cfg.cfgMetrics):
-                self.cfgMetrics = obj
-                self.bind_shm_segments(self.cfgMetrics, self.metrics_buf)
-
-    def bind_shm_segments(self, cfg_obj: object, shm_buf: memoryview) -> None:
-        for attr_name in list(cfg_obj.__dict__.keys()):
-            attr_val = getattr(cfg_obj, attr_name)
+    def bind_shm_segments(self, cfg: object) -> None:
+        for attr_name in list(cfg.__dict__.keys()):
+            attr_val = getattr(cfg, attr_name)
             if isinstance(attr_val, tuple):
                 if len(attr_val) == 2:
-                    setattr(cfg_obj, attr_name, shm_buf[slice(*attr_val)])
+                    shm: memoryview = self.shm_buf[
+                        self.segments[cfg.__class__.__name__]
+                    ]
+                    setattr(cfg, attr_name, shm[slice(*attr_val)])
 
     def get_text(self, proc_id: int) -> str:
         text_buf: memoryview = self.cfgMetrics.text

@@ -81,24 +81,20 @@ def agent_init(main: bool, shm_buf: memoryview, **kwargs):
 @error_handler()
 def configurations_init(**kwargs) -> dict:
     offset = 0
-    kwargs["configs"], kwargs["segments"] = {}, {}
-    kwargs["configs"]["subclasses"], kwargs["segments"]["subclasses"] = [], []
+    kwargs["configs"], kwargs["segments"] = [], {}
     for name, obj in inspect.getmembers(configurations, inspect.isclass):
         if (
             issubclass(obj, Configuration)
             and obj is not Configuration
             and obj is not cfgSHMSegments
         ):
-            kwargs["configs"][name] = obj = (
-                kwargs.pop(name) if name in kwargs else obj()
-            )
-            kwargs["configs"]["subclasses"].append(name)
+            obj = kwargs.pop(name) if name in kwargs else obj()
+            kwargs["configs"].append(obj)
             if issubclass(obj.__class__, cfgSHMSegments):
                 kwargs["segments"][name] = slice(
                     offset,
                     (offset := (offset + obj.shm_size)),  # type: ignore | reportAttributeAccessIssue
                 )
-                kwargs["segments"]["subclasses"].append(name)
 
     kwargs["segments"]["shm_size"] = offset
     return kwargs

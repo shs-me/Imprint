@@ -25,10 +25,9 @@ class WssSimAgent(Wss):
         # Local Links
         prepper = self.prepper
         proc_status, task_status = self.proc_status, self.task_status
-        raw_buf = self.manager.raw_buf
         wCellC, rCellC = self.wCellC, self.rCellC
-        data_size = self.data_size
-        data_offset, data_header_offset = self.data_offset, self.data_header_offset
+        data, data_size = self.data, self.data_size
+        data_header = self.data_header
         cell_amount, safe_lag = self.cell_amount, self.safe_lag
         set_raw_data, alarm_clock = self.set_raw_data, self.alarm_clock
         # - - -
@@ -57,12 +56,11 @@ class WssSimAgent(Wss):
                         raw_data: bytes = prepper.queue.popleft()
                         set_raw_data(
                             raw_data=raw_data,
-                            raw_buf=raw_buf,
+                            data=data,
+                            data_header=data_header,
                             wCellC=wCellC,
                             cell_amount=cell_amount,
                             data_size=data_size,
-                            data_offset=data_offset,
-                            dataHeader_offset=data_header_offset,
                         )
                 else:
                     raise RuntimeError(prepper.error)
