@@ -17,20 +17,36 @@ class AgentManager:
         shm_buf: memoryview,
         sc_sem: Semaphore,
         symbol: str,
-        algorithm_module: str,
-        algorithm_package: str,
     ) -> None:
         self.proc_id, self.task_id = proc_id, task_id
         self.sc_sem, self.shm_buf = sc_sem, shm_buf
-        self.symbol = symbol
-        self.algorithm_module = algorithm_module
-        self.algorithm_package = algorithm_package
+        self.symbol: str = symbol
 
         self.segments_init(segments)
         self.configs_init(configs)
-        self.local_segments_init()
-        self.task_status = self.status_buf[task_id : task_id + 1]
-        self.proc_status = self.status_buf[proc_id : proc_id + 1]
+
+        self.task_status: memoryview = self.cfgMetrics.status.cast("q")[
+            task_id : task_id + 1
+        ]
+        self.proc_status: memoryview = self.cfgMetrics.status.cast("q")[
+            proc_id : proc_id + 1
+        ]
+
+    def segments_init(self, segments: dict[str, Any]) -> None:
+        _slice: slice
+        segments_subclasses: list[str] = segments.pop("subclasses")
+        for name, _slice in segments.items():
+            if name not in segments_subclasses:
+                raise ValueError(f"{name} not subclass {cfg.cfgSHMSegments.__name__}")
+
+            elif name == cfg.cfgStrategy.__name__:
+                self.strategy_buf = self.shm_buf[_slice]
+            elif name == cfg.cfgFootprint.__name__:
+                self.footprint_buf = self.shm_buf[_slice]
+            elif name == cfg.cfgMetrics.__name__:
+                self.metrics_buf = self.shm_buf[_slice]
+            elif name == cfg.cfgWssRingBuf.__name__:
+                self.raw_buf = self.shm_buf[_slice]
 
     def configs_init(self, configs: dict[str, Any]) -> None:
         config_subclasses: list[str] = configs.pop("subclasses")
@@ -38,43 +54,27 @@ class AgentManager:
             if name not in config_subclasses:
                 raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
 
-            if isinstance(obj, cfg.ConfigurationStrategy):
-                self.cfgStrategy = obj
-            elif isinstance(obj, cfg.ConfigurationBacktesting):
+            elif isinstance(obj, cfg.cfgBacktesting):
                 self.cfgBacktesting = obj
-            elif isinstance(obj, cfg.ConfigurationFootprint):
+            elif isinstance(obj, cfg.cfgStrategy):
+                self.cfgStrategy = obj
+                self.bind_shm_segments(self.cfgStrategy, self.strategy_buf)
+            elif isinstance(obj, cfg.cfgFootprint):
                 self.cfgFootprint = obj
-            elif isinstance(obj, cfg.ConfigurationMetrics):
+                self.bind_shm_segments(self.cfgFootprint, self.footprint_buf)
+            elif isinstance(obj, cfg.cfgMetrics):
                 self.cfgMetrics = obj
-            elif isinstance(obj, cfg.ConfigurationRingRawBuf):
+                self.bind_shm_segments(self.cfgMetrics, self.metrics_buf)
+            elif isinstance(obj, cfg.cfgWssRingBuf):
                 self.cfgRaw = obj
-            elif isinstance(obj, cfg.ConfigurationMonitoring):
-                self.cfgMonitoring = obj
+                self.bind_shm_segments(self.cfgRaw, self.raw_buf)
 
-    def segments_init(self, segments: dict[str, Any]) -> None:
-        _slice: slice
-        segments_subclasses: list[str] = segments.pop("subclasses")
-        for name, _slice in segments.items():
-            if name not in segments_subclasses:
-                raise ValueError(
-                    f"{name} not subclass {cfg.ConfigurationSHMSegments.__name__}"
-                )
-
-            if name == cfg.ConfigurationStrategy.__name__:
-                self.strategy_buf = self.shm_buf[_slice]
-            elif name == cfg.ConfigurationFootprint.__name__:
-                self.footprint_buf = self.shm_buf[_slice]
-            elif name == cfg.ConfigurationMetrics.__name__:
-                self.metrics_buf = self.shm_buf[_slice]
-            elif name == cfg.ConfigurationRingRawBuf.__name__:
-                self.raw_buf = self.shm_buf[_slice]
-            elif name == cfg.ConfigurationMonitoring.__name__:
-                self.monitoring_buf = self.shm_buf[_slice]
-
-    def local_segments_init(self) -> None:
-        self.status_buf = self.monitoring_buf[
-            slice(*self.cfgMonitoring.procs_buf)
-        ].cast("q")
+    def bind_shm_segments(self, cfg_obj: object, shm_buf: memoryview) -> None:
+        for attr_name in list(cfg_obj.__dict__.keys()):
+            attr_val = getattr(cfg_obj, attr_name)
+            if isinstance(attr_val, tuple):
+                if len(attr_val) == 2:
+                    setattr(cfg_obj, attr_name, shm_buf[slice(*attr_val)])
 
     def check_base_task(self, complete: bool) -> bool | int:
         if self.task_status[0] != 0 or self.proc_status[0] != 0:

@@ -8,9 +8,9 @@ from .utils.tm_con import TradeConverter
 
 class Execution(ABC):
     def __init__(self, manager: AgentManager) -> None:
-        self.manager = manager
+        self.manager: AgentManager = manager
 
-        self.symbol = manager.symbol
+        self.symbol: str = manager.symbol
         self.set_proc_sc = manager.set_proc_sc
         self.check_base_task = manager.check_base_task
         self.task_status, self.proc_status = manager.task_status, manager.proc_status
@@ -35,18 +35,11 @@ class Execution(ABC):
         self.RB_2: memoryview = self.executedBuf[self.readerId : self.readerId + 1]
 
         cfgMetrics = manager.cfgMetrics
-        self.footprintReaded: memoryview = manager.metrics_buf[
-            cfgMetrics.footprintReaded : cfgMetrics.footprintReaded + 1
-        ]
-        self.trade_par: memoryview = manager.metrics_buf[
-            cfgMetrics.tick_size[0] : cfgMetrics.qtyPrecision[1]
-        ].cast("q")
-        self.tick_size, self.lot_size, self.pricePrec, self.qtyPrec = self.trade_par[:]
-        self.priceMult: float = (10**self.pricePrec) + 1e-9
-        self.qtyMult: float = (10**self.qtyPrec) + 1e-9
-
+        self.logic_complete: memoryview = cfgMetrics.logic_complete
         self.con: TradeConverter = TradeConverter(
-            trade_param=self.trade_par, cfgStrategy=cfgST
+            cfgST=cfgST,
+            price_prec=cfgMetrics.price_precision.cast("q"),
+            qty_prec=cfgMetrics.qty_precision.cast("q"),
         )
 
     @error_handler(set_status_code=True)
@@ -78,7 +71,7 @@ class Execution(ABC):
                 self.post_check_bufs(WB_1, RB_1, WB_2, RB_2)
 
     def complete(self) -> bool:
-        return (self.footprintReaded[0] == 1) and (
+        return (self.logic_complete[0] == 1) and (
             (self.WB_1[0] == self.RB_1[0]) and (self.WB_2[0] == self.RB_2[0])
         )
 

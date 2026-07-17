@@ -1,12 +1,12 @@
 from multiprocessing.synchronize import Event
 
+from msgspec.json import Decoder
+
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
-from ...base.base_footprint_writer import (
-    BaseFootprintWriter,
-    FootprintWriter,
-)
+from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
 from ...base.base_parsing import Parsing
+from ...base.utils.data_structs import AggTrade
 
 
 class ParsingAgent(Parsing):
@@ -21,6 +21,7 @@ class ParsingAgent(Parsing):
 
         self.parsing_event: Event = parsing_event
         self.logic_event: Event = logic_event
+        self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
 
     def alarm_clock(self) -> None:
         if self.rCellC[0] == self.wCellC[0]:

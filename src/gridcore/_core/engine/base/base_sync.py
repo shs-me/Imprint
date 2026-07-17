@@ -10,12 +10,10 @@ class Sync(ABC):
         self.manager = manager
 
         cfgMetrics = manager.cfgMetrics
-        self.timeStartReading = self.manager.metrics_buf[
-            slice(*cfgMetrics.timeStartReading)
-        ].cast("q")
+        self.time_start_reading: memoryview = cfgMetrics.time_start_reading.cast("q")
 
         cfgST = manager.cfgStrategy
-        self.analysis_safe_lag_us = cfgST.analysis_safe_lag_microsecond
+        self.analysis_safe_lag_us: int = cfgST.analysis_safe_lag_microsecond
         self.cell_amount: int = cfgST.cell_amount
         self.readerId: int = cfgST.reader[1] // 8 - 1
         self.writerId: int = cfgST.writer[1] // 8 - 1
@@ -24,9 +22,7 @@ class Sync(ABC):
         self.orderParamId: int = cfgST.orderParam[1] // 8 - 1
         self.signal_size: int = cfgST.signal_size // 8
         self.signal_offset: int = cfgST.offset // 8
-        self.executeBuf: memoryview = manager.strategy_buf[
-            slice(*cfgST.executeBuf)
-        ].cast("q")
+        self.executeBuf: memoryview = cfgST.executeBuf.cast("q")
 
     def send_signal(
         self,
@@ -63,5 +59,5 @@ class Sync(ABC):
         pass
 
     def lag_is_safe(self) -> bool:
-        lag: int = (time.perf_counter_ns() - self.timeStartReading[0]) // 1_000
+        lag: int = (time.perf_counter_ns() - self.time_start_reading[0]) // 1_000
         return True if (lag < self.analysis_safe_lag_us) else False

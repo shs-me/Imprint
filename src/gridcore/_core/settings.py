@@ -94,9 +94,3 @@ class BarHeadersMetadata(IntEnum):
 class SpaceCoords(IntEnum):
     IDYmin, IDXmin, IDYmax, IDXmax = 0, auto(), auto(), auto()
     _ConstantCount = auto()
-
-
-@verify(CONTINUOUS, UNIQUE)
-class DataForMatching(IntEnum):
-    nPrice, startTimestamp, endTimestamp = 0, auto(), auto()
-    _ConstantCount = auto()

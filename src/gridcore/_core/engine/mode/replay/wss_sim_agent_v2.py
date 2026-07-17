@@ -97,8 +97,8 @@ class WssSimAgent(Wss):
         self.lock = Lock()
         self.prepper = DataPrepper(
             symbol=manager.symbol,
-            startDate=cfgBT.startDateForPrepper,
-            endDate=cfgBT.endDateForPrepper,
+            startDate=cfgBT.backtest_start_date,
+            endDate=cfgBT.backtest_end_date,
             lock=self.lock,
         )
         self.prepper.start()

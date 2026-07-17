@@ -1,11 +1,10 @@
 from . import typing
 from ._core import constant
 from ._core.engine.base.base_footprint_reader import FootprintReader
-from ._setup import Timeframe, run_backtesting, run_live
+from ._setup import Timeframe, run
 
 __all__ = [
-    "run_live",
-    "run_backtesting",
+    "run",
     "typing",
     "constant",
     "Timeframe",

@@ -16,25 +16,7 @@ class MainManager:
         self.startDate: date = date.today()
         self.segments_init(segments)
         self.configs_init(configs)
-        self.local_segments_init()
-
-    def configs_init(self, configs: dict[str, Any]) -> None:
-        config_subclasses: list[str] = configs["subclasses"]
-        for name, obj in configs.items():
-            if isinstance(obj, list):
-                continue
-
-            if name not in config_subclasses:
-                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
-
-            if isinstance(obj, cfg.ConfigurationMonitoring):
-                self.cfgMonitoring = obj
-
-            elif isinstance(obj, cfg.ConfigurationMetrics):
-                self.cfgMetrics = obj
-
-            elif isinstance(obj, cfg.ConfigurationBacktesting):
-                self.cfgBacktesting = obj
+        self.status_buf: memoryview = self.cfgMetrics.status.cast("q")
 
     def segments_init(self, segments: dict[str, Any]) -> None:
         _slice: slice
@@ -42,22 +24,30 @@ class MainManager:
         for name, _slice in segments.items():
             if isinstance(_slice, list):
                 continue
-
             if name not in segments_subclasses:
-                raise ValueError(
-                    f"{name} not subclass {cfg.ConfigurationSHMSegments.__name__}"
-                )
-
-            if name == cfg.ConfigurationMonitoring.__name__:
-                self.monitoring_buf = self.shm_buf[_slice]
-
-            elif name == cfg.ConfigurationMetrics.__name__:
+                raise ValueError(f"{name} not subclass {cfg.cfgSHMSegments.__name__}")
+            elif name == cfg.cfgMetrics.__name__:
                 self.metrics_buf = self.shm_buf[_slice]
 
-    def local_segments_init(self) -> None:
-        self.procs_buf = self.monitoring_buf[slice(*self.cfgMonitoring.procs_buf)].cast(
-            "q"
-        )
+    def configs_init(self, configs: dict[str, Any]) -> None:
+        config_subclasses: list[str] = configs["subclasses"]
+        for name, obj in configs.items():
+            if isinstance(obj, list):
+                continue
+            if name not in config_subclasses:
+                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
+            elif isinstance(obj, cfg.cfgBacktesting):
+                self.cfgBacktesting = obj
+            elif isinstance(obj, cfg.cfgMetrics):
+                self.cfgMetrics = obj
+                self.bind_shm_segments(self.cfgMetrics, self.metrics_buf)
+
+    def bind_shm_segments(self, cfg_obj: object, shm_buf: memoryview) -> None:
+        for attr_name in list(cfg_obj.__dict__.keys()):
+            attr_val = getattr(cfg_obj, attr_name)
+            if isinstance(attr_val, tuple):
+                if len(attr_val) == 2:
+                    setattr(cfg_obj, attr_name, shm_buf[slice(*attr_val)])
 
     def run(self, procs: dict[int, dict], scs_sem: Semaphore) -> None:
         self.procs = procs
@@ -86,10 +76,10 @@ class MainManager:
         return True
 
     def check_process_status_code(self) -> bool:
-        procs, procs_buf = self.procs, self.procs_buf
+        procs, status_buf = self.procs, self.status_buf
         for _ in range(len(self.procs)):
             for k, v in procs.items():
-                sc = procs_buf[k]
+                sc = status_buf[k]
                 # Action's
                 # General
                 if sc == 0:
@@ -112,10 +102,6 @@ class MainManager:
                 # Parsing
                 elif sc & scs.UNVALID_DATA:
                     logger.warning(f"{v['proc_name']} | {scs.UNVALID_DATA.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
-
-                elif sc & scs.BUF_DFM_FILLED:
-                    logger.warning(f"{v['proc_name']} | {scs.BUF_DFM_FILLED.label}")
                     self.set_task_sc_to_procs(scs.EXIT)
 
                 elif sc & scs.FP_IDX_FILLED:
@@ -162,14 +148,14 @@ class MainManager:
         return True
 
     def set_task_sc_to_proc(self, code: scs, task_id: int):
-        self.procs_buf[task_id] |= code
+        self.status_buf[task_id] |= code
 
     def set_task_sc_to_procs(self, code: scs):
         for _, data in self.procs.items():
-            self.procs_buf[data["task_id"]] |= code
+            self.status_buf[data["task_id"]] |= code
 
     def clear_proc_sc(self, code: scs | int, proc_id: int) -> None:
-        self.procs_buf[proc_id] &= ~(code)
+        self.status_buf[proc_id] &= ~(code)
 
     def get_procs_task_id(self, procs_name: list[str]) -> list[int]:
         return [

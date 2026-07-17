@@ -1,87 +1,77 @@
 from abc import ABC
+from typing import Any
 
-from .settings import (
-    ActiveOrders,
-    BarHeaders,
-    DataForMatching,
-    SpaceCoords,
-    Timeframe,
-    TradeParam,
-)
+from .settings import ActiveOrders, BarHeaders, SpaceCoords, Timeframe, TradeParam
 
+OFFSET = 0
 UBYTE = 1
 INT64 = 8
 FLOAT64 = 8
-OFFSET = 0
 
 
 class Configuration(ABC):
     pass
 
 
-# Configuration Subclasses
-class ConfigurationSHMSegments(Configuration):
+class cfgBacktesting(Configuration):
+    def __init__(
+        self,
+        balance: float = 100.0,
+        min_order_size: float = 5.0,
+        taker_commission: float = 0.005,
+        maker_commission: float = 0.002,
+        tick_size: str = "0.01",
+        lot_size: str = "0.001",
+        backtest_start_date: str = "2026-01-01",
+        backtest_end_date: str = "2026-01-01",
+    ) -> None:
+        self.balance: float = balance
+        self.min_order_size: float = min_order_size
+        self.taker_commission: float = taker_commission
+        self.maker_commission: float = maker_commission
+        self.tick_size: str = tick_size
+        self.lot_size: str = lot_size
+        self.backtest_start_date: str = backtest_start_date
+        self.backtest_end_date: str = backtest_end_date
+
+
+class cfgSHMSegments(Configuration):
     pass
 
 
-class ConfigurationBacktesting(Configuration):
+class cfgStrategy(cfgSHMSegments):
     def __init__(
         self,
-        tick_size: str = "0.01",
-        lot_size: str = "0.001",
-        minOrderSizeUSDT: float = 5.0,
-        taker_commission: float = 0.005,
-        maker_commission: float = 0.002,
-        balanceUSDT: float = 100.0,
-        execution_sim: bool = False,
-        startDateForPrepper: str = "2026-01-01",
-        endDateForPrepper: str = "2026-01-01",
-    ) -> None:
-        self.tick_size: str = tick_size
-        self.lot_size: str = lot_size
-        self.minOrderSizeUSDT: float = minOrderSizeUSDT
-        self.taker_commission: float = taker_commission
-        self.maker_commission: float = maker_commission
-        self.balance = balanceUSDT
-        self.execution_sim = execution_sim
-        self.startDateForPrepper = startDateForPrepper
-        self.endDateForPrepper = endDateForPrepper
-
-
-# ShmSegmentsSubclasses
-class ConfigurationStrategy(ConfigurationSHMSegments):
-    def __init__(
-        self,
-        scalePrec: int = 20,
         leverage: int = 20,
-        maxLockBalance: float = 0.1,
-        maxLossBalance: float = 0.2,
+        max_lock_balance: float = 0.1,
+        max_loss_balance: float = 0.2,
         entry_qty: float = 0.01,
-        TPdev: float = 0.05,
-        SLdev: float = 0.05,
+        TP_dev: float = 0.05,
+        SL_dev: float = 0.05,
         slippage: float = 0.0005,
-        latencyMs: int = 100,
-        countOrderHistory: int = 10000,
-        countActiveOrder: int = 100,
-        saveOrdersHistory: bool = False,
+        scale_prec: int = 20,
+        latency_ms: int = 100,
+        count_order_history: int = 10_000,
+        count_active_order: int = 1000,
         analysis_safe_lag_microsecond: int = 50_000,
+        save_orders_history: bool = False,
     ) -> None:
-        self.scalePrec: int = scalePrec
         self.leverage: int = leverage
-        self.maxLockBalance: int = round(maxLockBalance * 1000)
-        self.maxLossBalance: int = round(maxLossBalance * 1000)
-        self.entryQty: int = round(entry_qty * 1000)
-        self.TPdev: int = round(TPdev * 1000)
-        self.SLdev: int = round(SLdev * 1000)
+        self.max_lock_balance: int = round(max_lock_balance * 1000)
+        self.max_loss_balance: int = round(max_loss_balance * 1000)
+        self.entry_qty: int = round(entry_qty * 1000)
+        self.tp_dev: int = round(TP_dev * 1000)
+        self.sl_dev: int = round(SL_dev * 1000)
         self.slipage: int = round(slippage * 10000)
-        self.latency: int = latencyMs
-        self.saveOrdersHistory: bool = saveOrdersHistory
+        self.scale_prec: int = scale_prec
+        self.latency: int = latency_ms
         self.analysis_safe_lag_microsecond: int = analysis_safe_lag_microsecond
+        self.save_orders_history: bool = save_orders_history
 
-        self.ordersHistoryLines: int = countOrderHistory
-        self.ordersHistoryCols: int = TradeParam._ConstantCount
-        self.activeOrdersLines: int = countActiveOrder
-        self.activeOrdersCols: int = ActiveOrders._ConstantCount
+        self.orders_history_rows: int = count_order_history
+        self.orders_history_cols: int = TradeParam._ConstantCount
+        self.active_orders_rows: int = count_active_order
+        self.active_orders_cols: int = ActiveOrders._ConstantCount
         self.cell_amount: int = 1000
 
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
@@ -110,114 +100,112 @@ class ConfigurationStrategy(ConfigurationSHMSegments):
         return self.executedBuf[1]
 
 
-class ConfigurationFootprint(ConfigurationSHMSegments):
+class cfgFootprint(cfgSHMSegments):
     def __init__(
         self,
         timeframe: Timeframe = Timeframe._H,
         chart_range: int = 1,
-        fp_lines: int = 10001,
-        saveFootprintHeaders: bool = False,
-        saveAlgorithmMetadata: bool = False,
+        fp_rows: int = 10001,
+        save_fp_headers: bool = False,
+        save_algorithm_metadata: bool = False,
+        algorithm_module: str = "",
+        algorithm_package: str = "",
     ) -> None:
-        self.intervalMs = timeframe
-        self.bar_count = self.get_bar_count(day=chart_range)
-        self.fpLines = fp_lines
-        self.saveFootprintHeaders = saveFootprintHeaders
-        self.saveAlgorithmMetadata = saveAlgorithmMetadata
-
-        self.fpCols = self.bar_count * 2
-        self.fpPanelCols = self.fpCols + self.get_panel_count_cols()
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+        self.timeframe_in_ms: Timeframe = timeframe
+        self.bar_count: int = self.get_bar_count(day=chart_range)
+        self.fp_rows: int = fp_rows
+        self.save_fp_headers: bool = save_fp_headers
+        self.save_algorithm_metadata: bool = save_algorithm_metadata
+        self.algorithm_module: str = algorithm_module
+        self.algorithm_package: str = algorithm_package
+        self.fp_cols: int = self.bar_count * 2
+        self.fp_panel_cols: int = self.fp_cols + self.get_panel_count_cols()
+        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_panel_count_cols(self) -> int:
         self.colVP, self.colDP = -2, -1
         return 2
 
     def get_bar_count(self, day: int) -> int:
-        dayMs, ivlMs = (day if day >= 1 else 1) * 24 * 60 * 60 * 1000, self.intervalMs
+        dayMs, ivlMs = (
+            (day if day >= 1 else 1) * 24 * 60 * 60 * 1000,
+            self.timeframe_in_ms,
+        )
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
     def get_need_shm_size(self) -> int:
-        self.footprint = OFFSET, OFFSET + (self.fpLines * self.fpPanelCols * INT64)
-        self.headers = (
+        self.footprint: Any = (
+            OFFSET,
+            OFFSET + (self.fp_rows * self.fp_panel_cols * INT64),
+        )
+        self.headers: Any = (
             self.footprint[1],
             self.footprint[1] + (self.bar_count * BarHeaders._ConstantCount * INT64),
         )
-
-        self.meta_data = (self.headers[1], self.headers[1] + (6 * FLOAT64))
-        self.space = (
-            self.meta_data[1],
-            self.meta_data[1] + (SpaceCoords._ConstantCount * 2 * INT64),
+        self.metadata: Any = self.headers[1], self.headers[1] + (6 * FLOAT64)
+        self.space: Any = (
+            self.metadata[1],
+            self.metadata[1] + (SpaceCoords._ConstantCount * 2 * INT64),
         )
-        self.basePrice = self.space[1], self.space[1] + INT64
-        self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64
-
-        self.fp_shm_name = self.baseTimestamp[1], self.baseTimestamp[1] + 14
-        self.flag = self.fp_shm_name[1]
-        self.spare_flag = self.flag + UBYTE
-        self.space_read = self.spare_flag + UBYTE
-        return self.space_read
+        self.base_price: Any = self.space[1], self.space[1] + INT64
+        self.base_timestamp: Any = self.base_price[1], self.base_price[1] + INT64
+        self.space_flag: Any = self.base_timestamp[1], self.base_timestamp[1] + UBYTE
+        self.spare_flag: Any = self.space_flag[1], self.space_flag[1] + UBYTE
+        return self.spare_flag[1]
 
 
-class ConfigurationRingRawBuf(ConfigurationSHMSegments):
-    def __init__(self, cell_amount: int = 10000) -> None:
-        self.header_size = 1
-        self.data_size = 256
-        self.cell_amount = cell_amount
-        self.safe_lag = int(self.cell_amount * 0.9)
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+class cfgWssRingBuf(cfgSHMSegments):
+    def __init__(
+        self,
+        cell_amount: int = 10000,
+    ) -> None:
+        self.data_size: int = 256
+        self.header_size: int = 1
+        self.cell_amount: int = cell_amount
+        self.safe_lag: int = int(self.cell_amount * 0.9)
+        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
-        self.ReaderCellCounter = OFFSET, OFFSET + INT64
-        self.WriterCellCounter = (
-            self.ReaderCellCounter[1],
-            self.ReaderCellCounter[1] + INT64,
+        self.reader_id: Any = OFFSET, OFFSET + INT64
+        self.writer_id: Any = self.reader_id[1], self.reader_id[1] + INT64
+        self.data: Any = (
+            self.writer_id[1],
+            (self.cell_amount * self.data_size) + self.writer_id[1],
         )
-        self.dataHeader = (
-            self.WriterCellCounter[1],
-            (self.cell_amount * self.header_size) + self.WriterCellCounter[1],
+        self.data_header: Any = (
+            self.data[1],
+            (self.cell_amount * self.header_size) + self.data[1],
         )
-        self.data = (
-            self.dataHeader[1],
-            (self.cell_amount * self.data_size) + self.dataHeader[1],
-        )
-        return self.data[1]
+        self.data_offset: int = self.data[0]
+        self.data_header_offset: int = self.data_header[0]
+        return self.data_header[1]
 
 
-class ConfigurationMetrics(ConfigurationSHMSegments):
-    def __init__(self, dataForMatchingLines: int = 500_000) -> None:
-        self.dfmLines = dataForMatchingLines
-        self.dfmCols = DataForMatching._ConstantCount
-
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
-
-    def get_need_shm_size(self) -> int:
-        self.tick_size = OFFSET, OFFSET + INT64
-        self.lot_size = self.tick_size[1], self.tick_size[1] + INT64
-        self.pricePrecision = self.lot_size[1], self.lot_size[1] + INT64
-        self.qtyPrecision = self.pricePrecision[1], self.pricePrecision[1] + INT64
-
-        self.dfm_1 = (
-            self.qtyPrecision[1],
-            self.qtyPrecision[1] + (self.dfmLines * self.dfmCols * INT64),
-        )
-        self.dfm_2 = (
-            self.dfm_1[1],
-            self.dfm_1[1] + (self.dfmLines * self.dfmCols * INT64),
-        )
-        self.dfm_1_row_id = (self.dfm_2[1], self.dfm_2[1] + INT64)
-        self.dfm_2_row_id = (self.dfm_1_row_id[1], self.dfm_1_row_id[1] + INT64)
-
-        self.timeStartReading = self.dfm_2_row_id[1], self.dfm_2_row_id[1] + INT64
-        self.tradesParsed = self.timeStartReading[1] + UBYTE
-        self.footprintReaded = self.tradesParsed + UBYTE
-        return self.footprintReaded
-
-
-class ConfigurationMonitoring(ConfigurationSHMSegments):
+class cfgMetrics(cfgSHMSegments):
     def __init__(self) -> None:
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     def get_need_shm_size(self) -> int:
-        self.procs_buf = 0, 40 * INT64
-        return self.procs_buf[1]
+        self.status: Any = OFFSET, OFFSET + (40 * INT64)
+
+        self.tick_size: Any = self.status[1], self.status[1] + INT64
+        self.lot_size: Any = self.tick_size[1], self.tick_size[1] + INT64
+        self.price_precision: Any = self.lot_size[1], self.lot_size[1] + INT64
+        self.qty_precision: Any = (
+            self.price_precision[1],
+            self.price_precision[1] + INT64,
+        )
+
+        self.time_start_reading: Any = (
+            self.qty_precision[1],
+            self.qty_precision[1] + INT64,
+        )
+        self.parsing_complete: Any = (
+            self.time_start_reading[1],
+            self.time_start_reading[1] + UBYTE,
+        )
+        self.logic_complete: Any = (
+            self.parsing_complete[1],
+            self.parsing_complete[1] + UBYTE,
+        )
+        return self.logic_complete[1]

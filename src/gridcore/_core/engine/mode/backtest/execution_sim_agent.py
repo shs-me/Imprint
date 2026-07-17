@@ -5,7 +5,7 @@ from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
 from ....utils.monitoring.status_codes import StatusCodes as scs
 from ...base.base_execution import Execution
-from ...base.utils.tm_con import TradeConverter
+from .execution_utils.data_prepper import DataPrepper
 from .execution_utils.matching_engine import MatchingEngine
 from .execution_utils.trade_manager import TradeManager
 from .rest_sim_agent import RestSimAgent
@@ -15,13 +15,15 @@ class ExecutionAgent(Execution):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
-        cfgFP = manager.cfgFootprint
-        self.space_read = manager.footprint_buf[cfgFP.space_read : cfgFP.space_read + 1]
-        self.execution_sim = manager.cfgBacktesting.execution_sim
         self.rest = RestSimAgent(self.symbol, manager.cfgBacktesting)
-        self.con = TradeConverter(self.trade_par, manager.cfgStrategy)
         self.tm = TradeManager(converter=self.con)
-        self.me = MatchingEngine(manager, self.con, self.tm)
+        self.prepper = DataPrepper(
+            symbol=self.symbol,
+            startDate=manager.cfgBacktesting.backtest_start_date,
+            endDate=manager.cfgBacktesting.backtest_end_date,
+            priceMult=self.con.priceMult,
+        )
+        self.me = MatchingEngine(self.con, self.tm, self.prepper)
         self.con.init_session(
             startBalance=self.rest.get_balance(),
             minOrderSize=self.rest.get_min_order_size_usdt(),
@@ -33,8 +35,8 @@ class ExecutionAgent(Execution):
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
-        while (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and (
-            (self.space_read[0] == 0) and (self.footprintReaded[0] == 0)
+        while (self.logic_complete[0] == 0) and (
+            (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0])
         ):
             time.sleep(0)
 
@@ -52,24 +54,22 @@ class ExecutionAgent(Execution):
     ) -> None:
         _ = self.con
         # - - -
-        if self.execution_sim:
-            timestamp = time_get_signal + _.latencyMs
-            if self.start_matching(timestamp):
-                if (qty := _.nominalEntryNqtyWithLeverage) is not None:
-                    nQty: int = _.entryNqtyWithLeverage(nPrice, qty)
-                    is_market: bool = bool(orderParam & c.OF_MARKET)
-                    if not is_market:
-                        _.lockedNbalance = _.to_nMargin(nPrice, nQty)
+        timestamp = time_get_signal + _.latencyMs
+        if self.start_matching(timestamp):
+            if (qty := _.nominalEntryNqtyWithLeverage) is not None:
+                nQty: int = _.entryNqtyWithLeverage(nPrice, qty)
+                is_market: bool = bool(orderParam & c.OF_MARKET)
+                if not is_market:
+                    _.lockedNbalance = _.to_nMargin(nPrice, nQty)
 
-                    self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
-                    self.temp += 1
-                else:
-                    self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
+                self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
+                self.temp += 1
+            else:
+                self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
 
     def start_matching(self, timestamp: int | None) -> bool:
         try:
-            self.me.prepare_dfm(timestamp)
-            return True
+            return False
         except RuntimeError:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
             print(self.stat(), flush=True)
@@ -79,13 +79,7 @@ class ExecutionAgent(Execution):
     def post_check_bufs(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
-        if self.execution_sim:
-            if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
-                if self.space_read[0] == 1:
-                    self.start_matching(None)
-                    self.me.dfmWid[0] = 0
-                    self.me.dfmRid[0] = 0
-                    self.space_read[0] = 0
+        pass
 
     def stat(self) -> str:
         return (

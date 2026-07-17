@@ -14,73 +14,60 @@ from .utils.fp_con import FPconverter
 
 class FootprintReader(ABC):
     def __init__(self, manager: AgentManager, sync: Sync) -> None:
-        self.manager = manager
-        self.sync = sync
+        self.manager: AgentManager = manager
+        self.sync: Sync = sync
 
         cfgFP = manager.cfgFootprint
-        self.space_flag = manager.footprint_buf[cfgFP.flag : cfgFP.flag + 1]
-        self.spare_flag = manager.footprint_buf[cfgFP.spare_flag : cfgFP.spare_flag + 1]
-        self.base_price_and_timestamp_buf = manager.footprint_buf[
-            cfgFP.basePrice[0] : cfgFP.baseTimestamp[1]
-        ].cast("q")
+        self.space_flag: memoryview = cfgFP.space_flag
+        self.spare_flag: memoryview = cfgFP.spare_flag
+        self.base_nPrice: memoryview = cfgFP.base_price.cast("q")
+        self.base_timestamp: memoryview = cfgFP.base_timestamp.cast("q")
 
         cfgMetrics = manager.cfgMetrics
-        self.trade_par = manager.metrics_buf[
-            cfgMetrics.tick_size[0] : cfgMetrics.qtyPrecision[1]
-        ].cast("q")
-        """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
-
         self._init_array()
-
         self.con: FPconverter = FPconverter(
+            cfgFP=cfgFP,
             footprint=self.fp,
             headers=self.headers,
-            trade_param=self.trade_par,
-            cfgFP=cfgFP,
+            price_prec=cfgMetrics.price_precision.cast("q")[0],
+            qty_prec=cfgMetrics.qty_precision.cast("q")[0],
         )
-        self.defaultSpace: list[int] = [self.con.fpLines, self.con.fpCols, 0, 0]
+        self.defaultSpace: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
         self.amRow: int = 0
 
     def _init_array(self) -> None:
         cfgFP = self.manager.cfgFootprint
         self.fp: NDArray[int64] = np.ndarray(
-            shape=(cfgFP.fpLines, cfgFP.fpPanelCols),
+            shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols),
             dtype=int64,
-            buffer=self.manager.footprint_buf[slice(*cfgFP.footprint)],
+            buffer=cfgFP.footprint,
         )
         self.fp_state: NDArray[int32] = np.zeros(
-            shape=(cfgFP.fpLines, cfgFP.fpPanelCols),
-            dtype=int32,
+            shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols), dtype=int32
         )
-        #  - - -
         self.headers: NDArray[int64] = np.ndarray(
             shape=(cfgFP.bar_count, c.BH_ConstantCount),
             dtype=int64,
-            buffer=self.manager.footprint_buf[slice(*cfgFP.headers)],
+            buffer=cfgFP.headers,
         )
-        #  - - -
         self.space: NDArray[int64] = np.ndarray(
-            (2, sc._ConstantCount),
-            dtype=int64,
-            buffer=self.manager.footprint_buf[slice(*cfgFP.space)],
+            (2, sc._ConstantCount), dtype=int64, buffer=cfgFP.space
         )
-        # - - -
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
-        # - - -
         self.cachedStatesData: NDArray[int32] = np.zeros(
             (c.CSD_ConstantCount,), dtype=int32
         )
 
-    def init_session(self) -> bool:
-        nBasePrice, baseTimestamp = self.base_price_and_timestamp_buf[:]
+    def init_session(self) -> None:
         self.fp_state.fill(0)
         self.last_idx: int = 0
-        self.con.init_session(price=nBasePrice, timestamp=baseTimestamp)
-        return True
+        self.con.init_session(
+            price=self.base_nPrice[0], timestamp=self.base_timestamp[0]
+        )
 
     # Agent Methods's
     def final_actions(self) -> None:
-        if self.manager.cfgFootprint.saveAlgorithmMetadata:
+        if self.manager.cfgFootprint.save_algorithm_metadata:
             np.save(
                 c.ALGORITHM_METADATA_DUMP_PATH, self.algorithm_metadata[: self.amRow, :]
             )

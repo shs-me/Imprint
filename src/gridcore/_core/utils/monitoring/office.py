@@ -1,10 +1,11 @@
 import gc
 import inspect
+from copy import deepcopy
 from functools import wraps
 from multiprocessing.shared_memory import SharedMemory
 
 from ... import configurations
-from ...configurations import Configuration, ConfigurationSHMSegments
+from ...configurations import Configuration, cfgSHMSegments
 from ..handlers import error_handler
 from .agent_manager import AgentManager
 from .main_manager import MainManager
@@ -57,23 +58,22 @@ def manager_office(main: bool = False):
 
 
 def agent_init(main: bool, shm_buf: memoryview, **kwargs):
+    segments, configs = deepcopy(kwargs["segments"]), deepcopy(kwargs["configs"])
     if main:
         manager = MainManager(
-            segments=kwargs["segments"],
-            configs=kwargs["configs"],
+            segments=segments,
+            configs=configs,
             shm_buf=shm_buf,
         )
     else:
         manager = AgentManager(
-            proc_id=kwargs.pop("proc_id"),
-            task_id=kwargs.pop("task_id"),
-            segments=kwargs.pop("segments"),
-            configs=kwargs.pop("configs"),
+            proc_id=kwargs["proc_id"],
+            task_id=kwargs["task_id"],
+            segments=segments,
+            configs=configs,
             shm_buf=shm_buf,
-            sc_sem=kwargs.pop("sc_sem"),
-            symbol=kwargs.pop("symbol"),
-            algorithm_module=kwargs.pop("algorithm_module"),
-            algorithm_package=kwargs.pop("algorithm_package"),
+            sc_sem=kwargs["sc_sem"],
+            symbol=kwargs["symbol"],
         )
     return manager
 
@@ -87,13 +87,13 @@ def configurations_init(**kwargs) -> dict:
         if (
             issubclass(obj, Configuration)
             and obj is not Configuration
-            and obj is not ConfigurationSHMSegments
+            and obj is not cfgSHMSegments
         ):
             kwargs["configs"][name] = obj = (
                 kwargs.pop(name) if name in kwargs else obj()
             )
             kwargs["configs"]["subclasses"].append(name)
-            if issubclass(obj.__class__, ConfigurationSHMSegments):
+            if issubclass(obj.__class__, cfgSHMSegments):
                 kwargs["segments"][name] = slice(
                     offset,
                     (offset := (offset + obj.shm_size)),  # type: ignore | reportAttributeAccessIssue
