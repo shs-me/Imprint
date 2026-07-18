@@ -1,9 +1,19 @@
+import ctypes
 import os
+import signal
+import sys
 import zipfile
 from datetime import date, timedelta
 from urllib import request
 
 from .. import constant as c
+
+
+def generate_ctrl_c_event(pids: list[int]) -> None:
+    if sys.platform == "win32":
+        [ctypes.windll.kernel32.GenerateConsoleCtrlEvent(0, pid) for pid in pids]
+    elif sys.platform == "linux":
+        [os.kill(pid, signal.SIGINT) for pid in pids]
 
 
 def to_date(iso_f_dates: list[str]):

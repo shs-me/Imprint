@@ -54,18 +54,13 @@ class AgentManager(Manager):
 
             task_sc: int = self.task_status[0]
             _return_data, _clear_task, _set_proc_sc = task_sc, True, None
-            if task_sc & scs.EXIT:
-                _return_data, _set_proc_sc = True, task_sc
-
-            elif task_sc & scs.COMPLETE:
+            if task_sc & scs.COMPLETE:
                 _return_data, _clear_task = (
                     (True, False) if complete else (False, False)
                 )
-
             elif task_sc & scs.GC_COLLECT:
                 gc.collect()
                 _return_data = False
-
             elif task_sc & scs.RUN:
                 _return_data = False
 
@@ -88,7 +83,3 @@ class AgentManager(Manager):
 
     def clear_task_sc(self, code: scs | int) -> None:
         self.task_status[0] &= ~(code)
-
-    def _for_error_action(self) -> None:
-        self.proc_status[0] |= scs.ERROR
-        self._sc_sem.release()

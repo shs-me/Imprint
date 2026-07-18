@@ -4,6 +4,7 @@ from multiprocessing.synchronize import Semaphore
 from loguru import logger
 
 from ... import configurations as cfg
+from ..tools import generate_ctrl_c_event
 from .base_manager import Manager
 from .status_codes import StatusCodes as scs
 
@@ -41,7 +42,7 @@ class MainManager(Manager):
             if bool(len(procs)):
                 scs_sem.acquire(timeout=60)
                 if date.today() > self.startDate:
-                    self.set_task_sc_to_procs(scs.GC_COLLECT)
+                    self.set_task_sc_to_proc(scs.GC_COLLECT)
                     self.startDate = date.today()
 
                 if bool(len(procs)):
@@ -87,16 +88,16 @@ class MainManager(Manager):
                 # Parsing
                 elif sc & scs.UNVALID_DATA:
                     logger.warning(f"{v['proc_name']} | {scs.UNVALID_DATA.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 elif sc & scs.FP_IDX_FILLED:
                     logger.warning(f"{v['proc_name']} | {scs.FP_IDX_FILLED.label}")
-                    for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):
+                    for task_id in self.get_proc_task_id(["LOGIC", "PARSING"]):
                         self.set_task_sc_to_proc(scs.FP_RE_INIT, task_id)
 
                 elif sc & scs.FP_IDY_FILLED:
                     logger.warning(f"{v['proc_name']} | {scs.FP_IDY_FILLED.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 elif sc & scs.FP_RE_INIT:
                     logger.success(f"{v['proc_name']} | {scs.FP_RE_INIT.label}")
@@ -112,37 +113,49 @@ class MainManager(Manager):
                 # Network/Sim
                 elif sc & scs.DATA_PREPPERED:
                     logger.warning(f"{v['proc_name']} | {scs.DATA_PREPPERED.label}")
-                    self.set_task_sc_to_procs(scs.COMPLETE)
+                    self.set_task_sc_to_proc(scs.COMPLETE)
 
                 elif sc & scs.BIG_RAW_DATA:
                     logger.warning(f"{v['proc_name']} | {scs.BIG_RAW_DATA.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 # Execution
                 elif sc & scs.LOSS_MORE_LIMIT:
                     logger.warning(f"{v['proc_name']} | {scs.LOSS_MORE_LIMIT.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 elif sc & scs.QTY_LESS_LIMIT:
                     logger.warning(f"{v['proc_name']} | {scs.QTY_LESS_LIMIT.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 if sc != 0:
                     self.clear_proc_sc(code=sc, proc_id=k)
 
         return True
 
-    def set_task_sc_to_proc(self, code: scs, task_id: int):
-        self.status_buf[task_id] |= code
-
-    def set_task_sc_to_procs(self, code: scs):
-        for _, data in self.procs.items():
-            self.status_buf[data["task_id"]] |= code
-
     def clear_proc_sc(self, code: scs | int, proc_id: int) -> None:
         self.status_buf[proc_id] &= ~(code)
 
-    def get_procs_task_id(self, procs_name: list[str]) -> list[int]:
+    def set_task_sc_to_proc(self, code: scs, task_id: int | None = None):
+        if code & scs.EXIT:
+            pids = []
+            for _, v in self.procs.items():
+                if (v["task_id"] == task_id) or (task_id is None):
+                    pids.append(v["proc"].pid)
+                    logger.warning(f"{v['proc_name']} | {scs.EXIT.label}")
+
+            generate_ctrl_c_event(pids)
+        else:
+            [
+                self.set_sc(_["task_id"], code)
+                for p, _ in self.procs.items()
+                if (_["task_id"] == task_id) or (task_id is None)
+            ]
+
+    def set_sc(self, id: int, code: scs) -> None:
+        self.status_buf[id] |= code
+
+    def get_proc_task_id(self, procs_name: list[str]) -> list[int]:
         return [
             v["task_id"]
             for k, v in self.procs.items()
