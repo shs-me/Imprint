@@ -10,21 +10,21 @@ class TradeConverter:
         price_prec: int,
         qty_prec: int,
     ) -> None:
-
         self.pricePrec, self.qtyPrec = price_prec, qty_prec
         self.priceMult: int = 10**self.pricePrec
         self.qtyMult: int = 10**self.qtyPrec
 
-        self.cfgST = cfgAcount
-        self.latencyMs: int = self.cfgST.latency
-        self.leverage: int = self.cfgST.leverage
-        self.slipage: int = self.cfgST.slipage
-        self._entryQty: int = self.cfgST.entry_qty
-        self._tpDev: int = self.cfgST.tp_dev
-        self._slDev: int = self.cfgST.sl_dev
-        self._maxLockNbalance: int = self.cfgST.max_lock_balance
-        self._maxLossNbalance: int = self.cfgST.max_loss_balance
-        self._scalePrec: int = self.cfgST.scale_prec
+        self.cfgAC = cfgAcount
+        self._entryQty: int = self.cfgAC.entry_qty
+        self._tpDev: int = self.cfgAC.tp_dev
+        self._slDev: int = self.cfgAC.sl_dev
+        self._maxLockNbalance: int = self.cfgAC.max_lock_balance
+        self._maxLossNbalance: int = self.cfgAC.max_loss_balance
+        self._scalePrec: int = self.cfgAC.scale_prec
+        self.latency: int = self.cfgAC.latency
+        self.slipage: int = self.cfgAC.slipage
+        self.leverage: int = self.cfgAC.leverage
+
         self.scale: int = round(10**self._scalePrec)
         self.startNbalance: int = 0
         self._nBalance: int = 0

@@ -4,6 +4,7 @@ from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
 from ...utils.monitoring.status_codes import StatusCodes as scs
 from .utils.tm_con import TradeConverter
+from .utils.trade_manager import TradeManager
 
 
 class Execution(ABC):
@@ -28,7 +29,9 @@ class Execution(ABC):
         cfgUS = manager.cfgUserStream
         self.us_cell_amount: int = cfgUS.cell_amount
         self.us_data_size: int = cfgUS.data_size
+        self.us_data_header: memoryview = cfgUS.data_header
         self.us_data: memoryview = cfgUS.data
+        self.us_data_header_size: int = cfgUS.data_header_size
         self.WB_2: memoryview = cfgUS.writer_id.cast("q")
         self.RB_2: memoryview = cfgUS.reader_id.cast("q")
 
@@ -39,6 +42,7 @@ class Execution(ABC):
             price_prec=cfgMetrics.price_precision.cast("q"),
             qty_prec=cfgMetrics.qty_precision.cast("q"),
         )
+        self.tm: TradeManager = TradeManager(converter=self.con)
 
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:
@@ -56,15 +60,15 @@ class Execution(ABC):
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self.final_actions()
-
+                                self.set_proc_sc(scs.COMPLETE)
                             return
 
                 alarm_clock(WB_1, RB_1, WB_2, RB_2)
 
-                if WB_2[0] != RB_2[0]:
-                    self.check_executed_buf()
                 if WB_1[0] != RB_1[0]:
-                    self.check_execute_buf()
+                    self.check_signal_buf()
+                elif WB_2[0] != RB_2[0]:
+                    self.check_user_data_buf()
 
                 self.post_check_bufs(WB_1, RB_1, WB_2, RB_2)
 
@@ -75,7 +79,6 @@ class Execution(ABC):
 
     def final_actions(self) -> None:
         self.post_final_action()
-        self.set_proc_sc(scs.COMPLETE)
 
     def post_final_action(self) -> None:
         pass
@@ -86,38 +89,14 @@ class Execution(ABC):
     ) -> None:
         pass
 
-    @abstractmethod
-    def post_check_bufs(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
-    ) -> None:
-        pass
-
-    def check_executed_buf(self) -> None:
-        pass
-
-    @abstractmethod
-    def pre_executed_actions(self) -> None:
-        pass
-
-    @abstractmethod
-    def executed_action(self) -> None:
-        pass
-
-    def check_execute_buf(self) -> None:
-        _ = self.con
-        # - - -
-        cell: int = self.RB_1[0]
-        start: int = cell * self.sn_data_size
-        get_data: memoryview = self.sn_data[start : start + self.sn_data_size].cast("q")
-        nPrice, timestamp, order_param = get_data[0], get_data[1], get_data[2]
-        new_cell: int = cell + 1
-        self.RB_1[0] = new_cell if (new_cell < self.sn_cell_amount) else 0
-
-        self.pre_execute_actions()
-        if _.lossNbalanceSafeLimit:
-            if _.lockedNbalanceSafeLimit:
-                if _.nominalEntryNqtyWithLeverage is not None:
-                    self.execute_action(nPrice, timestamp, order_param)
+    def check_signal_buf(self) -> None:
+        nPrice, timestamp, order_param = self.get_signal_data()
+        self.pre_execute_signal_action()
+        self.check_user_data_buf()
+        if self.con.lossNbalanceSafeLimit:
+            if self.con.lockedNbalanceSafeLimit:
+                if self.con.nominalEntryNqtyWithLeverage is not None:
+                    self.execute_signal(nPrice, timestamp, order_param)
                 else:
                     self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
             else:
@@ -125,12 +104,46 @@ class Execution(ABC):
         else:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
 
+    def get_signal_data(self) -> tuple[int, int, int]:
+        cell: int = self.RB_1[0]
+        start: int = cell * self.sn_data_size
+        get_data: memoryview = self.sn_data[start : start + self.sn_data_size].cast("q")
+        nPrice, timestamp, order_param = get_data[0], get_data[1], get_data[2]
+        new_cell: int = cell + 1
+        self.RB_1[0] = new_cell if (new_cell < self.sn_cell_amount) else 0
+        return nPrice, timestamp, order_param
+
     @abstractmethod
-    def pre_execute_actions(self) -> None:
+    def pre_execute_signal_action(self) -> None:
         pass
 
     @abstractmethod
-    def execute_action(
+    def execute_signal(
         self, nPrice: int, time_get_signal: int, orderParam: int
+    ) -> None:
+        pass
+
+    def check_user_data_buf(self) -> None:
+        raw_buf = self.get_user_data()
+        self.preppare_user_data(raw_buf)
+
+    def get_user_data(self) -> memoryview:
+        cell: int = self.RB_2[0]
+        start, start_1 = cell * self.us_data_size, cell * self.us_data_header_size
+        lrd: int = self.us_data_header[
+            start_1 : start_1 + self.us_data_header_size
+        ].cast("q")[0]
+        raw_data = self.us_data[start : start + lrd]
+        new_cell: int = cell + 1
+        self.RB_2[0] = new_cell if (new_cell < self.us_cell_amount) else 0
+        return raw_data
+
+    @abstractmethod
+    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+        pass
+
+    @abstractmethod
+    def post_check_bufs(
+        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
         pass

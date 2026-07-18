@@ -1,11 +1,36 @@
+import struct
 import time
+from collections import deque
 
 from ....utils.handlers import error_handler
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
 from ....utils.monitoring.status_codes import StatusCodes as scs
+from ...base.base_data_prepper import BaseDataPrepper
 from ...base.base_wss import Wss
-from ...base.utils.data_prepper import DataPrepper
+
+
+class DataPrepper(BaseDataPrepper):
+    def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
+        super().__init__(symbol, start_date, end_date)
+
+        self.queue: deque = deque(maxlen=10000)
+
+    def alarm_clock(self) -> None:
+        while len(self.queue) == self.queue.maxlen:
+            time.sleep(0)
+
+    def prepper_data(self, data: bytes) -> None:
+        list_data: list[bytes] = data.split(b",")
+        self.queue.append(
+            struct.pack(
+                "@ddq?",
+                float(list_data[1]),
+                float(list_data[2]),
+                int(list_data[5]),
+                b"true" in list_data[6],
+            )
+        )
 
 
 class WssSimAgent(Wss):
@@ -15,8 +40,8 @@ class WssSimAgent(Wss):
         cfgBT = manager.cfgBacktesting
         self.prepper = DataPrepper(
             symbol=manager.symbol,
-            startDate=cfgBT.backtest_start_date,
-            endDate=cfgBT.backtest_end_date,
+            start_date=cfgBT.backtest_start_date,
+            end_date=cfgBT.backtest_end_date,
         )
         self.prepper.start()
 

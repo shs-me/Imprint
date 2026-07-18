@@ -3,7 +3,6 @@ from multiprocessing.synchronize import Event
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
 from ...base.base_execution import Execution
-from ...base.utils.tm_con import TradeConverter
 from ...mode.real.rest_agent import RestAgent
 
 
@@ -13,10 +12,7 @@ class ExecutionAgent(Execution):
 
         self.execution_event = execution_event
 
-        self.rest = RestAgent(symbol=self.symbol)
-        self.con = TradeConverter(
-            trade_param=self.trade_par, cfgStrategy=manager.cfgStrategy
-        )
+        self.rest: RestAgent = RestAgent(symbol=self.symbol)
         self.con.init_session(
             startBalance=self.rest.get_balance(),
             minOrderSize=self.rest.get_min_order_size_usdt(),
@@ -32,18 +28,15 @@ class ExecutionAgent(Execution):
             if (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0]):
                 self.execution_event.wait(timeout=60)
 
-    def pre_executed_actions(self) -> None:
+    def pre_execute_signal_action(self) -> None:
         pass
 
-    def executed_action(self) -> None:
-        pass
-
-    def pre_execute_actions(self) -> None:
-        pass
-
-    def execute_action(
+    def execute_signal(
         self, nPrice: int, time_get_signal: int, orderParam: int
     ) -> None:
+        pass
+
+    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
         pass
 
     def post_check_bufs(

@@ -1,27 +1,24 @@
 import os
-import struct
-import time
 import traceback
-from collections import deque
+from abc import ABC, abstractmethod
 from datetime import date
 from threading import Thread
 
-from ....constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
+from ...constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
 
 
-class DataPrepper:
-    def __init__(self, symbol: str, startDate: str | None, endDate: str | None) -> None:
+class BaseDataPrepper(ABC):
+    def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
         self.symbol: str = symbol.upper()
-        self.startDate, self.endDate = startDate, endDate
+        self.start_date: str = start_date
+        self.end_date: str = end_date
 
         self.datadir: str = DATA_PATH
-        self.typeData: str = DATA_TYPE_AGGTRADES_PATH
-        self.base_path: str = f"{self.datadir}/{self.typeData}/{self.symbol}"
+        self.type_data: str = DATA_TYPE_AGGTRADES_PATH
+        self.base_path: str = f"{self.datadir}/{self.type_data}/{self.symbol}"
 
-        self.queue: deque = deque(maxlen=10000)
-
+        self.error: str | None = None
         self.is_running, self.complete = True, False
-        self.error: None | str = None
 
     def start(self) -> None:
         self.subP: Thread = Thread(target=self.run_prepper_engine, daemon=True)
@@ -38,8 +35,7 @@ class DataPrepper:
                             break
 
                         self.alarm_clock()
-                        data: list[bytes] = line.split(b",")
-                        self.queue.append(self.get_obj(data))
+                        self.prepper_data(line)
 
             self.complete = True
 
@@ -51,23 +47,20 @@ class DataPrepper:
         paths: list[str] = [p for p in os.listdir(self.base_path) if p.endswith(".csv")]
         dates: list[date] = sorted([date.fromisoformat(p.split(".")[0]) for p in paths])
         startDate: date = (
-            dates[0] if (self.startDate is None) else date.fromisoformat(self.startDate)
+            dates[0]
+            if (self.start_date is None)
+            else date.fromisoformat(self.start_date)
         )
         endDate: date = (
-            dates[-1] if (self.endDate is None) else date.fromisoformat(self.endDate)
+            dates[-1] if (self.end_date is None) else date.fromisoformat(self.end_date)
         )
         needDates: list[date] = [d for d in dates if (startDate <= d <= endDate)]
         return [f"{self.base_path}/{date.isoformat(d)}.csv" for d in needDates]
 
+    @abstractmethod
     def alarm_clock(self) -> None:
-        while len(self.queue) == self.queue.maxlen:
-            time.sleep(0)
+        pass
 
-    def get_obj(self, data: list[bytes]) -> bytes:
-        return struct.pack(
-            "@ddq?",
-            float(data[1]),
-            float(data[2]),
-            int(data[5]),
-            b"true" in data[6],
-        )
+    @abstractmethod
+    def prepper_data(self, data: bytes) -> None:
+        pass
