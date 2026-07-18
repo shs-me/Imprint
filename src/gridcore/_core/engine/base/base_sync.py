@@ -17,8 +17,8 @@ class Sync(ABC):
 
         cfgSN = manager.cfgSignal
         self.cell_amount: int = cfgSN.cell_amount
-        self.data_size: int = cfgSN.data_size
-        self.data: memoryview = cfgSN.data
+        self.data_size: int = cfgSN.data_size // 8
+        self.data: memoryview = cfgSN.data.cast("q")
         self.writer_id: memoryview = cfgSN.writer_id.cast("q")
         self.reader_id: memoryview = cfgSN.reader_id.cast("q")
 
@@ -43,7 +43,7 @@ class Sync(ABC):
 
         cell: int = self.writer_id[0]
         start: int = cell * self.data_size
-        set_data: memoryview = self.data[start : start + self.data_size].cast("q")
+        set_data: memoryview = self.data[start : start + self.data_size]
         set_data[0], set_data[1], set_data[2] = nPrice, time_ms, orderParam
 
         new_cell = cell + 1

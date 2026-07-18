@@ -24,6 +24,7 @@ class FootprintReader(ABC):
         self.base_timestamp: memoryview = cfgFP.base_timestamp.cast("q")
 
         cfgMetrics = manager.cfgMetrics
+        self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
         self._init_array()
         self.con: FPconverter = FPconverter(
             cfgFP=cfgFP,
@@ -82,6 +83,7 @@ class FootprintReader(ABC):
             if self.con.volume(idx) > 0:
                 if idx > self.last_idx:
                     self.update_closed_bar_and_fp()
+                    self.trade_readed_time[0] = int(self.con.lastTradeTime(idXmax - 1))
                     self.last_idx = idx
 
                 self.update_bar(idYmin, idYmax, idxBid, idxAsk)

@@ -5,6 +5,7 @@ from numba import njit
 from numpy import int64
 from numpy.typing import NDArray
 
+from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_data_prepper import BaseDataPrepper
 
 
@@ -39,8 +40,19 @@ class DataPrepper(BaseDataPrepper):
 
 
 class MatchingEngine:
-    def __init__(self) -> None:
+    def __init__(self, manager: AgentManager) -> None:
+        self.manager: AgentManager = manager
+
+        cfgUS = manager.cfgUserStream
+        self.cell_amount: int = cfgUS.cell_amount
+        self.data: memoryview = cfgUS.data
+        self.data_size: int = cfgUS.data_size
+        self.data_header: memoryview = cfgUS.data_header.cast("q")
+        self.writer_id: memoryview = cfgUS.writer_id.cast("q")
+        self.reader_id: memoryview = cfgUS.reader_id.cast("q")
+
         self.prepper: DataPrepper
+        self.trade_readed_time: memoryview = memoryview(bytearray(8)).cast("q")
 
     def _init_array(self) -> None:
         self.order_book: NDArray[int64]
@@ -53,6 +65,14 @@ class MatchingEngine:
             dfmRid=self.prepper.dfmRid,
             dfmWid=self.prepper.dfmWid,
         )
+
+    def set_user_data(self, data: bytes) -> None:
+        cell: int = self.writer_id[0]
+        start = cell * self.data_size
+        self.data_header[cell] = len(data)
+        self.data[start : start + len(data)] = data
+        new_cell: int = cell + 1
+        self.writer_id[0] = new_cell if (new_cell < self.cell_amount) else 0
 
 
 @njit(cached=True)

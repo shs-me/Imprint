@@ -14,7 +14,7 @@ class ExecutionAgent(Execution):
         super().__init__(manager=manager)
 
         self.rest = RestSimAgent(self.symbol, manager.cfgBacktesting)
-        self.me = MatchingEngine()
+        self.me = MatchingEngine(manager)
         self.con.init_session(
             startBalance=self.rest.get_balance(),
             minOrderSize=self.rest.get_min_order_size_usdt(),
@@ -28,6 +28,9 @@ class ExecutionAgent(Execution):
         while (self.logic_complete[0] == 0) and (
             (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0])
         ):
+            if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
+                pass
+
             time.sleep(0)
 
     def pre_execute_signal_action(self) -> None:

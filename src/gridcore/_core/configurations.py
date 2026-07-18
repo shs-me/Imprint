@@ -183,9 +183,13 @@ class cfgMetrics(cfgSHMSegments):
             self.qty_precision[1],
             self.qty_precision[1] + INT64,
         )
-        self.parsing_complete: Any = (
+        self.trade_readed_time: Any = (
             self.time_start_reading[1],
-            self.time_start_reading[1] + UBYTE,
+            self.time_start_reading[1] + INT64,
+        )
+        self.parsing_complete: Any = (
+            self.trade_readed_time[1],
+            self.trade_readed_time[1] + UBYTE,
         )
         self.logic_complete: Any = (
             self.parsing_complete[1],

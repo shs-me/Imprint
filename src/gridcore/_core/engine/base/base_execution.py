@@ -21,21 +21,21 @@ class Execution(ABC):
 
         cfgSN = manager.cfgSignal
         self.sn_cell_amount: int = cfgSN.cell_amount
-        self.sn_data_size: int = cfgSN.data_size
-        self.sn_data: memoryview = cfgSN.data
+        self.sn_data_size: int = cfgSN.data_size // 8
+        self.sn_data: memoryview = cfgSN.data.cast("q")
         self.WB_1: memoryview = cfgSN.writer_id.cast("q")
         self.RB_1: memoryview = cfgSN.reader_id.cast("q")
 
         cfgUS = manager.cfgUserStream
         self.us_cell_amount: int = cfgUS.cell_amount
-        self.us_data_size: int = cfgUS.data_size
-        self.us_data_header: memoryview = cfgUS.data_header
         self.us_data: memoryview = cfgUS.data
-        self.us_data_header_size: int = cfgUS.data_header_size
+        self.us_data_size: int = cfgUS.data_size
+        self.us_data_header: memoryview = cfgUS.data_header.cast("q")
         self.WB_2: memoryview = cfgUS.writer_id.cast("q")
         self.RB_2: memoryview = cfgUS.reader_id.cast("q")
 
         cfgMetrics = manager.cfgMetrics
+        self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
         self.logic_complete: memoryview = cfgMetrics.logic_complete
         self.con: TradeConverter = TradeConverter(
             cfgAcount=cfgAC,
@@ -107,7 +107,7 @@ class Execution(ABC):
     def get_signal_data(self) -> tuple[int, int, int]:
         cell: int = self.RB_1[0]
         start: int = cell * self.sn_data_size
-        get_data: memoryview = self.sn_data[start : start + self.sn_data_size].cast("q")
+        get_data: memoryview = self.sn_data[start : start + self.sn_data_size]
         nPrice, timestamp, order_param = get_data[0], get_data[1], get_data[2]
         new_cell: int = cell + 1
         self.RB_1[0] = new_cell if (new_cell < self.sn_cell_amount) else 0
@@ -129,11 +129,9 @@ class Execution(ABC):
 
     def get_user_data(self) -> memoryview:
         cell: int = self.RB_2[0]
-        start, start_1 = cell * self.us_data_size, cell * self.us_data_header_size
-        lrd: int = self.us_data_header[
-            start_1 : start_1 + self.us_data_header_size
-        ].cast("q")[0]
-        raw_data = self.us_data[start : start + lrd]
+        start = cell * self.us_data_size
+        len_raw_data: int = self.us_data_header[start]
+        raw_data = self.us_data[start : start + len_raw_data]
         new_cell: int = cell + 1
         self.RB_2[0] = new_cell if (new_cell < self.us_cell_amount) else 0
         return raw_data
