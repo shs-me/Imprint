@@ -114,7 +114,7 @@ class TradeConverter:
 
     def to_nMargin(self, nPrice: int, nQty: int) -> int:
         margin: float = (
-            (nQty * self.qtyMult) * (nPrice * self.priceMult)
+            (nQty / self.qtyMult) * (nPrice / self.priceMult)
         ) / self.leverage
         return round(margin * self.scale)
 

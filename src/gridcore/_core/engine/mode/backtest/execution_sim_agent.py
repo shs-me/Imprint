@@ -20,6 +20,7 @@ class ExecutionAgent(Execution):
             takerCommission=self.rest.get_commission(is_maker=False),
             makerCommission=self.rest.get_commission(is_maker=True),
         )
+        self.open_position = 0
 
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
@@ -45,6 +46,7 @@ class ExecutionAgent(Execution):
             nPrice=nPrice,
             nQty=nQty,
         )
+        self.open_position += 1
 
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
         get_data: memoryview = user_data_raw_buf.cast("q")
@@ -76,7 +78,20 @@ class ExecutionAgent(Execution):
 
     def final_actions(self) -> None:
         super().final_actions()
-        self.manager.set_text(f"Balance: {self.con.nBalance / self.con.scale}")
+        self.manager.set_text(
+            (
+                f"Balance: {self.con.nBalance / self.con.scale} \n"
+                f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
+                f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
+                f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
+                f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
+                f"Long Open Qty: {self.con.longNqty / self.con.qtyMult} \n"
+                f"Short Open Qty: {self.con.shortNqty / self.con.qtyMult} \n"
+                f"Count Orders in History: {self.con.last_order_id} \n"
+                f"Count Active Orders: {self.me.obRow[0]} \n"
+                f"Count Open Positions: {self.open_position}"
+            )
+        )
 
     def post_final_action(self) -> None:
         pass
