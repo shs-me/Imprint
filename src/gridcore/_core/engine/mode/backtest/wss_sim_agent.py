@@ -32,6 +32,9 @@ class DataPrepper(BaseDataPrepper):
             )
         )
 
+    def post_prepper(self) -> None:
+        pass
+
 
 class WssSimAgent(Wss):
     def __init__(self, manager: AgentManager) -> None:

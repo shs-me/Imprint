@@ -13,11 +13,17 @@ from ...base.base_data_prepper import BaseDataPrepper
 
 class DataPrepper(BaseDataPrepper):
     def __init__(
-        self, symbol: str, start_date: str, end_date: str, price_mult: int
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        price_mult: int,
+        is_complete: memoryview,
     ) -> None:
         super().__init__(symbol, start_date, end_date)
 
         self.price_mult: int = price_mult
+        self.is_complete: memoryview = is_complete
 
         self.dfm: NDArray[int64] = np.ndarray((100_000, 2), dtype=int64)
         self.dfmWid: memoryview = memoryview(bytearray(8)).cast("q")
@@ -40,6 +46,9 @@ class DataPrepper(BaseDataPrepper):
         new_row: int = self.dfmWid[0] + 1
         self.dfmWid[0] = new_row if (new_row <= self.max_row) else 0
 
+    def post_prepper(self) -> None:
+        self.is_complete[0] = 1
+
 
 class MatchingEngine:
     def __init__(self, manager: AgentManager) -> None:
@@ -61,16 +70,21 @@ class MatchingEngine:
 
         self._init_array()
 
-        cfgBT = manager.cfgBacktesting
+        cfgMetrics = manager.cfgMetrics
+        self.price_prec: memoryview = cfgMetrics.price_precision.cast("q")
+        self.dfm_comlpete: memoryview = cfgMetrics.dfm_comlpete
+
         self.prepper: DataPrepper = DataPrepper(
             symbol=manager.symbol,
-            start_date=cfgBT.backtest_start_date,
-            end_date=cfgBT.backtest_end_date,
-            price_mult=10 ** manager.cfgMetrics.price_precision.cast("q")[0],
+            start_date=manager.cfgBacktesting.backtest_start_date,
+            end_date=manager.cfgBacktesting.backtest_end_date,
+            price_mult=10 ** self.price_prec[0],
+            is_complete=self.dfm_comlpete,
         )
 
     def _init_array(self) -> None:
         self.data_buf: NDArray[uint8] = np.frombuffer(self.data, uint8)
+        self.data_example: NDArray[int64] = np.array([0, 0, 0, 0, 0], dtype=int64)
         self.order_book: NDArray[int64] = np.ndarray(
             (1000, c.OB_ConstantCount), dtype=int64
         )
@@ -95,7 +109,9 @@ class MatchingEngine:
             dfm=self.prepper.dfm,
             dfmRid=self.prepper.dfmRid,
             dfmWid=self.prepper.dfmWid,
+            dfm_complete=self.dfm_comlpete,
             data_buf=self.data_buf,
+            data_example=self.data_example,
             data_buf_size=self.data_size,
             data_header=self.data_header,
             writer_id=self.writer_id,
@@ -105,7 +121,7 @@ class MatchingEngine:
         )
 
 
-@njit(cache=True, nogil=True)
+@njit(nogil=True)
 def _matching(
     timestamp: int,
     time_readed_trade: memoryview,
@@ -114,7 +130,9 @@ def _matching(
     dfm: NDArray[int64],
     dfmRid: memoryview,
     dfmWid: memoryview,
+    dfm_complete: memoryview,
     data_buf: NDArray[uint8],
+    data_example: NDArray[int64],
     data_buf_size: int,
     data_header: memoryview,
     writer_id: memoryview,
@@ -122,54 +140,53 @@ def _matching(
     cell_amount: int,
     slippage: int,
 ) -> None:
-    if obRow[0] == 0:
-        while time_readed_trade[0] < timestamp:
-            while dfmRid[0] == dfmWid[0]:
-                continue
-
-            time_readed_trade[0] = dfm[dfmRid[0], 1]
-    else:
-        while time_readed_trade[0] < timestamp:
-            while dfmRid[0] == dfmWid[0]:
+    while time_readed_trade[0] < timestamp:
+        while dfmRid[0] == dfmWid[0]:
+            if dfm_complete[0] == 0:
                 sleep(0)
+            else:
+                return
 
-            trade_nPrice: int = dfm[dfmRid[0], 0]
-            trade_timestamp: int = dfm[dfmRid[0], 1]
+        time_readed_trade[0] = dfm[dfmRid[0], 1]
+        if obRow[0] == 0:
+            continue
 
-            order_row = 0
-            while order_row < obRow[0]:
-                order_timestamp: int = order_book[order_row, c.OB_timestamp]
-                order_param: int = order_book[order_row, c.OB_orderParam]
-                order_nPrice: int = order_book[order_row, c.OB_nPrice]
-                order_nQty: int = order_book[order_row, c.OB_nQty]
+        trade_nPrice: int = dfm[dfmRid[0], 0]
+        trade_timestamp: int = dfm[dfmRid[0], 1]
 
-                if order_timestamp >= trade_timestamp:
-                    data = processing_order(
-                        trade_timestamp,
-                        order_param,
-                        order_id,
-                        trade_nPrice,
-                        order_nPrice,
-                        order_nQty,
-                        slippage,
-                    )
-                else:
-                    data = None
+        order_row = 0
+        while order_row < obRow[0]:
+            order_timestamp: int = order_book[order_row, c.OB_timestamp]
+            order_param: int = order_book[order_row, c.OB_orderParam]
+            order_nPrice: int = order_book[order_row, c.OB_nPrice]
+            order_nQty: int = order_book[order_row, c.OB_nQty]
 
-                if data is not None:
-                    set_user_data(
-                        data=data,
-                        data_buf=data_buf,
-                        data_buf_size=data_buf_size,
-                        data_header=data_header,
-                        writer_id=writer_id,
-                        cell_amount=cell_amount,
-                    )
-                    compact_order_book(order_row, obRow, order_book)
-                else:
-                    order_row += 1
+            if order_timestamp >= trade_timestamp:
+                data = processing_order(
+                    trade_timestamp,
+                    order_param,
+                    order_id,
+                    trade_nPrice,
+                    order_nPrice,
+                    order_nQty,
+                    slippage,
+                    data_example,
+                )
+            else:
+                data = None
 
-            time_readed_trade[0] = trade_timestamp
+            if data is not None:
+                set_user_data(
+                    data=data,
+                    data_buf=data_buf,
+                    data_buf_size=data_buf_size,
+                    data_header=data_header,
+                    writer_id=writer_id,
+                    cell_amount=cell_amount,
+                )
+                compact_order_book(order_row, obRow, order_book)
+            else:
+                order_row += 1
 
 
 @njit(cache=True)
@@ -181,6 +198,7 @@ def processing_order(
     order_nPrice: int,
     order_nQty: int,
     slippage: int,
+    data_example: NDArray[int64],
 ) -> NDArray[uint8] | None:
     is_buy: bool = bool(order_param & c.OF_BUY)
 
@@ -207,10 +225,15 @@ def processing_order(
 
     order_param &= ~(c.OF_NEW)
     order_param |= c.OF_FILLED
-    return np.array(
-        [trade_timestamp, order_param, order_id[0], executed_nPrice, order_nQty],
-        dtype=int64,
-    ).view(uint8)
+
+    data_example[:] = (
+        trade_timestamp,
+        order_param,
+        order_id[0],
+        executed_nPrice,
+        order_nQty,
+    )
+    return data_example.view(uint8)
 
 
 @njit(cache=True)

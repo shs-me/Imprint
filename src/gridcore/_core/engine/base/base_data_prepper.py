@@ -18,7 +18,8 @@ class BaseDataPrepper(ABC):
         self.base_path: str = f"{self.datadir}/{self.type_data}/{self.symbol}"
 
         self.error: str | None = None
-        self.is_running, self.complete = True, False
+        self.is_running: bool = True
+        self.complete = False
 
     def start(self) -> None:
         self.subP: Thread = Thread(target=self.run_prepper_engine, daemon=True)
@@ -37,6 +38,7 @@ class BaseDataPrepper(ABC):
                         self.alarm_clock()
                         self.prepper_data(line)
 
+            self.post_prepper()
             self.complete = True
 
         except Exception as e:
@@ -63,4 +65,8 @@ class BaseDataPrepper(ABC):
 
     @abstractmethod
     def prepper_data(self, data: bytes) -> None:
+        pass
+
+    @abstractmethod
+    def post_prepper(self) -> None:
         pass

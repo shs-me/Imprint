@@ -188,7 +188,11 @@ class cfgMetrics(cfgSHMSegments):
             self.parsing_complete[1],
             self.parsing_complete[1] + UBYTE,
         )
-        return self.logic_complete[1]
+        self.dfm_comlpete: Any = (
+            self.logic_complete[1],
+            self.logic_complete[1] + UBYTE,
+        )
+        return self.dfm_comlpete[1]
 
 
 class cfgSignal(cfgSHMSegments, BaseRingBuf):
