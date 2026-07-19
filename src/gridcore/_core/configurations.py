@@ -1,7 +1,7 @@
 from abc import ABC
 from typing import Any
 
-from .settings import ActiveOrders, BarHeaders, SpaceCoords, Timeframe, TradeParam
+from .settings import BarHeaders, SpaceCoords, Timeframe
 
 OFFSET = 0
 UBYTE = 1
@@ -74,8 +74,6 @@ class cfgAccount(Configuration):
         slippage: float = 0.0005,
         scale_prec: int = 20,
         latency_ms: int = 100,
-        count_order_history: int = 10_000,
-        count_active_order: int = 1000,
         analysis_safe_lag_microsecond: int = 50_000,
         save_orders_history: bool = False,
     ) -> None:
@@ -90,11 +88,6 @@ class cfgAccount(Configuration):
         self.latency: int = latency_ms
         self.analysis_safe_lag_microsecond: int = analysis_safe_lag_microsecond
         self.save_orders_history: bool = save_orders_history
-
-        self.orders_history_rows: int = count_order_history
-        self.orders_history_cols: int = TradeParam._ConstantCount
-        self.active_orders_rows: int = count_active_order
-        self.active_orders_cols: int = ActiveOrders._ConstantCount
 
 
 class cfgSHMSegments(Configuration):

@@ -60,9 +60,8 @@ class CachedStatesData(IntEnum):
 
 
 @verify(CONTINUOUS, UNIQUE)
-class ActiveOrders(IntEnum):
+class OrderBook(IntEnum):
     nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
-    orderID = auto()
     _ConstantCount = auto()
 
 

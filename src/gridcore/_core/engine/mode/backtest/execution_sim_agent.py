@@ -3,7 +3,6 @@ import time
 from .... import constant as c
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
-from ....utils.monitoring.status_codes import StatusCodes as scs
 from ...base.base_execution import Execution
 from .matching_engine import MatchingEngine
 from .rest_sim_agent import RestSimAgent
@@ -29,24 +28,52 @@ class ExecutionAgent(Execution):
             (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0])
         ):
             if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
-                pass
+                self.me.matching(self.trade_readed_time[0])
 
             time.sleep(0)
 
-    def pre_execute_signal_action(self) -> None:
-        pass
+    def pre_execute_signal_action(self, time_get_signal: int) -> None:
+        self.me.matching(time_get_signal + self.con.latency)
 
     def execute_signal(
-        self, nPrice: int, time_get_signal: int, orderParam: int
+        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
-        pass
+        self.me.update_order_book(
+            timestamp=time_get_signal + self.con.latency,
+            order_param=order_param,
+            nPrice=nPrice,
+            nQty=nQty,
+        )
 
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-        pass
+        get_data: memoryview = user_data_raw_buf.cast("q")
+        timestamp: int = get_data[0]
+        order_param: int = get_data[0]
+        order_id: int = get_data[0]
+        nPrice: int = get_data[0]
+        nQty: int = get_data[0]
+
+        if bool(order_param & c.OF_FILLED):
+            nCommission = self.con.to_nCommission(nQty, bool(order_param & c.OF_LIMIT))
+            is_long, is_buy = (
+                bool(order_param & c.OF_LONG),
+                bool(order_param & c.OF_BUY),
+            )
+            is_open = (is_long and is_buy) or (not is_long and not is_buy)
+            self.tm.update_position(nPrice, nQty, nCommission, is_open, is_long)
+        else:
+            nCommission = 0
+
+        self.tm.update_orders_history(
+            timestamp, order_param, order_id, nPrice, nQty, nCommission
+        )
 
     def post_check_bufs(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
+        pass
+
+    def post_final_action(self) -> None:
         pass
 
 

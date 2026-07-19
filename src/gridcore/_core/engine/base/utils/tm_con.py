@@ -100,7 +100,7 @@ class TradeConverter:
         return nominalNqty * self.scale // nPrice
 
     @property
-    def newOrderId(self) -> int:
+    def newClientOrderId(self) -> int:
         self.last_order_id += 1
         return self.last_order_id
 

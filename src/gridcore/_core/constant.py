@@ -1,7 +1,7 @@
 from .settings import (
-    ActiveOrders,
     BarHeaders,
     CachedStatesData,
+    OrderBook,
     OrderFlag,
     StateFlags,
     TradeParam,
@@ -96,12 +96,11 @@ CSD_VAL_FP: int = int(CachedStatesData.VAL_FP)
 CSD_ConstantCount: int = int(CachedStatesData._ConstantCount)
 
 # Active Orders
-AO_nPrice: int = int(ActiveOrders.nPrice)
-AO_nQty: int = int(ActiveOrders.nQty)
-AO_timestamp: int = int(ActiveOrders.timestamp)
-AO_orderParam: int = int(ActiveOrders.orderParam)
-AO_orderID: int = int(ActiveOrders.orderID)
-AO_ConstantCount: int = int(ActiveOrders._ConstantCount)
+OB_nPrice: int = int(OrderBook.nPrice)
+OB_nQty: int = int(OrderBook.nQty)
+OB_timestamp: int = int(OrderBook.timestamp)
+OB_orderParam: int = int(OrderBook.orderParam)
+OB_ConstantCount: int = int(OrderBook._ConstantCount)
 
 # Trade Param
 TP_nPrice: int = int(TradeParam.nPrice)

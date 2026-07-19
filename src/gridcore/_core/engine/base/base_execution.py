@@ -77,12 +77,6 @@ class Execution(ABC):
             (self.WB_1[0] == self.RB_1[0]) and (self.WB_2[0] == self.RB_2[0])
         )
 
-    def final_actions(self) -> None:
-        self.post_final_action()
-
-    def post_final_action(self) -> None:
-        pass
-
     @abstractmethod
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
@@ -91,12 +85,12 @@ class Execution(ABC):
 
     def check_signal_buf(self) -> None:
         nPrice, timestamp, order_param = self.get_signal_data()
-        self.pre_execute_signal_action()
+        self.pre_execute_signal_action(timestamp)
         self.check_user_data_buf()
         if self.con.lossNbalanceSafeLimit:
             if self.con.lockedNbalanceSafeLimit:
-                if self.con.nominalEntryNqtyWithLeverage is not None:
-                    self.execute_signal(nPrice, timestamp, order_param)
+                if (nQty := self.con.nominalEntryNqtyWithLeverage) is not None:
+                    self.execute_signal(timestamp, order_param, nPrice, nQty)
                 else:
                     self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
             else:
@@ -114,12 +108,12 @@ class Execution(ABC):
         return nPrice, timestamp, order_param
 
     @abstractmethod
-    def pre_execute_signal_action(self) -> None:
+    def pre_execute_signal_action(self, time_get_signal: int) -> None:
         pass
 
     @abstractmethod
     def execute_signal(
-        self, nPrice: int, time_get_signal: int, orderParam: int
+        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
         pass
 
@@ -144,4 +138,11 @@ class Execution(ABC):
     def post_check_bufs(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
+        pass
+
+    def final_actions(self) -> None:
+        self.post_final_action()
+
+    @abstractmethod
+    def post_final_action(self) -> None:
         pass

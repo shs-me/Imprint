@@ -5,17 +5,13 @@ from numpy.typing import NDArray
 from ..... import constant as c
 from .tm_con import TradeConverter
 
-OPEN_ORDER: int = 0
-TP_ORDER: int = 1
-SL_ORDER: int = 2
-
 
 class TradeManager:
     def __init__(self, converter: TradeConverter) -> None:
         self.con: TradeConverter = converter
 
-        self.oh_rows: int = self.con.cfgAC.orders_history_rows
-        self.oh_cols: int = self.con.cfgAC.orders_history_cols
+        self.oh_rows: int = 10_000
+        self.oh_cols: int = c.TradeParam._ConstantCount
 
         self._init_array()
 
@@ -32,7 +28,7 @@ class TradeManager:
         order_id: int,
         nPrice: int,
         nQty: int,
-        nCommission: int = 0,
+        nCommission: int,
     ) -> None:
         ohWid, oh = self.ohWid, self.orders_history
         # - - -
@@ -45,7 +41,7 @@ class TradeManager:
             )
             self.orders_history[old_rows:, :] = 0
 
-    def updatePosition(
+    def update_position(
         self, nPrice: int, nQty: int, nCommission: int, is_open: bool, is_long: bool
     ) -> None:
         _ = self.con

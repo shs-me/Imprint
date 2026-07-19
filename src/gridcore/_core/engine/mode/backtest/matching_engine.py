@@ -2,9 +2,10 @@ import time
 
 import numpy as np
 from numba import njit
-from numpy import int64
+from numpy import int64, uint8
 from numpy.typing import NDArray
 
+from .... import constant as c
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_data_prepper import BaseDataPrepper
 
@@ -54,34 +55,54 @@ class MatchingEngine:
         self.prepper: DataPrepper
         self.trade_readed_time: memoryview = memoryview(bytearray(8)).cast("q")
 
+        self._init_array()
+
     def _init_array(self) -> None:
-        self.order_book: NDArray[int64]
+        self.data_buf: NDArray[uint8] = np.frombuffer(self.data, uint8)
+        self.order_book: NDArray[int64] = np.ndarray(
+            (1000, c.OB_ConstantCount), dtype=int64
+        )
+        self.order_book.fill(0)
+        self.obRow: memoryview = memoryview(bytearray(8)).cast("q")
+
+    def update_order_book(
+        self,
+        timestamp: int,
+        order_param: int,
+        nPrice: int,
+        nQty: int,
+    ) -> None:
+        self.order_book[self.obRow[0], :] = timestamp, order_param, nPrice, nQty
 
     def matching(self, timestamp: int) -> None:
         _matching(
             timestamp=timestamp,
             order_book=self.order_book,
+            obRow=self.obRow,
             dfm=self.prepper.dfm,
             dfmRid=self.prepper.dfmRid,
             dfmWid=self.prepper.dfmWid,
+            data_buf=self.data_buf,
+            data_buf_size=self.data_size,
+            data_header=self.data_header,
+            writer_id=self.writer_id,
+            cell_amount=self.cell_amount,
         )
-
-    def set_user_data(self, data: bytes) -> None:
-        cell: int = self.writer_id[0]
-        start = cell * self.data_size
-        self.data_header[cell] = len(data)
-        self.data[start : start + len(data)] = data
-        new_cell: int = cell + 1
-        self.writer_id[0] = new_cell if (new_cell < self.cell_amount) else 0
 
 
 @njit(cached=True)
 def _matching(
     timestamp: int,
     order_book: NDArray[int64],
+    obRow: memoryview,
     dfm: NDArray[int64],
     dfmRid: memoryview,
     dfmWid: memoryview,
+    data_buf: NDArray[uint8],
+    data_buf_size: int,
+    data_header: memoryview,
+    writer_id: memoryview,
+    cell_amount: int,
 ) -> None:
     pass
 
@@ -96,3 +117,25 @@ def processing_limit_orders() -> None:
 
 def processing_cond_orders() -> None:
     pass
+
+
+def set_user_data(
+    data: bytes,
+    data_buf: NDArray[uint8],
+    data_buf_size: int,
+    data_header: memoryview,
+    writer_id: memoryview,
+    cell_amount: int,
+) -> None:
+    cell: int = writer_id[0]
+    start: int = cell * data_buf_size
+    data_header[cell] = len(data)
+    data_buf[start : start + len(data)] = data
+    new_cell: int = cell + 1
+    writer_id[0] = new_cell if (new_cell < cell_amount) else 0
+
+
+def compact_order_book(order_row: int, obRow: memoryview, ob: NDArray[int64]) -> None:
+    if (obRow[0] - 1) > order_row:
+        ob[order_row : obRow[0] - 1, :] = ob[order_row + 1 : obRow[0], :]
+        ob[obRow[0] - 1, :] = 0
