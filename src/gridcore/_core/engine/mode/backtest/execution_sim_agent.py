@@ -87,7 +87,7 @@ class ExecutionAgent(Execution):
                 f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
                 f"Long Open Qty: {self.con.longNqty / self.con.qtyMult} \n"
                 f"Short Open Qty: {self.con.shortNqty / self.con.qtyMult} \n"
-                f"Count Orders in History: {self.con.last_order_id} \n"
+                f"Count Orders in History: {self.tm.ohWid[0]} \n"
                 f"Count Active Orders: {self.me.obRow[0]} \n"
                 f"Count Open Positions: {self.open_position}"
             )

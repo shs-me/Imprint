@@ -249,6 +249,8 @@ def processing_order(
         executed_nPrice,
         order_nQty,
     )
+
+    order_id[0] += 1
     return data_example.view(uint8)
 
 

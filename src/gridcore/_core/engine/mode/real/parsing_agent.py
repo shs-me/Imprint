@@ -59,5 +59,5 @@ class ParsingAgent(Parsing):
 @manager_office()
 def run_parsing(parsing_event: Event, logic_event: Event, **kwargs) -> None:
     writer = BaseFootprintWriter(kwargs["manager"])
-    agent = ParsingAgent(kwargs["manager"], writer, logic_event, parsing_event)
+    agent = ParsingAgent(kwargs["manager"], writer, parsing_event, logic_event)
     agent.run_parsing_engine()
