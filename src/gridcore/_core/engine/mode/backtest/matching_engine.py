@@ -197,17 +197,18 @@ def _matching(
             if bool(order_param & c.OF_NEW):
                 if trade_timestamp >= order_timestamp:
                     data = processing_order(
-                        trade_timestamp,
-                        order_param,
-                        order_id,
-                        trade_nPrice,
-                        order_nPrice,
-                        order_nQty,
-                        slippage,
-                        data_example,
+                        trade_timestamp=trade_timestamp,
+                        order_book=order_book,
+                        obRow=obRow,
+                        client_order_id=client_order_id,
+                        order_param=order_param,
+                        order_id=order_id,
+                        trade_nPrice=trade_nPrice,
+                        order_nPrice=order_nPrice,
+                        nQty=order_nQty,
+                        slippage=slippage,
+                        data_example=data_example,
                     )
-                    if (data is not None) and bool(order_param & c.OF_OCO):
-                        proccesing_oco(client_order_id, order_book, obRow)
 
             elif bool(order_param & c.OF_CANCELED):
                 data_example[:] = (
@@ -240,6 +241,9 @@ def _matching(
 @njit(cache=True)
 def processing_order(
     trade_timestamp: int,
+    order_book: NDArray[int64],
+    obRow: memoryview,
+    client_order_id: int,
     order_param: int,
     order_id: memoryview,
     trade_nPrice: int,
@@ -271,24 +275,18 @@ def processing_order(
     else:
         return
 
-    order_param &= ~(c.OF_NEW)
+    if bool(order_param & c.OF_OCO):
+        mask = order_book[: obRow[0], c.OB_clientOrderID] == client_order_id
+        order_book[: obRow[0], c.OB_orderParam][mask] &= ~(c.OF_NEW)
+        order_book[: obRow[0], c.OB_orderParam][mask] |= c.OF_CANCELED
+
+    order_param &= ~(c.OF_NEW | c.OF_CANCELED)
     order_param |= c.OF_FILLED
 
     data_example[:] = trade_timestamp, order_param, order_id[0], nPrice, nQty
 
     order_id[0] += 1
     return data_example.view(uint8)
-
-
-@njit(cache=True)
-def proccesing_oco(
-    client_order_id: int,
-    order_book: NDArray[int64],
-    obRow: memoryview,
-) -> None:
-    mask = order_book[: obRow[0], c.OB_clientOrderID] == client_order_id
-    order_book[: obRow[0], c.OB_orderParam][mask] &= ~(c.OF_NEW)
-    order_book[: obRow[0], c.OB_orderParam][mask] |= c.OF_CANCELED
 
 
 @njit(cache=True)
