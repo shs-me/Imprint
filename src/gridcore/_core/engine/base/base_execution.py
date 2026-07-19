@@ -119,7 +119,7 @@ class Execution(ABC):
         pass
 
     def check_user_data_buf(self) -> None:
-        if self.WB_2[0] != self.RB_2[0]:
+        while self.WB_2[0] != self.RB_2[0]:
             raw_buf = self.get_user_data()
             self.preppare_user_data(raw_buf)
 

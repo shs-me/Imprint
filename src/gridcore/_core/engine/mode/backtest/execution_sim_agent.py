@@ -25,10 +25,13 @@ class ExecutionAgent(Execution):
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
-        while (self.logic_complete[0] == 0) and (
-            (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0])
-        ):
+        matching = False
+        while self.logic_complete[0] == 0:
             if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
+                matching = True
+            if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
+                break
+            if matching:
                 self.me.matching(self.trade_readed_time[0])
 
             time.sleep(0)
