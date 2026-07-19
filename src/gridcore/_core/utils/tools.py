@@ -30,7 +30,7 @@ elif sys.platform == "linux":
 
     @njit
     def sleep(seconds: float):
-        _wsleep(int(seconds * 1000))
+        _usleep(int(seconds * 1000))
 
     def generate_ctrl_c_event(pids: list[int]) -> None:
         [os.kill(pid, signal.SIGINT) for pid in pids]

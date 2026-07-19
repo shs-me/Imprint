@@ -74,6 +74,10 @@ class ExecutionAgent(Execution):
     ) -> None:
         pass
 
+    def final_actions(self) -> None:
+        super().final_actions()
+        self.manager.set_text(f"Balance: {self.con.nBalance / self.con.scale}")
+
     def post_final_action(self) -> None:
         pass
 

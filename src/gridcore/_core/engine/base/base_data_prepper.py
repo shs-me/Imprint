@@ -18,8 +18,7 @@ class BaseDataPrepper(ABC):
         self.base_path: str = f"{self.datadir}/{self.type_data}/{self.symbol}"
 
         self.error: str | None = None
-        self.is_running: bool = True
-        self.complete = False
+        self.complete: bool = False
 
     def start(self) -> None:
         self.subP: Thread = Thread(target=self.run_prepper_engine, daemon=True)
@@ -32,18 +31,18 @@ class BaseDataPrepper(ABC):
                 with open(file=path, mode="rb") as f:
                     next(f)
                     for line in f:
-                        if not self.is_running:
+                        if not self.complete:
+                            self.alarm_clock()
+                            self.prepper_data(line)
+                        else:
                             break
-
-                        self.alarm_clock()
-                        self.prepper_data(line)
 
             self.post_prepper()
             self.complete = True
 
         except Exception as e:
             self.error = f"Prepper Error: {e}\n{traceback.format_exc()}"
-            self.is_running = False
+            self.complete = True
 
     def get_data_paths(self) -> list[str]:
         paths: list[str] = [p for p in os.listdir(self.base_path) if p.endswith(".csv")]

@@ -7,7 +7,6 @@ from numpy.typing import NDArray
 
 from .... import constant as c
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.tools import sleep
 from ...base.base_data_prepper import BaseDataPrepper
 
 
@@ -29,7 +28,7 @@ class DataPrepper(BaseDataPrepper):
         self.dfmWid: memoryview = memoryview(bytearray(8)).cast("q")
         self.dfmRid: memoryview = memoryview(bytearray(8)).cast("q")
         self.max_row: int = self.dfm.shape[0]
-        self.safe_lag: int = round(self.max_row * 0.1)
+        self.safe_lag: int = round(self.max_row * 0.9)
 
     def alarm_clock(self) -> None:
         while (
@@ -44,7 +43,7 @@ class DataPrepper(BaseDataPrepper):
             int(list_data[5]),
         )
         new_row: int = self.dfmWid[0] + 1
-        self.dfmWid[0] = new_row if (new_row <= self.max_row) else 0
+        self.dfmWid[0] = new_row if (new_row < self.max_row) else 0
 
     def post_prepper(self) -> None:
         self.is_complete[0] = 1
@@ -72,15 +71,16 @@ class MatchingEngine:
 
         cfgMetrics = manager.cfgMetrics
         self.price_prec: memoryview = cfgMetrics.price_precision.cast("q")
-        self.dfm_comlpete: memoryview = cfgMetrics.dfm_comlpete
+        self.dfm_complete: memoryview = cfgMetrics.dfm_comlpete
 
         self.prepper: DataPrepper = DataPrepper(
             symbol=manager.symbol,
             start_date=manager.cfgBacktesting.backtest_start_date,
             end_date=manager.cfgBacktesting.backtest_end_date,
             price_mult=10 ** self.price_prec[0],
-            is_complete=self.dfm_comlpete,
+            is_complete=self.dfm_complete,
         )
+        self.prepper.start()
 
     def _init_array(self) -> None:
         self.data_buf: NDArray[uint8] = np.frombuffer(self.data, uint8)
@@ -99,26 +99,37 @@ class MatchingEngine:
         nQty: int,
     ) -> None:
         self.order_book[self.obRow[0], :] = timestamp, order_param, nPrice, nQty
+        self.obRow[0] += 1
 
     def matching(self, timestamp: int) -> None:
-        _matching(
-            timestamp=timestamp,
-            time_readed_trade=self.trade_readed_time,
-            order_book=self.order_book,
-            obRow=self.obRow,
-            dfm=self.prepper.dfm,
-            dfmRid=self.prepper.dfmRid,
-            dfmWid=self.prepper.dfmWid,
-            dfm_complete=self.dfm_comlpete,
-            data_buf=self.data_buf,
-            data_example=self.data_example,
-            data_buf_size=self.data_size,
-            data_header=self.data_header,
-            writer_id=self.writer_id,
-            order_id=self.order_id,
-            cell_amount=self.cell_amount,
-            slippage=self.slippage,
-        )
+        while True:
+            if _matching(
+                timestamp=timestamp,
+                time_readed_trade=self.trade_readed_time,
+                order_book=self.order_book,
+                obRow=self.obRow,
+                dfm=self.prepper.dfm,
+                dfmRid=self.prepper.dfmRid,
+                dfmWid=self.prepper.dfmWid,
+                data_buf=self.data_buf,
+                data_example=self.data_example,
+                data_buf_size=self.data_size,
+                data_header=self.data_header,
+                writer_id=self.writer_id,
+                order_id=self.order_id,
+                cell_amount=self.cell_amount,
+                slippage=self.slippage,
+            ):
+                break
+            else:
+                if self.prepper.error is not None:
+                    raise RuntimeError(self.prepper.error)
+                else:
+                    while self.prepper.dfmWid[0] == self.prepper.dfmRid[0]:
+                        if self.dfm_complete[0] == 0:
+                            time.sleep(0)
+                        else:
+                            return
 
 
 @njit(nogil=True)
@@ -130,7 +141,6 @@ def _matching(
     dfm: NDArray[int64],
     dfmRid: memoryview,
     dfmWid: memoryview,
-    dfm_complete: memoryview,
     data_buf: NDArray[uint8],
     data_example: NDArray[int64],
     data_buf_size: int,
@@ -139,15 +149,13 @@ def _matching(
     order_id: memoryview,
     cell_amount: int,
     slippage: int,
-) -> None:
+) -> bool:
     while time_readed_trade[0] < timestamp:
-        while dfmRid[0] == dfmWid[0]:
-            if dfm_complete[0] == 0:
-                sleep(0)
-            else:
-                return
+        if dfmRid[0] == dfmWid[0]:
+            return False
 
         time_readed_trade[0] = dfm[dfmRid[0], 1]
+
         if obRow[0] == 0:
             continue
 
@@ -161,7 +169,7 @@ def _matching(
             order_nPrice: int = order_book[order_row, c.OB_nPrice]
             order_nQty: int = order_book[order_row, c.OB_nQty]
 
-            if order_timestamp >= trade_timestamp:
+            if trade_timestamp >= order_timestamp:
                 data = processing_order(
                     trade_timestamp,
                     order_param,
@@ -187,6 +195,7 @@ def _matching(
                 compact_order_book(order_row, obRow, order_book)
             else:
                 order_row += 1
+    return True
 
 
 @njit(cache=True)
