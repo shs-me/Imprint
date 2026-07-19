@@ -132,7 +132,7 @@ class MatchingEngine:
                             return
 
 
-@njit(nogil=True)
+@njit(cache=True, nogil=True)
 def _matching(
     timestamp: int,
     time_readed_trade: memoryview,
@@ -158,7 +158,7 @@ def _matching(
             return False
 
         new_row: int = row + 1
-        dfmRid[0] += new_row if (new_row < max_row) else 0
+        dfmRid[0] = new_row if (new_row < max_row) else 0
 
         time_readed_trade[0] = dfm[row, 1]
 
