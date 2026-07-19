@@ -6,13 +6,33 @@ import zipfile
 from datetime import date, timedelta
 from urllib import request
 
+from numba import njit
+
 from .. import constant as c
 
+if sys.platform == "win32":
+    _wsleep = ctypes.windll.kernel32.Sleep
+    _wsleep.argtypes = [ctypes.c_uint32]
+    _wsleep.restype = None
 
-def generate_ctrl_c_event(pids: list[int]) -> None:
-    if sys.platform == "win32":
+    @njit
+    def sleep(seconds: float):
+        _wsleep(int(seconds * 1000))
+
+    def generate_ctrl_c_event(pids: list[int]) -> None:
         [ctypes.windll.kernel32.GenerateConsoleCtrlEvent(0, pid) for pid in pids]
-    elif sys.platform == "linux":
+
+elif sys.platform == "linux":
+    libc = ctypes.CDLL(None)
+    _usleep = libc.usleep
+    _usleep.argtypes = [ctypes.c_uint32]
+    _usleep.restype = ctypes.c_int
+
+    @njit
+    def sleep(seconds: float):
+        _wsleep(int(seconds * 1000))
+
+    def generate_ctrl_c_event(pids: list[int]) -> None:
         [os.kill(pid, signal.SIGINT) for pid in pids]
 
 

@@ -39,8 +39,8 @@ class Execution(ABC):
         self.logic_complete: memoryview = cfgMetrics.logic_complete
         self.con: TradeConverter = TradeConverter(
             cfgAcount=cfgAC,
-            price_prec=cfgMetrics.price_precision.cast("q"),
-            qty_prec=cfgMetrics.qty_precision.cast("q"),
+            price_prec=cfgMetrics.price_precision.cast("q")[0],
+            qty_prec=cfgMetrics.qty_precision.cast("q")[0],
         )
         self.tm: TradeManager = TradeManager(converter=self.con)
 

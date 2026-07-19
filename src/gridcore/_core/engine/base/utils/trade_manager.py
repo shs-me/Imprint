@@ -16,9 +16,10 @@ class TradeManager:
         self._init_array()
 
     def _init_array(self) -> None:
-        self.orders_history: NDArray[int64] = np.full(
-            shape=(self.oh_rows, self.oh_cols), fill_value=None, dtype=int64
+        self.orders_history: NDArray[int64] = np.ndarray(
+            shape=(self.oh_rows, self.oh_cols), dtype=int64
         )
+        self.orders_history.fill(0)
         self.ohWid: memoryview = memoryview(bytearray(8)).cast("q")
 
     def update_orders_history(

@@ -38,6 +38,7 @@ class ExecutionAgent(Execution):
     def execute_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
+        self.con.lockedNbalance = self.con.to_nMargin(nPrice, nQty)
         self.me.update_order_book(
             timestamp=time_get_signal + self.con.latency,
             order_param=order_param,
