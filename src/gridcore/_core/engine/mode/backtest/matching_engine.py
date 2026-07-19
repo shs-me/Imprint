@@ -150,17 +150,23 @@ def _matching(
     cell_amount: int,
     slippage: int,
 ) -> bool:
+    max_row: int = dfm.shape[0]
     while time_readed_trade[0] < timestamp:
-        if dfmRid[0] == dfmWid[0]:
+        row: int = dfmRid[0]
+
+        if row == dfmWid[0]:
             return False
 
-        time_readed_trade[0] = dfm[dfmRid[0], 1]
+        new_row: int = row + 1
+        dfmRid[0] += new_row if (new_row < max_row) else 0
+
+        time_readed_trade[0] = dfm[row, 1]
 
         if obRow[0] == 0:
             continue
 
-        trade_nPrice: int = dfm[dfmRid[0], 0]
-        trade_timestamp: int = dfm[dfmRid[0], 1]
+        trade_nPrice: int = dfm[row, 0]
+        trade_timestamp: int = dfm[row, 1]
 
         order_row = 0
         while order_row < obRow[0]:
@@ -195,6 +201,7 @@ def _matching(
                 compact_order_book(order_row, obRow, order_book)
             else:
                 order_row += 1
+
     return True
 
 

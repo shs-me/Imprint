@@ -49,10 +49,10 @@ class ExecutionAgent(Execution):
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
         get_data: memoryview = user_data_raw_buf.cast("q")
         timestamp: int = get_data[0]
-        order_param: int = get_data[0]
-        order_id: int = get_data[0]
-        nPrice: int = get_data[0]
-        nQty: int = get_data[0]
+        order_param: int = get_data[1]
+        order_id: int = get_data[2]
+        nPrice: int = get_data[3]
+        nQty: int = get_data[4]
 
         if bool(order_param & c.OF_FILLED):
             nCommission = self.con.to_nCommission(nQty, bool(order_param & c.OF_LIMIT))

@@ -96,7 +96,8 @@ class TradeConverter:
             return qty
 
     def entryNqtyWithLeverage(self, nPrice: int, nominalNqty: int) -> int:
-        return nominalNqty * self.scale // nPrice
+        nominal_qty: float = nominalNqty / self.scale
+        return round((nominal_qty * self.priceMult * self.qtyMult) / nPrice)
 
     @property
     def newClientOrderId(self) -> int:
@@ -112,13 +113,16 @@ class TradeConverter:
         return nPrice + (-slTicks if is_long else slTicks)
 
     def to_nMargin(self, nPrice: int, nQty: int) -> int:
-        return (nQty * nPrice) // self.scale // self.leverage
+        margin: float = (
+            (nQty * self.qtyMult) * (nPrice * self.priceMult)
+        ) / self.leverage
+        return round(margin * self.scale)
 
     def to_nPnl(self, closeNprice: int, nQty: int, is_long: bool) -> int:
-        diffNprice: int = (
-            closeNprice - (self.longEntryNprice if is_long else self.shortEntryNprice)
-        ) * (1 if is_long else -1)
-        return diffNprice * nQty // self.scale
+        entryNprice: int = self.longEntryNprice if is_long else self.shortEntryNprice
+        diffNprice: int = (closeNprice - entryNprice) * (1 if is_long else -1)
+        pnl: float = (diffNprice / self.priceMult) * (nQty / self.qtyMult)
+        return round(pnl * self.scale)
 
     @property
     def unrealizedNpnl(self) -> int:
@@ -140,9 +144,9 @@ class TradeConverter:
             self.longUnrealizedNpnl = 0
 
     def to_nCommission(self, nQty: int, is_maker: bool) -> int:
-        return (
-            nQty * (self.makerNcommission if is_maker else self.takerNcommission)
-        ) // 10_000
+        rate: int = self.makerNcommission if is_maker else self.takerNcommission
+        commission: float = (nQty / self.qtyMult) * (rate / 10_000)
+        return round(commission * self.scale)
 
     def to_roi(self, nPnl: int, nMargin: int) -> float:
         return (nPnl / nMargin) * 100

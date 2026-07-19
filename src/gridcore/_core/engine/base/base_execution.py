@@ -89,7 +89,8 @@ class Execution(ABC):
         self.check_user_data_buf()
         if self.con.lossNbalanceSafeLimit:
             if self.con.lockedNbalanceSafeLimit:
-                if (nQty := self.con.nominalEntryNqtyWithLeverage) is not None:
+                if (nominalNqty := self.con.nominalEntryNqtyWithLeverage) is not None:
+                    nQty: int = self.con.entryNqtyWithLeverage(nPrice, nominalNqty)
                     self.execute_signal(timestamp, order_param, nPrice, nQty)
                 else:
                     self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
@@ -118,14 +119,15 @@ class Execution(ABC):
         pass
 
     def check_user_data_buf(self) -> None:
-        raw_buf = self.get_user_data()
-        self.preppare_user_data(raw_buf)
+        if self.WB_2[0] != self.RB_2[0]:
+            raw_buf = self.get_user_data()
+            self.preppare_user_data(raw_buf)
 
     def get_user_data(self) -> memoryview:
         cell: int = self.RB_2[0]
-        start = cell * self.us_data_size
-        len_raw_data: int = self.us_data_header[start]
-        raw_data = self.us_data[start : start + len_raw_data]
+        start: int = cell * self.us_data_size
+        len_raw_data: int = self.us_data_header[cell]
+        raw_data: memoryview = self.us_data[start : start + len_raw_data]
         new_cell: int = cell + 1
         self.RB_2[0] = new_cell if (new_cell < self.us_cell_amount) else 0
         return raw_data
