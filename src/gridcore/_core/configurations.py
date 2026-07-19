@@ -72,7 +72,7 @@ class cfgAccount(Configuration):
         TP_dev: float = 0.05,
         SL_dev: float = 0.05,
         slippage: float = 0.0005,
-        scale_prec: int = 20,
+        scale_prec: int = 15,
         latency_ms: int = 100,
         analysis_safe_lag_microsecond: int = 50_000,
         save_orders_history: bool = False,

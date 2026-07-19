@@ -104,6 +104,7 @@ class ExecutionAgent(Execution):
             self.me.matching(self.trade_readed_time[0])
 
         self.check_user_data_buf()
+        self.tm.final_action()
         self.manager.set_text(
             (
                 f"Balance: {self.con.nBalance / self.con.scale} \n"

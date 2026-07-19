@@ -33,7 +33,12 @@ class TradeManager:
     ) -> None:
         ohWid, oh = self.ohWid, self.orders_history
         # - - -
-        oh[ohWid[0], :] = timestamp, order_param, order_id, nPrice, nQty, nCommission
+        oh[ohWid[0], c.TP_timestamp] = timestamp
+        oh[ohWid[0], c.TP_orderParam] = order_param
+        oh[ohWid[0], c.TP_orderID] = order_id
+        oh[ohWid[0], c.TP_nPrice] = nPrice
+        oh[ohWid[0], c.TP_nQty] = nQty
+        oh[ohWid[0], c.TP_commission] = nCommission
         ohWid[0] += 1
         if ohWid[0] >= oh.shape[0]:
             old_rows: int = oh.shape[0]
