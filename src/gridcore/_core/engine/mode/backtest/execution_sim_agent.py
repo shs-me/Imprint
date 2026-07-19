@@ -43,6 +43,7 @@ class ExecutionAgent(Execution):
         self.me.update_order_book(
             timestamp=time_get_signal + self.con.latency,
             order_param=order_param,
+            client_order_id=1,
             nPrice=nPrice,
             nQty=nQty,
         )
@@ -55,17 +56,36 @@ class ExecutionAgent(Execution):
         order_id: int = get_data[2]
         nPrice: int = get_data[3]
         nQty: int = get_data[4]
+        nCommission: int = 0
 
+        is_long, is_buy = (bool(order_param & c.OF_LONG), bool(order_param & c.OF_BUY))
         if bool(order_param & c.OF_FILLED):
             nCommission = self.con.to_nCommission(nQty, bool(order_param & c.OF_LIMIT))
-            is_long, is_buy = (
-                bool(order_param & c.OF_LONG),
-                bool(order_param & c.OF_BUY),
-            )
             is_open = (is_long and is_buy) or (not is_long and not is_buy)
             self.tm.update_position(nPrice, nQty, nCommission, is_open, is_long)
-        else:
-            nCommission = 0
+            if is_open:
+                tp_sl_timestamp: int = timestamp + self.con.latency
+
+                tp_nPrice: int = self.con.TPdevNprice(nPrice, is_long)
+                tp_order_param: int = 0
+                tp_order_param |= c.OF_LONG if is_long else c.OF_SHORT
+                tp_order_param |= c.OF_SELL if is_buy else c.OF_BUY
+                tp_order_param |= c.OF_LIMIT | c.OF_NEW | c.OF_OCO
+                self.me.update_order_book(
+                    tp_sl_timestamp, tp_order_param, order_id, tp_nPrice, nQty
+                )
+
+                sl_nPrice: int = self.con.SLdevNprice(nPrice, is_long)
+                sl_order_param: int = 0
+                sl_order_param |= c.OF_LONG if is_long else c.OF_SHORT
+                sl_order_param |= c.OF_SELL if is_buy else c.OF_BUY
+                sl_order_param |= c.OF_MARKET_TRIGER | c.OF_NEW | c.OF_OCO
+                self.me.update_order_book(
+                    tp_sl_timestamp, sl_order_param, order_id, sl_nPrice, nQty
+                )
+
+        elif bool(order_param & c.OF_CANCELED):
+            pass
 
         self.tm.update_orders_history(
             timestamp, order_param, order_id, nPrice, nQty, nCommission
@@ -76,8 +96,11 @@ class ExecutionAgent(Execution):
     ) -> None:
         pass
 
-    def final_actions(self) -> None:
-        super().final_actions()
+    def post_final_action(self) -> None:
+        if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
+            self.me.matching(self.trade_readed_time[0])
+
+        self.check_user_data_buf()
         self.manager.set_text(
             (
                 f"Balance: {self.con.nBalance / self.con.scale} \n"
@@ -92,9 +115,6 @@ class ExecutionAgent(Execution):
                 f"Count Open Positions: {self.open_position}"
             )
         )
-
-    def post_final_action(self) -> None:
-        pass
 
 
 @manager_office()

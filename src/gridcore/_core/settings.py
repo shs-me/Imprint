@@ -41,6 +41,7 @@ class OrderFlag(IntFlag):
     MARKET_TRIGER, LIMIT_TRIGER = auto(), auto()
     # Status
     NEW, FILLED, CANCELED = auto(), auto(), auto()
+    OCO = auto()
 
 
 class Timeframe(IntEnum):
@@ -61,7 +62,8 @@ class CachedStatesData(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class OrderBook(IntEnum):
-    timestamp, orderParam, nPrice, nQty = 0, auto(), auto(), auto()
+    timestamp, orderParam, clientOrderID = 0, auto(), auto()
+    nPrice, nQty = auto(), auto()
     _ConstantCount = auto()
 
 

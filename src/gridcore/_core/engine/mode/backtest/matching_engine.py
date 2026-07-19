@@ -95,11 +95,28 @@ class MatchingEngine:
         self,
         timestamp: int,
         order_param: int,
+        client_order_id: int,
         nPrice: int,
         nQty: int,
     ) -> None:
-        self.order_book[self.obRow[0], :] = timestamp, order_param, nPrice, nQty
+        self.order_book[self.obRow[0], c.OB_timestamp] = timestamp
+        self.order_book[self.obRow[0], c.OB_orderParam] = order_param
+        self.order_book[self.obRow[0], c.OB_clientOrderID] = client_order_id
+        self.order_book[self.obRow[0], c.OB_nPrice] = nPrice
+        self.order_book[self.obRow[0], c.OB_nQty] = nQty
         self.obRow[0] += 1
+
+        self.data_example[:] = timestamp, order_param, self.order_id[0], nPrice, nQty
+        self.order_id[0] += 1
+
+        set_user_data(
+            data=self.data_example.view(uint8),
+            data_buf=self.data_buf,
+            data_buf_size=self.data_size,
+            data_header=self.data_header,
+            writer_id=self.writer_id,
+            cell_amount=self.cell_amount,
+        )
 
     def matching(self, timestamp: int) -> None:
         while True:
@@ -168,26 +185,41 @@ def _matching(
         trade_nPrice: int = dfm[row, 0]
         trade_timestamp: int = dfm[row, 1]
 
-        order_row = 0
+        order_row: int = 0
+        data: NDArray[uint8] | None = None
         while order_row < obRow[0]:
             order_timestamp: int = order_book[order_row, c.OB_timestamp]
             order_param: int = order_book[order_row, c.OB_orderParam]
+            client_order_id: int = order_book[order_row, c.OB_clientOrderID]
             order_nPrice: int = order_book[order_row, c.OB_nPrice]
             order_nQty: int = order_book[order_row, c.OB_nQty]
 
-            if trade_timestamp >= order_timestamp:
-                data = processing_order(
+            if bool(order_param & c.OF_NEW):
+                if trade_timestamp >= order_timestamp:
+                    data = processing_order(
+                        trade_timestamp,
+                        order_param,
+                        order_id,
+                        trade_nPrice,
+                        order_nPrice,
+                        order_nQty,
+                        slippage,
+                        data_example,
+                    )
+                    if (data is not None) and bool(order_param & c.OF_OCO):
+                        proccesing_oco(client_order_id, order_book, obRow)
+
+            elif bool(order_param & c.OF_CANCELED):
+                data_example[:] = (
                     trade_timestamp,
                     order_param,
-                    order_id,
-                    trade_nPrice,
+                    order_id[0],
                     order_nPrice,
                     order_nQty,
-                    slippage,
-                    data_example,
                 )
-            else:
-                data = None
+
+                order_id[0] += 1
+                data = data_example.view(uint8)
 
             if data is not None:
                 set_user_data(
@@ -212,15 +244,15 @@ def processing_order(
     order_id: memoryview,
     trade_nPrice: int,
     order_nPrice: int,
-    order_nQty: int,
+    nQty: int,
     slippage: int,
     data_example: NDArray[int64],
 ) -> NDArray[uint8] | None:
     is_buy: bool = bool(order_param & c.OF_BUY)
 
-    executed_nPrice = trade_nPrice
+    nPrice = trade_nPrice
     if bool(order_param & c.OF_MARKET):
-        executed_nPrice = nPrice_with_slippage(trade_nPrice, is_buy, slippage)
+        nPrice = nPrice_with_slippage(trade_nPrice, is_buy, slippage)
 
     elif bool(order_param & c.OF_LIMIT) and (
         (is_buy and (trade_nPrice <= order_nPrice))
@@ -234,7 +266,7 @@ def processing_order(
     ):
         order_param &= ~(c.OF_MARKET_TRIGER)
         order_param |= c.OF_MARKET
-        executed_nPrice = nPrice_with_slippage(trade_nPrice, is_buy, slippage)
+        nPrice = nPrice_with_slippage(trade_nPrice, is_buy, slippage)
 
     else:
         return
@@ -242,16 +274,21 @@ def processing_order(
     order_param &= ~(c.OF_NEW)
     order_param |= c.OF_FILLED
 
-    data_example[:] = (
-        trade_timestamp,
-        order_param,
-        order_id[0],
-        executed_nPrice,
-        order_nQty,
-    )
+    data_example[:] = trade_timestamp, order_param, order_id[0], nPrice, nQty
 
     order_id[0] += 1
     return data_example.view(uint8)
+
+
+@njit(cache=True)
+def proccesing_oco(
+    client_order_id: int,
+    order_book: NDArray[int64],
+    obRow: memoryview,
+) -> None:
+    mask = order_book[: obRow[0], c.OB_clientOrderID] == client_order_id
+    order_book[: obRow[0], c.OB_orderParam][mask] &= ~(c.OF_NEW)
+    order_book[: obRow[0], c.OB_orderParam][mask] |= c.OF_CANCELED
 
 
 @njit(cache=True)

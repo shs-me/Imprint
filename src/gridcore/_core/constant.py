@@ -95,11 +95,12 @@ CSD_VAH_FP: int = int(CachedStatesData.VAH_FP)
 CSD_VAL_FP: int = int(CachedStatesData.VAL_FP)
 CSD_ConstantCount: int = int(CachedStatesData._ConstantCount)
 
-# Active Orders
-OB_nPrice: int = int(OrderBook.nPrice)
-OB_nQty: int = int(OrderBook.nQty)
+# OrderBook
 OB_timestamp: int = int(OrderBook.timestamp)
 OB_orderParam: int = int(OrderBook.orderParam)
+OB_clientOrderID: int = int(OrderBook.clientOrderID)
+OB_nPrice: int = int(OrderBook.nPrice)
+OB_nQty: int = int(OrderBook.nQty)
 OB_ConstantCount: int = int(OrderBook._ConstantCount)
 
 # Trade Param
@@ -123,6 +124,7 @@ OF_LIMIT_TRIGER: int = int(OrderFlag.LIMIT_TRIGER)
 OF_NEW: int = int(OrderFlag.NEW)
 OF_FILLED: int = int(OrderFlag.FILLED)
 OF_CANCELED: int = int(OrderFlag.CANCELED)
+OF_OCO: int = int(OrderFlag.OCO)
 
 # Tool's setup
 ATR_PERIOD: int = 14
