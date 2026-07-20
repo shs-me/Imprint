@@ -7,7 +7,7 @@ from types import FunctionType
 
 from loguru import logger
 
-from .constant import CORE_LOG_PATH, DIRS_LIST
+from .constant import DIRS_LIST
 from .engine.mode.backtest.execution_sim_agent import run_execution_sim
 from .engine.mode.backtest.logic_sim_agent import run_logic_sim
 from .engine.mode.backtest.parsing_sim_agent import run_parsing_sim
@@ -21,7 +21,6 @@ from .engine.mode.real.wss_agent import run_wss
 from .settings import CoreResources
 from .utils.monitoring.main_manager import MainManager
 from .utils.monitoring.office import manager_office
-from .utils.tools import download_aggTrade_hist_daily_data, to_date
 
 
 class RunMain(CoreResources):
@@ -45,20 +44,6 @@ class RunMain(CoreResources):
         for _dir in DIRS_LIST:
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
-
-    def check_data(self) -> None:
-        if self.backtesting:
-            try:
-                startDate, endDate = to_date(
-                    [
-                        self.manager.cfgBacktesting.backtest_start_date,
-                        self.manager.cfgBacktesting.backtest_end_date,
-                    ]
-                )
-            except ValueError as e:
-                return logger.error(f"-- Core -- | {e}")
-
-            download_aggTrade_hist_daily_data(self.symbol, startDate, endDate)
 
     def init_funcs(self) -> None:
         if self.backtesting:
@@ -130,7 +115,6 @@ class RunMain(CoreResources):
         logger.info("-- Core -- | Started, init...")
         try:
             self.check_dirs()
-            self.check_data()
             self.init_funcs()
             self.init_trade_param()
 
@@ -149,12 +133,5 @@ class RunMain(CoreResources):
 
 @manager_office(main=True)
 def run_core(**kwargs) -> None:
-    logger.remove()
-    logger.add(
-        CORE_LOG_PATH,
-        rotation="100 MB",
-        enqueue=True,
-        format="{time:HH:mm:ss.SSS} | {level} | {message}",
-    )
     state = RunMain(**kwargs)
     state.run_core_engine()

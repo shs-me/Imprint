@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gridcore"
 version = "0.1.0"
-description = "GridCore: Backtesting, Real Trading, Market Replay"
+description = "GridCore"
 
 dynamic = ["dependencies"]
 

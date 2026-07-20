@@ -17,7 +17,7 @@ class LogicAgent(Logic):
         super().__init__(manager=manager, reader=reader)
 
     def alarm_clock(self) -> None:
-        while (self.reader.spare_flag[0] == 0) and (self.parsing_complete[0] == 0):
+        while (self.reader._spare_flag[0] == 0) and (self.parsing_complete[0] == 0):
             time.sleep(0)
 
     def check_lag(self) -> None:
@@ -27,7 +27,7 @@ class LogicAgent(Logic):
         pass
 
     def post_final_action(self) -> None:
-        self.manager.set_text(f"Count Signals: {self.reader.temp}")  # type: ignore
+        self.manager.set_text(f"Count Signals: {self.reader._count_send_signal}")
 
 
 @manager_office()

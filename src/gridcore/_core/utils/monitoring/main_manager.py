@@ -1,10 +1,13 @@
+import ctypes
+import os
+import signal
+import sys
 from datetime import date
 from multiprocessing.synchronize import Semaphore
 
 from loguru import logger
 
 from ... import configurations as cfg
-from ..tools import generate_ctrl_c_event
 from .base_manager import Manager
 from .status_codes import StatusCodes as scs
 
@@ -162,3 +165,10 @@ class MainManager(Manager):
             for p in procs_name
             if p in v["proc_name"]
         ]
+
+
+def generate_ctrl_c_event(pids: list[int]) -> None:
+    if sys.platform == "win32":
+        [ctypes.windll.kernel32.GenerateConsoleCtrlEvent(0, pid) for pid in pids]
+    elif sys.platform == "linux":
+        [os.kill(pid, signal.SIGINT) for pid in pids]

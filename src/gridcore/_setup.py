@@ -4,17 +4,22 @@ from ._core.engine.base.base_footprint_reader import BaseFootprintReader
 from ._core.main import run_core
 from ._core.settings import Timeframe
 from ._core.utils.handlers import error_handler
+from ._core.utils.tools import download_aggTrade_hist_daily_data, to_date
 
 __all__ = [
     "run",
     "Timeframe",
 ]
+from loguru import logger
+
+from ._core import constant as c
 
 
 @error_handler()
 def run(
     is_backtesting: bool = True,
     with_execution: bool = False,
+    with_visuailization: bool = False,
     algorithm: type[FootprintReader] = BaseFootprintReader,
     timeframe: Timeframe = Timeframe._5M,
     symbol: str = "DASHUSDT",
@@ -36,6 +41,25 @@ def run(
     save_footprint_headers: bool = False,
     save_algorithm_metadata: bool = False,
 ) -> None:
+    logger.remove()
+    logger.add(
+        c.CORE_LOG_PATH,
+        rotation="10 MB",
+        enqueue=True,
+        format="{time:HH:mm:ss.SSS} | {level} | {message}",
+    )
+
+    if is_backtesting:
+        try:
+            startDate, endDate = to_date([backtest_start_date, backtest_end_date])
+        except ValueError as e:
+            return logger.error(f"Run Core Failed | {e}")
+
+        download_aggTrade_hist_daily_data(symbol, startDate, endDate)
+
+    if with_visuailization:
+        pass
+
     kwargs = {}
     kwargs["backtesting"] = is_backtesting
     kwargs["execution"] = with_execution

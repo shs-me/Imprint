@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 
 import numpy as np
 from numba import njit
@@ -13,18 +13,28 @@ from .utils.fp_con import FPconverter
 
 
 class FootprintReader(ABC):
-    def __init__(self, manager: AgentManager, sync: Sync) -> None:
-        self.manager: AgentManager = manager
-        self.sync: Sync = sync
+    def __init__(
+        self,
+        manager: AgentManager,
+        sync: Sync,
+        find_patterns_in_update_bar: bool = False,
+        find_patterns_in_update_closed_bar: bool = False,
+        find_patterns_in_update_clusters: bool = False,
+    ) -> None:
+        self._manager: AgentManager = manager
+        self._sync: Sync = sync
+        self._fpiu_bar: bool = find_patterns_in_update_bar
+        self._fpiu_closed_bar: bool = find_patterns_in_update_closed_bar
+        self._fpiu_clusters: bool = find_patterns_in_update_clusters
 
         cfgFP = manager.cfgFootprint
-        self.space_flag: memoryview = cfgFP.space_flag
-        self.spare_flag: memoryview = cfgFP.spare_flag
-        self.base_nPrice: memoryview = cfgFP.base_price.cast("q")
-        self.base_timestamp: memoryview = cfgFP.base_timestamp.cast("q")
+        self._space_flag: memoryview = cfgFP.space_flag
+        self._spare_flag: memoryview = cfgFP.spare_flag
+        self._base_nPrice: memoryview = cfgFP.base_price.cast("q")
+        self._base_timestamp: memoryview = cfgFP.base_timestamp.cast("q")
 
         cfgMetrics = manager.cfgMetrics
-        self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
+        self._trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
         self._init_array()
         self.con: FPconverter = FPconverter(
             cfgFP=cfgFP,
@@ -33,11 +43,13 @@ class FootprintReader(ABC):
             price_prec=cfgMetrics.price_precision.cast("q")[0],
             qty_prec=cfgMetrics.qty_precision.cast("q")[0],
         )
-        self.defaultSpace: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
+
+        self._default_space: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
+        self._count_send_signal: int = 0
         self.amRow: int = 0
 
     def _init_array(self) -> None:
-        cfgFP = self.manager.cfgFootprint
+        cfgFP = self._manager.cfgFootprint
         self.fp: NDArray[int64] = np.ndarray(
             shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols),
             dtype=int64,
@@ -51,7 +63,7 @@ class FootprintReader(ABC):
             dtype=int64,
             buffer=cfgFP.headers,
         )
-        self.space: NDArray[int64] = np.ndarray(
+        self._space: NDArray[int64] = np.ndarray(
             (2, sc._ConstantCount), dtype=int64, buffer=cfgFP.space
         )
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
@@ -59,39 +71,69 @@ class FootprintReader(ABC):
             (c.CSD_ConstantCount,), dtype=int32
         )
 
-    def init_session(self) -> None:
+    def _init_session(self) -> None:
         self.fp_state.fill(0)
         self.last_idx: int = 0
         self.con.init_session(
-            price=self.base_nPrice[0], timestamp=self.base_timestamp[0]
+            price=self._base_nPrice[0], timestamp=self._base_timestamp[0]
         )
 
-    # Agent Methods's
-    def final_actions(self) -> None:
-        if self.manager.cfgFootprint.save_algorithm_metadata:
+    # Agent/Sync Methods's
+    def _final_actions(self) -> None:
+        if self._manager.cfgFootprint.save_algorithm_metadata:
             np.save(
                 c.ALGORITHM_METADATA_DUMP_PATH, self.algorithm_metadata[: self.amRow, :]
             )
 
+    def send_signal(
+        self,
+        is_market: bool,
+        is_long: bool,
+        is_buy: bool,
+        idy: int64,
+        idx: int | None = None,
+        timestamp: int | None = None,
+        pass_lag: bool = True,
+    ) -> None:
+        nPrice: int = int(self.con.to_nPrice(idy))
+        _idx: int = idx if (idx is not None) else self.last_idx
+        _ms: int = (
+            timestamp if (timestamp is not None) else int(self.con.lastTradeTime(_idx))
+        )
+        self._sync.send_signal(
+            nPrice=nPrice,
+            time_ms=_ms,
+            is_long=is_long,
+            is_buy=is_buy,
+            is_market=is_market,
+            pass_lag=pass_lag,
+        )
+        self._count_send_signal += 1
+
     # - - Footprint Analysis/Update Methods - -
-    def update_states(self) -> None:
-        oldBuf: int = 1 if (self.space_flag[0] == 0) else 0
-        idYmin, idXmin, idYmax, idXmax = self.space[oldBuf, :]
-        self.update_clusters(idYmin, idYmax, idXmin, idXmax)
+    def _update_states(self) -> None:
+        oldBuf: int = 1 if (self._space_flag[0] == 0) else 0
+        idYmin, idXmin, idYmax, idXmax = self._space[oldBuf, :]
+        self._update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
             if self.con.volume(idx) > 0:
                 if idx > self.last_idx:
-                    self.update_closed_bar_and_fp()
-                    self.trade_readed_time[0] = int(self.con.lastTradeTime(idXmax - 1))
+                    self._update_closed_bar_and_fp()
+                    self._trade_readed_time[0] = int(self.con.lastTradeTime(idXmax - 1))
                     self.last_idx = idx
 
-                self.update_bar(idYmin, idYmax, idxBid, idxAsk)
+                self._update_bar(idYmin, idYmax, idxBid, idxAsk)
 
-        self.space[oldBuf, :] = self.defaultSpace
+        self._space[oldBuf, :] = self._default_space
 
-    def update_clusters(
-        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
+    def _update_clusters(
+        self,
+        idYmin: int64,
+        idYmax: int64,
+        idXmin: int64,
+        idXmax: int64,
+        in_update_clusters: bool = True,
     ) -> None:
         _update_clusters_states(
             idYmin=idYmin,
@@ -103,8 +145,14 @@ class FootprintReader(ABC):
             fp=self.fp,
             fp_state=self.fp_state,
         )
+        if self._fpiu_clusters:
+            if in_update_clusters:
+                self.find_patterns(in_update_clusters=in_update_clusters)
 
-    def update_closed_bar_and_fp(self) -> None:
+    def _update_closed_bar_and_fp(
+        self,
+        in_update_closed_bar: bool = True,
+    ) -> None:
         _update_closed_bar_and_fp_states(
             lidx=self.last_idx,
             idxVP=self.con.idxVP,
@@ -116,9 +164,17 @@ class FootprintReader(ABC):
             nBasePrice=self.con.nBasePrice,
             center=self.con.center,
         )
+        if self._fpiu_closed_bar:
+            if in_update_closed_bar:
+                self.find_patterns(in_update_closed_bar=in_update_closed_bar)
 
-    def update_bar(
-        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
+    def _update_bar(
+        self,
+        idYmin: int64,
+        idYmax: int64,
+        idxBid: int,
+        idxAsk: int,
+        in_update_bar: bool = True,
     ) -> None:
         _update_bar_states(
             idYmin=idYmin,
@@ -131,12 +187,57 @@ class FootprintReader(ABC):
             nBasePrice=self.con.nBasePrice,
             center=self.con.center,
         )
+        if self._fpiu_bar:
+            if in_update_bar:
+                self.find_patterns(in_update_bar=in_update_bar)
+
+    @abstractmethod
+    def find_patterns(
+        self,
+        in_update_bar: bool = False,
+        in_update_closed_bar: bool = False,
+        in_update_clusters: bool = False,
+    ) -> None:
+        pass
+
+    def bar_state_mask(self, idxBid: int) -> NDArray[int32]:
+        bar_flags = (
+            c.SF_OPEN
+            | c.SF_HIGH
+            | c.SF_LOW
+            | c.SF_CLOSE
+            | c.SF_POC_BAR
+            | c.SF_VAH_BAR
+            | c.SF_VAL_BAR
+        )
+        bid_ask_flags = (
+            c.SF_DELTA_DOMINATION
+            | c.SF_IMBALANCE
+            | c.SF_ZERO_PRINT
+            | c.SF_FINISHED_AUCTION
+            | c.SF_UNFINISHED_AUCTION
+        )
+        mask = bar_flags | bid_ask_flags
+        idYmin: int64 = self.con.to_idy(self.con.highNprice(idxBid))
+        idyMax: int64 = self.con.to_idy(self.con.lowNprice(idxBid))
+        return self.fp_state[idYmin : idyMax + 1, idxBid : idxBid + 2] & mask
+
+    def fp_state_mask(self, idYmin: int64, idYmax: int64) -> NDArray[int32]:
+        state = c.SF_FINISHED_AUCTION | c.SF_UNFINISHED_AUCTION
+        return self.fp_state[idYmin:idYmax, self.con.idxVP] & state
 
 
 class BaseFootprintReader(FootprintReader):
     def __init__(self, manager: AgentManager, sync: Sync) -> None:
         super().__init__(manager, sync)
-        self.temp = 0
+
+    def find_patterns(
+        self,
+        in_update_bar: bool = False,
+        in_update_closed_bar: bool = False,
+        in_update_clusters: bool = False,
+    ) -> None:
+        pass
 
 
 @njit(cache=True)
@@ -153,7 +254,6 @@ def _update_clusters_states(
     # - - -
     # Clear State's
     fp_state[idYmin:idYmax, idXmin:idXmax] &= ~(c.SF_BIG_TRADE)
-
     # - - -
     # Clear State's
     state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP

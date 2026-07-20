@@ -25,7 +25,7 @@ class Logic(ABC):
     @error_handler(set_status_code=True)
     def run_logic_engine(self) -> None:
         # LocalLinks
-        reader, spareFlag = self.reader, self.reader.spare_flag
+        reader, spareFlag = self.reader, self.reader._spare_flag
         proc_status, task_status = self.proc_status, self.task_status
         alarm_clock = self.alarm_clock
         # - - -
@@ -49,9 +49,9 @@ class Logic(ABC):
 
                 if spareFlag[0] == 1:
                     if init_session is False:
-                        init_session = reader.init_session()
+                        init_session = reader._init_session()
 
-                    reader.update_states()
+                    reader._update_states()
                     self.check_lag()
                     self.post_update()
                     spareFlag[0] = 0
@@ -74,7 +74,7 @@ class Logic(ABC):
     def final_actions(self) -> None:
         self.logic_complete[0] = 1
         self.post_final_action()
-        self.reader.final_actions()
+        self.reader._final_actions()
 
     @abstractmethod
     def post_final_action(self) -> None:

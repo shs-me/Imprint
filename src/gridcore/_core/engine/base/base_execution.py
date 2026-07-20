@@ -85,6 +85,7 @@ class Execution(ABC):
 
     def check_signal_buf(self) -> None:
         nPrice, timestamp, order_param = self.get_signal_data()
+        self.check_user_data_buf()
         self.pre_execute_signal_action(timestamp)
         self.check_user_data_buf()
         if self.con.lossNbalanceSafeLimit:
