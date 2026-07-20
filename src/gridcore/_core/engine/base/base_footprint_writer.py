@@ -35,20 +35,21 @@ class FootprintWriter(ABC):
 
         cfgMetrics = manager.cfgMetrics
         self.time_start_reading: memoryview = cfgMetrics.time_start_reading.cast("q")
+
         self._init_array()
+
         self.con: FPconverter = FPconverter(
             cfgFP=cfgFP,
             footprint=self.footprint,
             headers=self.headers,
-            price_prec=cfgMetrics.price_precision.cast("q")[0],
-            qty_prec=cfgMetrics.qty_precision.cast("q")[0],
+            price_prec=manager.cfgCoin.price_prec,
+            qty_prec=manager.cfgCoin.qty_prec,
         )
-
         self.last_idx: memoryview = memoryview(bytearray(8)).cast("q")
         self.counterTicks: memoryview = memoryview(bytearray(8)).cast("Q")
         self.defaultSpace: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
         self.base_fp_dump_path: str = (
-            f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.symbol.upper()}"
+            f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.cfgCoin.symbol.upper()}"
         )
 
     def _init_array(self) -> None:

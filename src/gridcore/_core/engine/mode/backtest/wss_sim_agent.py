@@ -42,7 +42,7 @@ class WssSimAgent(Wss):
 
         cfgBT = manager.cfgBacktesting
         self.prepper = DataPrepper(
-            symbol=manager.symbol,
+            symbol=manager.cfgCoin.symbol,
             start_date=cfgBT.backtest_start_date,
             end_date=cfgBT.backtest_end_date,
         )

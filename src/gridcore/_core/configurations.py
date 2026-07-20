@@ -47,8 +47,6 @@ class cfgBacktesting(Configuration):
         min_order_size: float = 5.0,
         taker_commission: float = 0.005,
         maker_commission: float = 0.002,
-        tick_size: str = "0.01",
-        lot_size: str = "0.001",
         backtest_start_date: str = "2026-01-01",
         backtest_end_date: str = "2026-01-01",
     ) -> None:
@@ -56,8 +54,6 @@ class cfgBacktesting(Configuration):
         self.min_order_size: float = min_order_size
         self.taker_commission: float = taker_commission
         self.maker_commission: float = maker_commission
-        self.tick_size: str = tick_size
-        self.lot_size: str = lot_size
         self.backtest_start_date: str = backtest_start_date
         self.backtest_end_date: str = backtest_end_date
 
@@ -88,6 +84,22 @@ class cfgAccount(Configuration):
         self.latency: int = latency_ms
         self.analysis_safe_lag_microsecond: int = analysis_safe_lag_microsecond
         self.save_orders_history: bool = save_orders_history
+
+
+class cfgCoin(Configuration):
+    def __init__(self, symbol: str, tick_size: str, lot_size: str) -> None:
+        self.symbol: str = symbol
+        self.tick_size: str = tick_size
+        self.lot_size: str = tick_size
+
+        self.price_prec: int = (
+            len(self.tick_size.split(sep=".")[-1]) if "." in self.tick_size else 0
+        )
+        self.qty_prec: int = (
+            len(self.lot_size.split(sep=".")[-1]) if "." in self.lot_size else 0
+        )
+        self.price_mult: int = 10**self.price_prec
+        self.qty_mult: int = 10**self.qty_prec
 
 
 class cfgSHMSegments(Configuration):
@@ -164,17 +176,9 @@ class cfgMetrics(cfgSHMSegments):
             self.status[1],
             self.status[1] + (self.count_procs * self.text_size),
         )
-        self.tick_size: Any = self.text[1], self.text[1] + INT64
-        self.lot_size: Any = self.tick_size[1], self.tick_size[1] + INT64
-        self.price_precision: Any = self.lot_size[1], self.lot_size[1] + INT64
-        self.qty_precision: Any = (
-            self.price_precision[1],
-            self.price_precision[1] + INT64,
-        )
-
         self.time_start_reading: Any = (
-            self.qty_precision[1],
-            self.qty_precision[1] + INT64,
+            self.text[1],
+            self.text[1] + INT64,
         )
         self.trade_readed_time: Any = (
             self.time_start_reading[1],

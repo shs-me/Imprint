@@ -69,15 +69,13 @@ class MatchingEngine:
 
         self._init_array()
 
-        cfgMetrics = manager.cfgMetrics
-        self.price_prec: memoryview = cfgMetrics.price_precision.cast("q")
-        self.dfm_complete: memoryview = cfgMetrics.dfm_comlpete
+        self.dfm_complete: memoryview = manager.cfgMetrics.dfm_comlpete
 
         self.prepper: DataPrepper = DataPrepper(
-            symbol=manager.symbol,
+            symbol=manager.cfgCoin.symbol,
             start_date=manager.cfgBacktesting.backtest_start_date,
             end_date=manager.cfgBacktesting.backtest_end_date,
-            price_mult=10 ** self.price_prec[0],
+            price_mult=manager.cfgCoin.price_mult,
             is_complete=self.dfm_complete,
         )
         self.prepper.start()

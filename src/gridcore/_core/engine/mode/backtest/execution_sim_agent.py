@@ -5,22 +5,20 @@ from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
 from ...base.base_execution import Execution
 from .matching_engine import MatchingEngine
-from .rest_sim_agent import RestSimAgent
 
 
 class ExecutionAgent(Execution):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
-        self.rest = RestSimAgent(self.symbol, manager.cfgBacktesting)
         self.me = MatchingEngine(manager)
         self.con.init_session(
-            startBalance=self.rest.get_balance(),
-            minOrderSize=self.rest.get_min_order_size_usdt(),
-            takerCommission=self.rest.get_commission(is_maker=False),
-            makerCommission=self.rest.get_commission(is_maker=True),
+            startBalance=manager.cfgBacktesting.balance,
+            minOrderSize=manager.cfgBacktesting.min_order_size,
+            takerCommission=manager.cfgBacktesting.taker_commission,
+            makerCommission=manager.cfgBacktesting.maker_commission,
         )
-        self.open_position = 0
+        self.count_open_position = 0
 
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
@@ -50,7 +48,7 @@ class ExecutionAgent(Execution):
             nPrice=nPrice,
             nQty=nQty,
         )
-        self.open_position += 1
+        self.count_open_position += 1
 
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
         get_data: memoryview = user_data_raw_buf.cast("q")
@@ -116,7 +114,7 @@ class ExecutionAgent(Execution):
                 f"Short Open Qty: {self.con.shortNqty / self.con.qtyMult} \n"
                 f"Count Orders in History: {self.tm.ohWid[0]} \n"
                 f"Count Active Orders: {self.me.obRow[0]} \n"
-                f"Count Open Positions: {self.open_position}"
+                f"Count Open Positions: {self.count_open_position}"
             )
         )
 

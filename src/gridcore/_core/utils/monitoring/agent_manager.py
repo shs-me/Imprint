@@ -10,6 +10,7 @@ from .status_codes import StatusCodes as scs
 class AgentManager(Manager):
     cfgBacktesting: cfg.cfgBacktesting
     cfgAccount: cfg.cfgAccount
+    cfgCoin: cfg.cfgCoin
     cfgFootprint: cfg.cfgFootprint
     cfgMetrics: cfg.cfgMetrics
     cfgDataStream: cfg.cfgDataStream
@@ -23,7 +24,6 @@ class AgentManager(Manager):
         configs: list,
         proc_id: int,
         task_id: int,
-        symbol: str,
         sc_sem: Semaphore,
     ) -> None:
         super().__init__(segments, shm_buf, configs)
@@ -32,7 +32,6 @@ class AgentManager(Manager):
         self._task_id: int = task_id
         self._sc_sem: Semaphore = sc_sem
 
-        self.symbol: str = symbol
         self.task_status: memoryview = self.cfgMetrics.status.cast("q")[
             task_id : task_id + 1
         ]

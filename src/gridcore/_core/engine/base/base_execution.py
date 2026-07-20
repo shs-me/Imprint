@@ -11,7 +11,6 @@ class Execution(ABC):
     def __init__(self, manager: AgentManager) -> None:
         self.manager: AgentManager = manager
 
-        self.symbol: str = manager.symbol
         self.set_proc_sc = manager.set_proc_sc
         self.check_base_task = manager.check_base_task
         self.task_status, self.proc_status = manager.task_status, manager.proc_status
@@ -37,10 +36,12 @@ class Execution(ABC):
         cfgMetrics = manager.cfgMetrics
         self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
         self.logic_complete: memoryview = cfgMetrics.logic_complete
+
+        self.symbol: str = manager.cfgCoin.symbol
         self.con: TradeConverter = TradeConverter(
             cfgAcount=cfgAC,
-            price_prec=cfgMetrics.price_precision.cast("q")[0],
-            qty_prec=cfgMetrics.qty_precision.cast("q")[0],
+            price_prec=manager.cfgCoin.price_prec,
+            qty_prec=manager.cfgCoin.qty_prec,
         )
         self.tm: TradeManager = TradeManager(converter=self.con)
 

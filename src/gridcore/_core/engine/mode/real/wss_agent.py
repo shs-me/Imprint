@@ -13,9 +13,10 @@ from ...base.base_wss import Wss
 class WssAgent(Wss):
     def __init__(self, manager: AgentManager, wake_up_parser: Event) -> None:
         super().__init__(manager=manager)
+
         self.wake_up_parser: Event = wake_up_parser
 
-        self.symbol: str = manager.symbol
+        self.symbol: str = manager.cfgCoin.symbol
         self.wss_aggTrades_url: str = (
             f"{WS_STREAMS_PROD_URL}/ws/{self.symbol.lower()}@aggTrade"
         )

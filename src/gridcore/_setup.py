@@ -1,6 +1,9 @@
+import importlib.util
+
 from . import FootprintReader
 from ._core import configurations as con
 from ._core.engine.base.base_footprint_reader import BaseFootprintReader
+from ._core.engine.mode.real.rest_agent import RestAgent
 from ._core.main import run_core
 from ._core.settings import Timeframe
 from ._core.utils.handlers import error_handler
@@ -19,7 +22,8 @@ from ._core import constant as c
 def run(
     is_backtesting: bool = True,
     with_execution: bool = False,
-    with_visuailization: bool = False,
+    with_visuailization_chart: bool = False,
+    with_visuailization_statistic: bool = False,
     algorithm: type[FootprintReader] = BaseFootprintReader,
     timeframe: Timeframe = Timeframe._5M,
     symbol: str = "DASHUSDT",
@@ -57,20 +61,19 @@ def run(
 
         download_aggTrade_hist_daily_data(symbol, startDate, endDate)
 
-    if with_visuailization:
-        pass
+    else:
+        rest = RestAgent(symbol)
+        sim_tick_size = rest.get_tick_size()
+        sim_lot_size = rest.get_lot_size()
 
     kwargs = {}
     kwargs["backtesting"] = is_backtesting
     kwargs["execution"] = with_execution
-    kwargs["symbol"] = symbol
     kwargs["algorithm_module"] = algorithm.__module__
     kwargs["algorithm_package"] = algorithm.__name__
 
     args = (
         con.cfgBacktesting(
-            tick_size=sim_tick_size,
-            lot_size=sim_lot_size,
             min_order_size=sim_min_order_size,
             taker_commission=sim_taker_commission,
             maker_commission=sim_maker_commission,
@@ -94,9 +97,35 @@ def run(
             SL_dev=stop_loss_deviation,
             save_orders_history=save_orders_history,
         ),
+        con.cfgCoin(
+            symbol=symbol,
+            tick_size=sim_tick_size,
+            lot_size=sim_lot_size,
+        ),
     )
 
     for obj in args:
         kwargs[obj.__class__.__name__] = obj
 
     run_core(**kwargs)
+
+    if with_visuailization_chart or with_visuailization_statistic:
+        vis_spec = importlib.util.find_spec("gridcore_visualization")
+        if vis_spec is not None:
+            vis_module = importlib.import_module("gridcore_visualization")
+            vis_module.run(
+                symbol=symbol,
+                timeframe=timeframe,
+                price_prec=args[3].price_prec,
+                qty_prec=args[3].qty_prec,
+                scale=args[2].scale_prec,
+                start_date=backtest_start_date,
+                end_date=backtest_end_date,
+                footprint_headers_path=c.BASE_FOOTPRINT_DUMP_PATH,
+                start_balance=sim_balance,
+                orders_history_path=c.ORDERS_HISTORY_DUMP_PATH,
+                run_chart_visualization=with_visuailization_chart,
+                run_statistic_visualization=with_visuailization_statistic,
+            )
+        else:
+            logger.warning('"gridcore-visualization" package not found')

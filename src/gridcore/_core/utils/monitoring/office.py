@@ -73,7 +73,6 @@ def agent_init(main: bool, shm_buf: memoryview, **kwargs):
             configs=configs,
             shm_buf=shm_buf,
             sc_sem=kwargs["sc_sem"],
-            symbol=kwargs["symbol"],
         )
     return manager
 
