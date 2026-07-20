@@ -90,7 +90,7 @@ class cfgCoin(Configuration):
     def __init__(self, symbol: str, tick_size: str, lot_size: str) -> None:
         self.symbol: str = symbol
         self.tick_size: str = tick_size
-        self.lot_size: str = tick_size
+        self.lot_size: str = lot_size
 
         self.price_prec: int = (
             len(self.tick_size.split(sep=".")[-1]) if "." in self.tick_size else 0
