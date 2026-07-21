@@ -55,7 +55,7 @@ class MatchingEngine:
 
         cfgAC = manager.cfgAccount
         self.slippage: int = cfgAC.slipage
-        
+
         cfgUS = manager.cfgUserStream
         self.cell_amount: int = cfgUS.cell_amount
         self.data: memoryview = cfgUS.data
@@ -234,10 +234,10 @@ def _matching(
                 client_in_priority = True
             else:
                 order_row += 1
-                
-        if client_in_priority: 
+
+        if client_in_priority:
             break
-            
+
     return True
 
 

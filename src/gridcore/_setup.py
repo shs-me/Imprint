@@ -22,14 +22,15 @@ from ._core import constant as c
 def run(
     is_backtesting: bool = True,
     with_execution: bool = False,
+    only_visualization: bool = False,
     with_visuailization_chart: bool = False,
     with_visuailization_statistic: bool = False,
     algorithm: type[FootprintReader] = BaseFootprintReader,
     timeframe: Timeframe = Timeframe._5M,
     symbol: str = "DASHUSDT",
     sim_balance: float = 5000.0,
-    sim_taker_commission: float = 0.005,
-    sim_maker_commission: float = 0.002,
+    sim_taker_commission: float = 0.0005,
+    sim_maker_commission: float = 0.0002,
     sim_min_order_size: float = 5,
     sim_tick_size: str = "0.01",
     sim_lot_size: str = "0.001",
@@ -107,7 +108,8 @@ def run(
     for obj in args:
         kwargs[obj.__class__.__name__] = obj
 
-    run_core(**kwargs)
+    if not only_visualization:
+        run_core(**kwargs)
 
     if with_visuailization_chart or with_visuailization_statistic:
         vis_spec = importlib.util.find_spec("gridcore_visualization")

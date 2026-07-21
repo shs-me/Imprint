@@ -45,8 +45,8 @@ class cfgBacktesting(Configuration):
         self,
         balance: float = 100.0,
         min_order_size: float = 5.0,
-        taker_commission: float = 0.005,
-        maker_commission: float = 0.002,
+        taker_commission: float = 0.0005,
+        maker_commission: float = 0.0002,
         backtest_start_date: str = "2026-01-01",
         backtest_end_date: str = "2026-01-01",
     ) -> None:
