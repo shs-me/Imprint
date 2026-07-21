@@ -13,7 +13,7 @@ from .status_codes import StatusCodes as scs
 
 
 class MainManager(Manager):
-    cfgBacktesting: cfg.cfgBacktesting
+    cfgSetup: cfg.cfgSetup
     cfgMetrics: cfg.cfgMetrics
 
     def __init__(

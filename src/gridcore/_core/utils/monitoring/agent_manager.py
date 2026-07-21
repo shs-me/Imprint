@@ -8,7 +8,7 @@ from .status_codes import StatusCodes as scs
 
 
 class AgentManager(Manager):
-    cfgBacktesting: cfg.cfgBacktesting
+    cfgSetup: cfg.cfgSetup
     cfgAccount: cfg.cfgAccount
     cfgCoin: cfg.cfgCoin
     cfgFootprint: cfg.cfgFootprint

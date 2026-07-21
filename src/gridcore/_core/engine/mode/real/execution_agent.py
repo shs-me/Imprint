@@ -10,15 +10,9 @@ class ExecutionAgent(Execution):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager=manager)
 
-        self.execution_event = execution_event
+        self.execution_event: Event = execution_event
 
         self.rest: RestAgent = RestAgent(symbol=self.symbol)
-        self.con.init_session(
-            startBalance=self.rest.get_balance(),
-            minOrderSize=self.rest.get_min_order_size_usdt(),
-            takerCommission=self.rest.get_commission(is_maker=False),
-            makerCommission=self.rest.get_commission(is_maker=True),
-        )
 
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview

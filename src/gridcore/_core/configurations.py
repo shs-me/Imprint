@@ -40,20 +40,12 @@ class Configuration(ABC):
     pass
 
 
-class cfgBacktesting(Configuration):
+class cfgSetup(Configuration):
     def __init__(
         self,
-        balance: float = 100.0,
-        min_order_size: float = 5.0,
-        taker_commission: float = 0.0005,
-        maker_commission: float = 0.0002,
         backtest_start_date: str = "2026-01-01",
         backtest_end_date: str = "2026-01-01",
     ) -> None:
-        self.balance: float = balance
-        self.min_order_size: float = min_order_size
-        self.taker_commission: float = taker_commission
-        self.maker_commission: float = maker_commission
         self.backtest_start_date: str = backtest_start_date
         self.backtest_end_date: str = backtest_end_date
 
@@ -62,24 +54,32 @@ class cfgAccount(Configuration):
     def __init__(
         self,
         leverage: int = 20,
-        max_lock_balance: float = 0.1,
-        max_loss_balance: float = 0.2,
-        entry_qty: float = 0.01,
-        TP_dev: float = 0.05,
-        SL_dev: float = 0.05,
-        slippage: float = 0.0005,
+        balance: float = 100.0,
+        min_order_size: float = 5.0,
+        taker_commission: str = "0.05%",
+        maker_commission: str = "0.02%",
+        max_lock_balance: str = "1%",
+        max_loss_balance: str = "1%",
+        entry_qty: str = "1%",
+        TP_dev: str = "5%",
+        SL_dev: str = "5%",
+        slippage: str = "0.05%",
         scale_prec: int = 15,
         latency_ms: int = 100,
         analysis_safe_lag_microsecond: int = 50_000,
         save_orders_history: bool = False,
     ) -> None:
         self.leverage: int = leverage
-        self.max_lock_balance: int = round(max_lock_balance * 1000)
-        self.max_loss_balance: int = round(max_loss_balance * 1000)
-        self.entry_qty: int = round(entry_qty * 1000)
-        self.tp_dev: int = round(TP_dev * 1000)
-        self.sl_dev: int = round(SL_dev * 1000)
-        self.slipage: int = round(slippage * 10000)
+        self.balance: float = balance
+        self.min_order_size: float = min_order_size
+        self.taker_commission: int = percent_to_int(taker_commission)
+        self.maker_commission: int = percent_to_int(maker_commission)
+        self.max_lock_balance: int = percent_to_int(max_lock_balance)
+        self.max_loss_balance: int = percent_to_int(max_loss_balance)
+        self.entry_qty: int = percent_to_int(entry_qty)
+        self.tp_dev: int = percent_to_int(TP_dev)
+        self.sl_dev: int = percent_to_int(SL_dev)
+        self.slipage: int = percent_to_int(slippage)
         self.scale_prec: int = scale_prec
         self.latency: int = latency_ms
         self.analysis_safe_lag_microsecond: int = analysis_safe_lag_microsecond
@@ -217,3 +217,7 @@ class cfgDataStream(cfgSHMSegments, BaseRingBuf):
             self, data_size=256, data_header_size=1, cell_amount=10_000
         )
         self.safe_lag: int = int(self.cell_amount * 0.9)
+
+
+def percent_to_int(value: str) -> int:
+    return round(float(value.split("%")[0]) / 100 * 10_000)

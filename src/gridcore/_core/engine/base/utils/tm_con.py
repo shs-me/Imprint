@@ -21,16 +21,16 @@ class TradeConverter:
         self._maxLockNbalance: int = self.cfgAC.max_lock_balance
         self._maxLossNbalance: int = self.cfgAC.max_loss_balance
         self._scalePrec: int = self.cfgAC.scale_prec
+        self.scale: int = 10**self._scalePrec
         self.latency: int = self.cfgAC.latency
         self.leverage: int = self.cfgAC.leverage
+        self.startNbalance: int = round(self.cfgAC.balance * self.scale)
+        self.minOrderNsize: int = round(self.cfgAC.min_order_size * self.scale)
+        self.takerNcommission: int = self.cfgAC.taker_commission
+        self.makerNcommission: int = self.cfgAC.maker_commission
 
-        self.scale: int = round(10**self._scalePrec)
-        self.startNbalance: int = 0
         self._nBalance: int = 0
         self._lockedNbalance: int = 0
-        self.minOrderNsize: int = 0
-        self.takerNcommission: int = 0
-        self.makerNcommission: int = 0
         self._unrealizedNpnl: int = 0
         self.longUnrealizedNpnl: int = 0
         self.shortUnrealizedNpnl: int = 0
@@ -39,18 +39,6 @@ class TradeConverter:
         self.longEntryNprice: int = 0
         self.shortNqty: int = 0
         self.shortEntryNprice: int = 0
-
-    def init_session(
-        self,
-        startBalance: float,
-        minOrderSize: float,
-        takerCommission: float,
-        makerCommission: float,
-    ) -> None:
-        self.startNbalance = round(startBalance * self.scale)
-        self.minOrderNsize = round(minOrderSize * self.scale)
-        self.takerNcommission = round(takerCommission * 10_000)
-        self.makerNcommission = round(makerCommission * 10_000)
 
         self.nBalance = self.startNbalance
 
@@ -62,7 +50,13 @@ class TradeConverter:
     def nBalance(self, nValue: int) -> None:
         self._nBalance += nValue
         if not self.lossNbalanceSafeLimit:
-            raise RuntimeError
+            raise RuntimeError(
+                (
+                    f"Loss balance > safe limit "
+                    f"Start balance: {self.startNbalance / self.scale} "
+                    f"Balance: {self.nBalance / self.scale}"
+                )
+            )
 
     @property
     def lockedNbalance(self) -> int:
@@ -79,16 +73,16 @@ class TradeConverter:
     @property
     def lossNbalanceSafeLimit(self) -> bool:
         return self.nBalance > (
-            self.startNbalance - (self.startNbalance * self._maxLossNbalance // 1000)
+            self.startNbalance - (self.startNbalance * self._maxLossNbalance // 10_000)
         )
 
     @property
     def lockedNbalanceSafeLimit(self) -> bool:
-        return self.lockedNbalance < (self._nBalance * self._maxLockNbalance // 1000)
+        return self.lockedNbalance < (self._nBalance * self._maxLockNbalance // 10_000)
 
     @property
     def nominalEntryNqty(self) -> int:
-        return self.availableNbalance * self._entryQty // 1000
+        return self.availableNbalance * self._entryQty // 10_000
 
     @property
     def nominalEntryNqtyWithLeverage(self) -> int | None:
@@ -105,11 +99,11 @@ class TradeConverter:
         return self.last_order_id
 
     def TPdevNprice(self, nPrice: int, is_long: bool) -> int:
-        tpTicks: int = nPrice * self._tpDev // 1000
+        tpTicks: int = nPrice * self._tpDev // 10_000
         return nPrice + (tpTicks if is_long else -tpTicks)
 
     def SLdevNprice(self, nPrice: int, is_long: bool) -> int:
-        slTicks: int = nPrice * self._slDev // 1000
+        slTicks: int = nPrice * self._slDev // 10_000
         return nPrice + (-slTicks if is_long else slTicks)
 
     def to_nMargin(self, nPrice: int, nQty: int) -> int:
@@ -143,9 +137,11 @@ class TradeConverter:
             self.shortUnrealizedNpnl = 0
             self.longUnrealizedNpnl = 0
 
-    def to_nCommission(self, nQty: int, is_maker: bool) -> int:
+    def to_nCommission(self, nPrice: int, nQty: int, is_maker: bool) -> int:
         rate: int = self.makerNcommission if is_maker else self.takerNcommission
-        commission: float = (nQty / self.qtyMult) * (rate / 10_000)
+        commission: float = (
+            ((nPrice / self.priceMult) * (nQty / self.qtyMult)) * rate / 10_000
+        )
         return round(commission * self.scale)
 
     def to_roi(self, nPnl: int, nMargin: int) -> float:

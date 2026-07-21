@@ -11,14 +11,8 @@ class ExecutionAgent(Execution):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
-        self.me = MatchingEngine(manager)
-        self.con.init_session(
-            startBalance=manager.cfgBacktesting.balance,
-            minOrderSize=manager.cfgBacktesting.min_order_size,
-            takerCommission=manager.cfgBacktesting.taker_commission,
-            makerCommission=manager.cfgBacktesting.maker_commission,
-        )
-        self.count_open_position = 0
+        self.me: MatchingEngine = MatchingEngine(manager)
+        self.count_open_position: int = 0
 
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
@@ -61,7 +55,9 @@ class ExecutionAgent(Execution):
 
         is_long, is_buy = (bool(order_param & c.OF_LONG), bool(order_param & c.OF_BUY))
         if bool(order_param & c.OF_FILLED):
-            nCommission = self.con.to_nCommission(nQty, bool(order_param & c.OF_LIMIT))
+            nCommission = self.con.to_nCommission(
+                nPrice, nQty, bool(order_param & c.OF_LIMIT)
+            )
             is_open = (is_long and is_buy) or (not is_long and not is_buy)
             self.tm.update_position(nPrice, nQty, nCommission, is_open, is_long)
             if is_open:

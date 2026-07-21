@@ -40,11 +40,11 @@ class WssSimAgent(Wss):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
-        cfgBT = manager.cfgBacktesting
+        cfgSetup = manager.cfgSetup
         self.prepper = DataPrepper(
             symbol=manager.cfgCoin.symbol,
-            start_date=cfgBT.backtest_start_date,
-            end_date=cfgBT.backtest_end_date,
+            start_date=cfgSetup.backtest_start_date,
+            end_date=cfgSetup.backtest_end_date,
         )
         self.prepper.start()
 

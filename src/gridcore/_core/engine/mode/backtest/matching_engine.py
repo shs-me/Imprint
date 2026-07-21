@@ -73,8 +73,8 @@ class MatchingEngine:
 
         self.prepper: DataPrepper = DataPrepper(
             symbol=manager.cfgCoin.symbol,
-            start_date=manager.cfgBacktesting.backtest_start_date,
-            end_date=manager.cfgBacktesting.backtest_end_date,
+            start_date=manager.cfgSetup.backtest_start_date,
+            end_date=manager.cfgSetup.backtest_end_date,
             price_mult=manager.cfgCoin.price_mult,
             is_complete=self.dfm_complete,
         )
