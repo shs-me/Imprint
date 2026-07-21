@@ -234,7 +234,10 @@ def _matching(
                 client_in_priority = True
             else:
                 order_row += 1
-
+                
+        if client_in_priority: 
+            break
+            
     return True
 
 
