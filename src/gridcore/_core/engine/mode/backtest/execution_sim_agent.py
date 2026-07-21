@@ -65,7 +65,7 @@ class ExecutionAgent(Execution):
             is_open = (is_long and is_buy) or (not is_long and not is_buy)
             self.tm.update_position(nPrice, nQty, nCommission, is_open, is_long)
             if is_open:
-                tp_sl_timestamp: int = timestamp + self.con.latency
+                tp_sl_timestamp: int = timestamp + (2* self.con.latency)
 
                 tp_nPrice: int = self.con.TPdevNprice(nPrice, is_long)
                 tp_order_param: int = 0
