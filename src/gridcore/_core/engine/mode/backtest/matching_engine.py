@@ -55,7 +55,7 @@ class MatchingEngine:
 
         cfgAC = manager.cfgAccount
         self.slippage: int = cfgAC.slipage
-
+        
         cfgUS = manager.cfgUserStream
         self.cell_amount: int = cfgUS.cell_amount
         self.data: memoryview = cfgUS.data
@@ -166,6 +166,7 @@ def _matching(
     slippage: int,
 ) -> bool:
     max_row: int = dfm.shape[0]
+    client_in_priority: bool = False
     while time_readed_trade[0] < timestamp:
         row: int = dfmRid[0]
 
@@ -230,6 +231,7 @@ def _matching(
                     cell_amount=cell_amount,
                 )
                 compact_order_book(order_row, obRow, order_book)
+                client_in_priority = True
             else:
                 order_row += 1
 
