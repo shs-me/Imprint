@@ -12,7 +12,7 @@ class SyncTool(Sync):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager)
 
-        self.execution_event = execution_event
+        self.execution_event: Event = execution_event
 
     def sync_with_execution(self) -> None:
         if self.execution_event.is_set() is False:

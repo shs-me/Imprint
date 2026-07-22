@@ -39,7 +39,8 @@ class Execution(ABC):
 
         self.symbol: str = manager.cfgCoin.symbol
         self.con: TradeConverter = TradeConverter(
-            cfgAcount=cfgAC,
+            cfgAccount=cfgAC,
+            cfgStrategy=manager.cfgStrategy,
             price_prec=manager.cfgCoin.price_prec,
             qty_prec=manager.cfgCoin.qty_prec,
         )

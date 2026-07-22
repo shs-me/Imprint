@@ -2,21 +2,11 @@ import gc
 import time
 from multiprocessing.synchronize import Semaphore
 
-from ... import configurations as cfg
 from .base_manager import Manager
 from .status_codes import StatusCodes as scs
 
 
 class AgentManager(Manager):
-    cfgSetup: cfg.cfgSetup
-    cfgAccount: cfg.cfgAccount
-    cfgCoin: cfg.cfgCoin
-    cfgFootprint: cfg.cfgFootprint
-    cfgMetrics: cfg.cfgMetrics
-    cfgDataStream: cfg.cfgDataStream
-    cfgUserStream: cfg.cfgUserStream
-    cfgSignal: cfg.cfgSignal
-
     def __init__(
         self,
         segments: dict[str, slice],

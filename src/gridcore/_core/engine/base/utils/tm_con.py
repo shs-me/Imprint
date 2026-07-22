@@ -1,12 +1,18 @@
 from datetime import datetime, timezone
 
-from ....configurations import cfgAccount
+import numpy as np
+from numpy import int64
+from numpy.typing import NDArray
+
+from .... import configurations as cfg
+from .... import constant as c
 
 
 class TradeConverter:
     def __init__(
         self,
-        cfgAcount: cfgAccount,
+        cfgAccount: cfg.Account,
+        cfgStrategy: cfg.Strategy,
         price_prec: int,
         qty_prec: int,
     ) -> None:
@@ -14,15 +20,17 @@ class TradeConverter:
         self.priceMult: int = 10**self.pricePrec
         self.qtyMult: int = 10**self.qtyPrec
 
-        self.cfgAC = cfgAcount
-        self._entryQty: int = self.cfgAC.entry_qty
-        self._tpDev: int = self.cfgAC.tp_dev
-        self._slDev: int = self.cfgAC.sl_dev
-        self._maxLockNbalance: int = self.cfgAC.max_lock_balance
-        self._maxLossNbalance: int = self.cfgAC.max_loss_balance
+        self.cfgST = cfgStrategy
+        self._entryQty: int = self.cfgST.entry_qty
+        self._tpDev: int = self.cfgST.tp_dev
+        self._slDev: int = self.cfgST.sl_dev
+        self._maxLockNbalance: int = self.cfgST.max_lock_balance
+        self._maxLossNbalance: int = self.cfgST.max_loss_balance
+
+        self.cfgAC = cfgAccount
         self._scalePrec: int = self.cfgAC.scale_prec
         self.scale: int = 10**self._scalePrec
-        self.latency: int = self.cfgAC.latency
+        self.latency: int = self.cfgAC.latency_ms
         self.leverage: int = self.cfgAC.leverage
         self.startNbalance: int = round(self.cfgAC.balance * self.scale)
         self.minOrderNsize: int = round(self.cfgAC.min_order_size * self.scale)
@@ -41,6 +49,43 @@ class TradeConverter:
         self.shortEntryNprice: int = 0
 
         self.nBalance = self.startNbalance
+
+        self.oh_rows: int = 10_000
+        self.oh_cols: int = c.TP_ConstantCount
+
+        self._init_array()
+
+    def _init_array(self) -> None:
+        self.orders_history: NDArray[int64] = np.ndarray(
+            shape=(self.oh_rows, self.oh_cols), dtype=int64
+        )
+        self.orders_history.fill(0)
+        self.ohWid: memoryview = memoryview(bytearray(8)).cast("q")
+
+    def update_orders_history(
+        self,
+        timestamp: int,
+        order_param: int,
+        order_id: int,
+        nPrice: int,
+        nQty: int,
+        nCommission: int,
+    ) -> None:
+        ohWid, oh = self.ohWid, self.orders_history
+        # - - -
+        oh[ohWid[0], c.TP_timestamp] = timestamp
+        oh[ohWid[0], c.TP_orderParam] = order_param
+        oh[ohWid[0], c.TP_orderID] = order_id
+        oh[ohWid[0], c.TP_nPrice] = nPrice
+        oh[ohWid[0], c.TP_nQty] = nQty
+        oh[ohWid[0], c.TP_commission] = nCommission
+        ohWid[0] += 1
+        if ohWid[0] >= oh.shape[0]:
+            old_rows: int = oh.shape[0]
+            self.orders_history = np.resize(
+                oh, new_shape=((old_rows + self.oh_rows), self.oh_cols)
+            )
+            self.orders_history[old_rows:, :] = 0
 
     @property
     def nBalance(self) -> int:
@@ -151,3 +196,13 @@ class TradeConverter:
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
+
+    def is_averaging(self, order_param: int) -> bool:
+        if bool(order_param & c.OF_LONG):
+            return True if self.longNqty else False
+        else:
+            return True if self.shortNqty else False
+
+    def final_action(self) -> None:
+        if self.cfgAC.save_orders_history:
+            np.save(c.ORDERS_HISTORY_DUMP_PATH, self.orders_history[: self.ohWid[0], :])

@@ -54,7 +54,7 @@ class MatchingEngine:
         self.manager: AgentManager = manager
 
         cfgAC = manager.cfgAccount
-        self.slippage: int = cfgAC.slipage
+        self.slippage: int = cfgAC.slippage
 
         cfgUS = manager.cfgUserStream
         self.cell_amount: int = cfgUS.cell_amount

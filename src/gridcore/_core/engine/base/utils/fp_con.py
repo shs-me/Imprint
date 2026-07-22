@@ -4,14 +4,14 @@ from typing import overload
 from numpy import float64, int64
 from numpy.typing import NDArray
 
+from .... import configurations as cfg
 from .... import constant as c
-from ....configurations import cfgFootprint
 
 
 class FPconverter:
     def __init__(
         self,
-        cfgFP: cfgFootprint,
+        cfgFP: cfg.Footprint,
         footprint: NDArray[int64],
         headers: NDArray[int64],
         price_prec: int,
@@ -23,7 +23,7 @@ class FPconverter:
         self.idxDP: int = cfgFP.colDP
         self.fp_panel_cols: int = cfgFP.fp_panel_cols
         self.bar_count: int = cfgFP.bar_count
-        self.tims: int = cfgFP.timeframe_in_ms
+        self.tims: int = cfgFP.timeframe
         self.footprint: NDArray[int64] = footprint
         self.headers: NDArray[int64] = headers
 

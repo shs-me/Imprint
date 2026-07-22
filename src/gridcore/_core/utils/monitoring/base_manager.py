@@ -4,6 +4,16 @@ from ... import configurations as cfg
 
 
 class Manager(ABC):
+    cfgSetup: cfg.Setup
+    cfgAccount: cfg.Account
+    cfgStrategy: cfg.Strategy
+    cfgCoin: cfg.Coin
+    cfgFootprint: cfg.Footprint
+    cfgMetrics: cfg.Metrics
+    cfgDataStream: cfg.DataStream
+    cfgUserStream: cfg.UserStream
+    cfgSignal: cfg.Signal
+
     def __init__(
         self, segments: dict[str, slice], shm_buf: memoryview, configs: list
     ) -> None:
@@ -16,7 +26,7 @@ class Manager(ABC):
             for obj in configs:
                 if isinstance(obj, attr_type):
                     setattr(self, attr_name, obj)
-                    if issubclass(obj.__class__, cfg.cfgSHMSegments):
+                    if issubclass(obj.__class__, cfg.SharedMemorySegments):
                         self.bind_shm_segments(obj)
                     break
 

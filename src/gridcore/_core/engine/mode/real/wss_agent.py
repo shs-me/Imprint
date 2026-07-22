@@ -41,9 +41,8 @@ class WssAgent(Wss):
                         if isinstance(task, bool):
                             if task:
                                 return
-
+                    
                     raw_data = await ws.recv(decode=False)
-
                     if set_raw_data(
                         raw_data=raw_data,
                         data=data,

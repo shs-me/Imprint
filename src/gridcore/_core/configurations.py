@@ -1,4 +1,5 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any
 
 from .settings import BarHeaders, SpaceCoords, Timeframe
@@ -9,89 +10,60 @@ INT64 = 8
 FLOAT64 = 8
 
 
-class BaseRingBuf(ABC):
-    def __init__(
-        self,
-        data_size: int = 1024,
-        data_header_size: int = 8,
-        cell_amount: int = 10_000,
-    ) -> None:
-        self.data_size: int = data_size
-        self.data_header_size: int = data_header_size
-        self.cell_amount: int = cell_amount
-
-        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
-
-    def get_need_shm_size(self) -> int:
-        self.reader_id: Any = OFFSET, OFFSET + INT64
-        self.writer_id: Any = self.reader_id[1], self.reader_id[1] + INT64
-        self.data: Any = (
-            self.writer_id[1],
-            (self.cell_amount * self.data_size) + self.writer_id[1],
-        )
-        self.data_header: Any = (
-            self.data[1],
-            (self.cell_amount * self.data_header_size) + self.data[1],
-        )
-        return self.data_header[1]
-
-
 class Configuration(ABC):
     pass
 
-
-class cfgSetup(Configuration):
-    def __init__(
-        self,
-        backtest_start_date: str = "2026-01-01",
-        backtest_end_date: str = "2026-01-01",
-    ) -> None:
-        self.backtest_start_date: str = backtest_start_date
-        self.backtest_end_date: str = backtest_end_date
+    def percent_to_int(self) -> None:
+        for name, value in self.__dict__.items():
+            if isinstance(value, str):
+                setattr(self, name, round(float(value.split("%")[0]) / 100 * 10_000))
 
 
-class cfgAccount(Configuration):
-    def __init__(
-        self,
-        leverage: int = 20,
-        balance: float = 100.0,
-        min_order_size: float = 5.0,
-        taker_commission: str = "0.05%",
-        maker_commission: str = "0.02%",
-        max_lock_balance: str = "1%",
-        max_loss_balance: str = "1%",
-        entry_qty: str = "1%",
-        TP_dev: str = "5%",
-        SL_dev: str = "5%",
-        slippage: str = "0.05%",
-        scale_prec: int = 15,
-        latency_ms: int = 100,
-        analysis_safe_lag_microsecond: int = 50_000,
-        save_orders_history: bool = False,
-    ) -> None:
-        self.leverage: int = leverage
-        self.balance: float = balance
-        self.min_order_size: float = min_order_size
-        self.taker_commission: int = percent_to_int(taker_commission)
-        self.maker_commission: int = percent_to_int(maker_commission)
-        self.max_lock_balance: int = percent_to_int(max_lock_balance)
-        self.max_loss_balance: int = percent_to_int(max_loss_balance)
-        self.entry_qty: int = percent_to_int(entry_qty)
-        self.tp_dev: int = percent_to_int(TP_dev)
-        self.sl_dev: int = percent_to_int(SL_dev)
-        self.slipage: int = percent_to_int(slippage)
-        self.scale_prec: int = scale_prec
-        self.latency: int = latency_ms
-        self.analysis_safe_lag_microsecond: int = analysis_safe_lag_microsecond
-        self.save_orders_history: bool = save_orders_history
+@dataclass
+class Setup(Configuration):
+    backtesting: bool = True
+    execution: bool = True
+    backtest_start_date: str = "2026-01-01"
+    backtest_end_date: str = "2026-01-01"
 
 
-class cfgCoin(Configuration):
-    def __init__(self, symbol: str, tick_size: str, lot_size: str) -> None:
-        self.symbol: str = symbol
-        self.tick_size: str = tick_size
-        self.lot_size: str = lot_size
+@dataclass
+class Account(Configuration):
+    leverage: int = 20
+    balance: float = 100.0
+    min_order_size: float = 5.0
+    taker_commission: Any = "0.05%"
+    maker_commission: Any = "0.02%"
+    slippage: Any = "0.05%"
+    latency_ms: Any = 100
+    scale_prec: Any = 15
+    analysis_safe_lag_microsecond: int = 50_000
+    save_orders_history: bool = False
 
+    def __post_init__(self) -> None:
+        self.percent_to_int()
+        self.scale_mult = 10**self.scale_prec
+
+
+@dataclass
+class Strategy(Configuration):
+    max_lock_balance: Any = "10%"
+    max_loss_balance: Any = "10%"
+    entry_qty: Any = "1%"
+    tp_dev: Any = "5%"
+    sl_dev: Any = "5%"
+
+    def __post_init__(self):
+        self.percent_to_int()
+
+
+@dataclass
+class Coin(Configuration):
+    symbol: str = "DASHUSDT"
+    tick_size: str = "0.01"
+    lot_size: str = "0.001"
+
+    def __post_init__(self) -> None:
         self.price_prec: int = (
             len(self.tick_size.split(sep=".")[-1]) if "." in self.tick_size else 0
         )
@@ -102,44 +74,44 @@ class cfgCoin(Configuration):
         self.qty_mult: int = 10**self.qty_prec
 
 
-class cfgSHMSegments(Configuration):
+@dataclass
+class SharedMemorySegments(Configuration, ABC):
     pass
 
-
-class cfgFootprint(cfgSHMSegments):
-    def __init__(
-        self,
-        timeframe: Timeframe = Timeframe._H,
-        chart_range: int = 1,
-        fp_rows: int = 10001,
-        save_fp_headers: bool = False,
-        save_algorithm_metadata: bool = False,
-        algorithm_module: str = "",
-        algorithm_package: str = "",
-    ) -> None:
-        self.timeframe_in_ms: Timeframe = timeframe
-        self.bar_count: int = self.get_bar_count(day=chart_range)
-        self.fp_rows: int = fp_rows
-        self.save_fp_headers: bool = save_fp_headers
-        self.save_algorithm_metadata: bool = save_algorithm_metadata
-        self.algorithm_module: str = algorithm_module
-        self.algorithm_package: str = algorithm_package
-        self.fp_cols: int = self.bar_count * 2
-        self.fp_panel_cols: int = self.fp_cols + self.get_panel_count_cols()
+    def __post_init__(self) -> None:
         self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
-    def get_panel_count_cols(self) -> int:
+    @abstractmethod
+    def get_need_shm_size(self) -> int:
+        pass
+
+
+@dataclass
+class Footprint(SharedMemorySegments):
+    timeframe: Timeframe = Timeframe._H
+    chart_range: int = 1
+    fp_rows: int = 10001
+    save_fp_headers: bool = False
+    save_algorithm_metadata: bool = False
+    algorithm_module: str = ""
+    algorithm_class_name: str = ""
+
+    def _init_data(self) -> None:
         self.colVP, self.colDP = -2, -1
-        return 2
+        self.bar_count: int = self.get_bar_count(day=self.chart_range)
+        self.fp_cols: int = self.bar_count * 2
+        self.fp_panel_cols: int = self.fp_cols + 2
 
     def get_bar_count(self, day: int) -> int:
         dayMs, ivlMs = (
             (day if day >= 1 else 1) * 24 * 60 * 60 * 1000,
-            self.timeframe_in_ms,
+            self.timeframe,
         )
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
     def get_need_shm_size(self) -> int:
+        self._init_data()
+
         self.footprint: Any = (
             OFFSET,
             OFFSET + (self.fp_rows * self.fp_panel_cols * INT64),
@@ -160,15 +132,10 @@ class cfgFootprint(cfgSHMSegments):
         return self.spare_flag[1]
 
 
-class cfgMetrics(cfgSHMSegments):
-    def __init__(
-        self,
-        count_procs: int = 10,
-        text_size: int = 1024,
-    ) -> None:
-        self.count_procs: int = count_procs
-        self.text_size: int = text_size
-        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
+@dataclass
+class Metrics(SharedMemorySegments):
+    count_procs: int = 10
+    text_size: int = 1024
 
     def get_need_shm_size(self) -> int:
         self.status: Any = OFFSET, OFFSET + ((self.count_procs * 2) * INT64)
@@ -199,25 +166,46 @@ class cfgMetrics(cfgSHMSegments):
         return self.dfm_comlpete[1]
 
 
-class cfgSignal(cfgSHMSegments, BaseRingBuf):
-    def __init__(self) -> None:
-        BaseRingBuf.__init__(self, data_size=24, data_header_size=1, cell_amount=10_000)
+@dataclass
+class BaseRingBuf(ABC):
+    data_size: int = 1024
+    data_header_size: int = 8
+    cell_amount: int = 10_000
 
-
-class cfgUserStream(cfgSHMSegments, BaseRingBuf):
-    def __init__(self) -> None:
-        BaseRingBuf.__init__(
-            self, data_size=1024, data_header_size=8, cell_amount=10_000
+    def get_need_shm_size(self) -> int:
+        self.reader_id: Any = OFFSET, OFFSET + INT64
+        self.writer_id: Any = self.reader_id[1], self.reader_id[1] + INT64
+        self.data: Any = (
+            self.writer_id[1],
+            (self.cell_amount * self.data_size) + self.writer_id[1],
         )
-
-
-class cfgDataStream(cfgSHMSegments, BaseRingBuf):
-    def __init__(self) -> None:
-        BaseRingBuf.__init__(
-            self, data_size=256, data_header_size=1, cell_amount=10_000
+        self.data_header: Any = (
+            self.data[1],
+            (self.cell_amount * self.data_header_size) + self.data[1],
         )
+        return self.data_header[1]
+
+
+@dataclass
+class Signal(BaseRingBuf, SharedMemorySegments):
+    data_size: int = 24
+    data_header_size: int = 1
+    cell_amount: int = 10_000
+
+
+@dataclass
+class UserStream(BaseRingBuf, SharedMemorySegments):
+    data_size: int = 1024
+    data_header_size: int = 8
+    cell_amount: int = 10_000
+
+
+@dataclass
+class DataStream(BaseRingBuf, SharedMemorySegments):
+    data_size: int = 256
+    data_header_size: int = 1
+    cell_amount: int = 10_000
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
         self.safe_lag: int = int(self.cell_amount * 0.9)
-
-
-def percent_to_int(value: str) -> int:
-    return round(float(value.split("%")[0]) / 100 * 10_000)

@@ -85,7 +85,7 @@ def resolve_reader(manager: AgentManager, sync: Sync) -> FootprintReader:
     module = importlib.import_module(manager.cfgFootprint.algorithm_module)
     reader: type[FootprintReader] = BaseFootprintReader
     for name, obj in inspect.getmembers(module, inspect.isclass):
-        if (name == manager.cfgFootprint.algorithm_package) and issubclass(
+        if (name == manager.cfgFootprint.algorithm_class_name) and issubclass(
             obj, FootprintReader
         ):
             reader = obj

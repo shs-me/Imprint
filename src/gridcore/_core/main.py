@@ -24,9 +24,10 @@ from .utils.monitoring.office import manager_office
 class RunMain(CoreResources):
     def __init__(self, **kwargs) -> None:
         self.base_kwargs: dict = kwargs
-        self.backtesting: bool = kwargs["backtesting"]
-        self.execution: bool = kwargs["execution"]
         self.manager: MainManager = kwargs.pop("manager")
+
+        self.backtesting: bool = self.manager.cfgSetup.backtesting
+        self.execution: bool = self.manager.cfgSetup.execution
 
         self.general_event: EventT = Event()
         self.execution_event: EventT = Event()

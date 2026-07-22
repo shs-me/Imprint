@@ -5,7 +5,7 @@ from functools import wraps
 from multiprocessing.shared_memory import SharedMemory
 
 from ... import configurations
-from ...configurations import Configuration, cfgSHMSegments
+from ...configurations import Configuration, SharedMemorySegments
 from ..handlers import error_handler
 from .agent_manager import AgentManager
 from .main_manager import MainManager
@@ -84,12 +84,12 @@ def configurations_init(**kwargs) -> dict:
     for name, obj in inspect.getmembers(configurations, inspect.isclass):
         if (
             issubclass(obj, Configuration)
-            and obj is not Configuration
-            and obj is not cfgSHMSegments
+            and (obj is not Configuration)
+            and (obj is not SharedMemorySegments)
         ):
             obj = kwargs.pop(name) if name in kwargs else obj()
             kwargs["configs"].append(obj)
-            if issubclass(obj.__class__, cfgSHMSegments):
+            if issubclass(obj.__class__, SharedMemorySegments):
                 kwargs["segments"][name] = slice(
                     offset,
                     (offset := (offset + obj.shm_size)),  # type: ignore | reportAttributeAccessIssue

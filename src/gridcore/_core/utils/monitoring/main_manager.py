@@ -7,15 +7,11 @@ from multiprocessing.synchronize import Semaphore
 
 from loguru import logger
 
-from ... import configurations as cfg
 from .base_manager import Manager
 from .status_codes import StatusCodes as scs
 
 
 class MainManager(Manager):
-    cfgSetup: cfg.cfgSetup
-    cfgMetrics: cfg.cfgMetrics
-
     def __init__(
         self,
         segments: dict[str, slice],
