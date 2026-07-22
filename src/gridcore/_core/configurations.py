@@ -76,10 +76,10 @@ class Coin(Configuration):
 
 @dataclass
 class SharedMemorySegments(Configuration, ABC):
-    pass
+    shm_size: int = 0
 
     def __post_init__(self) -> None:
-        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
+        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
     @abstractmethod
     def get_need_shm_size(self) -> int:

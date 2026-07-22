@@ -57,29 +57,9 @@ def manager_office(main: bool = False):
     return decorator
 
 
-def agent_init(main: bool, shm_buf: memoryview, **kwargs):
-    segments, configs = deepcopy(kwargs["segments"]), deepcopy(kwargs["configs"])
-    if main:
-        manager = MainManager(
-            segments=segments,
-            configs=configs,
-            shm_buf=shm_buf,
-        )
-    else:
-        manager = AgentManager(
-            proc_id=kwargs["proc_id"],
-            task_id=kwargs["task_id"],
-            segments=segments,
-            configs=configs,
-            shm_buf=shm_buf,
-            sc_sem=kwargs["sc_sem"],
-        )
-    return manager
-
-
 @error_handler()
 def configurations_init(**kwargs) -> dict:
-    offset = 0
+    offset: int = 0
     kwargs["configs"], kwargs["segments"] = [], {}
     for name, obj in inspect.getmembers(configurations, inspect.isclass):
         if (
@@ -87,12 +67,12 @@ def configurations_init(**kwargs) -> dict:
             and (obj is not Configuration)
             and (obj is not SharedMemorySegments)
         ):
-            obj = kwargs.pop(name) if name in kwargs else obj()
-            kwargs["configs"].append(obj)
-            if issubclass(obj.__class__, SharedMemorySegments):
+            c_obj: Configuration = kwargs.pop(name) if name in kwargs else obj()
+            kwargs["configs"].append(c_obj)
+            if isinstance(c_obj, SharedMemorySegments):
                 kwargs["segments"][name] = slice(
                     offset,
-                    (offset := (offset + obj.shm_size)),  # type: ignore | reportAttributeAccessIssue
+                    (offset := (offset + c_obj.shm_size)),
                 )
 
     kwargs["segments"]["shm_size"] = offset
@@ -115,3 +95,23 @@ def shm_init(
         if shm.buf is not None:
             shm_buf = shm.buf
             return shm, shm_buf
+
+
+def agent_init(main: bool, shm_buf: memoryview, **kwargs):
+    segments, configs = deepcopy(kwargs["segments"]), deepcopy(kwargs["configs"])
+    if main:
+        manager = MainManager(
+            segments=segments,
+            configs=configs,
+            shm_buf=shm_buf,
+        )
+    else:
+        manager = AgentManager(
+            proc_id=kwargs["proc_id"],
+            task_id=kwargs["task_id"],
+            segments=segments,
+            configs=configs,
+            shm_buf=shm_buf,
+            sc_sem=kwargs["sc_sem"],
+        )
+    return manager
