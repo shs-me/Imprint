@@ -182,7 +182,7 @@ def _start(
         trade_nPrice: int = dfm[row, 0]
         time_readed_trade[0] = dfm[row, 1]
 
-        if longNqty[0] and shortNqty[0]:
+        if longNqty[0] or shortNqty[0]:
             uNpnl = _to_unrealized_nPnl(
                 trade_nPrice=trade_nPrice,
                 unrealizedNpnl=unrealizedNpnl,
@@ -237,7 +237,7 @@ def _start(
                 shortEntryNprice=shortEntryNprice,
             )
 
-        if longNqty[0] and shortNqty[0]:
+        if longNqty[0] or shortNqty[0]:
             uNpnl = _to_unrealized_nPnl(
                 trade_nPrice=trade_nPrice,
                 unrealizedNpnl=unrealizedNpnl,
@@ -308,6 +308,7 @@ def _update_positions(
                 is_long=is_long,
                 is_open=is_open,
                 nCommission=nCommission,
+                obRow=obRow,
                 price_mult=price_mult,
                 qty_mult=qty_mult,
                 scale_mult=scale_mult,
@@ -329,9 +330,6 @@ def _update_positions(
             cell_amount=cell_amount,
         )
 
-        if not longNqty[0] and not shortNqty[0] and not obRow[0]:
-            lockedNbalance[0] = 0
-
 
 @njit(cache=True)
 def _update_position(
@@ -340,6 +338,7 @@ def _update_position(
     is_long: bool,
     is_open: bool,
     nCommission: int,
+    obRow: memoryview,
     price_mult: int,
     qty_mult: int,
     scale_mult: int,
@@ -409,6 +408,9 @@ def _update_position(
 
         if not shortNqty[0]:
             shortEntryNprice[0] = 0
+
+    if (not longNqty[0]) and (not shortNqty[0]) and (not obRow[0]):
+        lockedNbalance[0] = 0
 
 
 @njit(cache=True)
