@@ -107,9 +107,11 @@ class ExecutionAgent(Execution):
         pass
 
     def post_final_action(self) -> None:
-        while self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
-            self.acm.start(self.trade_readed_time[0])
+        while self.acm.trade_readed_time[0] < 100_000_000_000:
+            self.acm.start(100_000_000_000)
             self.check_user_data_buf()
+            if self.acm.prepper.complete:
+                break
 
         self.con.final_action()
         self.manager.set_text(
