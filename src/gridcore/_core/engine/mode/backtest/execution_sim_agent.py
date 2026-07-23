@@ -110,7 +110,10 @@ class ExecutionAgent(Execution):
         while self.acm.trade_readed_time[0] < 100_000_000_000:
             self.acm.start(100_000_000_000)
             self.check_user_data_buf()
-            if self.acm.prepper.complete:
+            if (
+                self.acm.prepper.complete
+                and self.acm.prepper.dfmRid[0] == self.acm.prepper.dfmWid[0]
+            ):
                 break
 
         self.con.final_action()
