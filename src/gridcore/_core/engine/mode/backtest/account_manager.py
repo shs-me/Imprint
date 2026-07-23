@@ -300,7 +300,8 @@ def _update_positions(
             commission: float = (
                 ((nPrice / price_mult) * (nQty / qty_mult)) * rate / 10_000
             )
-            data_example[de_row, 5] = round(commission * scale_mult)
+            nCommission = round(commission * scale_mult)
+            data_example[de_row, 5] = nCommission
 
             _update_position(
                 nPrice=nPrice,

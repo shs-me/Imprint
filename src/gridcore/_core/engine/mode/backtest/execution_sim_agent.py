@@ -107,8 +107,9 @@ class ExecutionAgent(Execution):
         pass
 
     def post_final_action(self) -> None:
-        while self.acm.trade_readed_time[0] < 100_000_000_000:
-            self.acm.start(100_000_000_000)
+        max_timestamp = 9_999_999_999_999
+        while self.acm.trade_readed_time[0] < max_timestamp:
+            self.acm.start(max_timestamp)
             self.check_user_data_buf()
             if (
                 self.acm.prepper.complete
