@@ -109,14 +109,6 @@ class MatchingEngine:
             nQty,
             0,
         )
-        _set_user_data(
-            data=self.data_example[self.deRow[0], :].view(uint8),
-            data_buf=self.data_buf,
-            data_buf_size=self.data_buf_size,
-            data_header=self.data_header,
-            writer_id=self.writer_id,
-            cell_amount=self.cell_amount,
-        )
         self.order_id[0] += 1
         self.deRow[0] += 1
 
@@ -134,7 +126,6 @@ def _matching(
 ) -> bool:
     client_in_priority: bool = False
     order_row: int = 0
-    data: NDArray[int64] | None = None
     while order_row < obRow[0]:
         order_timestamp: int = order_book[order_row, c.OB_timestamp]
         order_param: int = order_book[order_row, c.OB_orderParam]
@@ -142,6 +133,8 @@ def _matching(
         order_nPrice: int = order_book[order_row, c.OB_nPrice]
         order_nQty: int = order_book[order_row, c.OB_nQty]
 
+        data = None
+        date_ = None
         if bool(order_param & c.OF_NEW):
             if trade_timestamp >= order_timestamp:
                 data_ = _processing_order(

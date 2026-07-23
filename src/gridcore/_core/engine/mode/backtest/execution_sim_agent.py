@@ -41,7 +41,10 @@ class ExecutionAgent(Execution):
             time.sleep(0)
 
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
-        self.acm.start(time_get_signal + self.con.latency)
+        timestamp = time_get_signal + self.con.latency
+        while timestamp > self.acm.trade_readed_time[0]:
+            self.acm.start(timestamp)
+            self.check_user_data_buf()
 
     def execute_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
@@ -104,10 +107,10 @@ class ExecutionAgent(Execution):
         pass
 
     def post_final_action(self) -> None:
-        if self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
+        while self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
             self.acm.start(self.trade_readed_time[0])
+            self.check_user_data_buf()
 
-        self.check_user_data_buf()
         self.con.final_action()
         self.manager.set_text(
             (
