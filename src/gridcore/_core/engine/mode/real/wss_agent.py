@@ -13,9 +13,10 @@ from ...base.base_wss import Wss
 class WssAgent(Wss):
     def __init__(self, manager: AgentManager, wake_up_parser: Event) -> None:
         super().__init__(manager=manager)
+
         self.wake_up_parser: Event = wake_up_parser
 
-        self.symbol: str = manager.symbol
+        self.symbol: str = manager.cfgCoin.symbol
         self.wss_aggTrades_url: str = (
             f"{WS_STREAMS_PROD_URL}/ws/{self.symbol.lower()}@aggTrade"
         )
@@ -25,10 +26,9 @@ class WssAgent(Wss):
         # Local Links
         wake_up_parser = self.wake_up_parser
         proc_status, task_status = self.proc_status, self.task_status
-        raw_buf = self.manager.raw_buf
         wCellC = self.wCellC
-        data_size = self.data_size
-        data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
+        data, data_size = self.data, self.data_size
+        data_header = self.data_header
         cell_amount = self.cell_amount
         set_raw_data = self.set_raw_data
         # - - -
@@ -41,17 +41,15 @@ class WssAgent(Wss):
                         if isinstance(task, bool):
                             if task:
                                 return
-
+                    
                     raw_data = await ws.recv(decode=False)
-
                     if set_raw_data(
                         raw_data=raw_data,
-                        raw_buf=raw_buf,
+                        data=data,
+                        data_header=data_header,
                         wCellC=wCellC,
                         cell_amount=cell_amount,
                         data_size=data_size,
-                        data_offset=data_offset,
-                        dataHeader_offset=dataHeader_offset,
                     ):
                         if wake_up_parser.is_set() is False:
                             wake_up_parser.set()

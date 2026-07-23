@@ -41,6 +41,7 @@ class OrderFlag(IntFlag):
     MARKET_TRIGER, LIMIT_TRIGER = auto(), auto()
     # Status
     NEW, FILLED, CANCELED = auto(), auto(), auto()
+    OCO = auto()
 
 
 class Timeframe(IntEnum):
@@ -60,9 +61,9 @@ class CachedStatesData(IntEnum):
 
 
 @verify(CONTINUOUS, UNIQUE)
-class ActiveOrders(IntEnum):
-    nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
-    orderID = auto()
+class OrderBook(IntEnum):
+    timestamp, orderParam, clientOrderID = 0, auto(), auto()
+    nPrice, nQty = auto(), auto()
     _ConstantCount = auto()
 
 
@@ -93,10 +94,4 @@ class BarHeadersMetadata(IntEnum):
 @verify(CONTINUOUS, UNIQUE)
 class SpaceCoords(IntEnum):
     IDYmin, IDXmin, IDYmax, IDXmax = 0, auto(), auto(), auto()
-    _ConstantCount = auto()
-
-
-@verify(CONTINUOUS, UNIQUE)
-class DataForMatching(IntEnum):
-    nPrice, startTimestamp, endTimestamp = 0, auto(), auto()
     _ConstantCount = auto()

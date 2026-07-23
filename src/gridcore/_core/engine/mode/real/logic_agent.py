@@ -12,7 +12,7 @@ class SyncTool(Sync):
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager)
 
-        self.execution_event = execution_event
+        self.execution_event: Event = execution_event
 
     def sync_with_execution(self) -> None:
         if self.execution_event.is_set() is False:
@@ -28,7 +28,7 @@ class LogicAgent(Logic):
         self.logic_event: Event = logic_event
 
     def alarm_clock(self) -> None:
-        if (self.reader.spare_flag[0] == 0) and (self.tradesParsed[0] == 0):
+        if (self.reader._spare_flag[0] == 0) and (self.parsing_complete[0] == 0):
             if self.logic_event.is_set() is False:
                 self.logic_event.wait()
 
@@ -37,13 +37,13 @@ class LogicAgent(Logic):
             self.logic_event.clear()
 
     def check_lag(self) -> None:
-        if self.reader.sync.lag_is_safe() is False:
+        if self.reader._sync.lag_is_safe() is False:
             self.pass_lag += 1
             if self.pass_lag >= self.pass_lag_limit:
                 self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
 
     def post_final_action(self) -> None:
-        self.reader.sync.sync_with_execution()
+        self.reader._sync.sync_with_execution()
 
 
 @manager_office()

@@ -8,6 +8,7 @@ from types import TracebackType
 from typing import Any
 
 from ..constant import EXC_DUMP_PATH
+from .monitoring.status_codes import StatusCodes as scs
 
 
 class DebugEncoder(json.JSONEncoder):
@@ -101,14 +102,18 @@ def error_handler(set_status_code: bool = False):
             try:
                 return func(*args, **kwargs)
             except KeyboardInterrupt:
-                pass
+                set_sc(set_status_code, args, scs.EXIT)
             except Exception:
                 dump_exception()
-                if set_status_code and args:
-                    manager = getattr(args[0], "manager", None)
-                    if manager and hasattr(manager, "_for_error_action"):
-                        manager._for_error_action()
+                set_sc(set_status_code, args, scs.ERROR)
 
         return wrapper
 
     return decorator
+
+
+def set_sc(set_status_code: bool, args: tuple, code: scs) -> None:
+    if set_status_code and args:
+        manager = getattr(args[0], "manager", None)
+        if manager and hasattr(manager, "set_proc_sc"):
+            manager.set_proc_sc(code)

@@ -1,22 +1,49 @@
+import struct
 import time
+from collections import deque
 
 from ....utils.handlers import error_handler
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
 from ....utils.monitoring.status_codes import StatusCodes as scs
+from ...base.base_data_prepper import BaseDataPrepper
 from ...base.base_wss import Wss
-from ...base.utils.data_prepper import DataPrepper
+
+
+class DataPrepper(BaseDataPrepper):
+    def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
+        super().__init__(symbol, start_date, end_date)
+
+        self.queue: deque = deque(maxlen=10000)
+
+    def alarm_clock(self) -> None:
+        while len(self.queue) == self.queue.maxlen:
+            time.sleep(0)
+
+    def prepper_data(self, data: bytes) -> None:
+        list_data: list[bytes] = data.split(b",")
+        self.queue.append(
+            struct.pack(
+                "@ddq?",
+                float(list_data[1]),
+                float(list_data[2]),
+                int(list_data[5]),
+                b"true" in list_data[6],
+            )
+        )
+
+    def post_prepper(self) -> None:
+        pass
 
 
 class WssSimAgent(Wss):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
-        cfgBT = manager.cfgBacktesting
         self.prepper = DataPrepper(
-            symbol=manager.symbol,
-            startDate=cfgBT.startDateForPrepper,
-            endDate=cfgBT.endDateForPrepper,
+            symbol=manager.cfgCoin.symbol,
+            start_date=manager.cfgSetup.backtest_start_date,
+            end_date=manager.cfgSetup.backtest_end_date,
         )
         self.prepper.start()
 
@@ -25,10 +52,9 @@ class WssSimAgent(Wss):
         # Local Links
         prepper = self.prepper
         proc_status, task_status = self.proc_status, self.task_status
-        raw_buf = self.manager.raw_buf
         wCellC, rCellC = self.wCellC, self.rCellC
-        data_size = self.data_size
-        data_offset, dataHeader_offset = self.data_offset, self.dataHeader_offset
+        data, data_size = self.data, self.data_size
+        data_header = self.data_header
         cell_amount, safe_lag = self.cell_amount, self.safe_lag
         set_raw_data, alarm_clock = self.set_raw_data, self.alarm_clock
         # - - -
@@ -57,12 +83,11 @@ class WssSimAgent(Wss):
                         raw_data: bytes = prepper.queue.popleft()
                         set_raw_data(
                             raw_data=raw_data,
-                            raw_buf=raw_buf,
+                            data=data,
+                            data_header=data_header,
                             wCellC=wCellC,
                             cell_amount=cell_amount,
                             data_size=data_size,
-                            data_offset=data_offset,
-                            dataHeader_offset=dataHeader_offset,
                         )
                 else:
                     raise RuntimeError(prepper.error)

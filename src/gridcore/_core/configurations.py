@@ -1,223 +1,211 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
 
-from .settings import (
-    ActiveOrders,
-    BarHeaders,
-    DataForMatching,
-    SpaceCoords,
-    Timeframe,
-    TradeParam,
-)
+from .settings import BarHeaders, SpaceCoords, Timeframe
 
+OFFSET = 0
 UBYTE = 1
 INT64 = 8
 FLOAT64 = 8
-OFFSET = 0
 
 
 class Configuration(ABC):
     pass
 
-
-# Configuration Subclasses
-class ConfigurationSHMSegments(Configuration):
-    pass
-
-
-class ConfigurationBacktesting(Configuration):
-    def __init__(
-        self,
-        tick_size: str = "0.01",
-        lot_size: str = "0.001",
-        minOrderSizeUSDT: float = 5.0,
-        taker_commission: float = 0.005,
-        maker_commission: float = 0.002,
-        balanceUSDT: float = 100.0,
-        execution_sim: bool = False,
-        startDateForPrepper: str = "2026-01-01",
-        endDateForPrepper: str = "2026-01-01",
-    ) -> None:
-        self.tick_size: str = tick_size
-        self.lot_size: str = lot_size
-        self.minOrderSizeUSDT: float = minOrderSizeUSDT
-        self.taker_commission: float = taker_commission
-        self.maker_commission: float = maker_commission
-        self.balance = balanceUSDT
-        self.execution_sim = execution_sim
-        self.startDateForPrepper = startDateForPrepper
-        self.endDateForPrepper = endDateForPrepper
+    def percent_to_int(self) -> None:
+        for name, value in self.__dict__.items():
+            if isinstance(value, str):
+                setattr(self, name, round(float(value.split("%")[0]) / 100 * 10_000))
 
 
-# ShmSegmentsSubclasses
-class ConfigurationStrategy(ConfigurationSHMSegments):
-    def __init__(
-        self,
-        scalePrec: int = 20,
-        leverage: int = 20,
-        maxLockBalance: float = 0.1,
-        maxLossBalance: float = 0.2,
-        entry_qty: float = 0.01,
-        TPdev: float = 0.05,
-        SLdev: float = 0.05,
-        slippage: float = 0.0005,
-        latencyMs: int = 100,
-        countOrderHistory: int = 10000,
-        countActiveOrder: int = 100,
-        saveOrdersHistory: bool = False,
-        analysis_safe_lag_microsecond: int = 50_000,
-    ) -> None:
-        self.scalePrec: int = scalePrec
-        self.leverage: int = leverage
-        self.maxLockBalance: int = round(maxLockBalance * 1000)
-        self.maxLossBalance: int = round(maxLossBalance * 1000)
-        self.entryQty: int = round(entry_qty * 1000)
-        self.TPdev: int = round(TPdev * 1000)
-        self.SLdev: int = round(SLdev * 1000)
-        self.slipage: int = round(slippage * 10000)
-        self.latency: int = latencyMs
-        self.saveOrdersHistory: bool = saveOrdersHistory
-        self.analysis_safe_lag_microsecond: int = analysis_safe_lag_microsecond
+@dataclass
+class Setup(Configuration):
+    backtesting: bool = True
+    execution: bool = True
+    backtest_start_date: str = "2026-01-01"
+    backtest_end_date: str = "2026-01-01"
 
-        self.ordersHistoryLines: int = countOrderHistory
-        self.ordersHistoryCols: int = TradeParam._ConstantCount
-        self.activeOrdersLines: int = countActiveOrder
-        self.activeOrdersCols: int = ActiveOrders._ConstantCount
-        self.cell_amount: int = 1000
 
-        self.shm_size: int = ((self.get_need_shm_size() // 4096) + 1) * 4096
+@dataclass
+class Account(Configuration):
+    leverage: int = 20
+    balance: float = 100.0
+    min_order_size: float = 5.0
+    taker_commission: Any = "0.05%"
+    maker_commission: Any = "0.02%"
+    slippage: Any = "0.05%"
+    latency_ms: Any = 100
+    scale_prec: Any = 15
+    analysis_safe_lag_microsecond: int = 50_000
+    save_orders_history: bool = False
 
-    def get_need_shm_size(self) -> int:
-        self.reader = OFFSET, OFFSET + INT64
-        self.writer = self.reader[1], self.reader[1] + INT64
-        self.offset = self.writer[1]
-        self.nPrice = OFFSET, OFFSET + INT64
-        self.time_ms = self.nPrice[1], self.nPrice[1] + INT64
-        self.orderParam = self.time_ms[1], self.time_ms[1] + INT64
-        self.orderID = self.orderParam[1], self.orderParam[1] + INT64
-        self.commission = self.orderID[1], self.orderID[1] + INT64
+    def __post_init__(self) -> None:
+        self.percent_to_int()
+        self.scale_mult = 10**self.scale_prec
 
-        self.signal_size = self.orderParam[1]
-        self.executed_size = self.commission[1]
 
-        self.signal_buf_size = self.offset + self.signal_size * self.cell_amount
-        self.executedBuf_size = self.offset + self.executed_size * self.cell_amount
+@dataclass
+class Strategy(Configuration):
+    max_lock_balance: Any = "10%"
+    max_loss_balance: Any = "10%"
+    entry_qty: Any = "1%"
+    tp_dev: Any = "5%"
+    sl_dev: Any = "5%"
 
-        self.executeBuf = OFFSET, OFFSET + self.signal_buf_size
-        self.executedBuf = (
-            self.executeBuf[1],
-            self.executeBuf[1] + self.executedBuf_size,
+    def __post_init__(self):
+        self.percent_to_int()
+
+
+@dataclass
+class Coin(Configuration):
+    symbol: str = "DASHUSDT"
+    tick_size: str = "0.01"
+    lot_size: str = "0.001"
+
+    def __post_init__(self) -> None:
+        self.price_prec: int = (
+            len(self.tick_size.split(sep=".")[-1]) if "." in self.tick_size else 0
         )
-        return self.executedBuf[1]
+        self.qty_prec: int = (
+            len(self.lot_size.split(sep=".")[-1]) if "." in self.lot_size else 0
+        )
+        self.price_mult: int = 10**self.price_prec
+        self.qty_mult: int = 10**self.qty_prec
 
 
-class ConfigurationFootprint(ConfigurationSHMSegments):
-    def __init__(
-        self,
-        timeframe: Timeframe = Timeframe._H,
-        chart_range: int = 1,
-        fp_lines: int = 10001,
-        saveFootprintHeaders: bool = False,
-        saveAlgorithmMetadata: bool = False,
-    ) -> None:
-        self.intervalMs = timeframe
-        self.bar_count = self.get_bar_count(day=chart_range)
-        self.fpLines = fp_lines
-        self.saveFootprintHeaders = saveFootprintHeaders
-        self.saveAlgorithmMetadata = saveAlgorithmMetadata
+@dataclass
+class SharedMemorySegments(Configuration, ABC):
+    shm_size: int = 0
 
-        self.fpCols = self.bar_count * 2
-        self.fpPanelCols = self.fpCols + self.get_panel_count_cols()
+    def __post_init__(self) -> None:
         self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
 
-    def get_panel_count_cols(self) -> int:
+    @abstractmethod
+    def get_need_shm_size(self) -> int:
+        pass
+
+
+@dataclass
+class Footprint(SharedMemorySegments):
+    timeframe: Timeframe = Timeframe._H
+    chart_range: int = 1
+    fp_rows: int = 10001
+    save_fp_headers: bool = False
+    save_algorithm_metadata: bool = False
+    algorithm_module: str = ""
+    algorithm_class_name: str = ""
+
+    def _init_data(self) -> None:
         self.colVP, self.colDP = -2, -1
-        return 2
+        self.bar_count: int = self.get_bar_count(day=self.chart_range)
+        self.fp_cols: int = self.bar_count * 2
+        self.fp_panel_cols: int = self.fp_cols + 2
 
     def get_bar_count(self, day: int) -> int:
-        dayMs, ivlMs = (day if day >= 1 else 1) * 24 * 60 * 60 * 1000, self.intervalMs
+        dayMs, ivlMs = (
+            (day if day >= 1 else 1) * 24 * 60 * 60 * 1000,
+            self.timeframe,
+        )
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
     def get_need_shm_size(self) -> int:
-        self.footprint = OFFSET, OFFSET + (self.fpLines * self.fpPanelCols * INT64)
-        self.headers = (
+        self._init_data()
+
+        self.footprint: Any = (
+            OFFSET,
+            OFFSET + (self.fp_rows * self.fp_panel_cols * INT64),
+        )
+        self.headers: Any = (
             self.footprint[1],
             self.footprint[1] + (self.bar_count * BarHeaders._ConstantCount * INT64),
         )
-
-        self.meta_data = (self.headers[1], self.headers[1] + (6 * FLOAT64))
-        self.space = (
-            self.meta_data[1],
-            self.meta_data[1] + (SpaceCoords._ConstantCount * 2 * INT64),
+        self.metadata: Any = self.headers[1], self.headers[1] + (6 * FLOAT64)
+        self.space: Any = (
+            self.metadata[1],
+            self.metadata[1] + (SpaceCoords._ConstantCount * 2 * INT64),
         )
-        self.basePrice = self.space[1], self.space[1] + INT64
-        self.baseTimestamp = self.basePrice[1], self.basePrice[1] + INT64
-
-        self.fp_shm_name = self.baseTimestamp[1], self.baseTimestamp[1] + 14
-        self.flag = self.fp_shm_name[1]
-        self.spare_flag = self.flag + UBYTE
-        self.space_read = self.spare_flag + UBYTE
-        return self.space_read
+        self.base_price: Any = self.space[1], self.space[1] + INT64
+        self.base_timestamp: Any = self.base_price[1], self.base_price[1] + INT64
+        self.space_flag: Any = self.base_timestamp[1], self.base_timestamp[1] + UBYTE
+        self.spare_flag: Any = self.space_flag[1], self.space_flag[1] + UBYTE
+        return self.spare_flag[1]
 
 
-class ConfigurationRingRawBuf(ConfigurationSHMSegments):
-    def __init__(self, cell_amount: int = 10000) -> None:
-        self.header_size = 1
-        self.data_size = 256
-        self.cell_amount = cell_amount
-        self.safe_lag = int(self.cell_amount * 0.9)
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+@dataclass
+class Metrics(SharedMemorySegments):
+    count_procs: int = 10
+    text_size: int = 1024
 
     def get_need_shm_size(self) -> int:
-        self.ReaderCellCounter = OFFSET, OFFSET + INT64
-        self.WriterCellCounter = (
-            self.ReaderCellCounter[1],
-            self.ReaderCellCounter[1] + INT64,
+        self.status: Any = OFFSET, OFFSET + ((self.count_procs * 2) * INT64)
+        self.text: Any = (
+            self.status[1],
+            self.status[1] + (self.count_procs * self.text_size),
         )
-        self.dataHeader = (
-            self.WriterCellCounter[1],
-            (self.cell_amount * self.header_size) + self.WriterCellCounter[1],
+        self.time_start_reading: Any = (
+            self.text[1],
+            self.text[1] + INT64,
         )
-        self.data = (
-            self.dataHeader[1],
-            (self.cell_amount * self.data_size) + self.dataHeader[1],
+        self.trade_readed_time: Any = (
+            self.time_start_reading[1],
+            self.time_start_reading[1] + INT64,
         )
-        return self.data[1]
+        self.parsing_complete: Any = (
+            self.trade_readed_time[1],
+            self.trade_readed_time[1] + UBYTE,
+        )
+        self.logic_complete: Any = (
+            self.parsing_complete[1],
+            self.parsing_complete[1] + UBYTE,
+        )
+        self.dfm_comlpete: Any = (
+            self.logic_complete[1],
+            self.logic_complete[1] + UBYTE,
+        )
+        return self.dfm_comlpete[1]
 
 
-class ConfigurationMetrics(ConfigurationSHMSegments):
-    def __init__(self, dataForMatchingLines: int = 500_000) -> None:
-        self.dfmLines = dataForMatchingLines
-        self.dfmCols = DataForMatching._ConstantCount
-
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+@dataclass
+class BaseRingBuf(ABC):
+    data_size: int = 1024
+    data_header_size: int = 8
+    cell_amount: int = 10_000
 
     def get_need_shm_size(self) -> int:
-        self.tick_size = OFFSET, OFFSET + INT64
-        self.lot_size = self.tick_size[1], self.tick_size[1] + INT64
-        self.pricePrecision = self.lot_size[1], self.lot_size[1] + INT64
-        self.qtyPrecision = self.pricePrecision[1], self.pricePrecision[1] + INT64
-
-        self.dfm_1 = (
-            self.qtyPrecision[1],
-            self.qtyPrecision[1] + (self.dfmLines * self.dfmCols * INT64),
+        self.reader_id: Any = OFFSET, OFFSET + INT64
+        self.writer_id: Any = self.reader_id[1], self.reader_id[1] + INT64
+        self.data: Any = (
+            self.writer_id[1],
+            (self.cell_amount * self.data_size) + self.writer_id[1],
         )
-        self.dfm_2 = (
-            self.dfm_1[1],
-            self.dfm_1[1] + (self.dfmLines * self.dfmCols * INT64),
+        self.data_header: Any = (
+            self.data[1],
+            (self.cell_amount * self.data_header_size) + self.data[1],
         )
-        self.dfm_1_row_id = (self.dfm_2[1], self.dfm_2[1] + INT64)
-        self.dfm_2_row_id = (self.dfm_1_row_id[1], self.dfm_1_row_id[1] + INT64)
-
-        self.timeStartReading = self.dfm_2_row_id[1], self.dfm_2_row_id[1] + INT64
-        self.tradesParsed = self.timeStartReading[1] + UBYTE
-        self.footprintReaded = self.tradesParsed + UBYTE
-        return self.footprintReaded
+        return self.data_header[1]
 
 
-class ConfigurationMonitoring(ConfigurationSHMSegments):
-    def __init__(self) -> None:
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+@dataclass
+class Signal(BaseRingBuf, SharedMemorySegments):
+    data_size: int = 24
+    data_header_size: int = 1
+    cell_amount: int = 10_000
 
-    def get_need_shm_size(self) -> int:
-        self.procs_buf = 0, 40 * INT64
-        return self.procs_buf[1]
+
+@dataclass
+class UserStream(BaseRingBuf, SharedMemorySegments):
+    data_size: int = 1024
+    data_header_size: int = 8
+    cell_amount: int = 10_000
+
+
+@dataclass
+class DataStream(BaseRingBuf, SharedMemorySegments):
+    data_size: int = 256
+    data_header_size: int = 1
+    cell_amount: int = 10_000
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.safe_lag: int = int(self.cell_amount * 0.9)

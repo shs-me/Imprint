@@ -1,8 +1,7 @@
 from .settings import (
-    ActiveOrders,
     BarHeaders,
     CachedStatesData,
-    DataForMatching,
+    OrderBook,
     OrderFlag,
     StateFlags,
     TradeParam,
@@ -96,19 +95,13 @@ CSD_VAH_FP: int = int(CachedStatesData.VAH_FP)
 CSD_VAL_FP: int = int(CachedStatesData.VAL_FP)
 CSD_ConstantCount: int = int(CachedStatesData._ConstantCount)
 
-# DataForMatching
-DFM_nPrice: int = int(DataForMatching.nPrice)
-DFM_startTimestamp: int = int(DataForMatching.startTimestamp)
-DFM_endTimestamp: int = int(DataForMatching.endTimestamp)
-DFM_ConstantCount: int = int(DataForMatching._ConstantCount)
-
-# Active Orders
-AO_nPrice: int = int(ActiveOrders.nPrice)
-AO_nQty: int = int(ActiveOrders.nQty)
-AO_timestamp: int = int(ActiveOrders.timestamp)
-AO_orderParam: int = int(ActiveOrders.orderParam)
-AO_orderID: int = int(ActiveOrders.orderID)
-AO_ConstantCount: int = int(ActiveOrders._ConstantCount)
+# OrderBook
+OB_timestamp: int = int(OrderBook.timestamp)
+OB_orderParam: int = int(OrderBook.orderParam)
+OB_clientOrderID: int = int(OrderBook.clientOrderID)
+OB_nPrice: int = int(OrderBook.nPrice)
+OB_nQty: int = int(OrderBook.nQty)
+OB_ConstantCount: int = int(OrderBook._ConstantCount)
 
 # Trade Param
 TP_nPrice: int = int(TradeParam.nPrice)
@@ -131,6 +124,7 @@ OF_LIMIT_TRIGER: int = int(OrderFlag.LIMIT_TRIGER)
 OF_NEW: int = int(OrderFlag.NEW)
 OF_FILLED: int = int(OrderFlag.FILLED)
 OF_CANCELED: int = int(OrderFlag.CANCELED)
+OF_OCO: int = int(OrderFlag.OCO)
 
 # Tool's setup
 ATR_PERIOD: int = 14

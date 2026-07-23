@@ -1,6 +1,6 @@
 import os
 import zipfile
-from datetime import date
+from datetime import date, timedelta
 from urllib import request
 
 from .. import constant as c
@@ -31,15 +31,7 @@ def download_aggTrade_hist_daily_data(
             os.rename(file_path_, file_path)
             os.remove(zip_path)
 
-        try:
-            curDate = curDate.replace(day=curDate.day + 1)
-        except ValueError:
-            year, month, day = (
-                (curDate.year + 1, 1, 1)
-                if (curDate.month + 1) > 12
-                else (curDate.year, curDate.month + 1, 1)
-            )
-            curDate = curDate.replace(year, month, day)
+        curDate += timedelta(days=1)
 
     return True
 

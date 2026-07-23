@@ -16,24 +16,18 @@ class LogicAgent(Logic):
     def __init__(self, manager: AgentManager, reader: FootprintReader) -> None:
         super().__init__(manager=manager, reader=reader)
 
-        cfgFP = manager.cfgFootprint
-        self.space_read = manager.footprint_buf[cfgFP.space_read : cfgFP.space_read + 1]
-
     def alarm_clock(self) -> None:
-        while (self.reader.spare_flag[0] == 0) and (self.tradesParsed[0] == 0):
+        while (self.reader._spare_flag[0] == 0) and (self.parsing_complete[0] == 0):
             time.sleep(0)
 
     def check_lag(self) -> None:
         return super().check_lag()
 
     def post_update(self) -> None:
-        if self.execution_sim:
-            self.space_read[0] = 1
-            while self.space_read[0] == 1:
-                time.sleep(0)
+        pass
 
     def post_final_action(self) -> None:
-        print(f"Count Signals: {self.reader.temp}", flush=True)  # type: ignore
+        self.manager.set_text(f"Count Signals: {self.reader._count_send_signal}")
 
 
 @manager_office()

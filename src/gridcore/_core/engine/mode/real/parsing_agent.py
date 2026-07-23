@@ -1,12 +1,20 @@
 from multiprocessing.synchronize import Event
 
+from msgspec import Struct
+from msgspec.json import Decoder
+
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
-from ...base.base_footprint_writer import (
-    BaseFootprintWriter,
-    FootprintWriter,
-)
+from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
 from ...base.base_parsing import Parsing
+
+
+# - - Binance Futures USDM
+class AggTrade(Struct):
+    T: int  # Trade time
+    p: float  # Price
+    q: float  # Quantity
+    m: bool  # Is buyer maker?
 
 
 class ParsingAgent(Parsing):
@@ -21,6 +29,7 @@ class ParsingAgent(Parsing):
 
         self.parsing_event: Event = parsing_event
         self.logic_event: Event = logic_event
+        self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
 
     def alarm_clock(self) -> None:
         if self.rCellC[0] == self.wCellC[0]:
@@ -50,5 +59,5 @@ class ParsingAgent(Parsing):
 @manager_office()
 def run_parsing(parsing_event: Event, logic_event: Event, **kwargs) -> None:
     writer = BaseFootprintWriter(kwargs["manager"])
-    agent = ParsingAgent(kwargs["manager"], writer, logic_event, parsing_event)
+    agent = ParsingAgent(kwargs["manager"], writer, parsing_event, logic_event)
     agent.run_parsing_engine()

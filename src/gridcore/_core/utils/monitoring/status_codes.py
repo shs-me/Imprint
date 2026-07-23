@@ -17,31 +17,26 @@ class StatusCodes(IntEnum):
         return obj
 
     # General
-    RUN = "RUNNING"
-    STOP = "STOPING"
-    EXIT = "EXIT"
-    SLEEP = "SLEEPING"
-    WAKE_UP = "WAKE_UP"
-    COMPLETE = "COMPLETE AND EXIT"
-    ERROR = "ERROR[MORE INFO IN 'EXC_DUMP']"
+    RUN = "Running"
+    STOP = "Stopping"
+    EXIT = "Exit"
+    SLEEP = "Sleeping"
+    WAKE_UP = "Wake up"
+    COMPLETE = "Complete and exit"
+    ERROR = "ERROR more info in 'exc_dump'"
     GC_COLLECT = "Collect garbage"
     # - - -
     # PARSING
-    UNVALID_DATA = "AggTrade Data[price, qty or timestamp] < 0"
-    FP_IDX_FILLED = "Array[fpCols] < IDX or IDX < 0"
-    FP_IDY_FILLED = "Array[fpLines] < IDY or IDY < 0"
-    BUF_DFM_FILLED = "Buffer for matching engine filled: new_row_id > dfmLines"
+    UNVALID_DATA = "Unvalid data (0 > price or qty or timestamp)"
+    FP_IDX_FILLED = "Footprint X axis filled or (IDX < 0)"
+    FP_IDY_FILLED = "Footprint Y axis filled"
     # Logic
-    ANALYSIS_LAG_MORE_SAFE_LAG = (
-        "Analysis lag[endReadingTime - StartReadingTime] > AnalysisSafeLagMs"
-    )
+    ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
     # PARSING/LOGIC
     FP_RE_INIT = "Footprint re-initializated"
     # WSS/SIM
-    BIG_RAW_DATA = (
-        "wss: _set_raw_data: size/len raw_data > data_cell_size_in_ring_buffer"
-    )
-    DATA_PREPPERED = "wss_sim: historical data preppered"
+    BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"
+    DATA_PREPPERED = "Data preppered"
     # EXECUTION
-    LOSS_MORE_LIMIT = "balance >= max loss limit"
-    QTY_LESS_LIMIT = "qtyUSDT <= min order size in usdt"
+    LOSS_MORE_LIMIT = "Balance >= max loss limit"
+    QTY_LESS_LIMIT = "Nominal qty <= min order size"

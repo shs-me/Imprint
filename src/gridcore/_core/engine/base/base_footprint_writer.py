@@ -22,92 +22,65 @@ BHM_ConstantCount: int = int(BarHeadersMetadata._ConstantCount)
 
 class FootprintWriter(ABC):
     def __init__(self, manager: AgentManager) -> None:
-        self.manager = manager
+        self.manager: AgentManager = manager
         self.set_proc_sc = manager.set_proc_sc
-        self.task_status = manager.task_status
 
         cfgFP = manager.cfgFootprint
-        self.saveFootprintHeaders = cfgFP.saveFootprintHeaders
-        self.space_flag = manager.footprint_buf[cfgFP.flag : cfgFP.flag + 1]
-        self.spare_flag = manager.footprint_buf[cfgFP.spare_flag : cfgFP.spare_flag + 1]
-        self.base_price_and_timestamp_buf = manager.footprint_buf[
-            cfgFP.basePrice[0] : cfgFP.baseTimestamp[1]
-        ].cast("q")
+        self.space_flag: memoryview = cfgFP.space_flag
+        self.spare_flag: memoryview = cfgFP.spare_flag
+        self.base_nPrice: memoryview = cfgFP.base_price.cast("q")
+        self.base_timestamp: memoryview = cfgFP.base_timestamp.cast("q")
+        self.save_fp_headers: bool = cfgFP.save_fp_headers
+        self.idxVP, self.idxDP = cfgFP.colVP, cfgFP.colDP
 
         cfgMetrics = manager.cfgMetrics
-        self.dfmLines = cfgMetrics.dfmLines
-        self.dfm_1RID = manager.metrics_buf[slice(*cfgMetrics.dfm_1_row_id)].cast("q")
-        self.dfm_2RID = manager.metrics_buf[slice(*cfgMetrics.dfm_2_row_id)].cast("q")
-        self.timeStartReading = manager.metrics_buf[
-            slice(*cfgMetrics.timeStartReading)
-        ].cast("q")
-        self.trade_par = manager.metrics_buf[
-            cfgMetrics.tick_size[0] : cfgMetrics.qtyPrecision[1]
-        ].cast("q")
-        """symbol trading parameters: tick_size, lot_size, pricePrecision, qtyPrecision"""
+        self.time_start_reading: memoryview = cfgMetrics.time_start_reading.cast("q")
 
         self._init_array()
 
-        self.base_fp_dump_path = (
-            f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.symbol.upper()}"
-        )
-        self.idxVP, self.idxDP = cfgFP.colVP, cfgFP.colDP
-        self.con = FPconverter(
+        self.con: FPconverter = FPconverter(
+            cfgFP=cfgFP,
             footprint=self.footprint,
             headers=self.headers,
-            trade_param=self.trade_par,
-            cfgFP=cfgFP,
+            price_prec=manager.cfgCoin.price_prec,
+            qty_prec=manager.cfgCoin.qty_prec,
         )
         self.last_idx: memoryview = memoryview(bytearray(8)).cast("q")
         self.counterTicks: memoryview = memoryview(bytearray(8)).cast("Q")
-        self.defaultSpace: list[int] = [self.con.fpLines, self.con.fpCols, 0, 0]
+        self.defaultSpace: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
+        self.base_fp_dump_path: str = (
+            f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.cfgCoin.symbol.upper()}"
+        )
 
     def _init_array(self) -> None:
-        cfgFP, cfgMetrics = self.manager.cfgFootprint, self.manager.cfgMetrics
+        cfgFP = self.manager.cfgFootprint
         self.footprint: NDArray[int64] = np.ndarray(
-            shape=(cfgFP.fpLines, cfgFP.fpPanelCols),
+            shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols),
             dtype=int64,
-            buffer=self.manager.footprint_buf[slice(*cfgFP.footprint)],
+            buffer=cfgFP.footprint,
         )
         self.dirty_footprint: NDArray[int64] = np.ndarray(
-            shape=(cfgFP.fpLines, cfgFP.fpPanelCols),
-            dtype=int64,
+            shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols), dtype=int64
         )
-        # - - -
+
         self.meta_data: NDArray[float64] = np.ndarray(
-            shape=(2, BHM_ConstantCount),
-            dtype=float64,
-            buffer=self.manager.footprint_buf[slice(*cfgFP.meta_data)],
+            shape=(2, BHM_ConstantCount), dtype=float64, buffer=cfgFP.metadata
         )
-        # - - -
+
         self.headers: NDArray[int64] = np.ndarray(
             shape=(cfgFP.bar_count, c.BH_ConstantCount),
             dtype=int64,
-            buffer=self.manager.footprint_buf[slice(*cfgFP.headers)],
+            buffer=cfgFP.headers,
         )
         self.dirty_headers: NDArray[int64] = np.ndarray(
-            shape=(cfgFP.bar_count, c.BH_ConstantCount),
-            dtype=int64,
-        )
-        # - - -
-        self.space: NDArray[int64] = np.ndarray(
-            shape=(2, SpaceCoords._ConstantCount),
-            dtype=int64,
-            buffer=self.manager.footprint_buf[slice(*cfgFP.space)],
-        )
-        # - - -
-        self.dfm_1: NDArray[int64] = np.ndarray(
-            shape=(cfgMetrics.dfmLines, cfgMetrics.dfmCols),
-            dtype=int64,
-            buffer=self.manager.metrics_buf[slice(*cfgMetrics.dfm_1)],
-        )
-        self.dfm_2: NDArray[int64] = np.ndarray(
-            shape=(cfgMetrics.dfmLines, cfgMetrics.dfmCols),
-            dtype=int64,
-            buffer=self.manager.metrics_buf[slice(*cfgMetrics.dfm_2)],
+            shape=(cfgFP.bar_count, c.BH_ConstantCount), dtype=int64
         )
 
-    def init_session(self, price: float, timestamp: int) -> bool:
+        self.space: NDArray[int64] = np.ndarray(
+            shape=(2, SpaceCoords._ConstantCount), dtype=int64, buffer=cfgFP.space
+        )
+
+    def init_session(self, price: float, timestamp: int) -> None:
         self.dirty_footprint.fill(0)
         self.dirty_headers.fill(0)
         self.footprint.fill(0)
@@ -118,9 +91,8 @@ class FootprintWriter(ABC):
 
         self.con.init_session(price, timestamp)
 
-        self.base_price_and_timestamp_buf[0] = self.con.nBasePrice
-        self.base_price_and_timestamp_buf[1] = self.con.baseTimestamp
-        return True
+        self.base_nPrice[0] = self.con.nBasePrice
+        self.base_timestamp[0] = self.con.baseTimestamp
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
         nPrice: int = self.con.to_nPrice(price)
@@ -192,14 +164,14 @@ class FootprintWriter(ABC):
                 space=self.space,
                 space_flag=self.space_flag,
             )
-            self.timeStartReading[0] = time.perf_counter_ns()
+            self.time_start_reading[0] = time.perf_counter_ns()
             self.spare_flag[0] = 1
             return True
         return False
 
     # For Agent Method's
-    def save_headersArray(self) -> None:
-        if self.saveFootprintHeaders:
+    def save_fp_headers_array(self) -> None:
+        if self.save_fp_headers:
             os.makedirs(self.base_fp_dump_path, exist_ok=True)
             headers_save_path = (
                 f"{self.base_fp_dump_path}/{self.con.get_time(idx=0, strftime=True)}"
@@ -208,15 +180,15 @@ class FootprintWriter(ABC):
 
     def pre_re_init(self) -> None:
         self.wait_read_space()
-        self.save_headersArray()
+        self.save_fp_headers_array()
         self.set_proc_sc(scs.FP_RE_INIT)
 
     def space_is_read(self) -> bool:
         return bool(np.all(self.space[:] == self.defaultSpace))
 
     def final_actions(self) -> None:
-        if (self.last_idx[0] & ~1) == (self.manager.cfgFootprint.fpCols - 1 & ~1):
-            self.save_headersArray()
+        if (self.last_idx[0] & ~1) == (self.manager.cfgFootprint.fp_cols - 1 & ~1):
+            self.save_fp_headers_array()
 
 
 @njit(cache=True)

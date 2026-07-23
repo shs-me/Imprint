@@ -10,23 +10,17 @@ class Sync(ABC):
         self.manager = manager
 
         cfgMetrics = manager.cfgMetrics
-        self.timeStartReading = self.manager.metrics_buf[
-            slice(*cfgMetrics.timeStartReading)
-        ].cast("q")
+        self.time_start_reading: memoryview = cfgMetrics.time_start_reading.cast("q")
 
-        cfgST = manager.cfgStrategy
-        self.analysis_safe_lag_us = cfgST.analysis_safe_lag_microsecond
-        self.cell_amount: int = cfgST.cell_amount
-        self.readerId: int = cfgST.reader[1] // 8 - 1
-        self.writerId: int = cfgST.writer[1] // 8 - 1
-        self.nPriceId: int = cfgST.nPrice[1] // 8 - 1
-        self.time_msId: int = cfgST.time_ms[1] // 8 - 1
-        self.orderParamId: int = cfgST.orderParam[1] // 8 - 1
-        self.signal_size: int = cfgST.signal_size // 8
-        self.signal_offset: int = cfgST.offset // 8
-        self.executeBuf: memoryview = manager.strategy_buf[
-            slice(*cfgST.executeBuf)
-        ].cast("q")
+        cfgAC = manager.cfgAccount
+        self.analysis_safe_lag_us: int = cfgAC.analysis_safe_lag_microsecond
+
+        cfgSN = manager.cfgSignal
+        self.cell_amount: int = cfgSN.cell_amount
+        self.data_size: int = cfgSN.data_size // 8
+        self.data: memoryview = cfgSN.data.cast("q")
+        self.writer_id: memoryview = cfgSN.writer_id.cast("q")
+        self.reader_id: memoryview = cfgSN.reader_id.cast("q")
 
     def send_signal(
         self,
@@ -47,15 +41,13 @@ class Sync(ABC):
         orderParam |= c.OF_MARKET if is_market else c.OF_LIMIT
         orderParam |= c.OF_NEW
 
-        cell: int = self.executeBuf[self.writerId]
-        start: int = cell * self.signal_size + self.signal_offset
-
-        self.executeBuf[start + self.nPriceId] = nPrice
-        self.executeBuf[start + self.time_msId] = time_ms
-        self.executeBuf[start + self.orderParamId] = orderParam
+        cell: int = self.writer_id[0]
+        start: int = cell * self.data_size
+        set_data: memoryview = self.data[start : start + self.data_size]
+        set_data[0], set_data[1], set_data[2] = nPrice, time_ms, orderParam
 
         new_cell = cell + 1
-        self.executeBuf[self.writerId] = new_cell if new_cell < self.cell_amount else 0
+        self.writer_id[0] = new_cell if new_cell < self.cell_amount else 0
 
         self.sync_with_execution()
 
@@ -63,5 +55,5 @@ class Sync(ABC):
         pass
 
     def lag_is_safe(self) -> bool:
-        lag: int = (time.perf_counter_ns() - self.timeStartReading[0]) // 1_000
+        lag: int = (time.perf_counter_ns() - self.time_start_reading[0]) // 1_000
         return True if (lag < self.analysis_safe_lag_us) else False

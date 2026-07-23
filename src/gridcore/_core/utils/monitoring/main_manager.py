@@ -1,63 +1,37 @@
+import ctypes
+import os
+import signal
+import sys
 from datetime import date
 from multiprocessing.synchronize import Semaphore
-from typing import Any
 
 from loguru import logger
 
-from ... import configurations as cfg
+from .base_manager import Manager
 from .status_codes import StatusCodes as scs
 
 
-class MainManager:
+class MainManager(Manager):
     def __init__(
-        self, segments: dict[str, Any], configs: dict[str, Any], shm_buf: memoryview
+        self,
+        segments: dict[str, slice],
+        shm_buf: memoryview,
+        configs: list,
     ) -> None:
-        self.shm_buf: memoryview = shm_buf
+        super().__init__(segments, shm_buf, configs)
+
         self.startDate: date = date.today()
-        self.segments_init(segments)
-        self.configs_init(configs)
-        self.local_segments_init()
+        self.status_buf: memoryview = self.cfgMetrics.status.cast("q")
 
-    def configs_init(self, configs: dict[str, Any]) -> None:
-        config_subclasses: list[str] = configs["subclasses"]
-        for name, obj in configs.items():
-            if isinstance(obj, list):
-                continue
+    def get_text(self, proc_id: int) -> str:
+        text_buf: memoryview = self.cfgMetrics.text
+        start = proc_id * self.cfgMetrics.text_size
+        len_t, start = text_buf[start : start + 8].cast("q")[0], start + 8
+        text: str = f"{self.procs[proc_id]['proc_name']}: "
+        if len_t > 0:
+            text = text + bytes(text_buf[start : start + len_t]).decode()
 
-            if name not in config_subclasses:
-                raise ValueError(f"{name} not subclass {cfg.Configuration.__name__}")
-
-            if isinstance(obj, cfg.ConfigurationMonitoring):
-                self.cfgMonitoring = obj
-
-            elif isinstance(obj, cfg.ConfigurationMetrics):
-                self.cfgMetrics = obj
-
-            elif isinstance(obj, cfg.ConfigurationBacktesting):
-                self.cfgBacktesting = obj
-
-    def segments_init(self, segments: dict[str, Any]) -> None:
-        _slice: slice
-        segments_subclasses: list[str] = segments["subclasses"]
-        for name, _slice in segments.items():
-            if isinstance(_slice, list):
-                continue
-
-            if name not in segments_subclasses:
-                raise ValueError(
-                    f"{name} not subclass {cfg.ConfigurationSHMSegments.__name__}"
-                )
-
-            if name == cfg.ConfigurationMonitoring.__name__:
-                self.monitoring_buf = self.shm_buf[_slice]
-
-            elif name == cfg.ConfigurationMetrics.__name__:
-                self.metrics_buf = self.shm_buf[_slice]
-
-    def local_segments_init(self) -> None:
-        self.procs_buf = self.monitoring_buf[slice(*self.cfgMonitoring.procs_buf)].cast(
-            "q"
-        )
+        return text
 
     def run(self, procs: dict[int, dict], scs_sem: Semaphore) -> None:
         self.procs = procs
@@ -67,7 +41,7 @@ class MainManager:
             if bool(len(procs)):
                 scs_sem.acquire(timeout=60)
                 if date.today() > self.startDate:
-                    self.set_task_sc_to_procs(scs.GC_COLLECT)
+                    self.set_task_sc_to_proc(scs.GC_COLLECT)
                     self.startDate = date.today()
 
                 if bool(len(procs)):
@@ -86,10 +60,10 @@ class MainManager:
         return True
 
     def check_process_status_code(self) -> bool:
-        procs, procs_buf = self.procs, self.procs_buf
+        procs, status_buf = self.procs, self.status_buf
         for _ in range(len(self.procs)):
             for k, v in procs.items():
-                sc = procs_buf[k]
+                sc = status_buf[k]
                 # Action's
                 # General
                 if sc == 0:
@@ -106,26 +80,23 @@ class MainManager:
 
                 elif sc & scs.COMPLETE:
                     logger.success(f"{v['proc_name']} | {scs.COMPLETE.label}")
+                    print(self.get_text(k), flush=True)
                     procs.pop(k)
                     break
 
                 # Parsing
                 elif sc & scs.UNVALID_DATA:
                     logger.warning(f"{v['proc_name']} | {scs.UNVALID_DATA.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
-
-                elif sc & scs.BUF_DFM_FILLED:
-                    logger.warning(f"{v['proc_name']} | {scs.BUF_DFM_FILLED.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 elif sc & scs.FP_IDX_FILLED:
                     logger.warning(f"{v['proc_name']} | {scs.FP_IDX_FILLED.label}")
-                    for task_id in self.get_procs_task_id(["LOGIC", "PARSING"]):
+                    for task_id in self.get_proc_task_id(["LOGIC", "PARSING"]):
                         self.set_task_sc_to_proc(scs.FP_RE_INIT, task_id)
 
                 elif sc & scs.FP_IDY_FILLED:
                     logger.warning(f"{v['proc_name']} | {scs.FP_IDY_FILLED.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 elif sc & scs.FP_RE_INIT:
                     logger.success(f"{v['proc_name']} | {scs.FP_RE_INIT.label}")
@@ -141,40 +112,59 @@ class MainManager:
                 # Network/Sim
                 elif sc & scs.DATA_PREPPERED:
                     logger.warning(f"{v['proc_name']} | {scs.DATA_PREPPERED.label}")
-                    self.set_task_sc_to_procs(scs.COMPLETE)
+                    self.set_task_sc_to_proc(scs.COMPLETE)
 
                 elif sc & scs.BIG_RAW_DATA:
                     logger.warning(f"{v['proc_name']} | {scs.BIG_RAW_DATA.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 # Execution
                 elif sc & scs.LOSS_MORE_LIMIT:
                     logger.warning(f"{v['proc_name']} | {scs.LOSS_MORE_LIMIT.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 elif sc & scs.QTY_LESS_LIMIT:
                     logger.warning(f"{v['proc_name']} | {scs.QTY_LESS_LIMIT.label}")
-                    self.set_task_sc_to_procs(scs.EXIT)
+                    self.set_task_sc_to_proc(scs.EXIT)
 
                 if sc != 0:
                     self.clear_proc_sc(code=sc, proc_id=k)
 
         return True
 
-    def set_task_sc_to_proc(self, code: scs, task_id: int):
-        self.procs_buf[task_id] |= code
-
-    def set_task_sc_to_procs(self, code: scs):
-        for _, data in self.procs.items():
-            self.procs_buf[data["task_id"]] |= code
-
     def clear_proc_sc(self, code: scs | int, proc_id: int) -> None:
-        self.procs_buf[proc_id] &= ~(code)
+        self.status_buf[proc_id] &= ~(code)
 
-    def get_procs_task_id(self, procs_name: list[str]) -> list[int]:
+    def set_task_sc_to_proc(self, code: scs, task_id: int | None = None):
+        if code & scs.EXIT:
+            pids = []
+            for _, v in self.procs.items():
+                if (v["task_id"] == task_id) or (task_id is None):
+                    pids.append(v["proc"].pid)
+                    logger.warning(f"{v['proc_name']} | {scs.EXIT.label}")
+
+            generate_ctrl_c_event(pids)
+        else:
+            [
+                self.set_sc(_["task_id"], code)
+                for p, _ in self.procs.items()
+                if (_["task_id"] == task_id) or (task_id is None)
+            ]
+
+    def set_sc(self, id: int, code: scs) -> None:
+        self.status_buf[id] |= code
+
+    def get_proc_task_id(self, procs_name: list[str]) -> list[int]:
         return [
             v["task_id"]
             for k, v in self.procs.items()
             for p in procs_name
             if p in v["proc_name"]
         ]
+
+
+def generate_ctrl_c_event(pids: list[int]) -> None:
+    if sys.platform == "win32":
+        [ctypes.windll.kernel32.GenerateConsoleCtrlEvent(0, pid) for pid in pids]
+    elif sys.platform == "linux":
+        [os.kill(pid, signal.SIGINT) for pid in pids]

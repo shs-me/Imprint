@@ -3,107 +3,119 @@ import time
 from .... import constant as c
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
-from ....utils.monitoring.status_codes import StatusCodes as scs
 from ...base.base_execution import Execution
-from ...base.utils.tm_con import TradeConverter
-from .execution_utils.matching_engine import MatchingEngine
-from .execution_utils.trade_manager import TradeManager
-from .rest_sim_agent import RestSimAgent
+from .matching_engine import MatchingEngine
 
 
 class ExecutionAgent(Execution):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
-        cfgFP = manager.cfgFootprint
-        self.space_read = manager.footprint_buf[cfgFP.space_read : cfgFP.space_read + 1]
-        self.execution_sim = manager.cfgBacktesting.execution_sim
-        self.rest = RestSimAgent(self.symbol, manager.cfgBacktesting)
-        self.con = TradeConverter(self.trade_par, manager.cfgStrategy)
-        self.tm = TradeManager(converter=self.con)
-        self.me = MatchingEngine(manager, self.con, self.tm)
-        self.con.init_session(
-            startBalance=self.rest.get_balance(),
-            minOrderSize=self.rest.get_min_order_size_usdt(),
-            takerCommission=self.rest.get_commission(is_maker=False),
-            makerCommission=self.rest.get_commission(is_maker=True),
-        )
-        self.temp = 0
+        self.me: MatchingEngine = MatchingEngine(manager)
+        self.count_open_position: int = 0
 
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
-        while (WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]) and (
-            (self.space_read[0] == 0) and (self.footprintReaded[0] == 0)
-        ):
+        matching = False
+        while self.logic_complete[0] == 0:
+            if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
+                matching = True
+            if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
+                break
+            if matching:
+                self.me.matching(self.trade_readed_time[0])
+
             time.sleep(0)
 
-    def pre_executed_actions(self) -> None:
-        pass
+    def pre_execute_signal_action(self, time_get_signal: int) -> None:
+        self.me.matching(time_get_signal + self.con.latency)
 
-    def executed_action(self) -> None:
-        pass
-
-    def pre_execute_actions(self) -> None:
-        pass
-
-    def execute_action(
-        self, nPrice: int, time_get_signal: int, orderParam: int
+    def execute_signal(
+        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
-        _ = self.con
-        # - - -
-        if self.execution_sim:
-            timestamp = time_get_signal + _.latencyMs
-            if self.start_matching(timestamp):
-                if (qty := _.nominalEntryNqtyWithLeverage) is not None:
-                    nQty: int = _.entryNqtyWithLeverage(nPrice, qty)
-                    is_market: bool = bool(orderParam & c.OF_MARKET)
-                    if not is_market:
-                        _.lockedNbalance = _.to_nMargin(nPrice, nQty)
+        if self.con.is_averaging(order_param):
+            return
 
-                    self.tm.set_active_order(nPrice, nQty, timestamp, orderParam)
-                    self.temp += 1
-                else:
-                    self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
+        self.con.lockedNbalance = self.con.to_nMargin(nPrice, nQty)
+        self.me.update_order_book(
+            timestamp=time_get_signal + self.con.latency,
+            order_param=order_param,
+            client_order_id=1,
+            nPrice=nPrice,
+            nQty=nQty,
+        )
+        self.count_open_position += 1
 
-    def start_matching(self, timestamp: int | None) -> bool:
-        try:
-            self.me.prepare_dfm(timestamp)
-            return True
-        except RuntimeError:
-            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
-            print(self.stat(), flush=True)
-            self.tm.final_action()
-            return False
+    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+        get_data: memoryview = user_data_raw_buf.cast("q")
+        timestamp: int = get_data[0]
+        order_param: int = get_data[1]
+        order_id: int = get_data[2]
+        nPrice: int = get_data[3]
+        nQty: int = get_data[4]
+        nCommission: int = 0
+
+        is_long, is_buy = (bool(order_param & c.OF_LONG), bool(order_param & c.OF_BUY))
+        if bool(order_param & c.OF_FILLED):
+            nCommission = self.con.to_nCommission(
+                nPrice, nQty, bool(order_param & c.OF_LIMIT)
+            )
+            is_open = (is_long and is_buy) or (not is_long and not is_buy)
+            self.tm.update_position(nPrice, nQty, nCommission, is_open, is_long)
+            if is_open:
+                tp_sl_timestamp: int = timestamp + (2 * self.con.latency)
+
+                tp_nPrice: int = self.con.TPdevNprice(nPrice, is_long)
+                tp_order_param: int = 0
+                tp_order_param |= c.OF_LONG if is_long else c.OF_SHORT
+                tp_order_param |= c.OF_SELL if is_buy else c.OF_BUY
+                tp_order_param |= c.OF_LIMIT | c.OF_NEW | c.OF_OCO
+                self.me.update_order_book(
+                    tp_sl_timestamp, tp_order_param, order_id, tp_nPrice, nQty
+                )
+
+                sl_nPrice: int = self.con.SLdevNprice(nPrice, is_long)
+                sl_order_param: int = 0
+                sl_order_param |= c.OF_LONG if is_long else c.OF_SHORT
+                sl_order_param |= c.OF_SELL if is_buy else c.OF_BUY
+                sl_order_param |= c.OF_MARKET_TRIGER | c.OF_NEW | c.OF_OCO
+                self.me.update_order_book(
+                    tp_sl_timestamp, sl_order_param, order_id, sl_nPrice, nQty
+                )
+
+        elif bool(order_param & c.OF_CANCELED):
+            pass
+
+        self.tm.update_orders_history(
+            timestamp, order_param, order_id, nPrice, nQty, nCommission
+        )
 
     def post_check_bufs(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
-        if self.execution_sim:
-            if WB_1[0] == RB_1[0] and WB_2[0] == RB_2[0]:
-                if self.space_read[0] == 1:
-                    self.start_matching(None)
-                    self.me.dfmWid[0] = 0
-                    self.me.dfmRid[0] = 0
-                    self.space_read[0] = 0
-
-    def stat(self) -> str:
-        return (
-            f"Balance: {self.con.nBalance / self.con.scale} \n"
-            f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
-            f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
-            f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
-            f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
-            f"Long Open Qty: {self.con.longNqty / self.con.scale} \n"
-            f"Short Open Qty: {self.con.shortNqty / self.con.scale} \n"
-            f"Count Orders in History: {self.con.last_order_id} \n"
-            f"Count Active Orders: {self.tm.aoWRow[0]} \n"
-            f"Count Open Positions: {self.temp}"
-        )
+        pass
 
     def post_final_action(self) -> None:
+        if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
+            self.me.matching(self.trade_readed_time[0])
+
+        self.check_user_data_buf()
         self.tm.final_action()
-        print(self.stat(), flush=True)
+        self.manager.set_text(
+            (
+                f"Balance: {self.con.nBalance / self.con.scale} \n"
+                f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
+                f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
+                f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
+                f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
+                f"Long Open Qty: {self.con.longNqty / self.con.qtyMult} \n"
+                f"Short Open Qty: {self.con.shortNqty / self.con.qtyMult} \n"
+                f"Count Orders in History: {self.tm.ohWid[0]} \n"
+                f"Count Active Orders: {self.me.obRow[0]} \n"
+                f"Count Open Positions: {self.count_open_position}"
+            )
+        )
 
 
 @manager_office()

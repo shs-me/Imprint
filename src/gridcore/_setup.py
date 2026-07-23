@@ -1,159 +1,126 @@
-from enum import Enum
+import importlib.util
+from dataclasses import dataclass
 
 from . import FootprintReader
-from ._core import configurations as con
+from ._core import configurations as cfg
 from ._core.engine.base.base_footprint_reader import BaseFootprintReader
+from ._core.engine.mode.real.rest_agent import RestAgent
 from ._core.main import run_core
 from ._core.settings import Timeframe
 from ._core.utils.handlers import error_handler
+from ._core.utils.tools import download_aggTrade_hist_daily_data, to_date
 
 __all__ = [
-    "run_live",
-    "run_backtesting",
+    "run",
+    "cfg",
+    "RunMode",
+    "Analysis",
     "Timeframe",
 ]
 
+from loguru import logger
 
-class RunMode(Enum):
-    Backtesting = True, True
-    Real = False, True
-
-
-def run_live(
-    algorithm: type[FootprintReader] = BaseFootprintReader,
-    symbol: str = "DASHUSDT",
-    timeframe: Timeframe = Timeframe._5M,
-    laverage: int = 20,
-    max_loss_balance: float = 0.1,
-    max_lock_balance: float = 0.05,
-    entry_quantity: float = 0.005,
-    take_profit_deviation: float = 0.05,
-    stop_loss_deviation: float = 0.05,
-) -> None:
-    _run(
-        algorithm=algorithm,
-        run_mode=RunMode.Real,
-        symbol=symbol,
-        timeframe=timeframe,
-        laverage=laverage,
-        max_loss_balance=max_loss_balance,
-        max_lock_balance=max_lock_balance,
-        entry_quantity=entry_quantity,
-        take_profit_deviation=take_profit_deviation,
-        stop_loss_deviation=stop_loss_deviation,
-    )
+from ._core import constant as c
 
 
-def run_backtesting(
-    algorithm: type[FootprintReader] = BaseFootprintReader,
-    backtest_start_date: str = "2026-01-01",
-    backtest_end_date: str = "2026-01-01",
-    symbol: str = "DASHUSDT",
-    sim_tick_size: str = "0.01",
-    sim_lot_size: str = "0.001",
-    sim_taker_commission: float = 0.005,
-    sim_maker_commission: float = 0.002,
-    sim_min_order_size: float = 5.0,
-    sim_balance: float = 5000.0,
-    timeframe: Timeframe = Timeframe._5M,
-    laverage: int = 20,
-    max_loss_balance: float = 0.1,
-    max_lock_balance: float = 0.05,
-    entry_quantity: float = 0.005,
-    take_profit_deviation: float = 0.05,
-    stop_loss_deviation: float = 0.05,
-    save_orders_history: bool = False,
-    save_footprint_headers: bool = False,
-    save_algorithm_metadata: bool = False,
-) -> None:
-    _run(
-        algorithm=algorithm,
-        run_mode=RunMode.Backtesting,
-        backtest_start_date=backtest_start_date,
-        backtest_end_date=backtest_end_date,
-        symbol=symbol,
-        sim_tick_size=sim_tick_size,
-        sim_lot_size=sim_lot_size,
-        sim_balance=sim_balance,
-        sim_taker_commission=sim_taker_commission,
-        sim_maker_commission=sim_maker_commission,
-        sim_min_order_size=sim_min_order_size,
-        timeframe=timeframe,
-        laverage=laverage,
-        max_loss_balance=max_loss_balance,
-        max_lock_balance=max_lock_balance,
-        entry_quantity=entry_quantity,
-        take_profit_deviation=take_profit_deviation,
-        stop_loss_deviation=stop_loss_deviation,
-        save_orders_history=save_orders_history,
-        save_footprint_headers=save_footprint_headers,
-        save_algorithm_metadata=save_algorithm_metadata,
-    )
+@dataclass
+class RunMode:
+    only_visualization: bool = False
+    with_visualization_chart: bool = False
+    with_visualization_statistic: bool = False
+    backtesting: bool = True
+    execution: bool = True
+    backtest_start_date: str = "2026-01-01"
+    backtest_end_date: str = "2026-01-01"
+
+    def __post_init__(self) -> None:
+        self.setup: cfg.Setup = cfg.Setup(
+            backtesting=self.backtesting,
+            execution=self.execution,
+            backtest_start_date=self.backtest_start_date,
+            backtest_end_date=self.backtest_end_date,
+        )
+
+
+@dataclass
+class Analysis:
+    algorithm: type[FootprintReader] = BaseFootprintReader
+    timeframe: Timeframe = Timeframe._5M
+    save_fp_headers: bool = False
+    save_algorithm_metadata: bool = False
+
+    def __post_init__(self) -> None:
+        self.footprint: cfg.Footprint = cfg.Footprint(
+            timeframe=self.timeframe,
+            save_fp_headers=self.save_fp_headers,
+            save_algorithm_metadata=self.save_algorithm_metadata,
+            algorithm_module=self.algorithm.__module__,
+            algorithm_class_name=self.algorithm.__name__,
+        )
 
 
 @error_handler()
-def _run(
-    algorithm: type[FootprintReader] = BaseFootprintReader,
-    run_mode: RunMode = RunMode.Backtesting,
-    timeframe: Timeframe = Timeframe._5M,
-    symbol: str = "DASHUSDT",
-    laverage: int = 20,
-    max_loss_balance: float = 0.1,
-    max_lock_balance: float = 0.05,
-    entry_quantity: float = 0.005,
-    take_profit_deviation: float = 0.05,
-    stop_loss_deviation: float = 0.05,
-    sim_balance: float = 5000.0,
-    sim_taker_commission: float = 0.005,
-    sim_maker_commission: float = 0.002,
-    sim_min_order_size: float = 5,
-    sim_tick_size: str = "0.01",
-    sim_lot_size: str = "0.001",
-    backtest_start_date: str = "2026-01-01",
-    backtest_end_date: str = "2026-01-01",
-    save_orders_history: bool = False,
-    save_footprint_headers: bool = False,
-    save_algorithm_metadata: bool = False,
+def run(
+    run_mode: RunMode = RunMode(),
+    account: cfg.Account = cfg.Account(),
+    coin: cfg.Coin = cfg.Coin(),
+    strategy: cfg.Strategy = cfg.Strategy(),
+    analysis: Analysis = Analysis(),
 ) -> None:
-    execution, backtesting = run_mode.value
-
-    kwargs = {}
-    kwargs["backtesting"] = backtesting
-    kwargs["execution"] = execution
-    kwargs["symbol"] = symbol
-    kwargs["algorithm_module"] = algorithm.__module__
-    kwargs["algorithm_package"] = algorithm.__name__
-
-    args = (
-        con.ConfigurationBacktesting(
-            tick_size=sim_tick_size,
-            lot_size=sim_lot_size,
-            minOrderSizeUSDT=sim_min_order_size,
-            taker_commission=sim_taker_commission,
-            maker_commission=sim_maker_commission,
-            balanceUSDT=sim_balance,
-            execution_sim=execution,
-            startDateForPrepper=backtest_start_date,
-            endDateForPrepper=backtest_end_date,
-        ),
-        con.ConfigurationFootprint(
-            timeframe=timeframe,
-            saveFootprintHeaders=save_footprint_headers,
-            saveAlgorithmMetadata=save_algorithm_metadata,
-        ),
-        con.ConfigurationStrategy(
-            leverage=laverage,
-            maxLossBalance=max_loss_balance,
-            maxLockBalance=max_lock_balance,
-            entry_qty=entry_quantity,
-            TPdev=take_profit_deviation,
-            SLdev=stop_loss_deviation,
-            saveOrdersHistory=save_orders_history,
-        ),
+    logger.remove()
+    logger.add(
+        c.CORE_LOG_PATH,
+        rotation="10 MB",
+        enqueue=True,
+        format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
-    for obj in args:
-        name = str(obj.__class__).split(".")[-1].removesuffix("'>")
-        kwargs[name] = obj
+    if run_mode.setup.backtesting:
+        try:
+            startDate, endDate = to_date(
+                [run_mode.setup.backtest_start_date, run_mode.setup.backtest_end_date]
+            )
+        except ValueError as e:
+            return logger.error(f"Run Core Failed | {e}")
 
-    run_core(**kwargs)
+        download_aggTrade_hist_daily_data(coin.symbol, startDate, endDate)
+
+    else:
+        rest = RestAgent(coin.symbol)
+        coin.tick_size = rest.get_tick_size()
+        coin.lot_size = rest.get_lot_size()
+
+    args = (
+        run_mode.setup,
+        account,
+        coin,
+        strategy,
+        analysis.footprint,
+    )
+    kwargs = {}
+    for obj in args:
+        kwargs[obj.__class__.__name__] = obj
+
+    if not run_mode.only_visualization:
+        run_core(**kwargs)
+
+    if run_mode.with_visualization_chart or run_mode.with_visualization_statistic:
+        vis_spec = importlib.util.find_spec("gridcore_visualization")
+        if vis_spec is not None:
+            vis_module = importlib.import_module("gridcore_visualization")
+            vis_module.run(
+                symbol=coin.symbol,
+                timeframe=analysis.timeframe,
+                price_prec=coin.price_prec,
+                qty_prec=coin.qty_prec,
+                scale=account.scale_prec,
+                start_date=run_mode.backtest_start_date,
+                end_date=run_mode.backtest_end_date,
+                footprint_headers_path=c.BASE_FOOTPRINT_DUMP_PATH,
+                start_balance=account.balance,
+                orders_history_path=c.ORDERS_HISTORY_DUMP_PATH,
+                run_chart_visualization=run_mode.with_visualization_chart,
+                run_statistic_visualization=run_mode.with_visualization_statistic,
+            )
+        else:
+            logger.warning('"gridcore-visualization" package not found')
