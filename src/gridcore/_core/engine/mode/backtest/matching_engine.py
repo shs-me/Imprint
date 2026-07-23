@@ -158,6 +158,7 @@ def _matching(
                 )
                 if data_ is not None:
                     data_example[deRow[0], :] = data_
+                    data = data_example[deRow[0], :]
                     deRow[0] += 1
                     order_id_buf[0] += 1
 

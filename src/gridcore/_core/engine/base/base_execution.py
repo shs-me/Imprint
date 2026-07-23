@@ -4,7 +4,6 @@ from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
 from ...utils.monitoring.status_codes import StatusCodes as scs
 from .utils.tm_con import TradeConverter
-from .utils.trade_manager import TradeManager
 
 
 class Execution(ABC):
@@ -44,7 +43,6 @@ class Execution(ABC):
             price_prec=manager.cfgCoin.price_prec,
             qty_prec=manager.cfgCoin.qty_prec,
         )
-        self.tm: TradeManager = TradeManager(converter=self.con)
 
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:

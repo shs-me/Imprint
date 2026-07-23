@@ -374,7 +374,7 @@ def _update_position(
 
     else:
         if is_open:
-            if not shortNqty[0]:
+            if shortNqty[0]:
                 shortEntryNprice[0] = (
                     (shortEntryNprice[0] * shortNqty[0]) + (nPrice * nQty)
                 ) // (shortNqty[0] + nQty)
@@ -384,12 +384,7 @@ def _update_position(
             shortNqty[0] += nQty
         else:
             lockedNbalance[0] -= _to_nMargin(
-                shortEntryNprice[0],
-                nQty,
-                leverage,
-                price_mult,
-                qty_mult,
-                scale_mult,
+                shortEntryNprice[0], nQty, leverage, price_mult, qty_mult, scale_mult
             )
             nBalance[0] += _to_nPnl(
                 nPrice,
@@ -466,7 +461,7 @@ def _to_unrealized_nPnl(
         longUnrealizedNpnl[0] = 0
 
     if shortNqty[0]:
-        longUnrealizedNpnl[0] = _to_nPnl(
+        shortUnrealizedNpnl[0] = _to_nPnl(
             trade_nPrice,
             longNqty[0],
             True,

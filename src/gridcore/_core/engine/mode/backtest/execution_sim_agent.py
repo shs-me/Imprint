@@ -66,10 +66,10 @@ class ExecutionAgent(Execution):
         nPrice: int = get_data[3]
         nQty: int = get_data[4]
         nCommission: int = get_data[5]
+
         is_long, is_buy = (bool(order_param & c.OF_LONG), bool(order_param & c.OF_BUY))
         if bool(order_param & c.OF_FILLED):
             is_open = (is_long and is_buy) or (not is_long and not is_buy)
-            self.tm.update_position(nPrice, nQty, nCommission, is_open, is_long)
             if is_open:
                 tp_sl_timestamp: int = timestamp + self.con.latency
 
@@ -94,7 +94,7 @@ class ExecutionAgent(Execution):
         elif bool(order_param & c.OF_CANCELED):
             pass
 
-        self.tm.update_orders_history(
+        self.con.update_orders_history(
             timestamp, order_param, order_id, nPrice, nQty, nCommission
         )
 
@@ -108,7 +108,7 @@ class ExecutionAgent(Execution):
             self.acm.start(self.trade_readed_time[0])
 
         self.check_user_data_buf()
-        self.tm.final_action()
+        self.con.final_action()
         self.manager.set_text(
             (
                 f"Balance: {self.con.nBalance / self.con.scale} \n"
@@ -118,7 +118,7 @@ class ExecutionAgent(Execution):
                 f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
                 f"Long Open Qty: {self.con._longNqty[0] / self.con.qtyMult} \n"
                 f"Short Open Qty: {self.con._shortNqty[0] / self.con.qtyMult} \n"
-                f"Count Orders in History: {self.tm.ohWid[0]} \n"
+                f"Count Orders in History: {self.con.ohWid[0]} \n"
                 f"Count Active Orders: {self.acm.obRow[0]} \n"
                 f"Count Open Positions: {self.count_open_position}"
             )
