@@ -156,7 +156,3 @@ class FPconverter:
 
     def val(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.VAL)
-
-    # Other
-    def time_ms(self, idx: int | int64) -> int:
-        return int(self.lastTradeTime(idx) // 1_000_000)

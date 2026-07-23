@@ -174,10 +174,15 @@ class TradeConverter:
         return nPrice + (-slTicks if is_long else slTicks)
 
     def is_averaging(self, order_param: int) -> bool:
-        if bool(order_param & c.OF_LONG):
+        is_long = bool(order_param & c.OF_LONG)
+        is_buy = bool(order_param & c.OF_BUY)
+
+        if is_buy and is_long:
             return True if self._longNqty[0] else False
-        else:
+        elif not is_buy and not is_long:
             return True if self._shortNqty[0] else False
+        else:
+            return False
 
     def final_action(self) -> None:
         if self.cfgAC.save_orders_history:

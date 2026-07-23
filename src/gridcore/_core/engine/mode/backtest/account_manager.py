@@ -86,9 +86,18 @@ class AccountManager(me.MatchingEngine):
         nPrice: int,
         nQty: int,
     ) -> None:
-        self.lockedNbalance[0] += _to_nMargin(
-            nPrice, nQty, self.leverage, self.price_mult, self.qty_mult, self.scale_mult
-        )
+        is_long = bool(order_param & c.OF_LONG)
+        is_buy = bool(order_param & c.OF_BUY)
+        if (is_buy and is_long) or (not is_long and not is_buy):
+            self.lockedNbalance[0] += _to_nMargin(
+                nPrice,
+                nQty,
+                self.leverage,
+                self.price_mult,
+                self.qty_mult,
+                self.scale_mult,
+            )
+
         self._update_order_book(
             timestamp=timestamp + self.latency,
             order_param=order_param,
@@ -158,7 +167,7 @@ def _start(
     unrealizedNpnl, longUnrealizedNpnl, shortUnrealizedNpnl = args[20:23]
     longNqty, longEntryNprice, shortNqty, shortEntryNprice = args[23:27]
     price_mult, qty_mult, scale_mult = args[27:30]
-    writer_id, cell_amount = args[30:322]
+    writer_id, cell_amount = args[30:32]
 
     max_row: int = dfm.shape[0]
     while time_readed_trade[0] < timestamp:
@@ -293,23 +302,24 @@ def _update_positions(
             )
             data_example[de_row, 5] = round(commission * scale_mult)
 
-        _update_position(
-            nPrice=nPrice,
-            nQty=nQty,
-            is_long=is_long,
-            is_open=is_open,
-            nCommission=nCommission,
-            price_mult=price_mult,
-            qty_mult=qty_mult,
-            scale_mult=scale_mult,
-            leverage=leverage,
-            nBalance=nBalance,
-            lockedNbalance=lockedNbalance,
-            longNqty=longNqty,
-            longEntryNprice=longEntryNprice,
-            shortNqty=shortNqty,
-            shortEntryNprice=shortEntryNprice,
-        )
+            _update_position(
+                nPrice=nPrice,
+                nQty=nQty,
+                is_long=is_long,
+                is_open=is_open,
+                nCommission=nCommission,
+                price_mult=price_mult,
+                qty_mult=qty_mult,
+                scale_mult=scale_mult,
+                leverage=leverage,
+                nBalance=nBalance,
+                lockedNbalance=lockedNbalance,
+                longNqty=longNqty,
+                longEntryNprice=longEntryNprice,
+                shortNqty=shortNqty,
+                shortEntryNprice=shortEntryNprice,
+            )
+
         me._set_user_data(
             data=data_example[de_row, :].view(uint8),
             data_buf=data_buf,
@@ -320,8 +330,7 @@ def _update_positions(
         )
 
         if not longNqty[0] and not shortNqty[0] and not obRow[0]:
-            if lockedNbalance[0] > 0:
-                lockedNbalance[0] = -lockedNbalance[0]
+            lockedNbalance[0] = 0
 
 
 @njit(cache=True)
@@ -463,8 +472,8 @@ def _to_unrealized_nPnl(
     if shortNqty[0]:
         shortUnrealizedNpnl[0] = _to_nPnl(
             trade_nPrice,
-            longNqty[0],
-            True,
+            shortNqty[0],
+            False,
             longEntryNprice[0],
             shortEntryNprice[0],
             price_mult,

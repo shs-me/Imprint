@@ -49,7 +49,8 @@ class Logic(ABC):
 
                 if spareFlag[0] == 1:
                     if init_session is False:
-                        init_session = reader._init_session()
+                        reader._init_session()
+                        init_session = True
 
                     reader._update_states()
                     self.check_lag()

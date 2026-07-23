@@ -101,7 +101,7 @@ class MatchingEngine:
         self.order_book[self.obRow[0], c.OB_nQty] = nQty
         self.obRow[0] += 1
 
-        self.data_example[self.deRow[0] :] = (
+        self.data_example[self.deRow[0], :] = (
             timestamp,
             order_param,
             self.order_id[0],
