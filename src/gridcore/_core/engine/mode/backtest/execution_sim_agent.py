@@ -4,14 +4,26 @@ from .... import constant as c
 from ....utils.monitoring.agent_manager import AgentManager
 from ....utils.monitoring.office import manager_office
 from ...base.base_execution import Execution
-from .matching_engine import MatchingEngine
+from .account_manager import AccountManager
 
 
 class ExecutionAgent(Execution):
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
-        self.me: MatchingEngine = MatchingEngine(manager)
+        self.acm: AccountManager = AccountManager(manager)
+        self.con.init_session(
+            nBalance=self.acm.nBalance,
+            lockedNbalance=self.acm.lockedNbalance,
+            availableNbalance=self.acm.availableNbalance,
+            longNqty=self.acm.longNqty,
+            longEntryNprice=self.acm.longEntryNprice,
+            shortNqty=self.acm.shortNqty,
+            shortEntryNprice=self.acm.shortEntryNprice,
+            unrealizedNpnl=self.acm.unrealizedNpnl,
+            longUnrealizedNpnl=self.acm.longUnrealizedNpnl,
+            shortUnrealizedNpnl=self.acm.shortUnrealizedNpnl,
+        )
         self.count_open_position: int = 0
 
     def alarm_clock(
@@ -19,17 +31,17 @@ class ExecutionAgent(Execution):
     ) -> None:
         matching = False
         while self.logic_complete[0] == 0:
-            if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
+            if self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
                 matching = True
             if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
                 break
             if matching:
-                self.me.matching(self.trade_readed_time[0])
+                self.acm.start(self.trade_readed_time[0])
 
             time.sleep(0)
 
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
-        self.me.matching(time_get_signal + self.con.latency)
+        self.acm.start(time_get_signal + self.con.latency)
 
     def execute_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
@@ -37,9 +49,8 @@ class ExecutionAgent(Execution):
         if self.con.is_averaging(order_param):
             return
 
-        self.con.lockedNbalance = self.con.to_nMargin(nPrice, nQty)
-        self.me.update_order_book(
-            timestamp=time_get_signal + self.con.latency,
+        self.acm.send_order(
+            timestamp=time_get_signal,
             order_param=order_param,
             client_order_id=1,
             nPrice=nPrice,
@@ -54,24 +65,20 @@ class ExecutionAgent(Execution):
         order_id: int = get_data[2]
         nPrice: int = get_data[3]
         nQty: int = get_data[4]
-        nCommission: int = 0
-
+        nCommission: int = get_data[5]
         is_long, is_buy = (bool(order_param & c.OF_LONG), bool(order_param & c.OF_BUY))
         if bool(order_param & c.OF_FILLED):
-            nCommission = self.con.to_nCommission(
-                nPrice, nQty, bool(order_param & c.OF_LIMIT)
-            )
             is_open = (is_long and is_buy) or (not is_long and not is_buy)
             self.tm.update_position(nPrice, nQty, nCommission, is_open, is_long)
             if is_open:
-                tp_sl_timestamp: int = timestamp + (2 * self.con.latency)
+                tp_sl_timestamp: int = timestamp + self.con.latency
 
                 tp_nPrice: int = self.con.TPdevNprice(nPrice, is_long)
                 tp_order_param: int = 0
                 tp_order_param |= c.OF_LONG if is_long else c.OF_SHORT
                 tp_order_param |= c.OF_SELL if is_buy else c.OF_BUY
                 tp_order_param |= c.OF_LIMIT | c.OF_NEW | c.OF_OCO
-                self.me.update_order_book(
+                self.acm.send_order(
                     tp_sl_timestamp, tp_order_param, order_id, tp_nPrice, nQty
                 )
 
@@ -80,7 +87,7 @@ class ExecutionAgent(Execution):
                 sl_order_param |= c.OF_LONG if is_long else c.OF_SHORT
                 sl_order_param |= c.OF_SELL if is_buy else c.OF_BUY
                 sl_order_param |= c.OF_MARKET_TRIGER | c.OF_NEW | c.OF_OCO
-                self.me.update_order_book(
+                self.acm.send_order(
                     tp_sl_timestamp, sl_order_param, order_id, sl_nPrice, nQty
                 )
 
@@ -97,8 +104,8 @@ class ExecutionAgent(Execution):
         pass
 
     def post_final_action(self) -> None:
-        if self.trade_readed_time[0] > self.me.trade_readed_time[0]:
-            self.me.matching(self.trade_readed_time[0])
+        if self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
+            self.acm.start(self.trade_readed_time[0])
 
         self.check_user_data_buf()
         self.tm.final_action()
@@ -109,10 +116,10 @@ class ExecutionAgent(Execution):
                 f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
                 f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
                 f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
-                f"Long Open Qty: {self.con.longNqty / self.con.qtyMult} \n"
-                f"Short Open Qty: {self.con.shortNqty / self.con.qtyMult} \n"
+                f"Long Open Qty: {self.con._longNqty[0] / self.con.qtyMult} \n"
+                f"Short Open Qty: {self.con._shortNqty[0] / self.con.qtyMult} \n"
                 f"Count Orders in History: {self.tm.ohWid[0]} \n"
-                f"Count Active Orders: {self.me.obRow[0]} \n"
+                f"Count Active Orders: {self.acm.obRow[0]} \n"
                 f"Count Open Positions: {self.count_open_position}"
             )
         )

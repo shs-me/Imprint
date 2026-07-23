@@ -159,11 +159,7 @@ class Metrics(SharedMemorySegments):
             self.parsing_complete[1],
             self.parsing_complete[1] + UBYTE,
         )
-        self.dfm_comlpete: Any = (
-            self.logic_complete[1],
-            self.logic_complete[1] + UBYTE,
-        )
-        return self.dfm_comlpete[1]
+        return self.logic_complete[1]
 
 
 @dataclass
