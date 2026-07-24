@@ -1,6 +1,8 @@
 from abc import ABC
+from multiprocessing.synchronize import Event, Semaphore
 
 from ... import configurations as cfg
+from ...settings import ProcessFlags  # noqa: F401
 
 
 class Manager(ABC):
@@ -13,13 +15,20 @@ class Manager(ABC):
     cfgDataStream: cfg.DataStream
     cfgUserStream: cfg.UserStream
     cfgSignal: cfg.Signal
+    _sc_sem: Semaphore
+    _general_event: Event
 
     def __init__(
-        self, segments: dict[str, slice], shm_buf: memoryview, configs: list
+        self,
+        segments: dict[str, slice],
+        shm_buf: memoryview,
+        configs: list,
+        main_tools: list,
     ) -> None:
         self._segments: dict[str, slice] = segments
         self._shm_buf: memoryview = shm_buf
         self.configs_init(configs)
+        self.main_tools_init(main_tools)
 
     def configs_init(self, configs: list) -> None:
         for attr_name, attr_type in self.__annotations__.items():
@@ -39,3 +48,10 @@ class Manager(ABC):
                         self._segments[cfg.__class__.__name__]
                     ]
                     setattr(cfg, attr_name, shm[slice(*attr_val)])
+
+    def main_tools_init(self, tools: list) -> None:
+        for attr_name, attr_type in self.__annotations__.items():
+            for obj in tools:
+                if isinstance(obj, attr_type):
+                    setattr(self, attr_name, obj)
+                    break

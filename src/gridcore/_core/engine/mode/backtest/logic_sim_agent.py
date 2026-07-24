@@ -1,7 +1,7 @@
 import time
 
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ...base.base_footprint_reader import FootprintReader
 from ...base.base_logic import Logic, resolve_reader
 from ...base.base_sync import Sync
@@ -30,7 +30,7 @@ class LogicAgent(Logic):
         self.manager.set_text(f"Count Signals: {self.reader._count_send_signal}")
 
 
-@manager_office()
+@supervisor()
 def run_logic_sim(**kwargs) -> None:
     sync = SyncTool(kwargs["manager"])
     reader = resolve_reader(kwargs["manager"], sync)

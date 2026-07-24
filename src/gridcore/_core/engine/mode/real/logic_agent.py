@@ -1,7 +1,7 @@
 from multiprocessing.synchronize import Event
 
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ....utils.monitoring.status_codes import StatusCodes as scs
 from ...base.base_footprint_reader import FootprintReader
 from ...base.base_logic import Logic, resolve_reader
@@ -46,7 +46,7 @@ class LogicAgent(Logic):
         self.reader._sync.sync_with_execution()
 
 
-@manager_office()
+@supervisor()
 def run_logic(logic_event: Event, execution_event: Event, **kwargs) -> None:
     sync = SyncTool(kwargs["manager"], execution_event)
     reader = resolve_reader(kwargs["manager"], sync)

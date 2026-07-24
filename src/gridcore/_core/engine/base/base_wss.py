@@ -1,6 +1,7 @@
 import time
-from abc import ABC
+from abc import ABC, abstractmethod
 
+from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
 from ...utils.monitoring.status_codes import StatusCodes as scs
 
@@ -21,6 +22,11 @@ class Wss(ABC):
         self.data_header: memoryview = cfgDS.data_header
         self.wCellC: memoryview = cfgDS.writer_id.cast("q")
         self.rCellC: memoryview = cfgDS.reader_id.cast("q")
+
+    @abstractmethod
+    @error_handler(set_status_code=True)
+    def run_wss_engine(self) -> None:
+        pass
 
     def alarm_clock(
         self, wCellC: memoryview, rCellC: memoryview, cell_amount: int, safe_lag: int

@@ -1,8 +1,7 @@
 import inspect
 import os
-from multiprocessing import Event, Process, Semaphore
+from multiprocessing import Event, Process
 from multiprocessing.synchronize import Event as EventT
-from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
 
 from loguru import logger
@@ -16,9 +15,9 @@ from .engine.mode.real.execution_agent import run_execution
 from .engine.mode.real.logic_agent import run_logic
 from .engine.mode.real.parsing_agent import run_parsing
 from .engine.mode.real.wss_agent import run_wss
-from .settings import CoreResources
+from .settings import CoreResources, ProcsData
+from .utils.handlers import supervisor
 from .utils.monitoring.main_manager import MainManager
-from .utils.monitoring.office import manager_office
 
 
 class RunMain(CoreResources):
@@ -29,33 +28,65 @@ class RunMain(CoreResources):
         self.backtesting: bool = self.manager.cfgSetup.backtesting
         self.execution: bool = self.manager.cfgSetup.execution
 
-        self.general_event: EventT = Event()
         self.execution_event: EventT = Event()
         self.parsing_event: EventT = Event()
         self.logic_event: EventT = Event()
-        self.sc_sem: SemT = Semaphore(0)
 
-        self.procs: dict = {}
-        self.funcs: list[FunctionType] = []
+        self.procs: dict[int, ProcsData] = {}
+
+    def run_core_engine(self) -> None:
+        logger.info("-- Core -- | Started, init...")
+        try:
+            self.check_dirs()
+            if self.run_procs():
+                logger.info("-- Core -- | Init completed.")
+
+                self.manager.run(procs=self.procs)
+
+        except KeyboardInterrupt:
+            pass
+        finally:
+            logger.info("-- Core -- | Close the Core.")
 
     def check_dirs(self) -> None:
         for _dir in DIRS_LIST:
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
 
-    def init_funcs(self) -> None:
+    def run_procs(self) -> bool:
+        procs_funcs: list[FunctionType] = self.get_procs_funcs()
+        count_procs: int = len(procs_funcs)
+        procs_ids: list[int] = [i for i in range(count_procs)]
+        task_ids: list[int] = [i + 10 for i in procs_ids]
+
+        self.manager.general_event(False, task_ids)
+
+        for proc_func, proc_id, task_id in zip(procs_funcs, procs_ids, task_ids):
+            if (
+                kwargs := self.get_kwargs_for_func(proc_func, proc_id, task_id)
+            ) is None:
+                return False
+
+            self.run_proc(proc_func, kwargs)
+
+        self.manager.general_event(True, task_ids)
+        return True
+
+    def get_procs_funcs(self) -> list[FunctionType]:
+        funcs: list[FunctionType] = []
+        funcs.append((run_wss_sim if self.backtesting else run_wss))
+        funcs.append(run_parsing_sim if self.backtesting else run_parsing)
+        funcs.append(run_logic_sim if self.backtesting else run_logic)
         if self.execution:
-            self.funcs.append(run_execution_sim if self.backtesting else run_execution)
+            funcs.append(run_execution_sim if self.backtesting else run_execution)
 
-        self.funcs.append(run_logic_sim if self.backtesting else run_logic)
-        self.funcs.append(run_parsing_sim if self.backtesting else run_parsing)
-        self.funcs.append((run_wss_sim if self.backtesting else run_wss))
+        return funcs
 
-    def get_kwargs_for_func(self, func: FunctionType) -> dict | None:
-        sig = inspect.signature(func)
-        proc_id = len(self.procs)
-        task_id = proc_id + self.manager.cfgMetrics.count_procs
-        proc_name = func.__name__.removeprefix("run_").upper()
+    def get_kwargs_for_func(
+        self, func: FunctionType, proc_id: int, task_id: int
+    ) -> dict | None:
+        sig: inspect.Signature = inspect.signature(func)
+        proc_name: str = func.__name__.removeprefix("run_").upper()
         kwargs = {}
         for param_name in sig.parameters:
             if hasattr(self, param_name):
@@ -63,54 +94,28 @@ class RunMain(CoreResources):
                 kwargs[param_name] = val
             elif param_name == "kwargs":
                 kwargs["proc_id"], kwargs["task_id"] = proc_id, task_id
-                kwargs["sc_sem"] = self.sc_sem
             else:
-                logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
-                return None
+                return logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
 
         kwargs = self.base_kwargs | kwargs
-        self.procs[proc_id] = {"proc_name": proc_name, "task_id": task_id}
+
+        self.procs[proc_id] = {"proc_name": proc_name, "task_id": task_id}  # type: ignore
         return kwargs
 
-    def run_proc(self, func) -> bool:
-        kwargs = self.get_kwargs_for_func(func)
-        if isinstance(kwargs, dict):
-            name: str = self.procs[kwargs["proc_id"]]["proc_name"]
-            p = Process(
-                target=func,
-                kwargs=kwargs,
-                name=name,
-                daemon=True,
-            )
-            p.start()
-            self.procs[kwargs["proc_id"]]["proc"] = p
-            logger.success(f"-- Core -- | Process [{name}: pid[{p.pid}]], started.")
-            return True
-
-        else:
-            logger.warning("-- Core -- | RunProc | kwargs is not dict")
-            return False
-
-    def run_core_engine(self) -> None:
-        logger.info("-- Core -- | Started, init...")
-        try:
-            self.check_dirs()
-            self.init_funcs()
-
-            for func in self.funcs:
-                if self.run_proc(func=func) is False:
-                    return
-
-            logger.info("-- Core -- | Init completed.")
-
-            self.manager.run(procs=self.procs, scs_sem=self.sc_sem)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            logger.info("-- Core -- | Close the Core.")
+    def run_proc(self, func: FunctionType, kwargs: dict) -> None:
+        name: str = self.procs[kwargs["proc_id"]]["proc_name"]
+        proc: Process = Process(
+            target=func,
+            kwargs=kwargs,
+            name=name,
+            daemon=True,
+        )
+        proc.start()
+        self.procs[kwargs["proc_id"]]["proc"] = proc
+        logger.success(f"-- Core -- | Process [{name}: pid[{proc.pid}]], started.")
 
 
-@manager_office(main=True)
+@supervisor(is_main=True)
 def run_core(**kwargs) -> None:
     state = RunMain(**kwargs)
     state.run_core_engine()

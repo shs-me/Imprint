@@ -1,6 +1,5 @@
 import gc
 import time
-from multiprocessing.synchronize import Semaphore
 
 from .base_manager import Manager
 from .status_codes import StatusCodes as scs
@@ -12,15 +11,14 @@ class AgentManager(Manager):
         segments: dict[str, slice],
         shm_buf: memoryview,
         configs: list,
+        main_tools: list,
         proc_id: int,
         task_id: int,
-        sc_sem: Semaphore,
     ) -> None:
-        super().__init__(segments, shm_buf, configs)
+        super().__init__(segments, shm_buf, configs, main_tools)
 
         self._proc_id: int = proc_id
         self._task_id: int = task_id
-        self._sc_sem: Semaphore = sc_sem
 
         self.task_status: memoryview = self.cfgMetrics.status.cast("q")[
             task_id : task_id + 1
@@ -39,24 +37,36 @@ class AgentManager(Manager):
     def check_base_task(self, complete: bool) -> bool | int:
         if self.task_status[0] != 0 or self.proc_status[0] != 0:
             while self.task_status[0] == 0:
-                time.sleep(0.001)
+                time.sleep(0)
 
             task_sc: int = self.task_status[0]
             _return_data, _clear_task, _set_proc_sc = task_sc, True, None
-            if task_sc & scs.COMPLETE:
+
+            if task_sc & scs.RUN:
+                _return_data = False
+
+            elif task_sc & scs.STOP:
+                self._general_event.wait()
+                _return_data = False
+
+            elif task_sc & scs.EXIT:
+                _return_data, _clear_task, _set_proc_sc = True, False, scs.EXIT
+
+            elif task_sc & scs.COMPLETE:
                 _return_data, _clear_task = (
                     (True, False) if complete else (False, False)
                 )
+
             elif task_sc & scs.GC_COLLECT:
                 gc.collect()
                 _return_data = False
-            elif task_sc & scs.RUN:
-                _return_data = False
+
             elif task_sc & (scs.QTY_LESS_LIMIT | scs.LOSS_MORE_LIMIT):
                 _return_data = True
 
             if _clear_task:
                 self.clear_task_sc(task_sc)
+
             if _set_proc_sc:
                 self.set_proc_sc(_set_proc_sc)
 

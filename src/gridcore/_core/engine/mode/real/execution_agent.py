@@ -1,7 +1,7 @@
 from multiprocessing.synchronize import Event
 
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ...base.base_execution import Execution
 from ...mode.real.rest_agent import RestAgent
 
@@ -42,7 +42,7 @@ class ExecutionAgent(Execution):
         pass
 
 
-@manager_office()
+@supervisor()
 def run_execution(execution_event: Event, **kwargs):
     agent = ExecutionAgent(manager=kwargs["manager"], execution_event=execution_event)
     agent.run_execution_engine()

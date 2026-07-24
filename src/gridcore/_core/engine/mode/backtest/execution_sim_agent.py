@@ -1,8 +1,8 @@
 import time
 
 from .... import constant as c
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ...base.base_execution import Execution
 from .account_manager import AccountManager
 
@@ -131,7 +131,7 @@ class ExecutionAgent(Execution):
         )
 
 
-@manager_office()
+@supervisor()
 def run_execution_sim(**kwargs):
     agent = ExecutionAgent(manager=kwargs["manager"])
     agent.run_execution_engine()

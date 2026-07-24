@@ -2,9 +2,8 @@ import struct
 import time
 from collections import deque
 
-from ....utils.handlers import error_handler
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ....utils.monitoring.status_codes import StatusCodes as scs
 from ...base.base_data_prepper import BaseDataPrepper
 from ...base.base_wss import Wss
@@ -47,8 +46,7 @@ class WssSimAgent(Wss):
         )
         self.prepper.start()
 
-    @error_handler(set_status_code=True)
-    def run_wss_sim_engine(self) -> None:
+    def run_wss_engine(self) -> None:
         # Local Links
         prepper = self.prepper
         proc_status, task_status = self.proc_status, self.task_status
@@ -96,7 +94,7 @@ class WssSimAgent(Wss):
         return self.prepper.complete and (not self.prepper.queue)
 
 
-@manager_office()
+@supervisor()
 def run_wss_sim(**kwargs) -> None:
     agent = WssSimAgent(manager=kwargs["manager"])
-    agent.run_wss_sim_engine()
+    agent.run_wss_engine()

@@ -1,14 +1,29 @@
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
-from multiprocessing.synchronize import Event, Semaphore
-from typing import Protocol
+from multiprocessing import Process
+from multiprocessing.synchronize import Event
+from typing import Protocol, TypedDict
+
+
+class ProcsData(TypedDict):
+    proc_name: str
+    task_id: int
+    proc: Process
+
+
+class KwgsKeys(IntEnum):
+    Configs, Segments, MainTools = auto(), auto(), auto()
+    ShmName, ShmSize = auto(), auto()
 
 
 class CoreResources(Protocol):
     parsing_event: Event
     logic_event: Event
     execution_event: Event
-    general_event: Event
-    sc_sem: Semaphore
+
+
+class ProcessFlags(IntEnum):
+    WSS, PARSING, LOGIC, EXECUTION = auto(), auto(), auto(), auto()
+    _CountProcess = auto()
 
 
 class StateFlags(IntFlag):

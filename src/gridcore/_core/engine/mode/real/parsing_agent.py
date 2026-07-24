@@ -3,8 +3,8 @@ from multiprocessing.synchronize import Event
 from msgspec import Struct
 from msgspec.json import Decoder
 
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
 from ...base.base_parsing import Parsing
 
@@ -56,7 +56,7 @@ class ParsingAgent(Parsing):
         print(f"Count Prepped Ticks: {self.writer.counterTicks[0]}", flush=True)
 
 
-@manager_office()
+@supervisor()
 def run_parsing(parsing_event: Event, logic_event: Event, **kwargs) -> None:
     writer = BaseFootprintWriter(kwargs["manager"])
     agent = ParsingAgent(kwargs["manager"], writer, parsing_event, logic_event)

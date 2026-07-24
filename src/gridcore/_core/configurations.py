@@ -139,7 +139,8 @@ class Metrics(SharedMemorySegments):
     text_size: int = 1024
 
     def get_need_shm_size(self) -> int:
-        self.status: Any = OFFSET, OFFSET + ((self.count_procs * 2) * INT64)
+        self.main: Any = OFFSET, OFFSET + INT64
+        self.status: Any = self.main[1], self.main[1] + ((self.count_procs * 2) * INT64)
         self.text: Any = (
             self.status[1],
             self.status[1] + (self.count_procs * self.text_size),

@@ -1,8 +1,8 @@
 import struct
 import time
 
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ...base.base_footprint_writer import FootprintWriter
 from ...base.base_parsing import Parsing
 
@@ -34,7 +34,7 @@ class ParsingAgent(Parsing):
         pass
 
 
-@manager_office()
+@supervisor()
 def run_parsing_sim(**kwargs) -> None:
     writer = FootprintWriter(kwargs["manager"])
     agent = ParsingAgent(kwargs["manager"], writer=writer)
