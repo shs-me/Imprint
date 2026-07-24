@@ -46,6 +46,8 @@ class ExecutionAgent(Execution):
             self.acm.start(timestamp)
             self.check_user_data_buf()
 
+        # self.readed_timestamp = self.trade_readed_time[0]
+
     def execute_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
@@ -100,11 +102,6 @@ class ExecutionAgent(Execution):
         self.con.update_orders_history(
             timestamp, order_param, order_id, nPrice, nQty, nCommission
         )
-
-    def post_check_bufs(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
-    ) -> None:
-        pass
 
     def post_final_action(self) -> None:
         max_timestamp = 9_999_999_999_999

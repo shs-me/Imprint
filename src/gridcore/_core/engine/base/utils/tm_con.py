@@ -22,8 +22,9 @@ class TradeConverter:
         self._entryQty: int = self.cfgST.entry_qty
         self._tpDev: int = self.cfgST.tp_dev
         self._slDev: int = self.cfgST.sl_dev
-        self._maxLockNbalance: int = self.cfgST.max_lock_balance
-        self._maxLossNbalance: int = self.cfgST.max_loss_balance
+        self._max_lock_balance: int = self.cfgST.max_lock_balance
+        self._max_loss_balance: int = self.cfgST.max_loss_balance
+        self._timer_signal: int = self.cfgST.timer_signal
 
         self.cfgAC = cfgAccount
         self._scalePrec: int = self.cfgAC.scale_prec
@@ -128,12 +129,12 @@ class TradeConverter:
     @property
     def lossNbalanceSafeLimit(self) -> bool:
         return self.nBalance > (
-            self.startNbalance - (self.startNbalance * self._maxLossNbalance // 10_000)
+            self.startNbalance - (self.startNbalance * self._max_loss_balance // 10_000)
         )
 
     @property
     def lockedNbalanceSafeLimit(self) -> bool:
-        return self.lockedNbalance < (self.nBalance * self._maxLockNbalance // 10_000)
+        return self.lockedNbalance < (self.nBalance * self._max_lock_balance // 10_000)
 
     @property
     def nominalEntryNqty(self) -> int:

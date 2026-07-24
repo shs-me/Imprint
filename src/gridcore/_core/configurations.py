@@ -52,6 +52,7 @@ class Strategy(Configuration):
     entry_qty: Any = "1%"
     tp_dev: Any = "5%"
     sl_dev: Any = "5%"
+    timer_signal: int = 1000
 
     def __post_init__(self):
         self.percent_to_int()

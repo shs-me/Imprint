@@ -52,6 +52,8 @@ class AgentManager(Manager):
                 _return_data = False
             elif task_sc & scs.RUN:
                 _return_data = False
+            elif task_sc & (scs.QTY_LESS_LIMIT | scs.LOSS_MORE_LIMIT):
+                _return_data = True
 
             if _clear_task:
                 self.clear_task_sc(task_sc)

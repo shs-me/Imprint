@@ -134,7 +134,6 @@ def _matching(
         order_nQty: int = order_book[order_row, c.OB_nQty]
 
         data = None
-        date_ = None
         if bool(order_param & c.OF_NEW):
             if trade_timestamp >= order_timestamp:
                 data_ = _processing_order(

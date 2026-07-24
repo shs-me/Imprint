@@ -44,6 +44,8 @@ class Execution(ABC):
             qty_prec=manager.cfgCoin.qty_prec,
         )
 
+        self.readed_timestamp: int = 0
+
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:
         # LocalLinks
@@ -70,8 +72,6 @@ class Execution(ABC):
                 elif WB_2[0] != RB_2[0]:
                     self.check_user_data_buf()
 
-                self.post_check_bufs(WB_1, RB_1, WB_2, RB_2)
-
     def complete(self) -> bool:
         return (self.logic_complete[0] == 1) and (
             (self.WB_1[0] == self.RB_1[0]) and (self.WB_2[0] == self.RB_2[0])
@@ -83,7 +83,9 @@ class Execution(ABC):
     ) -> None:
         pass
 
-    def check_signal_buf(self) -> None:
+    def check_signal_buf(
+        self,
+    ) -> None:
         nPrice, timestamp, order_param = self.get_signal_data()
         self.check_user_data_buf()
         self.pre_execute_signal_action(timestamp)
@@ -91,6 +93,9 @@ class Execution(ABC):
         if self.con.lossNbalanceSafeLimit:
             if self.con.lockedNbalanceSafeLimit:
                 if (nominalNqty := self.con.nominalEntryNqtyWithLeverage) is not None:
+                    if (timestamp + self.con._timer_signal) <= self.readed_timestamp:
+                        return
+
                     nQty: int = self.con.entryNqtyWithLeverage(nPrice, nominalNqty)
                     self.execute_signal(timestamp, order_param, nPrice, nQty)
                 else:
@@ -135,12 +140,6 @@ class Execution(ABC):
 
     @abstractmethod
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-        pass
-
-    @abstractmethod
-    def post_check_bufs(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
-    ) -> None:
         pass
 
     def final_actions(self) -> None:

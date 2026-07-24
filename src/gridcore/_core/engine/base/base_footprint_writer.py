@@ -52,6 +52,18 @@ class FootprintWriter(ABC):
             f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.cfgCoin.symbol.upper()}"
         )
 
+        self.args = (
+            self.idxVP,
+            self.idxDP,
+            self.con.priceMult,
+            self.con.qtyMult,
+            self.dirty_footprint,
+            self.dirty_headers,
+            self.space,
+            self.space_flag,
+            self.meta_data,
+        )
+
     def _init_array(self) -> None:
         cfgFP = self.manager.cfgFootprint
         self.footprint: NDArray[int64] = np.ndarray(
@@ -138,15 +150,7 @@ class FootprintWriter(ABC):
             nPrice=nPrice,
             idy=idy,
             idx=idx,
-            idxVP=self.idxVP,
-            idxDP=self.idxDP,
-            priceMult=self.con.priceMult,
-            qtyMult=self.con.qtyMult,
-            dirty_fp=self.dirty_footprint,
-            dirty_hr=self.dirty_headers,
-            space=self.space,
-            space_flag=self.space_flag,
-            meta_data=self.meta_data,
+            args=self.args,
         )
 
     def wait_read_space(self) -> None:
@@ -191,6 +195,11 @@ class FootprintWriter(ABC):
             self.save_fp_headers_array()
 
 
+class BaseFootprintWriter(FootprintWriter):
+    def __init__(self, manager: AgentManager) -> None:
+        super().__init__(manager)
+
+
 @njit(cache=True)
 def _update_footprint_and_headers_and_indicators_and_coords(
     price: float,
@@ -200,16 +209,21 @@ def _update_footprint_and_headers_and_indicators_and_coords(
     nPrice: int,
     idy: int,
     idx: int,
-    idxVP: int,
-    idxDP: int,
-    priceMult: float,
-    qtyMult: float,
-    dirty_fp: NDArray[int64],
-    dirty_hr: NDArray[int64],
-    space: NDArray[int64],
-    space_flag: memoryview,
-    meta_data: NDArray[np.float64],
+    args: tuple[
+        int,
+        int,
+        float,
+        float,
+        NDArray[int64],
+        NDArray[int64],
+        NDArray[int64],
+        memoryview,
+        NDArray[float64],
+    ],
 ) -> None:
+    idxVP, idxDP, priceMult, qtyMult, dirty_fp, dirty_hr = args[0:6]
+    space, space_flag, meta_data = args[6:9]
+
     nQty: int = round(qty * qtyMult)
     # Update Dirty Footprint
     dirty_fp[idy, idx] += nQty
@@ -279,8 +293,3 @@ def _copy_to(
     fp[idYmin:idYmax, idxVP:] = dirty_fp[idYmin:idYmax, idxVP:]
 
     space_flag[0] = 1 if (buf == 0) else 0
-
-
-class BaseFootprintWriter(FootprintWriter):
-    def __init__(self, manager: AgentManager) -> None:
-        super().__init__(manager)
