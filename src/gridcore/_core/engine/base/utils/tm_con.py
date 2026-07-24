@@ -97,6 +97,8 @@ class TradeConverter:
         nPrice: int,
         nQty: int,
         nCommission: int,
+        nMAE: int = 0,
+        nMFE: int = 0,
     ) -> None:
         ohWid, oh = self.ohWid, self.orders_history
         # - - -
@@ -106,6 +108,8 @@ class TradeConverter:
         oh[ohWid[0], c.TP_nPrice] = nPrice
         oh[ohWid[0], c.TP_nQty] = nQty
         oh[ohWid[0], c.TP_commission] = nCommission
+        oh[ohWid[0], c.TP_nMAE] = nMAE
+        oh[ohWid[0], c.TP_nMFE] = nMFE
         ohWid[0] += 1
         if ohWid[0] >= oh.shape[0]:
             old_rows: int = oh.shape[0]

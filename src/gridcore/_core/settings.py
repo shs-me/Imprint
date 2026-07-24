@@ -86,6 +86,7 @@ class OrderBook(IntEnum):
 class TradeParam(IntEnum):
     nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
     nCommission, orderID = auto(), auto()
+    nMAE, nMFE = auto(), auto()
     _ConstantCount = auto()
 
 

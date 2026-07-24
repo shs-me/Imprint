@@ -77,7 +77,9 @@ class MatchingEngine:
 
     def _init_array(self) -> None:
         self.data_buf: NDArray[uint8] = np.frombuffer(self.data, uint8)
-        self.data_example: NDArray[int64] = np.ndarray((1000, 6), dtype=int64)
+        self.data_example: NDArray[int64] = np.ndarray(
+            (1000, c.TP_ConstantCount), dtype=int64
+        )
         self.deRow: memoryview = memoryview(bytearray(8)).cast("q")
 
         self.order_book: NDArray[int64] = np.ndarray(
@@ -107,6 +109,8 @@ class MatchingEngine:
             self.order_id[0],
             nPrice,
             nQty,
+            0,
+            0,
             0,
         )
         self.order_id[0] += 1
@@ -162,6 +166,8 @@ def _matching(
                 order_nPrice,
                 order_nQty,
                 0,
+                0,
+                0,
             )
 
             data = data_example[deRow[0], :]
@@ -189,7 +195,7 @@ def _processing_order(
     obRow: memoryview,
     order_id: int,
     slippage: int,
-) -> tuple[int, int, int, int, int, int] | None:
+) -> tuple[int, int, int, int, int, int, int, int] | None:
     is_buy: bool = bool(order_param & c.OF_BUY)
 
     nPrice = trade_nPrice
@@ -221,7 +227,7 @@ def _processing_order(
     order_param &= ~(c.OF_NEW | c.OF_CANCELED)
     order_param |= c.OF_FILLED
 
-    return trade_timestamp, order_param, order_id, nPrice, nQty, 0
+    return trade_timestamp, order_param, order_id, nPrice, nQty, 0, 0, 0
 
 
 @njit(cache=True)

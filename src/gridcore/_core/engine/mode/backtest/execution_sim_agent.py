@@ -71,6 +71,8 @@ class ExecutionAgent(Execution):
         nPrice: int = get_data[3]
         nQty: int = get_data[4]
         nCommission: int = get_data[5]
+        nMAE: int = get_data[6]
+        nMFE: int = get_data[7]
 
         is_long, is_buy = (bool(order_param & c.OF_LONG), bool(order_param & c.OF_BUY))
         if bool(order_param & c.OF_FILLED):
@@ -100,7 +102,7 @@ class ExecutionAgent(Execution):
             pass
 
         self.con.update_orders_history(
-            timestamp, order_param, order_id, nPrice, nQty, nCommission
+            timestamp, order_param, order_id, nPrice, nQty, nCommission, nMAE, nMFE
         )
 
     def post_final_action(self) -> None:
@@ -115,6 +117,7 @@ class ExecutionAgent(Execution):
                 break
 
         self.con.final_action()
+        self.acm.final_action()
         self.manager.set_text(
             (
                 f"Balance: {self.con.nBalance / self.con.scale} \n"
