@@ -14,9 +14,6 @@ class Execution(ABC):
         self.check_base_task = manager.check_base_task
         self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
-        cfgAC = manager.cfgAccount
-        self.analysis_safe_lag_us: int = cfgAC.analysis_safe_lag_microsecond
-
         cfgSN = manager.cfgSignal
         self.sn_cell_amount: int = cfgSN.cell_amount
         self.sn_data_size: int = cfgSN.data_size // 8
@@ -38,7 +35,7 @@ class Execution(ABC):
 
         self.symbol: str = manager.cfgCoin.symbol
         self.con: TradeConverter = TradeConverter(
-            cfgAccount=cfgAC,
+            cfgAccount=manager.cfgAccount,
             cfgStrategy=manager.cfgStrategy,
             price_prec=manager.cfgCoin.price_prec,
             qty_prec=manager.cfgCoin.qty_prec,
@@ -93,7 +90,7 @@ class Execution(ABC):
         if self.con.lossNbalanceSafeLimit:
             if self.con.lockedNbalanceSafeLimit:
                 if (nominalNqty := self.con.nominalEntryNqtyWithLeverage) is not None:
-                    if (timestamp + self.con._timer_signal) <= self.readed_timestamp:
+                    if (timestamp + self.con.timer) <= self.readed_timestamp:
                         return
 
                     nQty: int = self.con.entryNqtyWithLeverage(nPrice, nominalNqty)

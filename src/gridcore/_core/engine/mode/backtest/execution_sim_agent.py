@@ -46,7 +46,7 @@ class ExecutionAgent(Execution):
             self.acm.start(timestamp)
             self.check_user_data_buf()
 
-        # self.readed_timestamp = self.trade_readed_time[0]
+        self.readed_timestamp = self.acm.trade_readed_time[0]
 
     def execute_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int

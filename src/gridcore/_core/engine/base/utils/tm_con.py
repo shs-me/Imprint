@@ -24,7 +24,7 @@ class TradeConverter:
         self._slDev: int = self.cfgST.sl_dev
         self._max_lock_balance: int = self.cfgST.max_lock_balance
         self._max_loss_balance: int = self.cfgST.max_loss_balance
-        self._timer_signal: int = self.cfgST.timer_signal
+        self.timer: int = self.cfgST.pass_execute_signal_if_timer_ms_exepired
 
         self.cfgAC = cfgAccount
         self._scalePrec: int = self.cfgAC.scale_prec

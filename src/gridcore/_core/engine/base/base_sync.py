@@ -12,8 +12,8 @@ class Sync(ABC):
         cfgMetrics = manager.cfgMetrics
         self.time_start_reading: memoryview = cfgMetrics.time_start_reading.cast("q")
 
-        cfgAC = manager.cfgAccount
-        self.analysis_safe_lag_us: int = cfgAC.analysis_safe_lag_microsecond
+        cfgST = manager.cfgStrategy
+        self.safe_lag: int = cfgST.pass_signal_if_analysis_time_big
 
         cfgSN = manager.cfgSignal
         self.cell_amount: int = cfgSN.cell_amount
@@ -56,4 +56,4 @@ class Sync(ABC):
 
     def lag_is_safe(self) -> bool:
         lag: int = (time.perf_counter_ns() - self.time_start_reading[0]) // 1_000
-        return True if (lag < self.analysis_safe_lag_us) else False
+        return True if (lag < self.safe_lag) else False

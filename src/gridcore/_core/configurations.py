@@ -37,7 +37,6 @@ class Account(Configuration):
     slippage: Any = "0.05%"
     latency_ms: Any = 100
     scale_prec: Any = 15
-    analysis_safe_lag_microsecond: int = 50_000
     save_orders_history: bool = False
 
     def __post_init__(self) -> None:
@@ -52,7 +51,8 @@ class Strategy(Configuration):
     entry_qty: Any = "1%"
     tp_dev: Any = "5%"
     sl_dev: Any = "5%"
-    timer_signal: int = 1000
+    pass_signal_if_analysis_time_big: int = 50_000
+    pass_execute_signal_if_timer_ms_exepired: int = 1_000
 
     def __post_init__(self):
         self.percent_to_int()
