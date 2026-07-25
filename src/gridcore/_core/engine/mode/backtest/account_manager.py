@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import numpy as np
 from numba import njit
@@ -33,7 +34,12 @@ class AccountManager(me.MatchingEngine):
 
         cfgFP = manager.cfgFootprint
         self.timeframe: int = int(cfgFP.timeframe)
-        self.bar_count: int = cfgFP.bar_count
+        start_dt: datetime = datetime.fromisoformat(
+            manager.cfgSetup.backtest_start_date
+        )
+        end_dt: datetime = datetime.fromisoformat(manager.cfgSetup.backtest_end_date)
+        total_days: int = max(1, (end_dt - start_dt).days + 1)
+        self.bar_count: int = (total_days * 24 * 60 * 60 * 1000) // self.timeframe
 
         self.equity_history: NDArray[int64] = np.zeros(
             (self.bar_count, EquityC + 1), dtype=int64
