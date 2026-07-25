@@ -119,6 +119,7 @@ def run(
                 footprint_headers_path=c.BASE_FOOTPRINT_DUMP_PATH,
                 start_balance=account.balance,
                 orders_history_path=c.ORDERS_HISTORY_DUMP_PATH,
+                equity_history_path=c.EQUITY_HISTORY_DUMP_PATH,
                 run_chart_visualization=run_mode.with_visualization_chart,
                 run_statistic_visualization=run_mode.with_visualization_statistic,
             )
