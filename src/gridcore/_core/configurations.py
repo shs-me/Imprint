@@ -10,13 +10,20 @@ INT64 = 8
 FLOAT64 = 8
 
 
+class INT(int):
+    pass
+
+
 class Configuration(ABC):
     pass
 
     def percent_to_int(self) -> None:
+        self.percent: int = 10_000
         for name, value in self.__dict__.items():
             if isinstance(value, str):
-                setattr(self, name, round(float(value.split("%")[0]) / 100 * 10_000))
+                setattr(
+                    self, name, round(float(value.split("%")[0]) / 100 * self.percent)
+                )
 
 
 @dataclass
@@ -80,11 +87,21 @@ class SharedMemorySegments(Configuration, ABC):
     shm_size: int = 0
 
     def __post_init__(self) -> None:
-        self.shm_size = ((self.get_need_shm_size() // 4096) + 1) * 4096
+        self._set_attr_use_shm()
+        self.shm_size = ((self._get_need_shm_size() // 4096) + 1) * 4096
 
     @abstractmethod
-    def get_need_shm_size(self) -> int:
+    def _set_attr_use_shm(self) -> None:
         pass
+
+    def _get_need_shm_size(self) -> int:
+        offset = 0
+        for attr_name, attr_obj in self.__dict__.items():
+            if isinstance(attr_obj, INT):
+                new_value = (offset, (offset := (offset + attr_obj)))
+                setattr(self, attr_name, new_value)
+
+        return offset
 
 
 @dataclass
@@ -99,38 +116,28 @@ class Footprint(SharedMemorySegments):
 
     def _init_data(self) -> None:
         self.colVP, self.colDP = -2, -1
-        self.bar_count: int = self.get_bar_count(day=self.chart_range)
+        self.bar_count: int = self._get_bar_count(day=self.chart_range)
         self.fp_cols: int = self.bar_count * 2
         self.fp_panel_cols: int = self.fp_cols + 2
 
-    def get_bar_count(self, day: int) -> int:
+    def _get_bar_count(self, day: int) -> int:
         dayMs, ivlMs = (
             (day if day >= 1 else 1) * 24 * 60 * 60 * 1000,
             self.timeframe,
         )
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
-    def get_need_shm_size(self) -> int:
+    def _set_attr_use_shm(self) -> None:
         self._init_data()
 
-        self.footprint: Any = (
-            OFFSET,
-            OFFSET + (self.fp_rows * self.fp_panel_cols * INT64),
-        )
-        self.headers: Any = (
-            self.footprint[1],
-            self.footprint[1] + (self.bar_count * BarHeaders._ConstantCount * INT64),
-        )
-        self.metadata: Any = self.headers[1], self.headers[1] + (6 * FLOAT64)
-        self.space: Any = (
-            self.metadata[1],
-            self.metadata[1] + (SpaceCoords._ConstantCount * 2 * INT64),
-        )
-        self.base_price: Any = self.space[1], self.space[1] + INT64
-        self.base_timestamp: Any = self.base_price[1], self.base_price[1] + INT64
-        self.space_flag: Any = self.base_timestamp[1], self.base_timestamp[1] + UBYTE
-        self.spare_flag: Any = self.space_flag[1], self.space_flag[1] + UBYTE
-        return self.spare_flag[1]
+        self.footprint: Any = INT(self.fp_rows * self.fp_panel_cols * INT64)
+        self.headers: Any = INT(self.bar_count * BarHeaders._ConstantCount * INT64)
+        self.metadata: Any = INT(6 * FLOAT64)
+        self.space: Any = INT(SpaceCoords._ConstantCount * 2 * INT64)
+        self.base_price: Any = INT(INT64)
+        self.base_timestamp: Any = INT(INT64)
+        self.space_flag: Any = INT(UBYTE)
+        self.spare_flag: Any = INT(UBYTE)
 
 
 @dataclass
@@ -138,30 +145,14 @@ class Metrics(SharedMemorySegments):
     count_procs: int = 10
     text_size: int = 1024
 
-    def get_need_shm_size(self) -> int:
-        self.main: Any = OFFSET, OFFSET + INT64
-        self.status: Any = self.main[1], self.main[1] + ((self.count_procs * 2) * INT64)
-        self.text: Any = (
-            self.status[1],
-            self.status[1] + (self.count_procs * self.text_size),
-        )
-        self.time_start_reading: Any = (
-            self.text[1],
-            self.text[1] + INT64,
-        )
-        self.trade_readed_time: Any = (
-            self.time_start_reading[1],
-            self.time_start_reading[1] + INT64,
-        )
-        self.parsing_complete: Any = (
-            self.trade_readed_time[1],
-            self.trade_readed_time[1] + UBYTE,
-        )
-        self.logic_complete: Any = (
-            self.parsing_complete[1],
-            self.parsing_complete[1] + UBYTE,
-        )
-        return self.logic_complete[1]
+    def _set_attr_use_shm(self) -> None:
+        self.main: Any = INT(INT64)
+        self.status: Any = INT((self.count_procs * 2) * INT64)
+        self.text: Any = INT(self.count_procs * self.text_size)
+        self.time_start_reading: Any = INT(INT64)
+        self.trade_readed_time: Any = INT(INT64)
+        self.parsing_complete: Any = INT(UBYTE)
+        self.logic_complete: Any = INT(UBYTE)
 
 
 @dataclass
@@ -170,18 +161,11 @@ class BaseRingBuf(ABC):
     data_header_size: int = 8
     cell_amount: int = 10_000
 
-    def get_need_shm_size(self) -> int:
-        self.reader_id: Any = OFFSET, OFFSET + INT64
-        self.writer_id: Any = self.reader_id[1], self.reader_id[1] + INT64
-        self.data: Any = (
-            self.writer_id[1],
-            (self.cell_amount * self.data_size) + self.writer_id[1],
-        )
-        self.data_header: Any = (
-            self.data[1],
-            (self.cell_amount * self.data_header_size) + self.data[1],
-        )
-        return self.data_header[1]
+    def _set_attr_use_shm(self) -> None:
+        self.reader_id: Any = INT(INT64)
+        self.writer_id: Any = INT(INT64)
+        self.data: Any = INT(self.cell_amount * self.data_size)
+        self.data_header: Any = INT(self.cell_amount * self.data_header_size)
 
 
 @dataclass

@@ -101,6 +101,7 @@ class Execution(ABC):
                 pass
         else:
             self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
+            self.post_final_action()
 
     def get_signal_data(self) -> tuple[int, int, int]:
         cell: int = self.RB_1[0]

@@ -22,6 +22,8 @@ class Sync(ABC):
         self.writer_id: memoryview = cfgSN.writer_id.cast("q")
         self.reader_id: memoryview = cfgSN.reader_id.cast("q")
 
+        self._count_send_signal: int = 0
+
     def send_signal(
         self,
         nPrice: int,
@@ -50,6 +52,7 @@ class Sync(ABC):
         self.writer_id[0] = new_cell if new_cell < self.cell_amount else 0
 
         self.sync_with_execution()
+        self._count_send_signal += 1
 
     def sync_with_execution(self) -> None:
         pass

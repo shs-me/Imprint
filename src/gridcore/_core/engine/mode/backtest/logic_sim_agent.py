@@ -27,7 +27,7 @@ class LogicAgent(Logic):
         pass
 
     def post_final_action(self) -> None:
-        self.manager.set_text(f"Count Signals: {self.reader._count_send_signal}")
+        self.manager.set_text(f"Count Signals: {self.reader._sync._count_send_signal}")
 
 
 @supervisor()

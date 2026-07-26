@@ -228,12 +228,18 @@ def _start(
         if row == dfmWid[0]:
             return False
 
+        trade_timestamp: int = dfm[row, 1]
+
+        if trade_timestamp > timestamp:
+            time_readed_trade[0] = timestamp
+            return True
+        else:
+            time_readed_trade[0] = trade_timestamp
+
         new_row: int = row + 1
         dfmRid[0] = new_row if (new_row < max_row) else 0
 
         trade_nPrice: int = dfm[row, 0]
-        trade_timestamp: int = dfm[row, 1]
-        time_readed_trade[0] = trade_timestamp
 
         uNpnl = _update_unrealized_nPnl(
             trade_nPrice=trade_nPrice,

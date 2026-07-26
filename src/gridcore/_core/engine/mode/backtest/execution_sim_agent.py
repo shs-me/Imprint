@@ -105,7 +105,7 @@ class ExecutionAgent(Execution):
             timestamp, order_param, order_id, nPrice, nQty, nCommission, nMAE, nMFE
         )
 
-    def post_final_action(self) -> None:
+    def final_actions(self) -> None:
         max_timestamp = 9_999_999_999_999
         while self.acm.trade_readed_time[0] < max_timestamp:
             self.acm.start(max_timestamp)
@@ -116,6 +116,9 @@ class ExecutionAgent(Execution):
             ):
                 break
 
+        self.post_final_action()
+
+    def post_final_action(self) -> None:
         self.con.final_action()
         self.acm.final_action()
         self.manager.set_text(

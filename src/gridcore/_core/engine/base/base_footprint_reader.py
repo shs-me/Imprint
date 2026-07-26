@@ -45,7 +45,6 @@ class FootprintReader(ABC):
         )
 
         self._default_space: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
-        self._count_send_signal: int = 0
         self.amRow: int = 0
 
     def _init_array(self) -> None:
@@ -108,7 +107,6 @@ class FootprintReader(ABC):
             is_market=is_market,
             pass_lag=pass_lag,
         )
-        self._count_send_signal += 1
 
     # - - Footprint Analysis/Update Methods - -
     def _update_states(self) -> None:
@@ -120,7 +118,9 @@ class FootprintReader(ABC):
             if self.con.volume(idx) > 0:
                 if idx > self.last_idx:
                     self._update_closed_bar_and_fp()
-                    self._trade_readed_time[0] = int(self.con.lastTradeTime(idXmax - 1))
+                    self._trade_readed_time[0] = int(
+                        self.con.lastTradeTime(self.last_idx)
+                    )
                     self.last_idx = idx
 
                 self._update_bar(idYmin, idYmax, idxBid, idxAsk)
