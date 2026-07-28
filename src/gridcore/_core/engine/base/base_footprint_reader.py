@@ -1,3 +1,5 @@
+"""Footprint analysis reader and JIT state management routines."""
+
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -13,6 +15,15 @@ from .utils.fp_con import FPconverter
 
 
 class FootprintReader(ABC):
+    """Base class providing interface for Footprint grid analysis and pattern recognition.
+
+    Attributes:
+        fp (NDArray[int64]): Shared 2D Footprint cell volume profile grid.
+        fp_state (NDArray[int32]): 2D Footprint cell state bitmask array.
+        headers (NDArray[int64]): 2D Bar headers array.
+        con (FPconverter): Footprint layout coordinate converter.
+    """
+
     def __init__(
         self,
         manager: AgentManager,
@@ -21,6 +32,8 @@ class FootprintReader(ABC):
         find_patterns_in_update_closed_bar: bool = False,
         find_patterns_in_update_clusters: bool = False,
     ) -> None:
+        """Binds memory views, initializes array structures, and instantiates converter."""
+
         self._manager: AgentManager = manager
         self._sync: Sync = sync
         self._fpiu_bar: bool = find_patterns_in_update_bar
@@ -48,6 +61,8 @@ class FootprintReader(ABC):
         self.amRow: int = 0
 
     def _init_array(self) -> None:
+        """Initializes NumPy wrappers around shared memory Footprint, Header, and Space buffers."""
+
         cfgFP = self._manager.cfgFootprint
         self.fp: NDArray[int64] = np.ndarray(
             shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols),
@@ -71,6 +86,8 @@ class FootprintReader(ABC):
         )
 
     def _init_session(self) -> None:
+        """Resets state arrays and calibrates layout converter for a new trading session."""
+
         self.fp_state.fill(0)
         self.last_idx: int = 0
         self.con.init_session(
@@ -79,6 +96,8 @@ class FootprintReader(ABC):
 
     # Agent/Sync Methods's
     def _final_actions(self) -> None:
+        """Persists strategy analytics metadata to disk if configured."""
+
         if self._manager.cfgFootprint.save_algorithm_metadata:
             np.save(
                 c.ALGORITHM_METADATA_DUMP_PATH, self.algorithm_metadata[: self.amRow, :]
@@ -94,6 +113,18 @@ class FootprintReader(ABC):
         timestamp: int | None = None,
         pass_lag: bool = True,
     ) -> None:
+        """Dispatches trade signal to Execution pipeline via Sync helper.
+
+        Args:
+            is_market (bool): True for Market orders, False for Limit.
+            is_long (bool): Position direction (True=Long, False=Short).
+            is_buy (bool): Trade action side (True=Buy, False=Sell).
+            idy (int64): Price level Y-axis row index.
+            idx (int | None): Bar column index.
+            timestamp (int | None): Explicit event timestamp in milliseconds.
+            pass_lag (bool): Flag to bypass processing latency validation checks.
+        """
+
         nPrice: int = int(self.con.to_nPrice(idy))
         _idx: int = idx if (idx is not None) else self.last_idx
         _ms: int = (
@@ -110,6 +141,8 @@ class FootprintReader(ABC):
 
     # - - Footprint Analysis/Update Methods - -
     def _update_states(self) -> None:
+        """Executes Numba update routines for clusters, closed bars, and active bar state flags."""
+
         oldBuf: int = 1 if (self._space_flag[0] == 0) else 0
         idYmin, idXmin, idYmax, idXmax = self._space[oldBuf, :]
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)
@@ -135,6 +168,8 @@ class FootprintReader(ABC):
         idXmax: int64,
         in_update_clusters: bool = True,
     ) -> None:
+        """Invokes cluster-level state updates and pattern recognition callbacks."""
+
         _update_clusters_states(
             idYmin=idYmin,
             idYmax=idYmax,
@@ -153,6 +188,8 @@ class FootprintReader(ABC):
         self,
         in_update_closed_bar: bool = True,
     ) -> None:
+        """Invokes closed bar calculation routines and updates static Footprint indicators."""
+
         _update_closed_bar_and_fp_states(
             lidx=self.last_idx,
             idxVP=self.con.idxVP,
@@ -176,6 +213,8 @@ class FootprintReader(ABC):
         idxAsk: int,
         in_update_bar: bool = True,
     ) -> None:
+        """Invokes active bar state updates and triggers pattern scanning callbacks."""
+
         _update_bar_states(
             idYmin=idYmin,
             idYmax=idYmax,
@@ -198,9 +237,26 @@ class FootprintReader(ABC):
         in_update_closed_bar: bool = False,
         in_update_clusters: bool = False,
     ) -> None:
+        """Abstract pattern detection entry point overridden by user strategy implementations.
+
+        Args:
+            in_update_bar (bool): True if invoked during active bar tick updates.
+            in_update_closed_bar (bool): True if invoked upon bar closure.
+            in_update_clusters (bool): True if invoked during cluster-level volume updates.
+        """
+
         pass
 
     def bar_state_mask(self, idxBid: int) -> NDArray[int32]:
+        """Returns bitmask slice of active bar indicator flags.
+
+        Args:
+            idxBid (int): Bar Bid column index.
+
+        Returns:
+            NDArray[int32]: Sliced state bitmask array for the specified bar.
+        """
+
         bar_flags = (
             c.SF_OPEN
             | c.SF_HIGH
@@ -223,11 +279,15 @@ class FootprintReader(ABC):
         return self.fp_state[idYmin : idyMax + 1, idxBid : idxBid + 2] & mask
 
     def fp_state_mask(self, idYmin: int64, idYmax: int64) -> NDArray[int32]:
+        """Returns bitmask slice of auction completion flags for specified row bounds."""
+
         state = c.SF_FINISHED_AUCTION | c.SF_UNFINISHED_AUCTION
         return self.fp_state[idYmin:idYmax, self.con.idxVP] & state
 
 
 class BaseFootprintReader(FootprintReader):
+    """Default no-op implementation of FootprintReader."""
+
     def __init__(self, manager: AgentManager, sync: Sync) -> None:
         super().__init__(manager, sync)
 
@@ -251,6 +311,8 @@ def _update_clusters_states(
     fp: NDArray[int64],
     fp_state: NDArray[int32],
 ) -> None:
+    """Numba JIT kernel recalculating delta domination and big trade flags across clusters."""
+
     # - - -
     # Clear State's
     fp_state[idYmin:idYmax, idXmin:idXmax] &= ~(c.SF_BIG_TRADE)
@@ -277,6 +339,8 @@ def _update_closed_bar_and_fp_states(
     nBasePrice: int,
     center: int,
 ) -> None:
+    """Numba JIT kernel calculating ATR, VWAP, Bollinger Bands, POC, and Value Area on bar closure."""
+
     bar: int = (lidx & ~1) // 2
     oldBar: int = bar - 1
     _open: int64 = hr[bar, c.BH_Open]
@@ -344,6 +408,8 @@ def _update_bar_states(
     nBasePrice: int,
     center: int,
 ) -> None:
+    """Numba JIT kernel calculating active bar OHLC, Zero-Print, Delta Domination, and Imbalances."""
+
     bar = (idxBid & ~1) // 2
     _open: int64 = hr[bar, c.BH_Open]
     _high: int64 = hr[bar, c.BH_High]
@@ -402,6 +468,8 @@ def _update_bar_states(
 
 @njit(cache=True)
 def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, intp]:
+    """Numba JIT kernel computing Value Area High (VAH) and Low (VAL) covering 70% of volume profile."""
+
     target_vol: float = np.sum(vp_slice) * 0.70
     current_vol: int64 = vp_slice[center_idx]
     max_len: int = len(vp_slice)

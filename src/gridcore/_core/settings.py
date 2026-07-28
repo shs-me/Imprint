@@ -1,3 +1,5 @@
+"""Enumerations, flags, and structural constant definitions."""
+
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
 from multiprocessing import Process
 from multiprocessing.synchronize import Event
@@ -5,28 +7,82 @@ from typing import Protocol, TypedDict
 
 
 class ProcsData(TypedDict):
+    """Typed dictionary representing managed worker process state and metadata."""
+
     proc_name: str
     task_id: int
     proc: Process
 
 
 class KwgsKeys(IntEnum):
+    """Key identifiers for inter-process parameter dictionaries."""
+
     Configs, Segments, MainTools = auto(), auto(), auto()
     ShmName, ShmSize = auto(), auto()
 
 
 class CoreResources(Protocol):
+    """Protocol defining inter-process synchronization events required by core components."""
+
     parsing_event: Event
     logic_event: Event
     execution_event: Event
 
 
 class ProcessFlags(IntEnum):
+    """Process index positions within system status tracking arrays."""
+
     WSS, PARSING, LOGIC, EXECUTION = auto(), auto(), auto(), auto()
     _CountProcess = auto()
 
 
+class StatusCodes(IntEnum):
+    """Process status codes and bitmask enumeration.
+    64-bit status code flags representing process lifecycle states, pipeline warnings, and errors."""
+
+    label: str
+
+    def __new__(cls, sc_label: str):
+        """Dynamically constructs single-bit bitmask flag integer for each status enum entry."""
+
+        if len(cls.__members__) >= 64:
+            raise ValueError("StatusCodes >= 64, but type: int64")
+
+        value = 1 << len(cls.__members__)
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        obj.label = sc_label
+        return obj
+
+    # General
+    RUN = "Running"
+    STOP = "Stopping"
+    EXIT = "Exit"
+    SLEEP = "Sleeping"
+    WAKE_UP = "Wake up"
+    COMPLETE = "Complete and exit"
+    ERROR = "ERROR more info in 'exc_dump'"
+    GC_COLLECT = "Collect garbage"
+    # - - -
+    # PARSING
+    UNVALID_DATA = "Unvalid data (0 > price or qty or timestamp)"
+    FP_IDX_FILLED = "Footprint X axis filled or (IDX < 0)"
+    FP_IDY_FILLED = "Footprint Y axis filled"
+    # Logic
+    ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
+    # PARSING/LOGIC
+    FP_RE_INIT = "Footprint re-initializated"
+    # WSS/SIM
+    BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"
+    DATA_PREPPERED = "Data preppered"
+    # EXECUTION
+    LOSS_MORE_LIMIT = "Balance >= max loss limit"
+    QTY_LESS_LIMIT = "Nominal qty <= min order size"
+
+
 class StateFlags(IntFlag):
+    """Bitmask flags marking Footprint, Bar, Indicator, and Auction market states."""
+
     # Footprint States
     # Footprint: RealTime
     BID_DELTA_DOMINATION_FP, ASK_DELTA_DOMINATION_FP = auto(), auto()
@@ -47,6 +103,8 @@ class StateFlags(IntFlag):
 
 
 class OrderFlag(IntFlag):
+    """Bitmask flags specifying order side, type, status, and position parameters."""
+
     # Position Side
     LONG, SHORT = auto(), auto()
     # Side
@@ -60,6 +118,8 @@ class OrderFlag(IntFlag):
 
 
 class Timeframe(IntEnum):
+    """Bar aggregation time intervals in milliseconds."""
+
     _30S = 30 * 1000
     _M = 1 * 60 * 1000
     _5M = 5 * 60 * 1000
@@ -70,6 +130,8 @@ class Timeframe(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class CachedStatesData(IntEnum):
+    """Index mapping for cached static Footprint indicators array."""
+
     VWAP, UPPER_BB, LOWER_BB = 0, auto(), auto()
     POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
     _ConstantCount = auto()
@@ -77,6 +139,8 @@ class CachedStatesData(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class OrderBook(IntEnum):
+    """Index mapping for internal order book array columns."""
+
     timestamp, orderParam, clientOrderID = 0, auto(), auto()
     nPrice, nQty = auto(), auto()
     _ConstantCount = auto()
@@ -84,6 +148,8 @@ class OrderBook(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class TradeParam(IntEnum):
+    """Index mapping for trade execution record array columns."""
+
     nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
     nCommission, orderID = auto(), auto()
     nMAE, nMFE = auto(), auto()
@@ -92,6 +158,8 @@ class TradeParam(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class BarHeaders(IntEnum):
+    """Index mapping for Bar Header array columns."""
+
     Open, High, Low, Close = 0, auto(), auto(), auto()
     Volume, Delta, CVD = auto(), auto(), auto()
     VWAP, VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto(), auto()
@@ -103,11 +171,15 @@ class BarHeaders(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class BarHeadersMetadata(IntEnum):
+    """Index mapping for VWAP running variance calculation metadata array."""
+
     VWAP_W, VWAP_PW, VWAP_P2W = 0, auto(), auto()
     _ConstantCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
 class SpaceCoords(IntEnum):
+    """Index mapping for modified region bounding box coordinates array."""
+
     IDYmin, IDXmin, IDYmax, IDXmax = 0, auto(), auto(), auto()
     _ConstantCount = auto()

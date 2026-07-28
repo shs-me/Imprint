@@ -1,3 +1,5 @@
+"""Signal transmission helper synchronizing Logic and Execution engines."""
+
 import time
 from abc import ABC
 
@@ -6,7 +8,15 @@ from ...utils.monitoring.agent_manager import AgentManager
 
 
 class Sync(ABC):
+    """Base class packing strategy signals into Signal ring buffer.
+
+    Attributes:
+        safe_lag (int): Maximum processing lag threshold in microseconds.
+    """
+
     def __init__(self, manager: AgentManager) -> None:
+        """Binds metrics buffers and Signal ring buffer memory views."""
+
         self.manager = manager
 
         cfgMetrics = manager.cfgMetrics
@@ -33,6 +43,17 @@ class Sync(ABC):
         is_market: bool,
         pass_lag: bool,
     ) -> None:
+        """Packs trade signal attributes into Signal ring buffer cell and notifies Execution process.
+
+        Args:
+            nPrice (int): Fixed-point limit or trigger target price.
+            time_ms (int): Signal creation timestamp in milliseconds.
+            is_long (bool): True for Long position, False for Short.
+            is_buy (bool): True for Buy order, False for Sell.
+            is_market (bool): True for Market execution, False for Limit.
+            pass_lag (bool): Flag to force signal dispatch despite processing latency.
+        """
+
         if not pass_lag:
             if not self.lag_is_safe():
                 return
@@ -55,8 +76,16 @@ class Sync(ABC):
         self._count_send_signal += 1
 
     def sync_with_execution(self) -> None:
+        """Hook for waking Execution process event waiters upon signal dispatch."""
+
         pass
 
     def lag_is_safe(self) -> bool:
+        """Checks if current strategy processing latency is within safe threshold bounds.
+
+        Returns:
+            bool: True if lag is acceptable.
+        """
+
         lag: int = (time.perf_counter_ns() - self.time_start_reading[0]) // 1_000
         return True if (lag < self.safe_lag) else False

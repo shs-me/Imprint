@@ -1,3 +1,5 @@
+"""Footprint grid updates and shared memory double-buffering writer routines."""
+
 import os
 import time
 from abc import ABC
@@ -10,8 +12,8 @@ from numpy.typing import NDArray
 
 from ... import constant as c
 from ...settings import BarHeadersMetadata, SpaceCoords
+from ...settings import StatusCodes as scs
 from ...utils.monitoring.agent_manager import AgentManager
-from ...utils.monitoring.status_codes import StatusCodes as scs
 from .utils.fp_con import FPconverter
 
 BHM_VWAP_W: int = int(BarHeadersMetadata.VWAP_W)
@@ -21,7 +23,11 @@ BHM_ConstantCount: int = int(BarHeadersMetadata._ConstantCount)
 
 
 class FootprintWriter(ABC):
+    """Base class managing tick ingestion, VWAP variance accumulation, and memory double-buffering."""
+
     def __init__(self, manager: AgentManager) -> None:
+        """Binds metrics buffers, shared memory references, and instantiates dirty arrays."""
+
         self.manager: AgentManager = manager
         self.set_proc_sc = manager.set_proc_sc
 
@@ -65,6 +71,8 @@ class FootprintWriter(ABC):
         )
 
     def _init_array(self) -> None:
+        """Initializes NumPy array abstractions over shared memory buffers and local dirty arrays."""
+
         cfgFP = self.manager.cfgFootprint
         self.footprint: NDArray[int64] = np.ndarray(
             shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols),
@@ -93,6 +101,8 @@ class FootprintWriter(ABC):
         )
 
     def init_session(self, price: float, timestamp: int) -> None:
+        """Initializes NumPy array abstractions over shared memory buffers and local dirty arrays."""
+
         self.dirty_footprint.fill(0)
         self.dirty_headers.fill(0)
         self.footprint.fill(0)
@@ -107,6 +117,12 @@ class FootprintWriter(ABC):
         self.base_timestamp[0] = self.con.baseTimestamp
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
+        """Ingests tick data, updates dirty structures, and triggers double-buffer flush.
+
+        Returns:
+            bool: True if dirty updates were successfully copied to primary shared memory buffer.
+        """
+
         nPrice: int = self.con.to_nPrice(price)
         idy: int | None = self.con.to_idy(nPrice=nPrice)
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
@@ -142,6 +158,8 @@ class FootprintWriter(ABC):
         idy: int,
         idx: int,
     ) -> None:
+        """Dispatches tick parameter tuple to Numba JIT calculation kernel."""
+
         _update_footprint_and_headers_and_indicators_and_coords(
             price=price,
             qty=qty,
@@ -154,10 +172,14 @@ class FootprintWriter(ABC):
         )
 
     def wait_read_space(self) -> None:
+        """Blocks until reader process releases spare buffer lock."""
+
         while self.spare_flag[0] == 1:
             time.sleep(0)
 
     def copy_to(self) -> bool:
+        """Flushes local dirty array updates to active shared memory buffer when spare flag is clear."""
+
         if self.spare_flag[0] == 0:
             _copy_to(
                 idxVP=self.idxVP,
@@ -175,6 +197,8 @@ class FootprintWriter(ABC):
 
     # For Agent Method's
     def save_fp_headers_array(self) -> None:
+        """Persists current bar headers array to local disk storage."""
+
         if self.save_fp_headers:
             os.makedirs(self.base_fp_dump_path, exist_ok=True)
             headers_save_path = (
@@ -183,19 +207,27 @@ class FootprintWriter(ABC):
             np.save(headers_save_path, self.headers)
 
     def pre_re_init(self) -> None:
+        """Saves Footprint headers and emits re-initialization status code prior to grid reset."""
+
         self.wait_read_space()
         self.save_fp_headers_array()
         self.set_proc_sc(scs.FP_RE_INIT)
 
     def space_is_read(self) -> bool:
+        """Checks if active modify bounding box matches default state."""
+
         return bool(np.all(self.space[:] == self.defaultSpace))
 
     def final_actions(self) -> None:
+        """Flushes remaining Footprint headers to disk upon process completion."""
+
         if (self.last_idx[0] & ~1) == (self.manager.cfgFootprint.fp_cols - 1 & ~1):
             self.save_fp_headers_array()
 
 
 class BaseFootprintWriter(FootprintWriter):
+    """Default concrete implementation of FootprintWriter."""
+
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager)
 
@@ -221,6 +253,8 @@ def _update_footprint_and_headers_and_indicators_and_coords(
         NDArray[float64],
     ],
 ) -> None:
+    """Numba JIT kernel updating volume profile, bar headers, VWAP, BB, and space coordinates."""
+
     idxVP, idxDP, priceMult, qtyMult, dirty_fp, dirty_hr = args[0:6]
     space, space_flag, meta_data = args[6:9]
 
@@ -284,6 +318,8 @@ def _copy_to(
     space: NDArray[int64],
     space_flag: memoryview,
 ) -> None:
+    """Numba JIT kernel performing targeted memory copy of modified regions into shared memory."""
+
     buf: int = space_flag[0]
     idYmin, idXmin, idYmax, idXmax = space[buf, :]
 

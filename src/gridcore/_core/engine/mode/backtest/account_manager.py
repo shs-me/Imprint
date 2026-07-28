@@ -1,3 +1,5 @@
+"""Simulated account equity tracking, margin maintenance, and position ledger."""
+
 import time
 from datetime import datetime
 
@@ -14,6 +16,8 @@ EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
 class AccountManager(me.MatchingEngine):
+    """Account state manager extending MatchingEngine with balance tracking and equity history."""
+
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager)
 
@@ -119,6 +123,8 @@ class AccountManager(me.MatchingEngine):
         nPrice: int,
         nQty: int,
     ) -> None:
+        """Locks margin for pending orders and registers entry within order book array."""
+
         is_long = bool(order_param & c.OF_LONG)
         is_buy = bool(order_param & c.OF_BUY)
         if (is_buy and is_long) or (not is_long and not is_buy):
@@ -141,6 +147,8 @@ class AccountManager(me.MatchingEngine):
         )
 
     def start(self, timestamp: int) -> None:
+        """Advances matching simulation clock up to specified target timestamp."""
+
         while True:
             if _start(timestamp=timestamp, args=self.args):
                 break
@@ -156,9 +164,13 @@ class AccountManager(me.MatchingEngine):
 
     # Agent Methods
     def final_action(self) -> None:
+        """Flushes non-zero equity history bars to disk."""
+
         self.dump_equity_history()
 
     def dump_equity_history(self) -> None:
+        """Saves active equity history array to disk."""
+
         valid_mask = self.equity_history[:, 0] > 0
         np.save(c.EQUITY_HISTORY_DUMP_PATH, self.equity_history[valid_mask])
 
@@ -209,6 +221,8 @@ def _start(
         memoryview,
     ],
 ) -> bool:
+    """Numba JIT kernel iterating tick data, calculating PnL, updating equity OHLC, and matching orders."""
+
     time_readed_trade, dfm, dfmRid, dfmWid = args[0:4]
     order_book, obRow, order_id_buf = args[4:7]
     data_buf, data_buf_size, data_header, data_example, deRow = args[7:12]
@@ -361,6 +375,8 @@ def _update_unrealized_nPnl(
     short_mae: memoryview,
     short_mfe: memoryview,
 ) -> int:
+    """Numba JIT kernel calculating unrealized PnL, MAE, and MFE for active Long/Short positions."""
+
     if longNqty[0] or shortNqty[0]:
         if longNqty[0]:
             longUnrealizedNpnl[0] = _to_nPnl(
@@ -411,6 +427,8 @@ def _update_equity_ohlc(
     base_timestamp: memoryview,
     timeframe: int,
 ) -> None:
+    """Numba JIT kernel tracking account equity OHLC values across bar timeframe boundaries."""
+
     ce, eh = current_equity, equity_history
     # - - -
     if base_timestamp[0] == 0:
@@ -463,6 +481,8 @@ def _update_positions(
     short_mae: memoryview,
     short_mfe: memoryview,
 ) -> None:
+    """Numba JIT kernel updating open positions, deducting commissions, and generating execution events."""
+
     max_de_row: int = deRow[0]
     for de_row in range(max_de_row):
         deRow[0] -= 1
@@ -554,6 +574,8 @@ def _update_position(
     short_mae: memoryview,
     short_mfe: memoryview,
 ) -> None:
+    """Numba JIT kernel updating balance, locked margin, and weighted average entry price for filled orders."""
+
     nBalance[0] -= nCommission
     if is_open and not is_maker:
         lockedNbalance[0] += _to_nMargin(
@@ -633,6 +655,8 @@ def _to_nMargin(
     qty_mult: int,
     scale_mult: int,
 ) -> int:
+    """Numba JIT kernel calculating required margin for specified order size and leverage."""
+
     margin: float = ((nQty / qty_mult) * (nPrice / price_mult)) / leverage
     return round(margin * scale_mult)
 
@@ -648,6 +672,8 @@ def _to_nPnl(
     qty_mult: int,
     scale_mult: int,
 ) -> int:
+    """Numba JIT kernel calculating realized profit or loss for closed position volume."""
+
     entryNprice: int = longEntryNprice if is_long else shortEntryNprice
     diffNprice: int = (closeNprice - entryNprice) * (1 if is_long else -1)
     pnl: float = (diffNprice / price_mult) * (nQty / qty_mult)

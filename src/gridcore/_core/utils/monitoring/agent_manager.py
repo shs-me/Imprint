@@ -1,11 +1,15 @@
+"""Worker process manager interface for updating status flags and IPC communication."""
+
 import gc
 import time
 
+from ...settings import StatusCodes as scs
 from .base_manager import Manager
-from .status_codes import StatusCodes as scs
 
 
 class AgentManager(Manager):
+    """Manager instance dedicated to individual worker process status tracking and IPC signaling."""
+
     def __init__(
         self,
         segments: dict[str, slice],
@@ -15,6 +19,8 @@ class AgentManager(Manager):
         proc_id: int,
         task_id: int,
     ) -> None:
+        """Binds process task and status memory views matching worker ID."""
+
         super().__init__(segments, shm_buf, configs, main_tools)
 
         self._proc_id: int = proc_id
@@ -28,6 +34,8 @@ class AgentManager(Manager):
         ]
 
     def set_text(self, text: str) -> None:
+        """Writes formatted process status text message to shared memory text buffer."""
+
         text_buf: memoryview = self.cfgMetrics.text
         b_text, start = text.encode(), self._proc_id * self.cfgMetrics.text_size
         set_len, start = text_buf[start : start + 8].cast("q"), start + 8
@@ -35,6 +43,15 @@ class AgentManager(Manager):
         text_buf[start : start + len(b_text)] = b_text
 
     def check_base_task(self, complete: bool) -> bool | int:
+        """Evaluates task status flags set by MainManager and executes task commands.
+
+        Args:
+            complete (bool): True if worker process has completed pipeline work.
+
+        Returns:
+            bool | int: Task action indicator or task status code.
+        """
+
         if self.task_status[0] != 0 or self.proc_status[0] != 0:
             while self.task_status[0] == 0:
                 time.sleep(0)
@@ -76,11 +93,17 @@ class AgentManager(Manager):
             return False
 
     def set_proc_sc(self, code: scs | int) -> None:
+        """Sets status code bitmask for process and signals MainManager semaphore."""
+
         self.proc_status[0] |= code
         self._sc_sem.release()
 
     def set_task_sc(self, code: scs | int) -> None:
+        """Sets task status code bitmask for assigned task slot."""
+
         self.task_status[0] |= code
 
     def clear_task_sc(self, code: scs | int) -> None:
+        """Clears task status code bitmask flags."""
+
         self.task_status[0] &= ~(code)

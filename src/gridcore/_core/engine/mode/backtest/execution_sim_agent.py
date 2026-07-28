@@ -1,3 +1,5 @@
+"""Simulated execution agent coordinating AccountManager and OCO order placement."""
+
 import time
 
 from .... import constant as c
@@ -8,6 +10,8 @@ from .account_manager import AccountManager
 
 
 class ExecutionAgent(Execution):
+    """Simulated Execution engine handling signal execution and OCO TP/SL placement."""
+
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
@@ -29,6 +33,8 @@ class ExecutionAgent(Execution):
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
+        """Drives AccountManager matching simulation while awaiting signal updates."""
+
         matching = False
         while self.logic_complete[0] == 0:
             if self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
@@ -41,6 +47,8 @@ class ExecutionAgent(Execution):
             time.sleep(0)
 
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
+        """Advances AccountManager clock to signal time before executing order."""
+
         timestamp = time_get_signal + self.con.latency
         while timestamp > self.acm.trade_readed_time[0]:
             self.acm.start(timestamp)
@@ -51,6 +59,8 @@ class ExecutionAgent(Execution):
     def execute_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
+        """Validates signal parameters and forwards order request to AccountManager."""
+
         if self.con.is_averaging(order_param):
             return
 
@@ -64,6 +74,8 @@ class ExecutionAgent(Execution):
         self.count_open_position += 1
 
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+        """Processes execution events, updates order history, and automatically places TP/SL OCO orders."""
+
         get_data: memoryview = user_data_raw_buf.cast("q")
         timestamp: int = get_data[0]
         order_param: int = get_data[1]
@@ -106,6 +118,8 @@ class ExecutionAgent(Execution):
         )
 
     def final_actions(self) -> None:
+        """Drains remaining execution queues and triggers final account report logging."""
+
         max_timestamp = 9_999_999_999_999
         while self.acm.trade_readed_time[0] < max_timestamp:
             self.acm.start(max_timestamp)
@@ -119,6 +133,8 @@ class ExecutionAgent(Execution):
         self.post_final_action()
 
     def post_final_action(self) -> None:
+        """Logs final balance, active orders, and position summary to process status text."""
+
         self.con.final_action()
         self.acm.final_action()
         self.manager.set_text(
@@ -139,5 +155,7 @@ class ExecutionAgent(Execution):
 
 @supervisor()
 def run_execution_sim(**kwargs):
+    """Supervisor-wrapped entry point for simulated Execution process."""
+
     agent = ExecutionAgent(manager=kwargs["manager"])
     agent.run_execution_engine()

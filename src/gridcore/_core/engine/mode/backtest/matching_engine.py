@@ -1,3 +1,5 @@
+"""Tick data CSV prepper and Numba JIT order matching engine for simulation mode."""
+
 import time
 
 import numpy as np
@@ -11,6 +13,8 @@ from ...base.base_data_prepper import BaseDataPrepper
 
 
 class DataPrepper(BaseDataPrepper):
+    """CSV tick reader parsing tick files into memory array buffers."""
+
     def __init__(
         self,
         symbol: str,
@@ -29,12 +33,16 @@ class DataPrepper(BaseDataPrepper):
         self.safe_lag: int = round(self.max_row * 0.9)
 
     def alarm_clock(self) -> None:
+        """Throttles CSV reader thread when output buffer lag reaches safe limit."""
+
         while (
             (self.dfmWid[0] - self.dfmRid[0] + self.max_row) % self.max_row
         ) > self.safe_lag:
             time.sleep(0)
 
     def prepper_data(self, data: bytes) -> None:
+        """Parses raw CSV byte line into fixed-point price and timestamp tuple."""
+
         list_data: list[bytes] = data.split(b",")
         self.dfm[self.dfmWid[0], :] = (
             round(float(list_data[1]) * self.price_mult),
@@ -48,7 +56,10 @@ class DataPrepper(BaseDataPrepper):
 
 
 class MatchingEngine:
+    """Backtest matching engine maintaining internal order book and user feedback arrays."""
+
     def __init__(self, manager: AgentManager) -> None:
+
         self.manager: AgentManager = manager
 
         cfgAC = manager.cfgAccount
@@ -76,6 +87,8 @@ class MatchingEngine:
         self.prepper.start()
 
     def _init_array(self) -> None:
+        """Initializes NumPy wrappers over shared user stream buffer, order book, and event logs."""
+
         self.data_buf: NDArray[uint8] = np.frombuffer(self.data, uint8)
         self.data_example: NDArray[int64] = np.ndarray(
             (1000, c.TP_ConstantCount), dtype=int64
@@ -96,6 +109,8 @@ class MatchingEngine:
         nPrice: int,
         nQty: int,
     ) -> None:
+        """Appends pending order to simulated order book array."""
+
         self.order_book[self.obRow[0], c.OB_timestamp] = timestamp
         self.order_book[self.obRow[0], c.OB_orderParam] = order_param
         self.order_book[self.obRow[0], c.OB_clientOrderID] = client_order_id
@@ -128,6 +143,8 @@ def _matching(
     deRow: memoryview,
     slippage: int,
 ) -> bool:
+    """Numba JIT kernel matching active limit, market, and trigger orders against incoming tick price."""
+
     client_in_priority: bool = False
     order_row: int = 0
     while order_row < obRow[0]:
@@ -196,6 +213,8 @@ def _processing_order(
     order_id: int,
     slippage: int,
 ) -> tuple[int, int, int, int, int, int, int, int] | None:
+    """Numba JIT kernel evaluating individual order fill conditions, slippage, and OCO cancellations."""
+
     is_buy: bool = bool(order_param & c.OF_BUY)
 
     nPrice = trade_nPrice
@@ -236,6 +255,8 @@ def _nPrice_with_slippage(
     is_buy: bool,
     slippage: int,
 ) -> int:
+    """Numba JIT kernel applying configured slippage deviation to execution price."""
+
     slipageTicks = nPrice * slippage // 10_000
     return nPrice + (slipageTicks if is_buy else -slipageTicks)
 
@@ -246,6 +267,8 @@ def _compact_order_book(
     obRow: memoryview,
     ob: NDArray[int64],
 ) -> None:
+    """Numba JIT kernel removing filled or canceled order from active order book array."""
+
     if (obRow[0] - 1) > order_row:
         ob[order_row : obRow[0] - 1, :] = ob[order_row + 1 : obRow[0], :]
         ob[obRow[0] - 1, :] = 0
@@ -264,6 +287,8 @@ def _set_user_data(
     writer_id: memoryview,
     cell_amount: int,
 ) -> None:
+    """Numba JIT kernel writing execution event payload into UserStream ring buffer."""
+
     cell: int = writer_id[0]
     start: int = cell * data_buf_size
     data_header[cell] = len(data)

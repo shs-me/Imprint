@@ -1,3 +1,5 @@
+"""Shared memory allocator and process client manager."""
+
 import inspect
 from copy import deepcopy
 from multiprocessing import Event, Semaphore
@@ -13,12 +15,16 @@ from .main_manager import MainManager
 
 
 class Dispatcher:
+    """IPC resource allocator instantiating SharedMemory blocks and manager interfaces."""
+
     def __init__(self, is_main: bool, **kwargs) -> None:
         self.is_main: bool = is_main
         self.kwg: dict = kwargs
 
     @error_handler()
     def run_client(self, func: FunctionType) -> None:
+        """Initializes shared memory resources and executes target process function with assigned Manager."""
+
         if self.is_main:
             self.configurations_init()
 
@@ -27,6 +33,8 @@ class Dispatcher:
         func(manager=self.agent_init(), **self.kwg)
 
     def configurations_init(self) -> None:
+        """Scans configuration module classes, calculates shared memory offsets, and creates IPC sync tools."""
+
         offset: int = 0
         self.kwg[kk.Configs.name], self.kwg[kk.Segments.name] = [], {}
         for name, obj in inspect.getmembers(configurations, inspect.isclass):
@@ -47,6 +55,8 @@ class Dispatcher:
         self.kwg[kk.MainTools.name] = [Event(), Semaphore(0)]
 
     def shm_init(self) -> tuple[SharedMemory, memoryview] | None:
+        """Allocates new SharedMemory block for main process or attaches to existing segment for workers."""
+
         self.shm: SharedMemory
         self.shm_buf: memoryview
 
@@ -66,6 +76,8 @@ class Dispatcher:
                 self.shm_buf = self.shm.buf
 
     def agent_init(self) -> MainManager | AgentManager:
+        """Instantiates MainManager or AgentManager instance matching process identity."""
+
         segments = deepcopy(self.kwg[kk.Segments.name])
         configs = deepcopy(self.kwg[kk.Configs.name])
         if self.is_main:

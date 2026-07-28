@@ -1,3 +1,5 @@
+"""Price, quantity, time, and index coordinate conversion helper."""
+
 from datetime import datetime, timezone
 from typing import overload
 
@@ -9,6 +11,8 @@ from .... import constant as c
 
 
 class FPconverter:
+    """Converter mapping floating-point values to fixed-point integers and Footprint matrix coordinates."""
+
     def __init__(
         self,
         cfgFP: cfg.Footprint,
@@ -31,6 +35,8 @@ class FPconverter:
         self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
 
     def init_session(self, price: float | int, timestamp: int):
+        """Calibrates converter base price, base timestamp, and grid center origin offset."""
+
         self.nBasePrice: int = (
             self.to_nPrice(price) if isinstance(price, float) else price
         )
@@ -42,6 +48,12 @@ class FPconverter:
     @overload
     def to_idy(self, nPrice: int64) -> int64: ...
     def to_idy(self, nPrice):
+        """Maps fixed-point price to Footprint grid Y-axis row index.
+
+        Returns:
+            int | int64 | None: Grid row index or None if out of bounds.
+        """
+
         idy: int | int64 = (self.nBasePrice - nPrice) + self.center
         if 0 <= idy < self.fp_rows:
             return idy
@@ -49,6 +61,12 @@ class FPconverter:
             return None
 
     def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
+        """Maps timestamp and trade side to Footprint grid X-axis column index.
+
+        Returns:
+            int | None: Grid column index or None if out of bounds.
+        """
+
         idx: int = (timestamp - self.baseTimestamp) // self.tims * 2 + (
             0 if is_sell else 1
         )
@@ -62,32 +80,46 @@ class FPconverter:
     @overload
     def to_nPrice(self, value: int | int64) -> int | int64: ...
     def to_nPrice(self, value):
+        """Converts float price to fixed-point int or Y-axis row index to fixed-point price."""
+
         if isinstance(value, float):
             return round(value * self.priceMult)
         else:
             return (self.center - value) + self.nBasePrice
 
     def to_nQty(self, qty: float) -> int:
+        """Converts float quantity to fixed-point int scaling representation."""
+
         return round(qty * self.qtyMult)
 
     def to_price(self, nPrice: int | int64) -> float | float64:
+        """Converts fixed-point price int to floating-point representation."""
+
         return nPrice / self.priceMult
 
     def to_qty(self, nQty: int | int64) -> float | float64:
+        """Converts fixed-point quantity int to floating-point representation."""
+
         return nQty / self.qtyMult
 
     def to_strftime(self, timestamp_ms: int | int64) -> str:
+        """Formats millisecond timestamp as ISO-8601 UTC string."""
+
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
             "%Y-%m-%dT%H-%M-%S"
         )
 
     def get_price(self, idy: int | int64) -> float:
+        """Returns rounded float price for specified Footprint row index Y."""
+
         return round(
             self.to_price(self.to_nPrice(idy)),
             ndigits=self.pricePrec,
         )
 
     def get_qty(self, idy: int, idx: int) -> float:
+        """Returns float quantity stored in Footprint cell at coordinates (idy, idx)."""
+
         return self.to_qty(self.footprint[idy, idx])
 
     @overload
@@ -95,6 +127,8 @@ class FPconverter:
     @overload
     def get_time(self, idx: int, strftime: bool = True) -> str: ...
     def get_time(self, idx: int | int64, strftime: bool = False):
+        """Returns timestamp or formatted string corresponding to bar column index X."""
+
         if strftime:
             return self.to_strftime((idx & ~1) // 2 * self.tims + self.baseTimestamp)
         else:
@@ -102,6 +136,8 @@ class FPconverter:
 
     # Headers
     def _get_header(self, idx: int | int64, header: c.BarHeaders) -> int64:
+        """Extracts header value for specified bar index and BarHeaders field."""
+
         return self.headers[(idx & ~1) // 2, header]
 
     # OHLC

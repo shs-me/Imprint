@@ -1,3 +1,5 @@
+"""Diagnostic dump generators and historical data downloader utilities."""
+
 import inspect
 import json
 import os
@@ -13,6 +15,8 @@ from .. import constant as c
 
 
 class DebugEncoder(json.JSONEncoder):
+    """Custom JSON encoder handling set, range, datetime, and non-serializable objects."""
+
     def default(self, o):
         if isinstance(o, (set, range)):
             return list(o)
@@ -24,6 +28,8 @@ class DebugEncoder(json.JSONEncoder):
 
 
 def dump_exception() -> None:
+    """Formats active exception traceback and frame local variables into `dump/exc_dump.json`."""
+
     exc_type, exc_value, exc_tb = sys.exc_info()
 
     data = {
@@ -56,6 +62,8 @@ def dump_exception() -> None:
 
 
 def process_value(val: Any, max_len: int = 100) -> Any:
+    """Safely formats local frame variable values for JSON diagnostic dumps."""
+
     if isinstance(val, memoryview):
         return {
             "type": "memoryview",
@@ -99,6 +107,8 @@ def process_value(val: Any, max_len: int = 100) -> Any:
 def download_aggTrade_hist_daily_data(
     symbol: str, startDate: date, endDate: date
 ) -> bool:
+    """Downloads and extracts Binance Vision daily aggTrade CSV files for specified symbol and date range."""
+
     base_path = f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}/{symbol.upper()}"
     os.makedirs(base_path, exist_ok=True)
 
@@ -123,10 +133,14 @@ def download_aggTrade_hist_daily_data(
 
 
 def to_date(iso_f_dates: list[str]):
+    """Converts list of ISO format date strings into datetime.date objects."""
+
     return [date.fromisoformat(d) for d in iso_f_dates]
 
 
 def download_file(url: str, path: str) -> None:
+    """Downloads file from target URL to disk path with progress streaming."""
+
     dl_file = request.urlopen(url)
     length = dl_file.getheader("content-length")
     if length:

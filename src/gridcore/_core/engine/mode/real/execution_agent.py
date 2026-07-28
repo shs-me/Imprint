@@ -1,3 +1,5 @@
+"""Live order execution process agent."""
+
 from multiprocessing.synchronize import Event
 
 from ....utils.handlers import supervisor
@@ -7,6 +9,8 @@ from ...mode.real.rest_agent import RestAgent
 
 
 class ExecutionAgent(Execution):
+    """Live Execution engine managing REST interactions with exchange."""
+
     def __init__(self, manager: AgentManager, execution_event: Event) -> None:
         super().__init__(manager=manager)
 
@@ -17,6 +21,8 @@ class ExecutionAgent(Execution):
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
+        """Blocks process on execution_event when ring buffers are drained."""
+
         if (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0]):
             self.execution_event.clear()
             if (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0]):
@@ -44,5 +50,7 @@ class ExecutionAgent(Execution):
 
 @supervisor()
 def run_execution(execution_event: Event, **kwargs):
+    """Supervisor-wrapped entry point for live Execution process."""
+
     agent = ExecutionAgent(manager=kwargs["manager"], execution_event=execution_event)
     agent.run_execution_engine()

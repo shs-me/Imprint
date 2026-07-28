@@ -1,3 +1,5 @@
+"""Live Binance Futures WebSocket connection worker."""
+
 import asyncio
 from multiprocessing.synchronize import Event
 
@@ -10,6 +12,8 @@ from ...base.base_wss import Wss
 
 
 class WssAgent(Wss):
+    """Asynchronous WebSocket client streaming live aggTrades into DataStream ring buffer."""
+
     def __init__(self, manager: AgentManager, wake_up_parser: Event) -> None:
         super().__init__(manager=manager)
 
@@ -24,6 +28,8 @@ class WssAgent(Wss):
         pass
 
     async def run_wss__engine(self) -> None:
+        """Asynchronous event loop managing WebSocket connection and pushing raw JSON bytes to DataStream."""
+
         self.run_wss_engine()
         # Local Links
         wake_up_parser = self.wake_up_parser
@@ -59,5 +65,7 @@ class WssAgent(Wss):
 
 @supervisor()
 def run_wss(parsing_event: Event, **kwargs) -> None:
+    """Supervisor-wrapped entry point launching live Wss process."""
+
     agent = WssAgent(kwargs["manager"], wake_up_parser=parsing_event)
     asyncio.run(agent.run_wss__engine())

@@ -1,25 +1,33 @@
+"""Simulated WebSocket agent streaming prepped CSV tick data."""
+
 import struct
 import time
 from collections import deque
 
+from ....settings import StatusCodes as scs
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.status_codes import StatusCodes as scs
 from ...base.base_data_prepper import BaseDataPrepper
 from ...base.base_wss import Wss
 
 
 class DataPrepper(BaseDataPrepper):
+    """Threaded queue container packing CSV tick rows into binary stream payloads."""
+
     def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
         super().__init__(symbol, start_date, end_date)
 
         self.queue: deque = deque(maxlen=10000)
 
     def alarm_clock(self) -> None:
+        """Throttles reader when output queue reaches capacity limit."""
+
         while len(self.queue) == self.queue.maxlen:
             time.sleep(0)
 
     def prepper_data(self, data: bytes) -> None:
+        """Packs CSV fields into packed binary struct payload `@ddq?`."""
+
         list_data: list[bytes] = data.split(b",")
         self.queue.append(
             struct.pack(
@@ -36,6 +44,8 @@ class DataPrepper(BaseDataPrepper):
 
 
 class WssSimAgent(Wss):
+    """Simulated Wss process pushing packed tick binary payloads into DataStream ring buffer."""
+
     def __init__(self, manager: AgentManager) -> None:
         super().__init__(manager=manager)
 
@@ -47,6 +57,8 @@ class WssSimAgent(Wss):
         self.prepper.start()
 
     def run_wss_engine(self) -> None:
+        """Main process loop streaming prepped tick data into DataStream ring buffer cells."""
+
         # Local Links
         prepper = self.prepper
         proc_status, task_status = self.proc_status, self.task_status
@@ -91,10 +103,14 @@ class WssSimAgent(Wss):
                     raise RuntimeError(prepper.error)
 
     def complete(self) -> bool:
+        """Checks if input tick file has been completely ingested and queue is drained."""
+
         return self.prepper.complete and (not self.prepper.queue)
 
 
 @supervisor()
 def run_wss_sim(**kwargs) -> None:
+    """Supervisor-wrapped entry point for simulated Wss process."""
+
     agent = WssSimAgent(manager=kwargs["manager"])
     agent.run_wss_engine()

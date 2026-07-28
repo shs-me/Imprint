@@ -1,3 +1,5 @@
+"""System-wide file paths, endpoints, and aliased bitmask constants."""
+
 from .settings import (
     BarHeaders,
     CachedStatesData,

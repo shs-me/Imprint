@@ -1,3 +1,5 @@
+"""Core process launcher and lifecycle manager."""
+
 import inspect
 import os
 from multiprocessing import Event, Process
@@ -20,10 +22,15 @@ from .utils.handlers import supervisor
 from .utils.monitoring.main_manager import MainManager
 
 
-class RunMain(CoreResources):
-    def __init__(self, **kwargs) -> None:
+class MainAgent(CoreResources):
+    """Process coordinator responsible for instantiating IPC tools and launching daemon processes."""
+
+    def __init__(self, manager: MainManager, **kwargs) -> None:
+        """Initializes synchronization events and process registry containers."""
+
+        self.manager: MainManager = manager
+
         self.base_kwargs: dict = kwargs
-        self.manager: MainManager = kwargs.pop("manager")
 
         self.backtesting: bool = self.manager.cfgSetup.backtesting
         self.execution: bool = self.manager.cfgSetup.execution
@@ -35,6 +42,8 @@ class RunMain(CoreResources):
         self.procs: dict[int, ProcsData] = {}
 
     def run_core_engine(self) -> None:
+        """Creates required output directories, spawns worker processes, and starts the MainManager loop."""
+
         logger.info("-- Core -- | Started, init...")
         try:
             self.check_dirs()
@@ -49,11 +58,15 @@ class RunMain(CoreResources):
             logger.info("-- Core -- | Close the Core.")
 
     def check_dirs(self) -> None:
+        """Ensures required working directories (data, logs, dump) exist on local disk."""
+
         for _dir in DIRS_LIST:
             if not os.path.exists(_dir):
                 os.mkdir(_dir)
 
     def run_procs(self) -> bool:
+        """Spawns configured worker processes and applies initial execution flags."""
+
         procs_funcs: list[FunctionType] = self.get_procs_funcs()
         count_procs: int = len(procs_funcs)
         procs_ids: list[int] = [i for i in range(count_procs)]
@@ -73,6 +86,12 @@ class RunMain(CoreResources):
         return True
 
     def get_procs_funcs(self) -> list[FunctionType]:
+        """Resolves pipeline target functions based on backtesting and execution flags.
+
+        Returns:
+            list[FunctionType]: Process target functions for WSS, Parsing, Logic, and Execution.
+        """
+
         funcs: list[FunctionType] = []
         funcs.append((run_wss_sim if self.backtesting else run_wss))
         funcs.append(run_parsing_sim if self.backtesting else run_parsing)
@@ -85,6 +104,17 @@ class RunMain(CoreResources):
     def get_kwargs_for_func(
         self, func: FunctionType, proc_id: int, task_id: int
     ) -> dict | None:
+        """Resolves required arguments for target worker process signatures.
+
+        Args:
+            func (FunctionType): Target process function.
+            proc_id (int): Assigned process identifier.
+            task_id (int): Assigned task status identifier.
+
+        Returns:
+            dict | None: Resolved keyword arguments or None if required parameters are missing.
+        """
+
         sig: inspect.Signature = inspect.signature(func)
         proc_name: str = func.__name__.removeprefix("run_").upper()
         kwargs = {}
@@ -103,6 +133,13 @@ class RunMain(CoreResources):
         return kwargs
 
     def run_proc(self, func: FunctionType, kwargs: dict) -> None:
+        """Spawns a target process as a daemon subprocess.
+
+        Args:
+            func (FunctionType): Target process function.
+            kwargs (dict): Arguments passed to target process.
+        """
+
         name: str = self.procs[kwargs["proc_id"]]["proc_name"]
         proc: Process = Process(
             target=func,
@@ -117,5 +154,7 @@ class RunMain(CoreResources):
 
 @supervisor(is_main=True)
 def run_core(**kwargs) -> None:
-    state = RunMain(**kwargs)
+    """Supervisor-wrapped entry point for spawning the core multiprocessing architecture."""
+
+    state = MainAgent(kwargs.pop("manager"), **kwargs)
     state.run_core_engine()

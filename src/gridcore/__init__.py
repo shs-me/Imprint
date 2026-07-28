@@ -1,3 +1,9 @@
+"""GridCore package entry point.
+
+Exposes primary user-facing interfaces, configuration structures, and runtime modes
+for the GridCore trading and footprint analysis engine.
+"""
+
 from . import typing
 from ._core import constant
 from ._core.engine.base.base_footprint_reader import FootprintReader

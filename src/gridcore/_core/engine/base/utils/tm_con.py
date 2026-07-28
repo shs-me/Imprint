@@ -1,3 +1,5 @@
+"""Trade execution parameter conversion, order history, and margin validator."""
+
 import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
@@ -7,6 +9,8 @@ from .... import constant as c
 
 
 class TradeConverter:
+    """Converter managing leverage scaling, risk validations, and order history tracking."""
+
     def __init__(
         self,
         cfgAccount: cfg.Account,
@@ -58,6 +62,8 @@ class TradeConverter:
         self._init_array()
 
     def _init_array(self) -> None:
+        """Initializes order history log buffer array."""
+
         self.orders_history: NDArray[int64] = np.ndarray(
             shape=(self.oh_rows, self.oh_cols), dtype=int64
         )
@@ -77,6 +83,8 @@ class TradeConverter:
         longUnrealizedNpnl: memoryview,
         shortUnrealizedNpnl: memoryview,
     ) -> None:
+        """Binds active balance, position, and PnL memory view pointers."""
+
         self._nBalance = nBalance
         self._lockedNbalance = lockedNbalance
         self._availableNbalance = availableNbalance
@@ -100,6 +108,8 @@ class TradeConverter:
         nMAE: int = 0,
         nMFE: int = 0,
     ) -> None:
+        """Appends trade execution entry to order history buffer array."""
+
         ohWid, oh = self.ohWid, self.orders_history
         # - - -
         oh[ohWid[0], c.TP_timestamp] = timestamp
@@ -120,65 +130,95 @@ class TradeConverter:
 
     @property
     def nBalance(self) -> int:
+        """Current fixed-point total account balance."""
+
         return self._nBalance[0]
 
     @property
     def lockedNbalance(self) -> int:
+        """Current fixed-point locked margin balance."""
+
         return self._lockedNbalance[0]
 
     @property
     def availableNbalance(self) -> int:
+        """Current fixed-point available balance for trading."""
+
         return self._availableNbalance[0]
 
     @property
     def lossNbalanceSafeLimit(self) -> bool:
+        """Evaluates whether current balance remains above max tolerable loss threshold."""
+
         return self.nBalance > (
             self.startNbalance - (self.startNbalance * self._max_loss_balance // 10_000)
         )
 
     @property
     def lockedNbalanceSafeLimit(self) -> bool:
+        """Evaluates whether locked margin remains below max margin lock threshold."""
+
         return self.lockedNbalance < (self.nBalance * self._max_lock_balance // 10_000)
 
     @property
     def nominalEntryNqty(self) -> int:
+        """Calculates unleveraged position entry allocation in scale fixed-point units."""
+
         return self.availableNbalance * self._entryQty // 10_000
 
     @property
     def nominalEntryNqtyWithLeverage(self) -> int | None:
+        """Calculates leveraged entry size if above minimum order threshold."""
+
         if (qty := (self.leverage * self.nominalEntryNqty)) > self.minOrderNsize:
             return qty
 
     def entryNqtyWithLeverage(self, nPrice: int, nominalNqty: int) -> int:
+        """Calculates target asset quantity int for specified entry price and nominal margin amount."""
+
         nominal_qty: float = nominalNqty / self.scale
         return round((nominal_qty * self.priceMult * self.qtyMult) / nPrice)
 
     @property
     def newClientOrderId(self) -> int:
+        """Generates unique incremental client order ID."""
+
         self._client_order_id += 1
         return self._client_order_id
 
     @property
     def unrealizedNpnl(self) -> int:
+        """Total fixed-point unrealized position PnL."""
+
         return self._unrealizedNpnl[0]
 
     @property
     def longUnrealizedNpnl(self) -> int:
+        """Fixed-point unrealized PnL for active Long position."""
+
         return self._longUnrealizedNpnl[0]
 
     @property
     def shortUnrealizedNpnl(self) -> int:
+        """Fixed-point unrealized PnL for active Short position."""
+
         return self._shortUnrealizedNpnl[0]
 
     def TPdevNprice(self, nPrice: int, is_long: bool) -> int:
+        """Calculates Take-Profit price for entry price and position side."""
+
         tpTicks: int = nPrice * self._tpDev // 10_000
         return nPrice + (tpTicks if is_long else -tpTicks)
 
     def SLdevNprice(self, nPrice: int, is_long: bool) -> int:
+        """Calculates Stop-Loss price for entry price and position side."""
+
         slTicks: int = nPrice * self._slDev // 10_000
         return nPrice + (-slTicks if is_long else slTicks)
 
     def is_averaging(self, order_param: int) -> bool:
+        """Checks whether incoming signal increases an existing active position."""
+
         is_long = bool(order_param & c.OF_LONG)
         is_buy = bool(order_param & c.OF_BUY)
 
@@ -190,5 +230,7 @@ class TradeConverter:
             return False
 
     def final_action(self) -> None:
+        """Flushes non-zero order history logs to disk."""
+
         if self.cfgAC.save_orders_history:
             np.save(c.ORDERS_HISTORY_DUMP_PATH, self.orders_history[: self.ohWid[0], :])

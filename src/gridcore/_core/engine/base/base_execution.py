@@ -1,13 +1,25 @@
+"""Abstract execution pipeline engine handling signal validation and order updates."""
+
 from abc import ABC, abstractmethod
 
+from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
-from ...utils.monitoring.status_codes import StatusCodes as scs
 from .utils.tm_con import TradeConverter
 
 
 class Execution(ABC):
+    """Base class managing Signal buffer intake and UserStream feedback.
+
+    Attributes:
+        symbol (str): Active coin symbol ticker.
+        con (TradeConverter): Order and balance conversion helper.
+        readed_timestamp (int): Current process trade read timestamp.
+    """
+
     def __init__(self, manager: AgentManager) -> None:
+        """Binds process status references, shared memory views, and trade converter instance."""
+
         self.manager: AgentManager = manager
 
         self.set_proc_sc = manager.set_proc_sc
@@ -45,6 +57,8 @@ class Execution(ABC):
 
     @error_handler(set_status_code=True)
     def run_execution_engine(self) -> None:
+        """Primary execution engine loop processing incoming trade signals and user stream updates."""
+
         # LocalLinks
         proc_status, task_status = self.proc_status, self.task_status
         WB_1, RB_1, WB_2, RB_2 = self.WB_1, self.RB_1, self.WB_2, self.RB_2
@@ -70,6 +84,12 @@ class Execution(ABC):
                     self.check_user_data_buf()
 
     def complete(self) -> bool:
+        """Checks if upstream processing is complete and execution buffers are fully drained.
+
+        Returns:
+            bool: True if execution phase is completed.
+        """
+
         return (self.logic_complete[0] == 1) and (
             (self.WB_1[0] == self.RB_1[0]) and (self.WB_2[0] == self.RB_2[0])
         )
@@ -78,11 +98,15 @@ class Execution(ABC):
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
+        """Abstract idle wait hook invoked when input ring buffers are empty."""
+
         pass
 
     def check_signal_buf(
         self,
     ) -> None:
+        """Polls Signal ring buffer, validates balance and risk constraints, and delegates signal execution."""
+
         nPrice, timestamp, order_param = self.get_signal_data()
         self.check_user_data_buf()
         self.pre_execute_signal_action(timestamp)
@@ -104,6 +128,12 @@ class Execution(ABC):
             self.post_final_action()
 
     def get_signal_data(self) -> tuple[int, int, int]:
+        """Extracts signal payload from Signal ring buffer cell and advances reader head position.
+
+        Returns:
+            tuple[int, int, int]: Fixed-point price, signal timestamp, and order parameters bitmask.
+        """
+
         cell: int = self.RB_1[0]
         start: int = cell * self.sn_data_size
         get_data: memoryview = self.sn_data[start : start + self.sn_data_size]
@@ -114,20 +144,32 @@ class Execution(ABC):
 
     @abstractmethod
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
+        """Abstract hook executed prior to order placement for custom matching sync."""
+
         pass
 
     @abstractmethod
     def execute_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
+        """Abstract method executing trade order placement logic."""
+
         pass
 
     def check_user_data_buf(self) -> None:
+        """Drains pending user stream execution updates and forwards raw buffers to parser."""
+
         while self.WB_2[0] != self.RB_2[0]:
             raw_buf = self.get_user_data()
             self.preppare_user_data(raw_buf)
 
     def get_user_data(self) -> memoryview:
+        """Extracts user stream payload from UserStream ring buffer and advances reader position.
+
+        Returns:
+            memoryview: Slice containing raw user event binary payload.
+        """
+
         cell: int = self.RB_2[0]
         start: int = cell * self.us_data_size
         len_raw_data: int = self.us_data_header[cell]
@@ -138,11 +180,17 @@ class Execution(ABC):
 
     @abstractmethod
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+        """Abstract handler parsing raw user event binary buffer."""
+
         pass
 
     def final_actions(self) -> None:
+        """Triggers post-execution cleanup callbacks."""
+
         self.post_final_action()
 
     @abstractmethod
     def post_final_action(self) -> None:
+        """Abstract teardown hook invoked upon execution pipeline termination."""
+
         pass

@@ -1,11 +1,19 @@
+"""Error handling and process supervisor decorators."""
+
 import gc
 from functools import wraps
 
-from .monitoring.status_codes import StatusCodes as scs
+from ..settings import StatusCodes as scs
 from .tools import dump_exception
 
 
 def error_handler(set_status_code: bool = False):
+    """Decorator capturing uncaught exceptions, writing crash dumps, and updating process status.
+
+    Args:
+        set_status_code (bool): Flag to automatically report scs.ERROR status code to manager.
+    """
+
     def decorator(func):
         @wraps(wrapped=func)
         def wrapper(*args, **kwargs):
@@ -28,6 +36,12 @@ def error_handler(set_status_code: bool = False):
 
 
 def supervisor(is_main: bool = False):
+    """Decorator wrapping worker process main functions with Dispatcher IPC initialization and cleanup.
+
+    Args:
+        is_main (bool): True if decorating main orchestrator process entry point.
+    """
+
     def decorator(func):
         @wraps(wrapped=func)
         def wrapper(**kwargs) -> None:

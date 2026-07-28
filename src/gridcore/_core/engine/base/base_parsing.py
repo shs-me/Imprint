@@ -1,12 +1,16 @@
+"""Data parsing engine processing raw tick ring buffers into Footprint updates."""
+
 from abc import ABC, abstractmethod
 
+from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
-from ...utils.monitoring.status_codes import StatusCodes as scs
 from .base_footprint_writer import FootprintWriter
 
 
 class Parsing(ABC):
+    """Base class managing tick stream ring buffer ingestion and FootprintWriter dispatch."""
+
     def __init__(self, manager: AgentManager, writer: FootprintWriter) -> None:
         self.manager: AgentManager = manager
         self.set_proc_sc = manager.set_proc_sc
@@ -33,6 +37,8 @@ class Parsing(ABC):
 
     @error_handler(set_status_code=True)
     def run_parsing_engine(self) -> None:
+        """Main loop consuming DataStream ring buffer cells and updating FootprintWriter."""
+
         # LocalLinks
         writer = self.writer
         proc_status, task_status = self.proc_status, self.task_status
@@ -81,9 +87,13 @@ class Parsing(ABC):
                     post_update()
 
     def complete(self) -> bool:
+        """Checks if DataStream ring buffer reader has caught up to writer head position."""
+
         return self.wCellC[0] == self.rCellC[0]
 
     def final_actions(self) -> None:
+        """Flushes remaining pending updates to shared memory and sets parsing completion flag."""
+
         self.writer.wait_read_space()
         if not self.writer.space_is_read():
             if self.writer.copy_to():
@@ -95,10 +105,14 @@ class Parsing(ABC):
 
     @abstractmethod
     def post_final_action(self) -> None:
+        """Abstract teardown hook invoked upon parsing pipeline termination."""
+
         pass
 
     @abstractmethod
     def alarm_clock(self) -> None:
+        """Abstract idle wait hook invoked when DataStream ring buffer is empty."""
+
         pass
 
     def get_trade_data(
@@ -110,6 +124,12 @@ class Parsing(ABC):
         cell_amount: int,
         data_size: int,
     ) -> bool:
+        """Extracts raw tick buffer from DataStream cell and advances reader head position.
+
+        Returns:
+            bool: True if trade payload contains valid price, quantity, and timestamp parameters.
+        """
+
         if wCellC[0] != rCellC[0]:
             cell: int = rCellC[0]
             lrd: int = data_header[cell]
@@ -127,12 +147,18 @@ class Parsing(ABC):
 
     @abstractmethod
     def set_trade_data(self, raw_data: memoryview) -> None:
+        """Abstract binary unpacking hook deserializing raw stream cell payload into tick values."""
+
         pass
 
     @abstractmethod
     def update_success(self) -> None:
+        """Abstract callback invoked following a successful Footprint update."""
+
         pass
 
     @abstractmethod
     def post_update(self) -> None:
+        """Abstract callback invoked after processing each tick iteration."""
+
         pass
