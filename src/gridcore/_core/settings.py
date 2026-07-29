@@ -32,7 +32,7 @@ class CoreResources(Protocol):
 class ProcessFlags(IntEnum):
     """Process index positions within system status tracking arrays."""
 
-    WSS, PARSING, LOGIC, EXECUTION = auto(), auto(), auto(), auto()
+    WSS, PARSING, LOGIC, EXECUTION = 0, auto(), auto(), auto()
     _CountProcess = auto()
 
 

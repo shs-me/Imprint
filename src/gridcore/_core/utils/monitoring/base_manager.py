@@ -33,6 +33,7 @@ class Manager(ABC):
         self._shm_buf: memoryview = shm_buf
         self.configs_init(configs)
         self.main_tools_init(main_tools)
+        self._main_status: memoryview = self.cfgMetrics.main.cast("q")
 
     def configs_init(self, configs: list) -> None:
         """Associates configuration class instances with manager attributes and shared memory segments."""

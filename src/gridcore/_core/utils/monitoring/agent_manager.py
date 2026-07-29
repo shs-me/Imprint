@@ -25,6 +25,7 @@ class AgentManager(Manager):
 
         self._proc_id: int = proc_id
         self._task_id: int = task_id
+        self._proc_spec_id: int = 1 << self._proc_id
 
         self.task_status: memoryview = self.cfgMetrics.status.cast("q")[
             task_id : task_id + 1
@@ -96,6 +97,7 @@ class AgentManager(Manager):
         """Sets status code bitmask for process and signals MainManager semaphore."""
 
         self.proc_status[0] |= code
+        self._main_status[0] |= self._proc_spec_id
         self._sc_sem.release()
 
     def set_task_sc(self, code: scs | int) -> None:
