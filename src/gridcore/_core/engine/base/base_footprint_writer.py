@@ -101,8 +101,7 @@ class FootprintWriter(ABC):
         )
 
     def init_session(self, price: float, timestamp: int) -> None:
-        """Initializes NumPy array abstractions over shared memory buffers and local dirty arrays."""
-
+        """Resets arrays and calibrates layout converter for a new trading session."""
         self.dirty_footprint.fill(0)
         self.dirty_headers.fill(0)
         self.footprint.fill(0)

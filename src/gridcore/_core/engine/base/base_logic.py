@@ -109,10 +109,10 @@ def resolve_reader(manager: AgentManager, sync: Sync) -> FootprintReader:
         FootprintReader: Configured user strategy reader instance.
     """
 
-    module = importlib.import_module(manager.cfgFootprint.algorithm_module)
+    module = importlib.import_module(manager.cfgSetup.algorithm_module)
     reader: type[FootprintReader] = BaseFootprintReader
     for name, obj in inspect.getmembers(module, inspect.isclass):
-        if (name == manager.cfgFootprint.algorithm_class_name) and issubclass(
+        if (name == manager.cfgSetup.algorithm_class_name) and issubclass(
             obj, FootprintReader
         ):
             reader = obj

@@ -9,11 +9,10 @@ from types import FunctionType
 from loguru import logger
 
 from .constant import DIRS_LIST
-from .engine.mode.backtest.execution_sim_agent import run_execution_sim
+from .engine.general.execution import run_execution, run_execution_sim
 from .engine.mode.backtest.logic_sim_agent import run_logic_sim
 from .engine.mode.backtest.parsing_sim_agent import run_parsing_sim
 from .engine.mode.backtest.wss_sim_agent import run_wss_sim
-from .engine.mode.real.execution_agent import run_execution
 from .engine.mode.real.logic_agent import run_logic
 from .engine.mode.real.parsing_agent import run_parsing
 from .engine.mode.real.wss_agent import run_wss

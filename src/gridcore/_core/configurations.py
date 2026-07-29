@@ -46,6 +46,10 @@ class Setup(Configuration):
     execution: bool = True
     backtest_start_date: str = "2026-01-01"
     backtest_end_date: str = "2026-01-01"
+    algorithm_module: str = ""
+    algorithm_class_name: str = ""
+    execution_module: str = ""
+    execution_class_name: str = ""
 
 
 @dataclass
@@ -187,8 +191,6 @@ class Footprint(SharedMemorySegments):
     fp_rows: int = 10001
     save_fp_headers: bool = False
     save_algorithm_metadata: bool = False
-    algorithm_module: str = ""
-    algorithm_class_name: str = ""
 
     def _init_data(self) -> None:
         """Calculates total bar count and column dimensions for Footprint layout."""

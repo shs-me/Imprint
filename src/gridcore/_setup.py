@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from . import FootprintReader
 from ._core import configurations as cfg
 from ._core.engine.base.base_footprint_reader import BaseFootprintReader
+from ._core.engine.general.execution import BaseExecution, Execution
 from ._core.engine.mode.real.rest_agent import RestAgent
 from ._core.main import run_core
 from ._core.settings import Timeframe
@@ -48,17 +49,20 @@ class RunMode:
     with_visualization_chart: bool = False
     with_visualization_statistic: bool = False
     backtesting: bool = True
-    execution: bool = True
     backtest_start_date: str = "2026-01-01"
     backtest_end_date: str = "2026-01-01"
+    with_execution: bool = True
+    execution: type[Execution] = BaseExecution
 
     def __post_init__(self) -> None:
         """Initializes embedded cfg.Setup dataclass after primary field assignment."""
         self.setup: cfg.Setup = cfg.Setup(
             backtesting=self.backtesting,
-            execution=self.execution,
+            execution=self.with_execution,
             backtest_start_date=self.backtest_start_date,
             backtest_end_date=self.backtest_end_date,
+            execution_module=self.execution.__module__,
+            execution_class_name=self.execution.__name__,
         )
 
 
@@ -85,8 +89,6 @@ class Analysis:
             timeframe=self.timeframe,
             save_fp_headers=self.save_fp_headers,
             save_algorithm_metadata=self.save_algorithm_metadata,
-            algorithm_module=self.algorithm.__module__,
-            algorithm_class_name=self.algorithm.__name__,
         )
 
 
@@ -130,6 +132,9 @@ def run(
         rest = RestAgent(coin.symbol)
         coin.tick_size = rest.get_tick_size()
         coin.lot_size = rest.get_lot_size()
+
+    run_mode.setup.algorithm_module = analysis.algorithm.__module__
+    run_mode.setup.algorithm_class_name = analysis.algorithm.__name__
 
     args = (
         run_mode.setup,
