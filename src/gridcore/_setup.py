@@ -1,9 +1,16 @@
+"""Initialization and setup orchestration module.
+
+Handles configuration object instantiations, historical data downloading for backtesting,
+and optional integration with visualization suites.
+"""
+
 import importlib.util
 from dataclasses import dataclass
 
 from . import FootprintReader
 from ._core import configurations as cfg
 from ._core.engine.base.base_footprint_reader import BaseFootprintReader
+from ._core.engine.general.execution import BaseExecution, Execution
 from ._core.engine.mode.real.rest_agent import RestAgent
 from ._core.main import run_core
 from ._core.settings import Timeframe
@@ -25,37 +32,63 @@ from ._core import constant as c
 
 @dataclass
 class RunMode:
+    """Execution runtime mode configuration container.
+
+    Attributes:
+        only_visualization (bool): Flag to run only visualization without core engine execution.
+        with_visualization_chart (bool): Enables chart rendering post-execution.
+        with_visualization_statistic (bool): Enables performance analytics rendering post-execution.
+        backtesting (bool): Enables historical simulation mode.
+        execution (bool): Enables order execution pipeline.
+        backtest_start_date (str): Backtest window start date (YYYY-MM-DD).
+        backtest_end_date (str): Backtest window end date (YYYY-MM-DD).
+        setup (cfg.Setup): Internal setup configuration object.
+    """
+
     only_visualization: bool = False
     with_visualization_chart: bool = False
     with_visualization_statistic: bool = False
     backtesting: bool = True
-    execution: bool = True
     backtest_start_date: str = "2026-01-01"
     backtest_end_date: str = "2026-01-01"
+    with_execution: bool = True
+    execution: type[Execution] = BaseExecution
 
     def __post_init__(self) -> None:
+        """Initializes embedded cfg.Setup dataclass after primary field assignment."""
         self.setup: cfg.Setup = cfg.Setup(
             backtesting=self.backtesting,
-            execution=self.execution,
+            execution=self.with_execution,
             backtest_start_date=self.backtest_start_date,
             backtest_end_date=self.backtest_end_date,
+            execution_module=self.execution.__module__,
+            execution_class_name=self.execution.__name__,
         )
 
 
 @dataclass
 class Analysis:
+    """Footprint analysis algorithm configuration container.
+
+    Attributes:
+        algorithm (type[FootprintReader]): User strategy class inheriting from FootprintReader.
+        timeframe (Timeframe): Bar aggregation timeframe.
+        save_fp_headers (bool): Flag to dump footprint headers to disk.
+        save_algorithm_metadata (bool): Flag to dump algorithm execution metadata to disk.
+        footprint (cfg.Footprint): Internal footprint configuration object.
+    """
+
     algorithm: type[FootprintReader] = BaseFootprintReader
     timeframe: Timeframe = Timeframe._5M
     save_fp_headers: bool = False
     save_algorithm_metadata: bool = False
 
     def __post_init__(self) -> None:
+        """Instantiates internal Footprint configuration based on provided attributes."""
         self.footprint: cfg.Footprint = cfg.Footprint(
             timeframe=self.timeframe,
             save_fp_headers=self.save_fp_headers,
             save_algorithm_metadata=self.save_algorithm_metadata,
-            algorithm_module=self.algorithm.__module__,
-            algorithm_class_name=self.algorithm.__name__,
         )
 
 
@@ -67,6 +100,16 @@ def run(
     strategy: cfg.Strategy = cfg.Strategy(),
     analysis: Analysis = Analysis(),
 ) -> None:
+    """Primary execution launcher for GridCore engine.
+
+    Args:
+        run_mode (RunMode): Runtime flags and execution mode configuration.
+        account (cfg.Account): Account balances, leverage, and commission settings.
+        coin (cfg.Coin): Symbol specification and precision metadata.
+        strategy (cfg.Strategy): Risk parameters, entry sizing, and TP/SL deviations.
+        analysis (Analysis): Footprint strategy class and timeframe parameters.
+    """
+
     logger.remove()
     logger.add(
         c.CORE_LOG_PATH,
@@ -89,6 +132,9 @@ def run(
         rest = RestAgent(coin.symbol)
         coin.tick_size = rest.get_tick_size()
         coin.lot_size = rest.get_lot_size()
+
+    run_mode.setup.algorithm_module = analysis.algorithm.__module__
+    run_mode.setup.algorithm_class_name = analysis.algorithm.__name__
 
     args = (
         run_mode.setup,
@@ -119,6 +165,7 @@ def run(
                 footprint_headers_path=c.BASE_FOOTPRINT_DUMP_PATH,
                 start_balance=account.balance,
                 orders_history_path=c.ORDERS_HISTORY_DUMP_PATH,
+                equity_history_path=c.EQUITY_HISTORY_DUMP_PATH,
                 run_chart_visualization=run_mode.with_visualization_chart,
                 run_statistic_visualization=run_mode.with_visualization_statistic,
             )

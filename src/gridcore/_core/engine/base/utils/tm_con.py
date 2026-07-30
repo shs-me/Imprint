@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+"""Trade execution parameter conversion, order history, and margin validator."""
 
 import numpy as np
 from numpy import int64
@@ -9,6 +9,8 @@ from .... import constant as c
 
 
 class TradeConverter:
+    """Converter managing leverage scaling, risk validations, and order history tracking."""
+
     def __init__(
         self,
         cfgAccount: cfg.Account,
@@ -24,8 +26,9 @@ class TradeConverter:
         self._entryQty: int = self.cfgST.entry_qty
         self._tpDev: int = self.cfgST.tp_dev
         self._slDev: int = self.cfgST.sl_dev
-        self._maxLockNbalance: int = self.cfgST.max_lock_balance
-        self._maxLossNbalance: int = self.cfgST.max_loss_balance
+        self._max_lock_balance: int = self.cfgST.max_lock_balance
+        self._max_loss_balance: int = self.cfgST.max_loss_balance
+        self.timer: int = self.cfgST.pass_execute_signal_if_timer_ms_exepired
 
         self.cfgAC = cfgAccount
         self._scalePrec: int = self.cfgAC.scale_prec
@@ -37,18 +40,21 @@ class TradeConverter:
         self.takerNcommission: int = self.cfgAC.taker_commission
         self.makerNcommission: int = self.cfgAC.maker_commission
 
-        self._nBalance: int = 0
-        self._lockedNbalance: int = 0
-        self._unrealizedNpnl: int = 0
-        self.longUnrealizedNpnl: int = 0
-        self.shortUnrealizedNpnl: int = 0
-        self.last_order_id: int = 0
-        self.longNqty: int = 0
-        self.longEntryNprice: int = 0
-        self.shortNqty: int = 0
-        self.shortEntryNprice: int = 0
+        self._nBalance: memoryview = memoryview(bytearray(8)).cast("q")
+        self._lockedNbalance: memoryview = memoryview(bytearray(8)).cast("q")
+        self._availableNbalance: memoryview = memoryview(bytearray(8)).cast("q")
+        self._longNqty: memoryview = memoryview(bytearray(8)).cast("q")
+        self._longEntryNprice: memoryview = memoryview(bytearray(8)).cast("q")
+        self._shortNqty: memoryview = memoryview(bytearray(8)).cast("q")
+        self._shortEntryNprice: memoryview = memoryview(bytearray(8)).cast("q")
 
-        self.nBalance = self.startNbalance
+        self._unrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
+        self._longUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
+        self._shortUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
+
+        self._nBalance[0] = self.startNbalance
+
+        self._client_order_id: int = 0
 
         self.oh_rows: int = 10_000
         self.oh_cols: int = c.TP_ConstantCount
@@ -56,11 +62,40 @@ class TradeConverter:
         self._init_array()
 
     def _init_array(self) -> None:
+        """Initializes order history log buffer array."""
+
         self.orders_history: NDArray[int64] = np.ndarray(
             shape=(self.oh_rows, self.oh_cols), dtype=int64
         )
         self.orders_history.fill(0)
         self.ohWid: memoryview = memoryview(bytearray(8)).cast("q")
+
+    def init_session(
+        self,
+        nBalance: memoryview,
+        lockedNbalance: memoryview,
+        availableNbalance: memoryview,
+        longNqty: memoryview,
+        longEntryNprice: memoryview,
+        shortNqty: memoryview,
+        shortEntryNprice: memoryview,
+        unrealizedNpnl: memoryview,
+        longUnrealizedNpnl: memoryview,
+        shortUnrealizedNpnl: memoryview,
+    ) -> None:
+        """Binds active balance, position, and PnL memory view pointers."""
+
+        self._nBalance = nBalance
+        self._lockedNbalance = lockedNbalance
+        self._availableNbalance = availableNbalance
+        self._longNqty = longNqty
+        self._longEntryNprice = longEntryNprice
+        self._shortNqty = shortNqty
+        self._shortEntryNprice = shortEntryNprice
+
+        self._unrealizedNpnl = unrealizedNpnl
+        self._longUnrealizedNpnl = longUnrealizedNpnl
+        self._shortUnrealizedNpnl = shortUnrealizedNpnl
 
     def update_orders_history(
         self,
@@ -70,7 +105,11 @@ class TradeConverter:
         nPrice: int,
         nQty: int,
         nCommission: int,
+        nMAE: int = 0,
+        nMFE: int = 0,
     ) -> None:
+        """Appends trade execution entry to order history buffer array."""
+
         ohWid, oh = self.ohWid, self.orders_history
         # - - -
         oh[ohWid[0], c.TP_timestamp] = timestamp
@@ -79,6 +118,8 @@ class TradeConverter:
         oh[ohWid[0], c.TP_nPrice] = nPrice
         oh[ohWid[0], c.TP_nQty] = nQty
         oh[ohWid[0], c.TP_commission] = nCommission
+        oh[ohWid[0], c.TP_nMAE] = nMAE
+        oh[ohWid[0], c.TP_nMFE] = nMFE
         ohWid[0] += 1
         if ohWid[0] >= oh.shape[0]:
             old_rows: int = oh.shape[0]
@@ -89,120 +130,107 @@ class TradeConverter:
 
     @property
     def nBalance(self) -> int:
-        return self._nBalance
+        """Current fixed-point total account balance."""
 
-    @nBalance.setter
-    def nBalance(self, nValue: int) -> None:
-        self._nBalance += nValue
-        if not self.lossNbalanceSafeLimit:
-            raise RuntimeError(
-                (
-                    f"Loss balance > safe limit "
-                    f"Start balance: {self.startNbalance / self.scale} "
-                    f"Balance: {self.nBalance / self.scale}"
-                )
-            )
+        return self._nBalance[0]
 
     @property
     def lockedNbalance(self) -> int:
-        return self._lockedNbalance
+        """Current fixed-point locked margin balance."""
 
-    @lockedNbalance.setter
-    def lockedNbalance(self, nValue: int) -> None:
-        self._lockedNbalance += nValue
+        return self._lockedNbalance[0]
 
     @property
     def availableNbalance(self) -> int:
-        return self.nBalance - self.lockedNbalance
+        """Current fixed-point available balance for trading."""
+
+        return self._availableNbalance[0]
 
     @property
     def lossNbalanceSafeLimit(self) -> bool:
+        """Evaluates whether current balance remains above max tolerable loss threshold."""
+
         return self.nBalance > (
-            self.startNbalance - (self.startNbalance * self._maxLossNbalance // 10_000)
+            self.startNbalance - (self.startNbalance * self._max_loss_balance // 10_000)
         )
 
     @property
     def lockedNbalanceSafeLimit(self) -> bool:
-        return self.lockedNbalance < (self._nBalance * self._maxLockNbalance // 10_000)
+        """Evaluates whether locked margin remains below max margin lock threshold."""
+
+        return self.lockedNbalance < (self.nBalance * self._max_lock_balance // 10_000)
 
     @property
     def nominalEntryNqty(self) -> int:
+        """Calculates unleveraged position entry allocation in scale fixed-point units."""
+
         return self.availableNbalance * self._entryQty // 10_000
 
     @property
     def nominalEntryNqtyWithLeverage(self) -> int | None:
+        """Calculates leveraged entry size if above minimum order threshold."""
+
         if (qty := (self.leverage * self.nominalEntryNqty)) > self.minOrderNsize:
             return qty
 
     def entryNqtyWithLeverage(self, nPrice: int, nominalNqty: int) -> int:
+        """Calculates target asset quantity int for specified entry price and nominal margin amount."""
+
         nominal_qty: float = nominalNqty / self.scale
         return round((nominal_qty * self.priceMult * self.qtyMult) / nPrice)
 
     @property
     def newClientOrderId(self) -> int:
-        self.last_order_id += 1
-        return self.last_order_id
+        """Generates unique incremental client order ID."""
+
+        self._client_order_id += 1
+        return self._client_order_id
+
+    @property
+    def unrealizedNpnl(self) -> int:
+        """Total fixed-point unrealized position PnL."""
+
+        return self._unrealizedNpnl[0]
+
+    @property
+    def longUnrealizedNpnl(self) -> int:
+        """Fixed-point unrealized PnL for active Long position."""
+
+        return self._longUnrealizedNpnl[0]
+
+    @property
+    def shortUnrealizedNpnl(self) -> int:
+        """Fixed-point unrealized PnL for active Short position."""
+
+        return self._shortUnrealizedNpnl[0]
 
     def TPdevNprice(self, nPrice: int, is_long: bool) -> int:
+        """Calculates Take-Profit price for entry price and position side."""
+
         tpTicks: int = nPrice * self._tpDev // 10_000
         return nPrice + (tpTicks if is_long else -tpTicks)
 
     def SLdevNprice(self, nPrice: int, is_long: bool) -> int:
+        """Calculates Stop-Loss price for entry price and position side."""
+
         slTicks: int = nPrice * self._slDev // 10_000
         return nPrice + (-slTicks if is_long else slTicks)
 
-    def to_nMargin(self, nPrice: int, nQty: int) -> int:
-        margin: float = (
-            (nQty / self.qtyMult) * (nPrice / self.priceMult)
-        ) / self.leverage
-        return round(margin * self.scale)
-
-    def to_nPnl(self, closeNprice: int, nQty: int, is_long: bool) -> int:
-        entryNprice: int = self.longEntryNprice if is_long else self.shortEntryNprice
-        diffNprice: int = (closeNprice - entryNprice) * (1 if is_long else -1)
-        pnl: float = (diffNprice / self.priceMult) * (nQty / self.qtyMult)
-        return round(pnl * self.scale)
-
-    @property
-    def unrealizedNpnl(self) -> int:
-        return self._unrealizedNpnl
-
-    @unrealizedNpnl.setter
-    def unrealizedNpnl(self, lastNprice: int) -> None:
-        if self.shortNqty or self.longNqty:
-            self.longUnrealizedNpnl = (
-                self.to_nPnl(lastNprice, self.longNqty, True) if self.longNqty else 0
-            )
-            self.shortUnrealizedNpnl = (
-                self.to_nPnl(lastNprice, self.shortNqty, False) if self.shortNqty else 0
-            )
-            self._unrealizedNpnl = self.longUnrealizedNpnl + self.shortUnrealizedNpnl
-        else:
-            self._unrealizedNpnl = 0
-            self.shortUnrealizedNpnl = 0
-            self.longUnrealizedNpnl = 0
-
-    def to_nCommission(self, nPrice: int, nQty: int, is_maker: bool) -> int:
-        rate: int = self.makerNcommission if is_maker else self.takerNcommission
-        commission: float = (
-            ((nPrice / self.priceMult) * (nQty / self.qtyMult)) * rate / 10_000
-        )
-        return round(commission * self.scale)
-
-    def to_roi(self, nPnl: int, nMargin: int) -> float:
-        return (nPnl / nMargin) * 100
-
-    def to_strftime(self, timestamp_ms: int) -> str:
-        return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-
     def is_averaging(self, order_param: int) -> bool:
-        if bool(order_param & c.OF_LONG):
-            return True if self.longNqty else False
+        """Checks whether incoming signal increases an existing active position."""
+
+        is_long = bool(order_param & c.OF_LONG)
+        is_buy = bool(order_param & c.OF_BUY)
+
+        if is_buy and is_long:
+            return True if self._longNqty[0] else False
+        elif not is_buy and not is_long:
+            return True if self._shortNqty[0] else False
         else:
-            return True if self.shortNqty else False
+            return False
 
     def final_action(self) -> None:
+        """Flushes non-zero order history logs to disk."""
+
         if self.cfgAC.save_orders_history:
             np.save(c.ORDERS_HISTORY_DUMP_PATH, self.orders_history[: self.ohWid[0], :])

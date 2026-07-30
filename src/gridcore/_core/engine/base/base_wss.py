@@ -1,12 +1,19 @@
-import time
-from abc import ABC
+"""Abstract network and stream ingestion process template."""
 
+import time
+from abc import ABC, abstractmethod
+
+from ...settings import StatusCodes as scs
+from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
-from ...utils.monitoring.status_codes import StatusCodes as scs
 
 
 class Wss(ABC):
+    """Base class providing ring buffer write routines for stream connections."""
+
     def __init__(self, manager: AgentManager) -> None:
+        """Binds DataStream shared memory views and buffer parameters."""
+
         self.manager: AgentManager = manager
         self.set_proc_sc = manager.set_proc_sc
         self.check_base_task = manager.check_base_task
@@ -22,9 +29,18 @@ class Wss(ABC):
         self.wCellC: memoryview = cfgDS.writer_id.cast("q")
         self.rCellC: memoryview = cfgDS.reader_id.cast("q")
 
+    @abstractmethod
+    @error_handler(set_status_code=True)
+    def run_wss_engine(self) -> None:
+        """Abstract entry point for stream connection loop."""
+
+        pass
+
     def alarm_clock(
         self, wCellC: memoryview, rCellC: memoryview, cell_amount: int, safe_lag: int
     ) -> None:
+        """Throttles intake stream writing if DataStream ring buffer unread cell lag exceeds limit."""
+
         while ((wCellC[0] - rCellC[0] + cell_amount) % cell_amount) > safe_lag:
             time.sleep(0)
 
@@ -37,6 +53,12 @@ class Wss(ABC):
         cell_amount: int,
         data_size: int,
     ) -> bool:
+        """Writes raw binary packet into DataStream cell and advances writer position.
+
+        Returns:
+            bool: True if payload size fits within cell capacity.
+        """
+
         if (lrd := len(raw_data)) < data_size:
             cell: int = wCellC[0]
             data_header[cell] = lrd
@@ -50,4 +72,6 @@ class Wss(ABC):
             return False
 
     def final_actions(self) -> None:
+        """Sets completion process status code upon connection close."""
+
         self.set_proc_sc(scs.COMPLETE)

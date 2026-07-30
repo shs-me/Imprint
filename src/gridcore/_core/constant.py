@@ -1,3 +1,5 @@
+"""System-wide file paths, endpoints, and aliased bitmask constants."""
+
 from .settings import (
     BarHeaders,
     CachedStatesData,
@@ -34,6 +36,8 @@ DATA_TYPE_AGGTRADES_PATH = "aggTrades"
 # Dump
 DUMP_PATH = "dump"
 EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
+# src/gridcore/_core/constant.py
+EQUITY_HISTORY_DUMP_PATH = f"{DUMP_PATH}/equity_history.npy"
 ORDERS_HISTORY_DUMP_PATH = f"{DUMP_PATH}/order_history.npy"
 BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
 ALGORITHM_METADATA_DUMP_PATH = f"{DUMP_PATH}/algorithm_metadata.npy"
@@ -110,6 +114,8 @@ TP_timestamp: int = int(TradeParam.timestamp)
 TP_orderParam: int = int(TradeParam.orderParam)
 TP_orderID: int = int(TradeParam.orderID)
 TP_commission: int = int(TradeParam.nCommission)
+TP_nMAE: int = int(TradeParam.nMAE)
+TP_nMFE: int = int(TradeParam.nMFE)
 TP_ConstantCount: int = int(TradeParam._ConstantCount)
 
 # OrderFlag

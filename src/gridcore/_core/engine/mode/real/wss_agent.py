@@ -1,16 +1,19 @@
+"""Live Binance Futures WebSocket connection worker."""
+
 import asyncio
 from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
 
 from ....constant import WS_STREAMS_PROD_URL
-from ....utils.handlers import error_handler
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ...base.base_wss import Wss
 
 
 class WssAgent(Wss):
+    """Asynchronous WebSocket client streaming live aggTrades into DataStream ring buffer."""
+
     def __init__(self, manager: AgentManager, wake_up_parser: Event) -> None:
         super().__init__(manager=manager)
 
@@ -21,8 +24,13 @@ class WssAgent(Wss):
             f"{WS_STREAMS_PROD_URL}/ws/{self.symbol.lower()}@aggTrade"
         )
 
-    @error_handler(set_status_code=True)
-    async def run_wss_engine(self) -> None:
+    def run_wss_engine(self) -> None:
+        pass
+
+    async def run_wss__engine(self) -> None:
+        """Asynchronous event loop managing WebSocket connection and pushing raw JSON bytes to DataStream."""
+
+        self.run_wss_engine()
         # Local Links
         wake_up_parser = self.wake_up_parser
         proc_status, task_status = self.proc_status, self.task_status
@@ -41,7 +49,7 @@ class WssAgent(Wss):
                         if isinstance(task, bool):
                             if task:
                                 return
-                    
+
                     raw_data = await ws.recv(decode=False)
                     if set_raw_data(
                         raw_data=raw_data,
@@ -55,7 +63,9 @@ class WssAgent(Wss):
                             wake_up_parser.set()
 
 
-@manager_office()
+@supervisor()
 def run_wss(parsing_event: Event, **kwargs) -> None:
+    """Supervisor-wrapped entry point launching live Wss process."""
+
     agent = WssAgent(kwargs["manager"], wake_up_parser=parsing_event)
-    asyncio.run(agent.run_wss_engine())
+    asyncio.run(agent.run_wss__engine())

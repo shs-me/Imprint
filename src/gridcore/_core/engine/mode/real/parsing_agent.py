@@ -1,16 +1,20 @@
+"""Live JSON tick payload parser worker."""
+
 from multiprocessing.synchronize import Event
 
 from msgspec import Struct
 from msgspec.json import Decoder
 
+from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ....utils.monitoring.office import manager_office
 from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
 from ...base.base_parsing import Parsing
 
 
 # - - Binance Futures USDM
 class AggTrade(Struct):
+    """msgspec Struct defining Binance live aggTrade JSON payload schema."""
+
     T: int  # Trade time
     p: float  # Price
     q: float  # Quantity
@@ -18,6 +22,8 @@ class AggTrade(Struct):
 
 
 class ParsingAgent(Parsing):
+    """Parsing process deserializing JSON aggTrade payloads via msgspec."""
+
     def __init__(
         self,
         manager: AgentManager,
@@ -32,15 +38,21 @@ class ParsingAgent(Parsing):
         self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
 
     def alarm_clock(self) -> None:
+        """Blocks process on parsing_event until new WebSocket frame arrives."""
+
         if self.rCellC[0] == self.wCellC[0]:
             self.parsing_event.wait()
 
     def set_trade_data(self, raw_data: memoryview) -> None:
+        """Decodes raw JSON buffer using msgspec Decoder into tick attributes."""
+
         trade = self.decoder.decode(raw_data[:])
         self.price[0], self.qty[0], self.timestamp[0] = trade.p, trade.q, trade.T
         self.is_sell = trade.m
 
     def update_success(self) -> None:
+        """Sets logic_event to wake up strategy engine upon Footprint update."""
+
         if self.logic_event.is_set() is False:
             self.logic_event.set()
 
@@ -56,8 +68,10 @@ class ParsingAgent(Parsing):
         print(f"Count Prepped Ticks: {self.writer.counterTicks[0]}", flush=True)
 
 
-@manager_office()
+@supervisor()
 def run_parsing(parsing_event: Event, logic_event: Event, **kwargs) -> None:
+    """Supervisor-wrapped entry point for live Parsing process."""
+
     writer = BaseFootprintWriter(kwargs["manager"])
     agent = ParsingAgent(kwargs["manager"], writer, parsing_event, logic_event)
     agent.run_parsing_engine()

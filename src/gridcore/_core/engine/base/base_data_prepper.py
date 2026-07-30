@@ -1,3 +1,5 @@
+"""Abstract base class for asynchronous CSV tick data prefetching."""
+
 import os
 import traceback
 from abc import ABC, abstractmethod
@@ -8,7 +10,18 @@ from ...constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
 
 
 class BaseDataPrepper(ABC):
+    """Threaded worker for reading historical tick CSV data from disk.
+
+    Attributes:
+        symbol (str): Target trading symbol.
+        start_date (str): Backtest start date ISO string.
+        end_date (str): Backtest end date ISO string.
+        complete (bool): Execution completion indicator.
+        error (str | None): Captured exception message if pipeline fails.
+    """
+
     def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
+
         self.symbol: str = symbol.upper()
         self.start_date: str = start_date
         self.end_date: str = end_date
@@ -21,10 +34,14 @@ class BaseDataPrepper(ABC):
         self.complete: bool = False
 
     def start(self) -> None:
+        """Launches background prepper thread in daemon mode."""
+
         self.subP: Thread = Thread(target=self.run_prepper_engine, daemon=True)
         self.subP.start()
 
     def run_prepper_engine(self) -> None:
+        """Main loop iterating through CSV files, parsing rows, and executing pipeline callbacks."""
+
         try:
             data_paths: list[str] = self.get_data_paths()
             for path in data_paths:
@@ -45,6 +62,12 @@ class BaseDataPrepper(ABC):
             self.complete = True
 
     def get_data_paths(self) -> list[str]:
+        """Filters and returns sorted list of CSV file paths matching target date scope.
+
+        Returns:
+            list[str]: Absolute file paths to target CSV files.
+        """
+
         paths: list[str] = [p for p in os.listdir(self.base_path) if p.endswith(".csv")]
         dates: list[date] = sorted([date.fromisoformat(p.split(".")[0]) for p in paths])
         startDate: date = (
@@ -60,12 +83,18 @@ class BaseDataPrepper(ABC):
 
     @abstractmethod
     def alarm_clock(self) -> None:
+        """Abstract throttle hook invoked when output buffer reaches high-water threshold."""
+
         pass
 
     @abstractmethod
     def prepper_data(self, data: bytes) -> None:
+        """Abstract row parser hook invoked for each raw CSV byte string line."""
+
         pass
 
     @abstractmethod
     def post_prepper(self) -> None:
+        """Abstract post-processing teardown hook invoked upon completing file iteration."""
+
         pass
