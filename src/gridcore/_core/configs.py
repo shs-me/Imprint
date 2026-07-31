@@ -33,15 +33,6 @@ class Configuration(ABC):
 
 @dataclass
 class Setup(Configuration):
-    """Core operational framework mode settings.
-
-    Attributes:
-        backtesting (bool): Enables backtesting engine mode.
-        execution (bool): Enables trade order execution module.
-        backtest_start_date (str): Start date for backtest period.
-        backtest_end_date (str): End date for backtest period.
-    """
-
     backtesting: bool = True
     execution: bool = True
     backtest_start_date: str = "2026-01-01"
@@ -50,6 +41,15 @@ class Setup(Configuration):
     algorithm_class_name: str = ""
     execution_module: str = ""
     execution_class_name: str = ""
+    agg_trades_struct_module: str = ""
+    agg_trades_struct_class_name: str = ""
+
+
+@dataclass
+class Connector(Configuration):
+    market_data_uri_for_wss: str = ""
+    get_user_data_uri_for_wss: str = ""
+    set_user_data_uri_for_wss: str = ""
 
 
 @dataclass
@@ -86,7 +86,7 @@ class Account(Configuration):
 
 
 @dataclass
-class Strategy(Configuration):
+class RiskManagment(Configuration):
     """Strategy risk management and execution parameters.
 
     Attributes:
@@ -126,16 +126,21 @@ class Coin(Configuration):
     tick_size: str = "0.01"
     lot_size: str = "0.001"
 
-    def __post_init__(self) -> None:
-        """Calculates price and quantity decimal precisions and fixed-point scale multipliers."""
-        self.price_prec: int = (
-            len(self.tick_size.split(sep=".")[-1]) if "." in self.tick_size else 0
-        )
-        self.qty_prec: int = (
-            len(self.lot_size.split(sep=".")[-1]) if "." in self.lot_size else 0
-        )
-        self.price_mult: int = 10**self.price_prec
-        self.qty_mult: int = 10**self.qty_prec
+    @property
+    def price_prec(self) -> int:
+        return len(self.tick_size.split(sep=".")[-1]) if "." in self.tick_size else 0
+
+    @property
+    def qty_prec(self) -> int:
+        return len(self.lot_size.split(sep=".")[-1]) if "." in self.lot_size else 0
+
+    @property
+    def price_mult(self) -> int:
+        return 10**self.price_prec
+
+    @property
+    def qty_mult(self) -> int:
+        return 10**self.qty_prec
 
 
 @dataclass
@@ -182,8 +187,6 @@ class Footprint(SharedMemorySegments):
         fp_rows (int): Price row capacity in Footprint grid.
         save_fp_headers (bool): Flag to persist Footprint headers.
         save_algorithm_metadata (bool): Flag to persist strategy analytics.
-        algorithm_module (str): Fully qualified module path of user algorithm.
-        algorithm_class_name (str): Class name of user algorithm.
     """
 
     timeframe: Timeframe = Timeframe._H
@@ -277,12 +280,31 @@ class Signal(BaseRingBuf, SharedMemorySegments):
 
 
 @dataclass
-class UserStream(BaseRingBuf, SharedMemorySegments):
+class GetUserStream(BaseRingBuf, SharedMemorySegments):
     """Shared memory ring buffer layout for user execution events."""
 
     data_size: int = 1024
     data_header_size: int = 8
     cell_amount: int = 10_000
+
+    def __post_init__(self) -> None:
+        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
+        super().__post_init__()
+        self.safe_lag: int = int(self.cell_amount * 0.9)
+
+
+@dataclass
+class SetUserStream(BaseRingBuf, SharedMemorySegments):
+    """Shared memory ring buffer layout for user execution events."""
+
+    data_size: int = 1024
+    data_header_size: int = 8
+    cell_amount: int = 10_000
+
+    def __post_init__(self) -> None:
+        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
+        super().__post_init__()
+        self.safe_lag: int = int(self.cell_amount * 0.9)
 
 
 @dataclass

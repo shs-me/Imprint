@@ -6,7 +6,7 @@ from typing import overload
 from numpy import float64, int64
 from numpy.typing import NDArray
 
-from .... import configurations as cfg
+from .... import configs as cfg
 from .... import constant as c
 
 

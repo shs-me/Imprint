@@ -22,8 +22,8 @@ class Sync(ABC):
         cfgMetrics = manager.cfgMetrics
         self.time_start_reading: memoryview = cfgMetrics.time_start_reading.cast("q")
 
-        cfgST = manager.cfgStrategy
-        self.safe_lag: int = cfgST.pass_signal_if_analysis_time_big
+        cfgRM = manager.cfgRiskManagment
+        self.safe_lag: int = cfgRM.pass_signal_if_analysis_time_big
 
         cfgSN = manager.cfgSignal
         self.cell_amount: int = cfgSN.cell_amount

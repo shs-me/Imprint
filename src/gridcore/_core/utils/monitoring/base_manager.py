@@ -3,7 +3,7 @@
 from abc import ABC
 from multiprocessing.synchronize import Event, Semaphore
 
-from ... import configurations as cfg
+from ... import configs as cfg
 from ...settings import ProcessFlags  # noqa: F401
 
 
@@ -12,12 +12,14 @@ class Manager(ABC):
 
     cfgSetup: cfg.Setup
     cfgAccount: cfg.Account
-    cfgStrategy: cfg.Strategy
+    cfgConnector: cfg.Connector
+    cfgRiskManagment: cfg.RiskManagment
     cfgCoin: cfg.Coin
     cfgFootprint: cfg.Footprint
     cfgMetrics: cfg.Metrics
     cfgDataStream: cfg.DataStream
-    cfgUserStream: cfg.UserStream
+    cfgGetUserStream: cfg.GetUserStream
+    cfgSetUserStream: cfg.GetUserStream
     cfgSignal: cfg.Signal
     _sc_sem: Semaphore
     _general_event: Event

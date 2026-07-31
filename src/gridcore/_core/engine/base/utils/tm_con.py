@@ -4,7 +4,7 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from .... import configurations as cfg
+from .... import configs as cfg
 from .... import constant as c
 
 
@@ -14,7 +14,7 @@ class TradeConverter:
     def __init__(
         self,
         cfgAccount: cfg.Account,
-        cfgStrategy: cfg.Strategy,
+        cfgStrategy: cfg.RiskManagment,
         price_prec: int,
         qty_prec: int,
     ) -> None:

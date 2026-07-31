@@ -8,7 +8,7 @@ from numba import njit
 from numpy import int64, uint8
 from numpy.typing import NDArray
 
-from ..... import constant as c
+from .... import constant as c
 from ....utils.monitoring.agent_manager import AgentManager
 from . import matching_engine as me
 

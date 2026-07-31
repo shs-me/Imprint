@@ -2,8 +2,9 @@
 
 import inspect
 import os
-from multiprocessing import Event, Process
+from multiprocessing import Event, Process, Semaphore
 from multiprocessing.synchronize import Event as EventT
+from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
 
 from loguru import logger
@@ -15,7 +16,7 @@ from .engine.mode.backtest.parsing_sim_agent import run_parsing_sim
 from .engine.mode.backtest.wss_sim_agent import run_wss_sim
 from .engine.mode.real.logic_agent import run_logic
 from .engine.mode.real.parsing_agent import run_parsing
-from .engine.mode.real.wss_agent import run_wss
+from .engine.mode.real.ws_streams.market_data_wss import run_market_data_wss
 from .settings import CoreResources, ProcsData
 from .utils.handlers import supervisor
 from .utils.monitoring.main_manager import MainManager
@@ -37,6 +38,7 @@ class MainAgent(CoreResources):
         self.execution_event: EventT = Event()
         self.parsing_event: EventT = Event()
         self.logic_event: EventT = Event()
+        self.wss_sem: SemT = Semaphore(0)
 
         self.procs: dict[int, ProcsData] = {}
 
@@ -92,7 +94,7 @@ class MainAgent(CoreResources):
         """
 
         funcs: list[FunctionType] = []
-        funcs.append((run_wss_sim if self.backtesting else run_wss))
+        funcs.append((run_wss_sim if self.backtesting else run_market_data_wss))
         funcs.append(run_parsing_sim if self.backtesting else run_parsing)
         funcs.append(run_logic_sim if self.backtesting else run_logic)
         if self.execution:

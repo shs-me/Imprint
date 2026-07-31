@@ -1,24 +1,16 @@
 """Live JSON tick payload parser worker."""
 
+import importlib
+import inspect
 from multiprocessing.synchronize import Event
 
-from msgspec import Struct
 from msgspec.json import Decoder
 
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
 from ...base.base_parsing import Parsing
-
-
-# - - Binance Futures USDM
-class AggTrade(Struct):
-    """msgspec Struct defining Binance live aggTrade JSON payload schema."""
-
-    T: int  # Trade time
-    p: float  # Price
-    q: float  # Quantity
-    m: bool  # Is buyer maker?
+from .data_structs import AggTrades, BinanceAggTrades
 
 
 class ParsingAgent(Parsing):
@@ -28,6 +20,7 @@ class ParsingAgent(Parsing):
         self,
         manager: AgentManager,
         writer: FootprintWriter,
+        aggTrade: type[AggTrades],
         parsing_event: Event,
         logic_event: Event,
     ) -> None:
@@ -35,7 +28,7 @@ class ParsingAgent(Parsing):
 
         self.parsing_event: Event = parsing_event
         self.logic_event: Event = logic_event
-        self.decoder: Decoder[AggTrade] = Decoder(type=AggTrade, strict=False)
+        self.decoder: Decoder[AggTrades] = Decoder(type=aggTrade, strict=False)
 
     def alarm_clock(self) -> None:
         """Blocks process on parsing_event until new WebSocket frame arrives."""
@@ -47,8 +40,10 @@ class ParsingAgent(Parsing):
         """Decodes raw JSON buffer using msgspec Decoder into tick attributes."""
 
         trade = self.decoder.decode(raw_data[:])
-        self.price[0], self.qty[0], self.timestamp[0] = trade.p, trade.q, trade.T
-        self.is_sell = trade.m
+        self.price[0] = trade.price()
+        self.qty[0] = trade.qty()
+        self.timestamp[0] = trade.timestamp()
+        self.is_sell = trade.is_sell()
 
     def update_success(self) -> None:
         """Sets logic_event to wake up strategy engine upon Footprint update."""
@@ -68,10 +63,25 @@ class ParsingAgent(Parsing):
         print(f"Count Prepped Ticks: {self.writer.counterTicks[0]}", flush=True)
 
 
+def resolve_agg_trades_data_struct(manager: AgentManager) -> type[AggTrades]:
+    module = importlib.import_module(manager.cfgSetup.agg_trades_struct_module)
+    aggTrade: type[AggTrades] = BinanceAggTrades
+    for name, obj in inspect.getmembers(module, inspect.isclass):
+        if (name == manager.cfgSetup.agg_trades_struct_class_name) and issubclass(
+            obj, AggTrades
+        ):
+            aggTrade = obj
+
+    return aggTrade
+
+
 @supervisor()
 def run_parsing(parsing_event: Event, logic_event: Event, **kwargs) -> None:
     """Supervisor-wrapped entry point for live Parsing process."""
 
     writer = BaseFootprintWriter(kwargs["manager"])
-    agent = ParsingAgent(kwargs["manager"], writer, parsing_event, logic_event)
+    aggTrade = resolve_agg_trades_data_struct(kwargs["manager"])
+    agent = ParsingAgent(
+        kwargs["manager"], writer, aggTrade, parsing_event, logic_event
+    )
     agent.run_parsing_engine()

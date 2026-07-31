@@ -5,44 +5,36 @@ from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
 
-from ....constant import WS_STREAMS_PROD_URL
-from ....utils.handlers import supervisor
-from ....utils.monitoring.agent_manager import AgentManager
-from ...base.base_wss import Wss
+from .....utils.handlers import supervisor
+from .....utils.monitoring.agent_manager import AgentManager
+from ....base.base_wss import Wss
 
 
-class WssAgent(Wss):
+class MarketDataWSSAgent(Wss):
     """Asynchronous WebSocket client streaming live aggTrades into DataStream ring buffer."""
 
-    def __init__(self, manager: AgentManager, wake_up_parser: Event) -> None:
+    def __init__(self, manager: AgentManager, parsing_event: Event) -> None:
         super().__init__(manager=manager)
 
-        self.wake_up_parser: Event = wake_up_parser
+        self.parsing_event: Event = parsing_event
 
-        self.symbol: str = manager.cfgCoin.symbol
-        self.wss_aggTrades_url: str = (
-            f"{WS_STREAMS_PROD_URL}/ws/{self.symbol.lower()}@aggTrade"
-        )
-
-    def run_wss_engine(self) -> None:
-        pass
+        self.agg_trades_uri: str = manager.cfgConnector.market_data_uri_for_wss
 
     async def run_wss__engine(self) -> None:
         """Asynchronous event loop managing WebSocket connection and pushing raw JSON bytes to DataStream."""
 
-        self.run_wss_engine()
         # Local Links
-        wake_up_parser = self.wake_up_parser
+        parsing_event = self.parsing_event
         proc_status, task_status = self.proc_status, self.task_status
-        wCellC = self.wCellC
-        data, data_size = self.data, self.data_size
-        data_header = self.data_header
-        cell_amount = self.cell_amount
-        set_raw_data = self.set_raw_data
+        wid, rid = self.ds_wid, self.ds_rid
+        data, data_size = self.ds_data, self.ds_data_size
+        data_header = self.ds_data_header
+        cell_amount, safe_lag = self.ds_cell_amount, self.ds_safe_lag
+        set_raw_data, alarm_clock = self.set_raw_data, self.alarm_clock
         # - - -
         while True:
             # - - -
-            async with connect(self.wss_aggTrades_url, ping_interval=20) as ws:
+            async with connect(self.agg_trades_uri, ping_interval=20) as ws:
                 while True:
                     if proc_status[0] != 0 or task_status[0] != 0:
                         task: bool | int = self.check_base_task(complete=True)
@@ -51,21 +43,22 @@ class WssAgent(Wss):
                                 return
 
                     raw_data = await ws.recv(decode=False)
+                    alarm_clock(wid, rid, cell_amount, safe_lag)
                     if set_raw_data(
                         raw_data=raw_data,
+                        writer_id=wid,
                         data=data,
                         data_header=data_header,
-                        wCellC=wCellC,
-                        cell_amount=cell_amount,
                         data_size=data_size,
+                        cell_amount=cell_amount,
                     ):
-                        if wake_up_parser.is_set() is False:
-                            wake_up_parser.set()
+                        if parsing_event.is_set() is False:
+                            parsing_event.set()
 
 
 @supervisor()
-def run_wss(parsing_event: Event, **kwargs) -> None:
+def run_market_data_wss(parsing_event: Event, **kwargs) -> None:
     """Supervisor-wrapped entry point launching live Wss process."""
 
-    agent = WssAgent(kwargs["manager"], wake_up_parser=parsing_event)
+    agent = MarketDataWSSAgent(kwargs["manager"], parsing_event=parsing_event)
     asyncio.run(agent.run_wss__engine())

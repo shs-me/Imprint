@@ -203,7 +203,8 @@ class FootprintWriter(ABC):
             headers_save_path = (
                 f"{self.base_fp_dump_path}/{self.con.get_time(idx=0, strftime=True)}"
             )
-            np.save(headers_save_path, self.headers)
+            if not os.path.exists(headers_save_path):
+                np.save(headers_save_path, self.headers)
 
     def pre_re_init(self) -> None:
         """Saves Footprint headers and emits re-initialization status code prior to grid reset."""

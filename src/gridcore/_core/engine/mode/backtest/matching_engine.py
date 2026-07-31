@@ -65,7 +65,7 @@ class MatchingEngine:
         cfgAC = manager.cfgAccount
         self.slippage: int = cfgAC.slippage
 
-        cfgUS = manager.cfgUserStream
+        cfgUS = manager.cfgGetUserStream
         self.cell_amount: int = cfgUS.cell_amount
         self.data: memoryview = cfgUS.data
         self.data_buf_size: int = cfgUS.data_size

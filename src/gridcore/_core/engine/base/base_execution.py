@@ -33,13 +33,21 @@ class BaseExecution(ABC):
         self.WB_1: memoryview = cfgSN.writer_id.cast("q")
         self.RB_1: memoryview = cfgSN.reader_id.cast("q")
 
-        cfgUS = manager.cfgUserStream
-        self.us_cell_amount: int = cfgUS.cell_amount
-        self.us_data: memoryview = cfgUS.data
-        self.us_data_size: int = cfgUS.data_size
-        self.us_data_header: memoryview = cfgUS.data_header.cast("q")
-        self.WB_2: memoryview = cfgUS.writer_id.cast("q")
-        self.RB_2: memoryview = cfgUS.reader_id.cast("q")
+        cfgGUS = manager.cfgGetUserStream
+        self.gus_cell_amount: int = cfgGUS.cell_amount
+        self.gus_data: memoryview = cfgGUS.data
+        self.gus_data_size: int = cfgGUS.data_size
+        self.gus_data_header: memoryview = cfgGUS.data_header.cast("q")
+        self.WB_2: memoryview = cfgGUS.writer_id.cast("q")
+        self.RB_2: memoryview = cfgGUS.reader_id.cast("q")
+
+        cfgSUS = manager.cfgSetUserStream
+        self.sus_cell_amount: int = cfgSUS.cell_amount
+        self.sus_data: memoryview = cfgSUS.data
+        self.sus_data_size: int = cfgSUS.data_size
+        self.sus_data_header: memoryview = cfgSUS.data_header.cast("q")
+        self.sus_wid: memoryview = cfgGUS.writer_id.cast("q")
+        self.sus_rid: memoryview = cfgGUS.reader_id.cast("q")
 
         cfgMetrics = manager.cfgMetrics
         self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
@@ -48,7 +56,7 @@ class BaseExecution(ABC):
         self.symbol: str = manager.cfgCoin.symbol
         self.con: TradeConverter = TradeConverter(
             cfgAccount=manager.cfgAccount,
-            cfgStrategy=manager.cfgStrategy,
+            cfgStrategy=manager.cfgRiskManagment,
             price_prec=manager.cfgCoin.price_prec,
             qty_prec=manager.cfgCoin.qty_prec,
         )
@@ -182,11 +190,11 @@ class BaseExecution(ABC):
         """
 
         cell: int = self.RB_2[0]
-        start: int = cell * self.us_data_size
-        len_raw_data: int = self.us_data_header[cell]
-        raw_data: memoryview = self.us_data[start : start + len_raw_data]
+        start: int = cell * self.gus_data_size
+        len_raw_data: int = self.gus_data_header[cell]
+        raw_data: memoryview = self.gus_data[start : start + len_raw_data]
         new_cell: int = cell + 1
-        self.RB_2[0] = new_cell if (new_cell < self.us_cell_amount) else 0
+        self.RB_2[0] = new_cell if (new_cell < self.gus_cell_amount) else 0
         return raw_data
 
     @abstractmethod

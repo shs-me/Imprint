@@ -6,8 +6,8 @@ from multiprocessing import Event, Semaphore
 from multiprocessing.shared_memory import SharedMemory
 from types import FunctionType
 
-from ... import configurations
-from ...configurations import Configuration, SharedMemorySegments
+from ... import configs
+from ...configs import Configuration, SharedMemorySegments
 from ...settings import KwgsKeys as kk
 from ..handlers import error_handler
 from .agent_manager import AgentManager
@@ -37,7 +37,7 @@ class Dispatcher:
 
         offset: int = 0
         self.kwg[kk.Configs.name], self.kwg[kk.Segments.name] = [], {}
-        for name, obj in inspect.getmembers(configurations, inspect.isclass):
+        for name, obj in inspect.getmembers(configs, inspect.isclass):
             if (
                 issubclass(obj, Configuration)
                 and (obj is not Configuration)

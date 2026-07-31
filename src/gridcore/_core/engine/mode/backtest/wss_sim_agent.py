@@ -5,7 +5,7 @@ import time
 from collections import deque
 
 from ....settings import StatusCodes as scs
-from ....utils.handlers import supervisor
+from ....utils.handlers import error_handler, supervisor
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_data_prepper import BaseDataPrepper
 from ...base.base_wss import Wss
@@ -56,16 +56,17 @@ class WssSimAgent(Wss):
         )
         self.prepper.start()
 
+    @error_handler(set_status_code=True)
     def run_wss_engine(self) -> None:
         """Main process loop streaming prepped tick data into DataStream ring buffer cells."""
 
         # Local Links
         prepper = self.prepper
         proc_status, task_status = self.proc_status, self.task_status
-        wCellC, rCellC = self.wCellC, self.rCellC
-        data, data_size = self.data, self.data_size
-        data_header = self.data_header
-        cell_amount, safe_lag = self.cell_amount, self.safe_lag
+        wid, rid = self.ds_wid, self.ds_rid
+        data, data_size = self.ds_data, self.ds_data_size
+        data_header = self.ds_data_header
+        cell_amount, safe_lag = self.ds_cell_amount, self.ds_safe_lag
         set_raw_data, alarm_clock = self.set_raw_data, self.alarm_clock
         # - - -
         while True:
@@ -87,17 +88,17 @@ class WssSimAgent(Wss):
                         time.sleep(0)
                         continue
 
-                    alarm_clock(wCellC, rCellC, cell_amount, safe_lag)
+                    alarm_clock(wid, rid, cell_amount, safe_lag)
 
                     if prepper.queue:
                         raw_data: bytes = prepper.queue.popleft()
                         set_raw_data(
                             raw_data=raw_data,
+                            writer_id=wid,
                             data=data,
                             data_header=data_header,
-                            wCellC=wCellC,
-                            cell_amount=cell_amount,
                             data_size=data_size,
+                            cell_amount=cell_amount,
                         )
                 else:
                     raise RuntimeError(prepper.error)
