@@ -324,8 +324,10 @@ def _copy_to(
     idYmin, idXmin, idYmax, idXmax = space[buf, :]
 
     idxMin, idxMax = (idXmin & ~1) // 2, ((idXmax - 1) & ~1) // 2 + 1
-    hr[idxMin:idxMax, :] = dirty_hr[idxMin:idxMax, :]
     fp[idYmin:idYmax, idXmin:idXmax] = dirty_fp[idYmin:idYmax, idXmin:idXmax]
     fp[idYmin:idYmax, idxVP:] = dirty_fp[idYmin:idYmax, idxVP:]
+    hr[idxMin:idxMax, : c.BH_CountTrade + 1] = dirty_hr[
+        idxMin:idxMax, : c.BH_CountTrade + 1
+    ]
 
     space_flag[0] = 1 if (buf == 0) else 0

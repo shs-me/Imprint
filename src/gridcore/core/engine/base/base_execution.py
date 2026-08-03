@@ -1,10 +1,12 @@
 """Abstract execution pipeline engine handling signal validation and order updates."""
 
+import struct
 from abc import ABC, abstractmethod
 
 from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
+from .base_account_manager import BaseAccountManager
 from .utils.tm_con import TradeConverter
 
 
@@ -60,7 +62,7 @@ class BaseExecution(ABC):
             price_prec=manager.cfgCoin.price_prec,
             qty_prec=manager.cfgCoin.qty_prec,
         )
-
+        self.acm = BaseAccountManager(manager)
         self.readed_timestamp: int = 0
 
     @error_handler(set_status_code=True)
@@ -164,17 +166,6 @@ class BaseExecution(ABC):
 
         pass
 
-    @abstractmethod
-    def send_order(
-        self,
-        timestamp: int,
-        order_param: int,
-        client_order_id: int,
-        nPrice: int,
-        nQty: int,
-    ) -> None:
-        pass
-
     def _check_user_data_buf(self) -> None:
         """Drains pending user stream execution updates and forwards raw buffers to parser."""
 
@@ -214,6 +205,28 @@ class BaseExecution(ABC):
         nCommission: int,
     ) -> None:
         pass
+
+    def send_order(
+        self,
+        timestamp: int,
+        order_param: int,
+        client_order_id: int,
+        nPrice: int,
+        nQty: int,
+    ) -> None:
+        raw_data: bytes = struct.pack(
+            "@qqqqq", timestamp, order_param, client_order_id, nPrice, nQty
+        )
+        self._set_user_data(raw_data)
+        self.acm.update_local_lockedNbalance(nPrice, nQty, order_param)
+
+    def _set_user_data(self, raw_data: bytes) -> None:
+        cell: int = self.sus_wid[0]
+        start: int = cell * self.sus_data_size
+        self.sus_data_header[cell] = len(raw_data)
+        self.sus_data[start : start + len(raw_data)] = raw_data
+        new_cell: int = cell + 1
+        self.sus_wid[0] = new_cell if (new_cell < self.sus_cell_amount) else 0
 
     def _final_actions(self) -> None:
         """Triggers post-execution cleanup callbacks."""

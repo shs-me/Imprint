@@ -5,6 +5,7 @@ from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
 
+from .....settings import DataStreamProc
 from .....utils.handlers import supervisor
 from .....utils.monitoring.agent_manager import AgentManager
 from ....base.base_wss import Wss
@@ -57,7 +58,9 @@ class MarketDataWSSAgent(Wss):
 
 
 @supervisor()
-def run_market_data_wss(parsing_event: Event, **kwargs) -> None:
+def run_market_data_wss(
+    parsing_event: Event, proc: DataStreamProc = DataStreamProc(), **kwargs
+) -> None:
     """Supervisor-wrapped entry point launching live Wss process."""
 
     agent = MarketDataWSSAgent(kwargs["manager"], parsing_event=parsing_event)

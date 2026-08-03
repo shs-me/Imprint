@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from ..._core.configs import (
+from ...core.configs import (
     Account,
     Coin,
     Configuration,
@@ -9,9 +9,9 @@ from ..._core.configs import (
     RiskManagment,
     Setup,
 )
-from ..._core.engine.base.base_footprint_reader import FootprintReader
-from ..._core.engine.general.execution import Execution
-from ..._core.engine.mode.real.data_structs import AggTrades
+from ...core.engine.base.base_footprint_reader import FootprintReader
+from ...core.engine.general.execution import Execution
+from ...core.engine.mode.real.data_structs import AggTrades
 
 __all__ = [
     "Visualization",
@@ -27,9 +27,7 @@ __all__ = [
 
 @dataclass
 class Visualization:
-    only_visualization: bool
-    chart: bool
-    statistic: bool
+    only_visualization: bool = False
 
 
 @dataclass

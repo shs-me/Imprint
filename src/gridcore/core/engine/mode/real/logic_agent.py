@@ -2,6 +2,7 @@
 
 from multiprocessing.synchronize import Event
 
+from ....settings import LogicProc
 from ....settings import StatusCodes as scs
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
@@ -61,7 +62,9 @@ class LogicAgent(Logic):
 
 
 @supervisor()
-def run_logic(logic_event: Event, execution_event: Event, **kwargs) -> None:
+def run_logic(
+    logic_event: Event, execution_event: Event, proc: LogicProc = LogicProc(), **kwargs
+) -> None:
     """Supervisor-wrapped entry point for live Logic process."""
 
     sync = SyncTool(kwargs["manager"], execution_event)

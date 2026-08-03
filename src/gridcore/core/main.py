@@ -12,18 +12,23 @@ from loguru import logger
 from .constant import DIRS_LIST
 from .engine.general.execution import run_execution, run_execution_sim
 from .engine.mode.backtest.logic_sim_agent import run_logic_sim
+from .engine.mode.backtest.market_data_wss_sim_agent import run_wss_sim
 from .engine.mode.backtest.parsing_sim_agent import run_parsing_sim
-from .engine.mode.backtest.wss_sim_agent import run_wss_sim
 from .engine.mode.real.logic_agent import run_logic
 from .engine.mode.real.parsing_agent import run_parsing
 from .engine.mode.real.ws_streams.market_data_wss import run_market_data_wss
-from .settings import CoreResources, ProcsData
+from .settings import DataStreamProc, ExecutionProc, LogicProc, ParsingProc, ProcsData
 from .utils.handlers import supervisor
 from .utils.monitoring.main_manager import MainManager
 
 
-class MainAgent(CoreResources):
+class MainAgent:
     """Process coordinator responsible for instantiating IPC tools and launching daemon processes."""
+
+    market_data_wss: DataStreamProc
+    parsing: ParsingProc
+    logic: LogicProc
+    execution: ExecutionProc
 
     def __init__(self, manager: MainManager, **kwargs) -> None:
         """Initializes synchronization events and process registry containers."""
@@ -32,15 +37,16 @@ class MainAgent(CoreResources):
 
         self.base_kwargs: dict = kwargs
 
-        self.backtesting: bool = self.manager.cfgSetup.backtesting
-        self.execution: bool = self.manager.cfgSetup.execution
-
-        self.execution_event: EventT = Event()
-        self.parsing_event: EventT = Event()
-        self.logic_event: EventT = Event()
-        self.wss_sem: SemT = Semaphore(0)
+        self.is_backtesting: bool = self.manager.cfgSetup.backtesting
+        self.with_execution: bool = self.manager.cfgSetup.execution
 
         self.procs: dict[int, ProcsData] = {}
+
+        if not self.is_backtesting:
+            self.execution_event: EventT = Event()
+            self.parsing_event: EventT = Event()
+            self.logic_event: EventT = Event()
+            self.wss_sem: SemT = Semaphore(0)
 
     def run_core_engine(self) -> None:
         """Creates required output directories, spawns worker processes, and starts the MainManager loop."""
@@ -51,7 +57,13 @@ class MainAgent(CoreResources):
             if self.run_procs():
                 logger.info("-- Core -- | Init completed.")
 
-                self.manager.run(procs=self.procs)
+                self.manager.run(
+                    procs=self.procs,
+                    market_data_wss=self.market_data_wss,
+                    parsing=self.parsing,
+                    logic=self.logic,
+                    execution=self.execution,
+                )
 
         except KeyboardInterrupt:
             pass
@@ -94,11 +106,11 @@ class MainAgent(CoreResources):
         """
 
         funcs: list[FunctionType] = []
-        funcs.append((run_wss_sim if self.backtesting else run_market_data_wss))
-        funcs.append(run_parsing_sim if self.backtesting else run_parsing)
-        funcs.append(run_logic_sim if self.backtesting else run_logic)
-        if self.execution:
-            funcs.append(run_execution_sim if self.backtesting else run_execution)
+        funcs.append((run_wss_sim if self.is_backtesting else run_market_data_wss))
+        funcs.append(run_parsing_sim if self.is_backtesting else run_parsing)
+        funcs.append(run_logic_sim if self.is_backtesting else run_logic)
+        if self.with_execution:
+            funcs.append(run_execution_sim if self.is_backtesting else run_execution)
 
         return funcs
 
@@ -119,12 +131,16 @@ class MainAgent(CoreResources):
         sig: inspect.Signature = inspect.signature(func)
         proc_name: str = func.__name__.removeprefix("run_").upper()
         kwargs = {}
-        for param_name in sig.parameters:
+        for param_name, param in sig.parameters.items():
             if hasattr(self, param_name):
                 val = getattr(self, param_name)
                 kwargs[param_name] = val
             elif param_name == "kwargs":
                 kwargs["proc_id"], kwargs["task_id"] = proc_id, task_id
+            elif param.annotation in self.__annotations__.values():
+                for ann_name, ann in self.__annotations__.items():
+                    if ann is param.annotation:
+                        setattr(self, ann_name, proc_id)
             else:
                 return logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
 

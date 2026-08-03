@@ -1,5 +1,6 @@
 """Tick data CSV prepper and Numba JIT order matching engine for simulation mode."""
 
+import struct
 import time
 
 import numpy as np
@@ -65,13 +66,21 @@ class MatchingEngine:
         cfgAC = manager.cfgAccount
         self.slippage: int = cfgAC.slippage
 
-        cfgUS = manager.cfgGetUserStream
-        self.cell_amount: int = cfgUS.cell_amount
-        self.data: memoryview = cfgUS.data
-        self.data_buf_size: int = cfgUS.data_size
-        self.data_header: memoryview = cfgUS.data_header.cast("q")
-        self.writer_id: memoryview = cfgUS.writer_id.cast("q")
-        self.reader_id: memoryview = cfgUS.reader_id.cast("q")
+        cfgGUS = manager.cfgGetUserStream
+        self.gus_cell_amount: int = cfgGUS.cell_amount
+        self.gus_data: memoryview = cfgGUS.data
+        self.gus_data_size: int = cfgGUS.data_size
+        self.gus_data_header: memoryview = cfgGUS.data_header.cast("q")
+        self.gus_wid: memoryview = cfgGUS.writer_id.cast("q")
+        self.gus_rid: memoryview = cfgGUS.reader_id.cast("q")
+
+        cfgSUS = manager.cfgSetUserStream
+        self.sus_cell_amount: int = cfgSUS.cell_amount
+        self.sus_data: memoryview = cfgSUS.data
+        self.sus_data_size: int = cfgSUS.data_size
+        self.sus_data_header: memoryview = cfgSUS.data_header.cast("q")
+        self.sus_wid: memoryview = cfgGUS.writer_id.cast("q")
+        self.sus_rid: memoryview = cfgGUS.reader_id.cast("q")
 
         self.trade_readed_time: memoryview = memoryview(bytearray(8)).cast("q")
         self.order_id: memoryview = memoryview(bytearray(8)).cast("q")
@@ -89,7 +98,7 @@ class MatchingEngine:
     def _init_array(self) -> None:
         """Initializes NumPy wrappers over shared user stream buffer, order book, and event logs."""
 
-        self.data_buf: NDArray[uint8] = np.frombuffer(self.data, uint8)
+        self.data_buf: NDArray[uint8] = np.frombuffer(self.gus_data, uint8)
         self.data_example: NDArray[int64] = np.ndarray(
             (1000, c.TP_ConstantCount), dtype=int64
         )
@@ -101,15 +110,13 @@ class MatchingEngine:
         self.order_book.fill(0)
         self.obRow: memoryview = memoryview(bytearray(8)).cast("q")
 
-    def _update_order_book(
-        self,
-        timestamp: int,
-        order_param: int,
-        client_order_id: int,
-        nPrice: int,
-        nQty: int,
-    ) -> None:
+    def _update_order_book(self) -> None:
         """Appends pending order to simulated order book array."""
+
+        raw_data = self._get_user_data()
+        timestamp, order_param, client_order_id, nPrice, nQty = struct.unpack(
+            "@qqqqq", raw_data
+        )
 
         self.order_book[self.obRow[0], c.OB_timestamp] = timestamp
         self.order_book[self.obRow[0], c.OB_orderParam] = order_param
@@ -130,6 +137,15 @@ class MatchingEngine:
         )
         self.order_id[0] += 1
         self.deRow[0] += 1
+
+    def _get_user_data(self) -> memoryview:
+        cell: int = self.sus_rid[0]
+        start: int = cell * self.sus_data_size
+        lrd = self.sus_data_header[cell]
+        raw_data = self.sus_data[start : start + lrd]
+        new_cell: int = cell + 1
+        self.sus_rid[0] = new_cell if (new_cell < self.sus_cell_amount) else 0
+        return raw_data
 
 
 @njit(cache=True)

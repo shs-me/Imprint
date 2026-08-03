@@ -4,6 +4,7 @@ import struct
 import time
 from collections import deque
 
+from ....settings import DataStreamProc
 from ....settings import StatusCodes as scs
 from ....utils.handlers import error_handler, supervisor
 from ....utils.monitoring.agent_manager import AgentManager
@@ -110,7 +111,7 @@ class WssSimAgent(Wss):
 
 
 @supervisor()
-def run_wss_sim(**kwargs) -> None:
+def run_wss_sim(proc: DataStreamProc = DataStreamProc(), **kwargs) -> None:
     """Supervisor-wrapped entry point for simulated Wss process."""
 
     agent = WssSimAgent(manager=kwargs["manager"])

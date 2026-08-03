@@ -2,8 +2,23 @@
 
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
 from multiprocessing import Process
-from multiprocessing.synchronize import Event
-from typing import Protocol, TypedDict
+from typing import TypedDict
+
+
+class DataStreamProc(int):
+    pass
+
+
+class ParsingProc(int):
+    pass
+
+
+class LogicProc(int):
+    pass
+
+
+class ExecutionProc(int):
+    pass
 
 
 class ProcsData(TypedDict):
@@ -19,21 +34,6 @@ class KwgsKeys(IntEnum):
 
     Configs, Segments, MainTools = auto(), auto(), auto()
     ShmName, ShmSize = auto(), auto()
-
-
-class CoreResources(Protocol):
-    """Protocol defining inter-process synchronization events required by core components."""
-
-    parsing_event: Event
-    logic_event: Event
-    execution_event: Event
-
-
-class ProcessFlags(IntEnum):
-    """Process index positions within system status tracking arrays."""
-
-    WSS, PARSING, LOGIC, EXECUTION = 0, auto(), auto(), auto()
-    _CountProcess = auto()
 
 
 class StatusCodes(IntEnum):
@@ -160,11 +160,14 @@ class TradeParam(IntEnum):
 class BarHeaders(IntEnum):
     """Index mapping for Bar Header array columns."""
 
+    # Footprint Writer
     Open, High, Low, Close = 0, auto(), auto(), auto()
     Volume, Delta, CVD = auto(), auto(), auto()
     VWAP, VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto(), auto()
     OpenTime, LastTradeTime = auto(), auto()
-    CountTrade, ATR = auto(), auto()
+    CountTrade = auto()
+    # Footprint Reader
+    ATR = auto()
     POC, VAH, VAL = auto(), auto(), auto()
     _ConstantCount = auto()
 

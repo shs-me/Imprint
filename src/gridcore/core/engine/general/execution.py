@@ -3,6 +3,7 @@ import inspect
 from abc import ABC, abstractmethod
 from multiprocessing.synchronize import Event
 
+from ...settings import ExecutionProc
 from ...utils.handlers import supervisor
 from ...utils.monitoring.agent_manager import AgentManager
 from ..mode.backtest.execution_sim_agent import ExecutionAgent as SimExecAgent
@@ -113,14 +114,16 @@ def run(manager: AgentManager, **kwargs) -> None:
 
 
 @supervisor()
-def run_execution_sim(**kwargs):
+def run_execution_sim(proc: ExecutionProc = ExecutionProc(), **kwargs):
     """Supervisor-wrapped entry point for simulated Execution process."""
 
     run(manager=kwargs["manager"])
 
 
 @supervisor()
-def run_execution(execution_event: Event, **kwargs):
+def run_execution(
+    execution_event: Event, proc: ExecutionProc = ExecutionProc(), **kwargs
+):
     """Supervisor-wrapped entry point for live Execution process."""
 
     run(manager=kwargs["manager"], execution_event=execution_event)

@@ -40,19 +40,23 @@ class ExecutionAgent(BaseExecution, ABC):
         pass
 
     @abstractmethod
-    def send_order(
-        self,
-        timestamp: int,
-        order_param: int,
-        client_order_id: int,
-        nPrice: int,
-        nQty: int,
-    ) -> None:
-        pass
-
-    @abstractmethod
     def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-        pass
+
+        timestamp: int = 0
+        order_param: int = 0
+        order_id: int = 0
+        nPrice: int = 0
+        nQty: int = 0
+        nCommission: int = 0
+        nMAE: int = 0
+        nMFE: int = 0
+
+        self.action_for_getted_executed_order(
+            timestamp, order_param, order_id, nPrice, nQty, nCommission
+        )
+        self.con.update_orders_history(
+            timestamp, order_param, order_id, nPrice, nQty, nCommission, nMAE, nMFE
+        )
 
     @abstractmethod
     def action_for_getted_executed_order(

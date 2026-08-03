@@ -2,6 +2,7 @@
 
 import time
 
+from ....settings import LogicProc
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_footprint_reader import FootprintReader
@@ -41,7 +42,7 @@ class LogicAgent(Logic):
 
 
 @supervisor()
-def run_logic_sim(**kwargs) -> None:
+def run_logic_sim(proc: LogicProc = LogicProc(), **kwargs) -> None:
     """Supervisor-wrapped entry point for simulated Logic process."""
 
     sync = SyncTool(kwargs["manager"])

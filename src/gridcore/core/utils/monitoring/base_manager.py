@@ -4,7 +4,6 @@ from abc import ABC
 from multiprocessing.synchronize import Event, Semaphore
 
 from ... import configs as cfg
-from ...settings import ProcessFlags  # noqa: F401
 
 
 class Manager(ABC):

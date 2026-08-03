@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_execution import BaseExecution
-from .account_manager import AccountManager
+from .exchange_sim import ExchangeSim
 
 
 class ExecutionAgent(BaseExecution, ABC):
@@ -14,7 +14,7 @@ class ExecutionAgent(BaseExecution, ABC):
     def __init__(self, manager: AgentManager) -> None:
         BaseExecution.__init__(self, manager=manager)
 
-        self.acm: AccountManager = AccountManager(manager)
+        self.acm = ExchangeSim(manager)
         self.con.init_session(
             nBalance=self.acm.nBalance,
             lockedNbalance=self.acm.lockedNbalance,
@@ -64,17 +64,6 @@ class ExecutionAgent(BaseExecution, ABC):
         """Validates signal parameters and forwards order request to AccountManager."""
 
         pass
-
-    @abstractmethod
-    def send_order(
-        self,
-        timestamp: int,
-        order_param: int,
-        client_order_id: int,
-        nPrice: int,
-        nQty: int,
-    ) -> None:
-        self.acm.send_order(timestamp, order_param, client_order_id, nPrice, nQty)
 
     @abstractmethod
     def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:

@@ -3,6 +3,7 @@
 import struct
 import time
 
+from ....settings import ParsingProc
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_footprint_writer import FootprintWriter
@@ -45,7 +46,7 @@ class ParsingAgent(Parsing):
 
 
 @supervisor()
-def run_parsing_sim(**kwargs) -> None:
+def run_parsing_sim(proc: ParsingProc = ParsingProc(), **kwargs) -> None:
     """Supervisor-wrapped entry point for simulated Parsing process."""
 
     writer = FootprintWriter(kwargs["manager"])

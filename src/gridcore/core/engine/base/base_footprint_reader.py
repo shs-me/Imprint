@@ -369,9 +369,12 @@ def _update_closed_bar_and_fp_states(
     vwap = (nBasePrice - hr[bar, c.BH_VWAP]) + center
     vwap_bb_lower = (nBasePrice - hr[bar, c.BH_VWAP_BB_LOWER]) + center
     vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_BB_UPPER]) + center
-    fp_state[vwap, idxVP] |= c.SF_VWAP
-    fp_state[vwap_bb_upper, idxVP] |= c.SF_UPPER_BB
-    fp_state[vwap_bb_lower, idxVP] |= c.SF_LOWER_BB
+    if 0 <= vwap < fp_state.shape[0]:
+        fp_state[vwap, idxVP] |= c.SF_VWAP
+    if 0 <= vwap_bb_upper < fp_state.shape[0]:
+        fp_state[vwap_bb_upper, idxVP] |= c.SF_UPPER_BB
+    if 0 <= vwap_bb_lower < fp_state.shape[0]:
+        fp_state[vwap_bb_lower, idxVP] |= c.SF_LOWER_BB
     # Update POC + VA
     poc: intp = np.argmax(fp[:, idxVP])
     vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
@@ -479,14 +482,22 @@ def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, i
         if 0 <= up_idx or down_idx < max_len:
             vol_up = vp_slice[up_idx] if 0 <= up_idx else 0
             vol_down = vp_slice[down_idx] if down_idx < max_len else 0
-            if vol_up > vol_down or vol_up == vol_down:
+            if vol_up > vol_down:
                 up_idx -= 1
                 current_vol += vol_up
 
-            if vol_down > vol_up or vol_down == vol_up:
+            elif vol_down > vol_up:
                 down_idx += 1
                 current_vol += vol_down
 
+            elif vol_up == vol_down:
+                if up_idx > 0:
+                    up_idx -= 1
+                    current_vol += vol_up
+
+                if down_idx < max_len:
+                    down_idx += 1
+                    current_vol += vol_down
         else:
             break
 

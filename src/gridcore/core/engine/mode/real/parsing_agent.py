@@ -6,6 +6,7 @@ from multiprocessing.synchronize import Event
 
 from msgspec.json import Decoder
 
+from ....settings import ParsingProc
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
@@ -76,7 +77,12 @@ def resolve_agg_trades_data_struct(manager: AgentManager) -> type[AggTrades]:
 
 
 @supervisor()
-def run_parsing(parsing_event: Event, logic_event: Event, **kwargs) -> None:
+def run_parsing(
+    parsing_event: Event,
+    logic_event: Event,
+    proc: ParsingProc = ParsingProc(),
+    **kwargs,
+) -> None:
     """Supervisor-wrapped entry point for live Parsing process."""
 
     writer = BaseFootprintWriter(kwargs["manager"])
