@@ -167,7 +167,15 @@ class FootprintWriter(ABC):
             nPrice=nPrice,
             idy=idy,
             idx=idx,
-            args=self.args,
+            idxVP=self.idxVP,
+            idxDP=self.idxDP,
+            priceMult=self.con.priceMult,
+            qtyMult=self.con.qtyMult,
+            dirty_fp=self.dirty_footprint,
+            dirty_hr=self.dirty_headers,
+            space=self.space,
+            space_flag=self.space_flag,
+            meta_data=self.meta_data,
         )
 
     def wait_read_space(self) -> None:
@@ -241,22 +249,17 @@ def _update_footprint_and_headers_and_indicators_and_coords(
     nPrice: int,
     idy: int,
     idx: int,
-    args: tuple[
-        int,
-        int,
-        float,
-        float,
-        NDArray[int64],
-        NDArray[int64],
-        NDArray[int64],
-        memoryview,
-        NDArray[float64],
-    ],
+    idxVP: int,
+    idxDP: int,
+    priceMult: int,
+    qtyMult: int,
+    dirty_fp: NDArray[int64],
+    dirty_hr: NDArray[int64],
+    space: NDArray[int64],
+    space_flag: memoryview,
+    meta_data: NDArray[float64],
 ) -> None:
     """Numba JIT kernel updating volume profile, bar headers, VWAP, BB, and space coordinates."""
-
-    idxVP, idxDP, priceMult, qtyMult, dirty_fp, dirty_hr = args[0:6]
-    space, space_flag, meta_data = args[6:9]
 
     nQty: int = round(qty * qtyMult)
     # Update Dirty Footprint
