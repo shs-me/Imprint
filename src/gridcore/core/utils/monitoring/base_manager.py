@@ -18,7 +18,7 @@ class Manager(ABC):
     cfgMetrics: cfg.Metrics
     cfgDataStream: cfg.DataStream
     cfgGetUserStream: cfg.GetUserStream
-    cfgSetUserStream: cfg.GetUserStream
+    cfgSetUserStream: cfg.SetUserStream
     cfgSignal: cfg.Signal
     _sc_sem: Semaphore
     _general_event: Event

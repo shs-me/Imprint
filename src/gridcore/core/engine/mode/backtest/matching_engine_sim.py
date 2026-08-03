@@ -79,8 +79,8 @@ class MatchingEngine:
         self.sus_data: memoryview = cfgSUS.data
         self.sus_data_size: int = cfgSUS.data_size
         self.sus_data_header: memoryview = cfgSUS.data_header.cast("q")
-        self.sus_wid: memoryview = cfgGUS.writer_id.cast("q")
-        self.sus_rid: memoryview = cfgGUS.reader_id.cast("q")
+        self.sus_wid: memoryview = cfgSUS.writer_id.cast("q")
+        self.sus_rid: memoryview = cfgSUS.reader_id.cast("q")
 
         self.trade_readed_time: memoryview = memoryview(bytearray(8)).cast("q")
         self.order_id: memoryview = memoryview(bytearray(8)).cast("q")

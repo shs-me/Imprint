@@ -49,7 +49,7 @@ class Parsing(ABC):
         get_trade_data, alarm_clock = self.get_trade_data, self.alarm_clock
         update_success, post_update = self.update_success, self.post_update
         price, qty = self.price, self.qty
-        timestamp, is_sell = self.timestamp, self.is_sell
+        timestamp = self.timestamp
         #  - - -
         while True:
             init_session: bool = False
@@ -81,7 +81,9 @@ class Parsing(ABC):
                         writer.init_session(price[0], timestamp[0])
                         init_session = True
 
-                    if writer.update(price[0], qty[0], timestamp[0], is_sell):
+                    if writer.update_footprint(
+                        price[0], qty[0], timestamp[0], self.is_sell
+                    ):
                         update_success()
 
                     post_update()

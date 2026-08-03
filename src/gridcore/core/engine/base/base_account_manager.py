@@ -186,10 +186,18 @@ def _update_equity_ohlc(
             eh[bar, :] = bar_open_time, ce, ce, ce, ce
 
             prev_bar: int = bar - 1
-            while prev_bar >= 0 and equity_history[prev_bar, 0] == 0:
+            prev_eq: int = ce
+            while prev_bar >= 0:
+                if equity_history[prev_bar, 0] == 0:
+                    prev_bar -= 1
+                else:
+                    prev_eq = equity_history[prev_bar, EquityC]
+                    break
+
+            while prev_bar < bar:
                 eh[prev_bar, EquityT] = base_timestamp[0] + (prev_bar * timeframe)
-                eh[prev_bar, EquityO:] = ce, ce, ce, ce
-                prev_bar -= 1
+                eh[prev_bar, EquityO:] = prev_eq, prev_eq, prev_eq, prev_eq
+                prev_bar += 1
         else:
             if current_equity > equity_history[bar, EquityH]:
                 equity_history[bar, EquityH] = current_equity

@@ -353,7 +353,7 @@ def _update_closed_bar_and_fp_states(
     # ATR
     if bar > 0:
         pre_c, pre_atr = hr[oldBar, c.BH_Close], hr[oldBar, c.BH_ATR]
-        tr = max(_high - _low, _high - pre_c, _low - pre_c)
+        tr = max(_high - _low, abs(_high - pre_c), abs(_low - pre_c))
         hr[bar, c.BH_ATR] = ((pre_atr * (c.ATR_PERIOD - 1)) + tr) // c.ATR_PERIOD
     else:
         hr[bar, c.BH_ATR] = _high - _low
@@ -491,7 +491,7 @@ def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, i
                 current_vol += vol_down
 
             elif vol_up == vol_down:
-                if up_idx > 0:
+                if up_idx >= 0:
                     up_idx -= 1
                     current_vol += vol_up
 

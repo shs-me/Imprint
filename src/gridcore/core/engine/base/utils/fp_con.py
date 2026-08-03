@@ -76,13 +76,15 @@ class FPconverter:
             return None
 
     @overload
+    def to_nPrice(self, value: float64) -> int: ...
+    @overload
     def to_nPrice(self, value: float) -> int: ...
     @overload
     def to_nPrice(self, value: int | int64) -> int | int64: ...
     def to_nPrice(self, value):
         """Converts float price to fixed-point int or Y-axis row index to fixed-point price."""
 
-        if isinstance(value, float):
+        if isinstance(value, float) or isinstance(value, float64):
             return round(value * self.priceMult)
         else:
             return (self.center - value) + self.nBasePrice

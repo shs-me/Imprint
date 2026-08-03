@@ -58,17 +58,11 @@ class FootprintWriter(ABC):
             f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.cfgCoin.symbol.upper()}"
         )
 
-        self.args = (
-            self.idxVP,
-            self.idxDP,
-            self.con.priceMult,
-            self.con.qtyMult,
-            self.dirty_footprint,
-            self.dirty_headers,
-            self.space,
-            self.space_flag,
-            self.meta_data,
-        )
+        self.has_pre_trade: bool = False
+        self._pre_price: float = 0.0
+        self._pre_qty: float = 0.0
+        self._pre_timestamp: int = 0
+        self._pre_is_sell: bool = False
 
     def _init_array(self) -> None:
         """Initializes NumPy array abstractions over shared memory buffers and local dirty arrays."""
@@ -115,13 +109,24 @@ class FootprintWriter(ABC):
         self.base_nPrice[0] = self.con.nBasePrice
         self.base_timestamp[0] = self.con.baseTimestamp
 
-    def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> bool:
+    def update_footprint(
+        self, price: float, qty: float, timestamp: int, is_sell: bool
+    ) -> bool:
         """Ingests tick data, updates dirty structures, and triggers double-buffer flush.
 
         Returns:
             bool: True if dirty updates were successfully copied to primary shared memory buffer.
         """
 
+        if self.has_pre_trade:
+            pre_price, pre_qty, pre_timestamp, pre_is_sell = self.pre_trade
+            self.update(pre_price, pre_qty, pre_timestamp, pre_is_sell)
+
+        self.update(price, qty, timestamp, is_sell)
+
+        return self.copy_to()
+
+    def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> None:
         nPrice: int = self.con.to_nPrice(price)
         idy: int | None = self.con.to_idy(nPrice=nPrice)
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
@@ -139,13 +144,24 @@ class FootprintWriter(ABC):
                 )
             else:
                 self.set_proc_sc(code=scs.FP_IDY_FILLED)
+                self.pre_trade = price, qty, timestamp, is_sell
 
         else:
             self.wait_read_space()
             self.set_proc_sc(code=scs.FP_IDX_FILLED)
+            self.pre_trade = price, qty, timestamp, is_sell
 
         self.counterTicks[0] += 1
-        return self.copy_to()
+
+    @property
+    def pre_trade(self) -> tuple[float, float, int, bool]:
+        self.has_pre_trade = False
+        return self._pre_price, self._pre_qty, self._pre_timestamp, self._pre_is_sell
+
+    @pre_trade.setter
+    def pre_trade(self, trade: tuple[float, float, int, bool]) -> None:
+        self._pre_price, self._pre_qty, self._pre_timestamp, self._pre_is_sell = trade
+        self.has_pre_trade = True
 
     def update_footprint_and_headers_and_indicators_and_coords(
         self,
