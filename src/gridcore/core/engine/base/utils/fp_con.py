@@ -142,7 +142,6 @@ class FPconverter:
 
         return self.headers[(idx & ~1) // 2, header]
 
-    # OHLC
     def openNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.Open)
 
@@ -155,13 +154,20 @@ class FPconverter:
     def closeNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.Close)
 
+    def ohlc(self, idx: int | int64, idy: bool) -> tuple[int64, int64, int64, int64]:
+        return (
+            self.to_idy(self.openNprice(idx)) if idy else self.openNprice(idx),
+            self.to_idy(self.highNprice(idx)) if idy else self.highNprice(idx),
+            self.to_idy(self.lowNprice(idx)) if idy else self.lowNprice(idx),
+            self.to_idy(self.closeNprice(idx)) if idy else self.closeNprice(idx),
+        )
+
     def openTime(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.OpenTime)
 
     def lastTradeTime(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.LastTradeTime)
 
-    # Indicators
     def countTrade(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.CountTrade)
 

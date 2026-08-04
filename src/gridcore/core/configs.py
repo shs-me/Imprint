@@ -22,8 +22,8 @@ class Configuration(ABC):
     """Abstract base class for engine configuration objects."""
 
     def percent_to_int(self) -> None:
-        """Converts percentage string fields (e.g., '10%') into basis points integers relative to 10,000."""
-        self.percent: int = 10_000
+        """Converts percentage string fields (e.g., '10%') into basis points integers relative to 100,000."""
+        self.percent: int = 100_000
         for name, value in self.__dict__.items():
             if isinstance(value, str):
                 setattr(
@@ -76,6 +76,7 @@ class Account(Configuration):
     slippage: Any = "0.05%"
     latency_ms: Any = 100
     scale_prec: Any = 15
+    active_order_limit: int = 1000
     save_orders_history: bool = False
 
     def __post_init__(self) -> None:

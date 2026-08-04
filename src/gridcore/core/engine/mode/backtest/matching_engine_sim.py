@@ -67,6 +67,7 @@ class MatchingEngine:
 
         cfgAC = manager.cfgAccount
         self.slippage: int = cfgAC.slippage
+        self.order_book_row: int = cfgAC.active_order_limit
 
         cfgGUS = manager.cfgGetUserStream
         self.gus_cell_amount: int = cfgGUS.cell_amount
@@ -107,7 +108,7 @@ class MatchingEngine:
         self.deRow: memoryview = memoryview(bytearray(8)).cast("q")
 
         self.order_book: NDArray[int64] = np.ndarray(
-            (1000, c.OB_ConstantCount), dtype=int64
+            (self.order_book_row, c.OB_ConstantCount), dtype=int64
         )
         self.order_book.fill(0)
         self.obRow: memoryview = memoryview(bytearray(8)).cast("q")

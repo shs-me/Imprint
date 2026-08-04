@@ -138,6 +138,7 @@ def _update_unrealized_nPnl(
                 long_mfe[0] = longUnrealizedNpnl[0]
         else:
             longUnrealizedNpnl[0] = 0
+
         if shortNqty[0]:
             shortUnrealizedNpnl[0] = _to_nPnl(
                 trade_nPrice,
