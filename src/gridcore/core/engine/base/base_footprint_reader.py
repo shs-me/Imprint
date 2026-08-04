@@ -466,9 +466,9 @@ def _update_bar_states(
     )
     poc: intp = np.argmax(vp_bar)
     vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-    hr[bar, c.BH_POC] = (center - poc) + nBasePrice
-    hr[bar, c.BH_VAH] = (center - vah) + nBasePrice
-    hr[bar, c.BH_VAL] = (center - val) + nBasePrice
+    hr[bar, c.BH_POC] = (center - (high_idy + poc)) + nBasePrice
+    hr[bar, c.BH_VAH] = (center - (high_idy + vah)) + nBasePrice
+    hr[bar, c.BH_VAL] = (center - (high_idy + val)) + nBasePrice
     fp_state[(high_idy + poc), idxBid] |= c.SF_POC_BAR
     fp_state[(high_idy + vah), idxBid] |= c.SF_VAH_BAR
     fp_state[(high_idy + val), idxBid] |= c.SF_VAL_BAR
