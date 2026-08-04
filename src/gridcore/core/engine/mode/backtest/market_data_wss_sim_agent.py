@@ -30,15 +30,16 @@ class DataPrepper(BaseDataPrepper):
         """Packs CSV fields into packed binary struct payload `@ddq?`."""
 
         list_data: list[bytes] = data.split(b",")
-        self.queue.append(
-            struct.pack(
-                "@ddq?",
-                float(list_data[1]),
-                float(list_data[2]),
-                int(list_data[5]),
-                b"true" in list_data[6],
+        if len(list_data) >= 6:
+            self.queue.append(
+                struct.pack(
+                    "@ddq?",
+                    float(list_data[1]),
+                    float(list_data[2]),
+                    int(list_data[5]),
+                    b"true" in list_data[6],
+                )
             )
-        )
 
     def post_prepper(self) -> None:
         pass

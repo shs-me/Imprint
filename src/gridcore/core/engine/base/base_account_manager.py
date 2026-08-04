@@ -192,6 +192,7 @@ def _update_equity_ohlc(
                     prev_bar -= 1
                 else:
                     prev_eq = equity_history[prev_bar, EquityC]
+                    prev_bar += 1
                     break
 
             while prev_bar < bar:

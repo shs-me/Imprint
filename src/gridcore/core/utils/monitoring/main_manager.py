@@ -175,6 +175,10 @@ class MainManager(Manager):
             logger.warning(f"{p_name} | {scs.QTY_LESS_LIMIT.label}")
             self.close_procs = True
 
+        elif sc & scs.ORDER_LIMIT:
+            logger.warning(f"{p_name} | {scs.QTY_LESS_LIMIT.label}")
+            self.close_procs = True
+
         if sc != 0:
             self.clear_proc_sc(code=sc, proc_id=p_id)
 

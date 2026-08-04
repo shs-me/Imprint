@@ -114,7 +114,7 @@ def download_aggTrade_hist_daily_data(
 
     endDate = endDate if date.today() > endDate else date.today()
     curDate = startDate
-    while curDate < endDate:
+    while curDate <= endDate:
         file_name = f"{symbol.upper()}-aggTrades-{curDate.isoformat()}"
         zip_path = f"{base_path}/{file_name}.zip"
         file_path = f"{base_path}/{curDate.isoformat()}.csv"

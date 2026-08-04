@@ -313,13 +313,11 @@ def _update_clusters_states(
 ) -> None:
     """Numba JIT kernel recalculating delta domination and big trade flags across clusters."""
 
-    # - - -
-    # Clear State's
-    fp_state[idYmin:idYmax, idXmin:idXmax] &= ~(c.SF_BIG_TRADE)
-    # - - -
     # Clear State's
     state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
     fp_state[idYmin:idYmax, idxVP] &= ~(state1)
+    fp_state[idYmin:idYmax, idXmin:idXmax] &= ~(c.SF_BIG_TRADE)
+
     # Update Delta Domination
     bidDD: NDArray[bool_] = fp[idYmin:idYmax, idxDP] < 0
     askDD: NDArray[bool_] = fp[idYmin:idYmax, idxDP] > 0
@@ -350,6 +348,7 @@ def _update_closed_bar_and_fp_states(
     _openY, _closeY = (nBasePrice - _open) + center, (nBasePrice - _close) + center
     _highY, _lowY = (nBasePrice - _high) + center, (nBasePrice - _low) + center
     # - - -
+
     # ATR
     if bar > 0:
         pre_c, pre_atr = hr[oldBar, c.BH_Close], hr[oldBar, c.BH_ATR]
@@ -359,28 +358,39 @@ def _update_closed_bar_and_fp_states(
         hr[bar, c.BH_ATR] = _high - _low
 
     # Clear Footprint Static State's
-    state_1 = c.SF_VWAP | c.SF_LOWER_BB | c.SF_UPPER_BB
     state_2 = c.SF_POC_BAR | c.SF_VAL_FP | c.SF_VAH_FP
     state_3 = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
-    fp_state[caching[c.CSD_VWAP : c.CSD_LOWER_BB + 1], idxVP] &= ~(state_1)
     fp_state[caching[c.CSD_POC_FP : c.CSD_VAL_FP + 1], idxVP] &= ~(state_2)
     fp_state[_highY : _lowY + 1, idxVP] &= ~(state_3)
+
     # Update VWAP+BB
     vwap = (nBasePrice - hr[bar, c.BH_VWAP]) + center
     vwap_bb_lower = (nBasePrice - hr[bar, c.BH_VWAP_BB_LOWER]) + center
     vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_BB_UPPER]) + center
+
     if 0 <= vwap < fp_state.shape[0]:
+        fp_state[caching[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP)
         fp_state[vwap, idxVP] |= c.SF_VWAP
+        caching[c.CSD_VWAP] = vwap
     if 0 <= vwap_bb_upper < fp_state.shape[0]:
+        fp_state[caching[c.CSD_UPPER_BB], idxVP] &= ~(c.SF_UPPER_BB)
         fp_state[vwap_bb_upper, idxVP] |= c.SF_UPPER_BB
+        caching[c.CSD_UPPER_BB] = vwap_bb_upper
     if 0 <= vwap_bb_lower < fp_state.shape[0]:
+        fp_state[caching[c.CSD_LOWER_BB], idxVP] &= ~(c.SF_LOWER_BB)
         fp_state[vwap_bb_lower, idxVP] |= c.SF_LOWER_BB
+        caching[c.CSD_LOWER_BB] = vwap_bb_lower
+
     # Update POC + VA
     poc: intp = np.argmax(fp[:, idxVP])
     vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
     fp_state[poc, idxVP] |= c.SF_POC_FP
+    caching[c.CSD_POC_FP] = poc
     fp_state[vah, idxVP] |= c.SF_VAH_FP
+    caching[c.CSD_VAH_FP] = vah
     fp_state[val, idxVP] |= c.SF_VAL_FP
+    caching[c.CSD_VAL_FP] = val
+
     # Update Auction
     highAuction = (
         c.SF_FINISHED_AUCTION if fp[_highY, lidx + 1] == 0 else c.SF_UNFINISHED_AUCTION
@@ -390,13 +400,6 @@ def _update_closed_bar_and_fp_states(
     )
     fp_state[_highY, idxVP] |= highAuction
     fp_state[_lowY, idxVP] |= lowAuction
-    # Caching
-    caching[c.CSD_VWAP] = vwap
-    caching[c.CSD_UPPER_BB] = vwap_bb_upper
-    caching[c.CSD_LOWER_BB] = vwap_bb_lower
-    caching[c.CSD_POC_FP] = poc
-    caching[c.CSD_VAH_FP] = vah
-    caching[c.CSD_VAL_FP] = val
 
 
 @njit(cache=True)
@@ -420,41 +423,45 @@ def _update_bar_states(
     _close: int64 = hr[bar, c.BH_Close]
     _openY, _closeY = (nBasePrice - _open) + center, (nBasePrice - _close) + center
     _highY, _lowY = (nBasePrice - _high) + center, (nBasePrice - _low) + center
-
     # - - -
     idyBid: slice[int64, int64] = slice(idYmin + 1, idYmax + 1)
     idyAsk: slice[int64, int64] = slice(idYmin, idYmax)
+
     # Clear State's
     indicators = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
     clear_mask = ~(indicators)
     fp_state[idYmin : idYmax + 1, idxBid : idxBid + 2] &= clear_mask
+
     # Update ZeroPrint
     bidZP: NDArray[bool_] = (fp[idyAsk, idxAsk] > 0) & (fp[idyBid, idxBid] == 0)
     askZP: NDArray[bool_] = (fp[idyBid, idxBid] > 0) & (fp[idyAsk, idxAsk] == 0)
     fp_state[idyBid, idxBid][bidZP] |= c.SF_ZERO_PRINT
     fp_state[idyAsk, idxAsk][askZP] |= c.SF_ZERO_PRINT
+
     # Update Delta Domination
     bidDD: NDArray[bool_] = (fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) < 0
     askDD: NDArray[bool_] = (fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) > 0
     fp_state[idyBid, idxBid][bidDD] |= c.SF_DELTA_DOMINATION
     fp_state[idyAsk, idxAsk][askDD] |= c.SF_DELTA_DOMINATION
+
     # Update IMBALANCE
     bidImb: NDArray[bool_] = fp[idyBid, idxBid] > (fp[idyAsk, idxAsk] * 3)
     askImb: NDArray[bool_] = fp[idyAsk, idxAsk] > (fp[idyBid, idxBid] * 3)
     fp_state[idyBid, idxBid][bidImb] |= c.SF_IMBALANCE
     fp_state[idyAsk, idxAsk][askImb] |= c.SF_IMBALANCE
 
-    # - - -
     # Clear State's
     headers = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
     indicators = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
     clear_mask = ~(headers | indicators)
     fp_state[_highY : _lowY + 1, idxBid] &= clear_mask
+
     # Update OHLC
     fp_state[_openY, idxBid] |= c.SF_OPEN
     fp_state[_highY, idxBid] |= c.SF_HIGH
     fp_state[_lowY, idxBid] |= c.SF_LOW
     fp_state[_closeY, idxBid] |= c.SF_CLOSE
+
     # Update VA + POC
     vp_bar: NDArray[int64] = (
         fp[_highY : _lowY + 1, idxBid] + fp[_highY : _lowY + 1, idxAsk]

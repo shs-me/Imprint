@@ -9,6 +9,7 @@ from numpy import int64, uint8
 from numpy.typing import NDArray
 
 from .... import constant as c
+from ....settings import StatusCodes as scs
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_data_prepper import BaseDataPrepper
 
@@ -45,12 +46,13 @@ class DataPrepper(BaseDataPrepper):
         """Parses raw CSV byte line into fixed-point price and timestamp tuple."""
 
         list_data: list[bytes] = data.split(b",")
-        self.dfm[self.dfmWid[0], :] = (
-            round(float(list_data[1]) * self.price_mult),
-            int(list_data[5]),
-        )
-        new_row: int = self.dfmWid[0] + 1
-        self.dfmWid[0] = new_row if (new_row < self.max_row) else 0
+        if len(list_data) >= 6:
+            self.dfm[self.dfmWid[0], :] = (
+                round(float(list_data[1]) * self.price_mult),
+                int(list_data[5]),
+            )
+            new_row: int = self.dfmWid[0] + 1
+            self.dfmWid[0] = new_row if (new_row < self.max_row) else 0
 
     def post_prepper(self) -> None:
         pass
@@ -124,6 +126,9 @@ class MatchingEngine:
         self.order_book[self.obRow[0], c.OB_nPrice] = nPrice
         self.order_book[self.obRow[0], c.OB_nQty] = nQty
         self.obRow[0] += 1
+
+        if self.obRow[0] > self.order_book.shape[0]:
+            self.manager.set_proc_sc(scs.ORDER_LIMIT)
 
         self.data_example[self.deRow[0], :] = (
             timestamp,

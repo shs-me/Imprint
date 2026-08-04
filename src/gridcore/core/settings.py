@@ -78,6 +78,7 @@ class StatusCodes(IntEnum):
     # EXECUTION
     LOSS_MORE_LIMIT = "Balance >= max loss limit"
     QTY_LESS_LIMIT = "Nominal qty <= min order size"
+    ORDER_LIMIT = "Active Orders > order limit"
 
 
 class StateFlags(IntFlag):
