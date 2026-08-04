@@ -22,8 +22,8 @@ class Configuration(ABC):
     """Abstract base class for engine configuration objects."""
 
     def percent_to_int(self) -> None:
-        """Converts percentage string fields (e.g., '10%') into basis points integers relative to 100,000."""
-        self.percent: int = 100_000
+        """Converts percentage string fields (e.g., '10%') into basis points integers relative to 10,000."""
+        self.percent: int = 10_000
         for name, value in self.__dict__.items():
             if isinstance(value, str):
                 setattr(
