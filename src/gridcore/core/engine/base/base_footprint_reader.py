@@ -148,7 +148,7 @@ class FootprintReader(ABC):
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
-            if self.con.volume(idx) > 0:
+            if self.con.nVolume(idx) > 0:
                 if idx > self.last_idx:
                     self._update_closed_bar_and_fp()
                     self._trade_readed_time[0] = int(
@@ -341,27 +341,28 @@ def _update_closed_bar_and_fp_states(
 
     bar: int = (lidx & ~1) // 2
     oldBar: int = bar - 1
-    _open: int64 = hr[bar, c.BH_Open]
-    _high: int64 = hr[bar, c.BH_High]
-    _low: int64 = hr[bar, c.BH_Low]
-    _close: int64 = hr[bar, c.BH_Close]
-    _openY, _closeY = (nBasePrice - _open) + center, (nBasePrice - _close) + center
-    _highY, _lowY = (nBasePrice - _high) + center, (nBasePrice - _low) + center
-    # - - -
+
+    highNprice: int64 = hr[bar, c.BH_High]
+    lowNprice: int64 = hr[bar, c.BH_Low]
+
+    high_idy: int64 = (nBasePrice - highNprice) + center
+    low_idy: int64 = (nBasePrice - lowNprice) + center
 
     # ATR
     if bar > 0:
         pre_c, pre_atr = hr[oldBar, c.BH_Close], hr[oldBar, c.BH_ATR]
-        tr = max(_high - _low, abs(_high - pre_c), abs(_low - pre_c))
+        tr: int64 = max(
+            highNprice - lowNprice, abs(highNprice - pre_c), abs(lowNprice - pre_c)
+        )
         hr[bar, c.BH_ATR] = ((pre_atr * (c.ATR_PERIOD - 1)) + tr) // c.ATR_PERIOD
     else:
-        hr[bar, c.BH_ATR] = _high - _low
+        hr[bar, c.BH_ATR] = highNprice - lowNprice
 
     # Clear Footprint Static State's
-    state_2 = c.SF_POC_BAR | c.SF_VAL_FP | c.SF_VAH_FP
-    state_3 = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
+    state_2 = c.SF_POC_FP | c.SF_VAH_FP | c.SF_VAL_FP
     fp_state[caching[c.CSD_POC_FP : c.CSD_VAL_FP + 1], idxVP] &= ~(state_2)
-    fp_state[_highY : _lowY + 1, idxVP] &= ~(state_3)
+    state_3 = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
+    fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
 
     # Update VWAP+BB
     vwap = (nBasePrice - hr[bar, c.BH_VWAP]) + center
@@ -392,14 +393,11 @@ def _update_closed_bar_and_fp_states(
     caching[c.CSD_VAL_FP] = val
 
     # Update Auction
-    highAuction = (
-        c.SF_FINISHED_AUCTION if fp[_highY, lidx + 1] == 0 else c.SF_UNFINISHED_AUCTION
-    )
-    lowAuction = (
-        c.SF_FINISHED_AUCTION if fp[_lowY, lidx] == 0 else c.SF_UNFINISHED_AUCTION
-    )
-    fp_state[_highY, idxVP] |= highAuction
-    fp_state[_lowY, idxVP] |= lowAuction
+    high_finished, low_finished = fp[high_idy, lidx + 1] == 0, fp[low_idy, lidx] == 0
+    highAuction = c.SF_FINISHED_AUCTION if high_finished else c.SF_UNFINISHED_AUCTION
+    lowAuction = c.SF_FINISHED_AUCTION if low_finished else c.SF_UNFINISHED_AUCTION
+    fp_state[high_idy, idxVP] |= highAuction
+    fp_state[low_idy, idxVP] |= lowAuction
 
 
 @njit(cache=True)
@@ -417,20 +415,26 @@ def _update_bar_states(
     """Numba JIT kernel calculating active bar OHLC, Zero-Print, Delta Domination, and Imbalances."""
 
     bar = (idxBid & ~1) // 2
-    _open: int64 = hr[bar, c.BH_Open]
-    _high: int64 = hr[bar, c.BH_High]
-    _low: int64 = hr[bar, c.BH_Low]
-    _close: int64 = hr[bar, c.BH_Close]
-    _openY, _closeY = (nBasePrice - _open) + center, (nBasePrice - _close) + center
-    _highY, _lowY = (nBasePrice - _high) + center, (nBasePrice - _low) + center
-    # - - -
+
+    openNprice: int64 = hr[bar, c.BH_Open]
+    highNprice: int64 = hr[bar, c.BH_High]
+    lowNprice: int64 = hr[bar, c.BH_Low]
+    closeNprice: int64 = hr[bar, c.BH_Close]
+
+    open_idy: int64 = (nBasePrice - openNprice) + center
+    high_idy: int64 = (nBasePrice - highNprice) + center
+    low_idy: int64 = (nBasePrice - lowNprice) + center
+    close_idy: int64 = (nBasePrice - closeNprice) + center
+
     idyBid: slice[int64, int64] = slice(idYmin + 1, idYmax + 1)
     idyAsk: slice[int64, int64] = slice(idYmin, idYmax)
 
     # Clear State's
-    indicators = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
-    clear_mask = ~(indicators)
-    fp_state[idYmin : idYmax + 1, idxBid : idxBid + 2] &= clear_mask
+    state1 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
+    fp_state[idYmin : idYmax + 1, idxBid : idxBid + 2] &= ~(state1)
+    state2 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
+    state3 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
+    fp_state[high_idy : low_idy + 1, idxBid] &= ~(state2 | state3)
 
     # Update ZeroPrint
     bidZP: NDArray[bool_] = (fp[idyAsk, idxAsk] > 0) & (fp[idyBid, idxBid] == 0)
@@ -450,30 +454,24 @@ def _update_bar_states(
     fp_state[idyBid, idxBid][bidImb] |= c.SF_IMBALANCE
     fp_state[idyAsk, idxAsk][askImb] |= c.SF_IMBALANCE
 
-    # Clear State's
-    headers = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
-    indicators = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
-    clear_mask = ~(headers | indicators)
-    fp_state[_highY : _lowY + 1, idxBid] &= clear_mask
-
     # Update OHLC
-    fp_state[_openY, idxBid] |= c.SF_OPEN
-    fp_state[_highY, idxBid] |= c.SF_HIGH
-    fp_state[_lowY, idxBid] |= c.SF_LOW
-    fp_state[_closeY, idxBid] |= c.SF_CLOSE
+    fp_state[open_idy, idxBid] |= c.SF_OPEN
+    fp_state[high_idy, idxBid] |= c.SF_HIGH
+    fp_state[low_idy, idxBid] |= c.SF_LOW
+    fp_state[close_idy, idxBid] |= c.SF_CLOSE
 
     # Update VA + POC
     vp_bar: NDArray[int64] = (
-        fp[_highY : _lowY + 1, idxBid] + fp[_highY : _lowY + 1, idxAsk]
+        fp[high_idy : low_idy + 1, idxBid] + fp[high_idy : low_idy + 1, idxAsk]
     )
     poc: intp = np.argmax(vp_bar)
     vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-    hr[bar, c.BH_POC] = poc = _highY + poc
-    hr[bar, c.BH_VAH] = vah = _highY + vah
-    hr[bar, c.BH_VAL] = val = _highY + val
-    fp_state[poc, idxBid] |= c.SF_POC_BAR
-    fp_state[vah, idxBid] |= c.SF_VAH_BAR
-    fp_state[val, idxBid] |= c.SF_VAL_BAR
+    hr[bar, c.BH_POC] = (center - poc) + nBasePrice
+    hr[bar, c.BH_VAH] = (center - vah) + nBasePrice
+    hr[bar, c.BH_VAL] = (center - val) + nBasePrice
+    fp_state[(high_idy + poc), idxBid] |= c.SF_POC_BAR
+    fp_state[(high_idy + vah), idxBid] |= c.SF_VAH_BAR
+    fp_state[(high_idy + val), idxBid] |= c.SF_VAL_BAR
 
 
 @njit(cache=True)

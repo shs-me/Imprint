@@ -84,7 +84,7 @@ class FPconverter:
     def to_nPrice(self, value):
         """Converts float price to fixed-point int or Y-axis row index to fixed-point price."""
 
-        if isinstance(value, float) or isinstance(value, float64):
+        if isinstance(value, (float, float64)):
             return round(value * self.priceMult)
         else:
             return (self.center - value) + self.nBasePrice
@@ -165,16 +165,16 @@ class FPconverter:
     def countTrade(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.CountTrade)
 
-    def volume(self, idx: int | int64) -> int64:
+    def nVolume(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.Volume)
 
-    def delta(self, idx: int | int64) -> int64:
+    def nDelta(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.Delta)
 
-    def cvd(self, idx: int | int64) -> int64:
+    def nCvd(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.CVD)
 
-    def vwap(self, idx: int | int64) -> int64:
+    def vwapNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.VWAP)
 
     def vwap_bb_lower(self, idx: int | int64) -> int64:
@@ -186,11 +186,11 @@ class FPconverter:
     def atr(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.ATR)
 
-    def poc(self, idx: int | int64) -> int64:
+    def pocNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.POC)
 
-    def vah(self, idx: int | int64) -> int64:
+    def vahNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.VAH)
 
-    def val(self, idx: int | int64) -> int64:
+    def valNprice(self, idx: int | int64) -> int64:
         return self._get_header(idx=idx, header=c.BarHeaders.VAL)
