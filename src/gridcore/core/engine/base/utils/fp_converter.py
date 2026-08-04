@@ -7,7 +7,6 @@ from numpy import float64, int64
 from numpy.typing import NDArray
 
 from .... import configs as cfg
-from .... import constant as c
 
 
 class FPconverter:
@@ -15,12 +14,17 @@ class FPconverter:
 
     def __init__(
         self,
-        cfgFP: cfg.Footprint,
         footprint: NDArray[int64],
         headers: NDArray[int64],
         price_prec: int,
         qty_prec: int,
+        cfgFP: cfg.Footprint,
     ) -> None:
+        self.footprint: NDArray[int64] = footprint
+        self.headers: NDArray[int64] = headers
+        self.price_prec: int = price_prec
+        self.qty_prec: int = qty_prec
+
         self.fp_rows: int = cfgFP.fp_rows
         self.fp_cols: int = cfgFP.fp_cols
         self.idxVP: int = cfgFP.colVP
@@ -28,11 +32,9 @@ class FPconverter:
         self.fp_panel_cols: int = cfgFP.fp_panel_cols
         self.bar_count: int = cfgFP.bar_count
         self.tims: int = cfgFP.timeframe
-        self.footprint: NDArray[int64] = footprint
-        self.headers: NDArray[int64] = headers
 
-        self.pricePrec, self.qtyPrec = price_prec, qty_prec
-        self.priceMult, self.qtyMult = 10**self.pricePrec, 10**self.qtyPrec
+        self.price_mult: int = 10**self.price_prec
+        self.qty_mult: int = 10**self.qty_prec
 
     def init_session(self, price: float | int, timestamp: int):
         """Calibrates converter base price, base timestamp, and grid center origin offset."""
@@ -85,24 +87,24 @@ class FPconverter:
         """Converts float price to fixed-point int or Y-axis row index to fixed-point price."""
 
         if isinstance(value, (float, float64)):
-            return round(value * self.priceMult)
+            return round(value * self.price_mult)
         else:
             return (self.center - value) + self.nBasePrice
 
     def to_nQty(self, qty: float) -> int:
         """Converts float quantity to fixed-point int scaling representation."""
 
-        return round(qty * self.qtyMult)
+        return round(qty * self.qty_mult)
 
     def to_price(self, nPrice: int | int64) -> float | float64:
         """Converts fixed-point price int to floating-point representation."""
 
-        return nPrice / self.priceMult
+        return nPrice / self.price_mult
 
     def to_qty(self, nQty: int | int64) -> float | float64:
         """Converts fixed-point quantity int to floating-point representation."""
 
-        return nQty / self.qtyMult
+        return nQty / self.qty_mult
 
     def to_strftime(self, timestamp_ms: int | int64) -> str:
         """Formats millisecond timestamp as ISO-8601 UTC string."""
@@ -116,7 +118,7 @@ class FPconverter:
 
         return round(
             self.to_price(self.to_nPrice(idy)),
-            ndigits=self.pricePrec,
+            ndigits=self.price_prec,
         )
 
     def get_qty(self, idy: int, idx: int) -> float:
@@ -136,67 +138,56 @@ class FPconverter:
         else:
             return (idx & ~1) // 2 * self.tims + self.baseTimestamp
 
-    # Headers
-    def _get_header(self, idx: int | int64, header: c.BarHeaders) -> int64:
-        """Extracts header value for specified bar index and BarHeaders field."""
 
-        return self.headers[(idx & ~1) // 2, header]
+class ConverterLike:
+    def __init__(self, fp_converter: FPconverter, is_bar: bool) -> None:
+        self._con: FPconverter = fp_converter
+        self._is_bar: bool = is_bar
 
-    def openNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.Open)
+        self._baseNprice: int64 = int64(0)
+        self._nPrice: int64 = self._baseNprice
 
-    def highNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.High)
+        self._baseNqty: int | int64 = 0
+        self._nQty: int | int64 = self._baseNqty
 
-    def lowNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.Low)
+        self._baseIdy: int64 = int64(0)
+        self._idy: int64 = self._baseIdy
 
-    def closeNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.Close)
+        self._baseIdxBid: int | int64 = 0
+        self._idxBid: int | int64 = self._baseIdxBid
 
-    def ohlc(self, idx: int | int64, idy: bool) -> tuple[int64, int64, int64, int64]:
-        return (
-            self.to_idy(self.openNprice(idx)) if idy else self.openNprice(idx),
-            self.to_idy(self.highNprice(idx)) if idy else self.highNprice(idx),
-            self.to_idy(self.lowNprice(idx)) if idy else self.lowNprice(idx),
-            self.to_idy(self.closeNprice(idx)) if idy else self.closeNprice(idx),
-        )
+    @property
+    def nPrice(self) -> int64:
+        if self._nPrice:
+            value = self._nPrice
+            self._nPrice = self._baseNprice
+        else:
+            value = int64(self._con.to_nPrice(self._idy))
 
-    def openTime(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.OpenTime)
+        return value
 
-    def lastTradeTime(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.LastTradeTime)
+    @property
+    def nQty(self) -> int | int64:
+        if self._nQty:
+            value = self._nQty
+        else:
+            idy = self._idy if self._idy else self._con.to_idy(self._nPrice)
+            idx = (
+                slice(self._idxBid, self._idxBid + 2) if self._is_bar else self._idxBid
+            )
+            value = sum(self._con.footprint[idy, idx])
 
-    def countTrade(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.CountTrade)
+        self._reset()
+        return value
 
-    def nVolume(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.Volume)
+    @property
+    def idY(self) -> int64:
+        value = self._idy if self._idy else self._con.to_idy(self._nPrice)
+        self._reset()
+        return value
 
-    def nDelta(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.Delta)
-
-    def nCvd(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.CVD)
-
-    def vwapNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.VWAP)
-
-    def vwap_bb_lower(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.VWAP_BB_LOWER)
-
-    def vwap_bb_upper(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.VWAP_BB_UPPER)
-
-    def atr(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.ATR)
-
-    def pocNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.POC)
-
-    def vahNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.VAH)
-
-    def valNprice(self, idx: int | int64) -> int64:
-        return self._get_header(idx=idx, header=c.BarHeaders.VAL)
+    def _reset(self) -> None:
+        self._nPrice = self._baseNprice
+        self._nQty = self._baseNqty
+        self._idy = self._baseIdy
+        self._idxBid = self._baseIdxBid

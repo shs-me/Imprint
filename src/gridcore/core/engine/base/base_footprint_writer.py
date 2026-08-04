@@ -14,7 +14,7 @@ from ... import constant as c
 from ...settings import BarHeadersMetadata, SpaceCoords
 from ...settings import StatusCodes as scs
 from ...utils.monitoring.agent_manager import AgentManager
-from .utils.fp_con import FPconverter
+from .utils.fp_converter import FPconverter
 
 BHM_VWAP_W: int = int(BarHeadersMetadata.VWAP_W)
 BHM_VWAP_PW: int = int(BarHeadersMetadata.VWAP_PW)
@@ -45,11 +45,11 @@ class FootprintWriter(ABC):
         self._init_array()
 
         self.con: FPconverter = FPconverter(
-            cfgFP=cfgFP,
             footprint=self.footprint,
             headers=self.headers,
             price_prec=manager.cfgCoin.price_prec,
             qty_prec=manager.cfgCoin.qty_prec,
+            cfgFP=cfgFP,
         )
         self.last_idx: memoryview = memoryview(bytearray(8)).cast("q")
         self.counterTicks: memoryview = memoryview(bytearray(8)).cast("Q")
@@ -185,8 +185,8 @@ class FootprintWriter(ABC):
             idx=idx,
             idxVP=self.idxVP,
             idxDP=self.idxDP,
-            priceMult=self.con.priceMult,
-            qtyMult=self.con.qtyMult,
+            price_mult=self.con.price_mult,
+            qty_mult=self.con.qty_mult,
             dirty_fp=self.dirty_footprint,
             dirty_hr=self.dirty_headers,
             space=self.space,
@@ -267,8 +267,8 @@ def _update_footprint_and_headers_and_indicators_and_coords(
     idx: int,
     idxVP: int,
     idxDP: int,
-    priceMult: int,
-    qtyMult: int,
+    price_mult: int,
+    qty_mult: int,
     dirty_fp: NDArray[int64],
     dirty_hr: NDArray[int64],
     space: NDArray[int64],
@@ -277,7 +277,7 @@ def _update_footprint_and_headers_and_indicators_and_coords(
 ) -> None:
     """Numba JIT kernel updating volume profile, bar headers, VWAP, BB, and space coordinates."""
 
-    nQty: int = round(qty * qtyMult)
+    nQty: int = round(qty * qty_mult)
     # Update Dirty Footprint
     dirty_fp[idy, idx] += nQty
     dirty_fp[idy, idxVP] += nQty  # VolumeProfile
@@ -313,9 +313,9 @@ def _update_footprint_and_headers_and_indicators_and_coords(
         max(0.0, (meta_data[0, BHM_VWAP_P2W] / meta_data[0, BHM_VWAP_W]) - (vwap**2))
     )
     upper_bb, lower_bb = vwap + (1.5 * std_dev), vwap - (1.5 * std_dev)
-    dirty_hr[bar, c.BH_VWAP] = round(vwap * priceMult)
-    dirty_hr[bar, c.BH_VWAP_BB_LOWER] = round(lower_bb * priceMult)
-    dirty_hr[bar, c.BH_VWAP_BB_UPPER] = round(upper_bb * priceMult)
+    dirty_hr[bar, c.BH_VWAP] = round(vwap * price_mult)
+    dirty_hr[bar, c.BH_VWAP_BB_LOWER] = round(lower_bb * price_mult)
+    dirty_hr[bar, c.BH_VWAP_BB_UPPER] = round(upper_bb * price_mult)
 
     # Update Space Coords
     buf: int = space_flag[0]

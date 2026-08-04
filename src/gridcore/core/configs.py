@@ -279,6 +279,11 @@ class Signal(BaseRingBuf, SharedMemorySegments):
     data_header_size: int = 1
     cell_amount: int = 10_000
 
+    def __post_init__(self) -> None:
+        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
+        super().__post_init__()
+        self.safe_lag: int = int(self.cell_amount * 0.9)
+
 
 @dataclass
 class GetUserStream(BaseRingBuf, SharedMemorySegments):

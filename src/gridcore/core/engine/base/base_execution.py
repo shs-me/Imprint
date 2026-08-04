@@ -7,7 +7,7 @@ from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
 from .base_account_manager import BaseAccountManager
-from .utils.tm_con import TradeConverter
+from .utils.tm_converter import TradeConverter
 
 
 class BaseExecution(ABC):

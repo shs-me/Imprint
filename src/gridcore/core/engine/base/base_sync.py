@@ -26,11 +26,12 @@ class Sync(ABC):
         self.safe_lag: int = cfgRM.pass_signal_if_analysis_time_big
 
         cfgSN = manager.cfgSignal
-        self.cell_amount: int = cfgSN.cell_amount
-        self.data_size: int = cfgSN.data_size // 8
-        self.data: memoryview = cfgSN.data.cast("q")
-        self.writer_id: memoryview = cfgSN.writer_id.cast("q")
-        self.reader_id: memoryview = cfgSN.reader_id.cast("q")
+        self.sn_cell_amount: int = cfgSN.cell_amount
+        self.sn_safe_lag: int = cfgSN.safe_lag
+        self.sn_data_size: int = cfgSN.data_size // 8
+        self.sn_data: memoryview = cfgSN.data.cast("q")
+        self.sn_wid: memoryview = cfgSN.writer_id.cast("q")
+        self.sn_rid: memoryview = cfgSN.reader_id.cast("q")
 
         self._count_send_signal: int = 0
 
@@ -58,19 +59,25 @@ class Sync(ABC):
             if not self.lag_is_safe():
                 return
 
+        if (
+            (self.sn_wid[0] - self.sn_rid[0] + self.sn_cell_amount)
+            % self.sn_cell_amount
+        ) > self.safe_lag:
+            return
+
         orderParam = 0
         orderParam |= c.OF_LONG if is_long else c.OF_SHORT
         orderParam |= c.OF_BUY if is_buy else c.OF_SELL
         orderParam |= c.OF_MARKET if is_market else c.OF_LIMIT
         orderParam |= c.OF_NEW
 
-        cell: int = self.writer_id[0]
-        start: int = cell * self.data_size
-        set_data: memoryview = self.data[start : start + self.data_size]
+        cell: int = self.sn_wid[0]
+        start: int = cell * self.sn_data_size
+        set_data: memoryview = self.sn_data[start : start + self.sn_data_size]
         set_data[0], set_data[1], set_data[2] = nPrice, time_ms, orderParam
 
         new_cell = cell + 1
-        self.writer_id[0] = new_cell if new_cell < self.cell_amount else 0
+        self.sn_wid[0] = new_cell if new_cell < self.sn_cell_amount else 0
 
         self.sync_with_execution()
         self._count_send_signal += 1

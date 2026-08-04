@@ -11,7 +11,8 @@ from ... import constant as c
 from ...settings import SpaceCoords as sc
 from ...utils.monitoring.agent_manager import AgentManager
 from .base_sync import Sync
-from .utils.fp_con import FPconverter
+from .utils.fp_converter import FPconverter
+from .utils.indicators import Indicators
 
 
 class FootprintReader(ABC):
@@ -48,15 +49,21 @@ class FootprintReader(ABC):
 
         cfgMetrics = manager.cfgMetrics
         self._trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
+
         self._init_array()
+
         self.con: FPconverter = FPconverter(
-            cfgFP=cfgFP,
             footprint=self.fp,
             headers=self.headers,
             price_prec=manager.cfgCoin.price_prec,
             qty_prec=manager.cfgCoin.qty_prec,
+            cfgFP=cfgFP,
         )
-
+        self.ind: Indicators = Indicators(
+            fp_converter=self.con,
+            fp_state=self.fp_state,
+            fp_state_cache=self.fp_state_cache,
+        )
         self._default_space: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
         self.amRow: int = 0
 
@@ -81,8 +88,8 @@ class FootprintReader(ABC):
             (2, sc._ConstantCount), dtype=int64, buffer=cfgFP.space
         )
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
-        self.cachedStatesData: NDArray[int32] = np.zeros(
-            (c.CSD_ConstantCount,), dtype=int32
+        self.fp_state_cache: NDArray[int64] = np.zeros(
+            (c.CSD_ConstantCount,), dtype=int64
         )
 
     def _init_session(self) -> None:
@@ -128,7 +135,9 @@ class FootprintReader(ABC):
         nPrice: int = int(self.con.to_nPrice(idy))
         _idx: int = idx if (idx is not None) else self.last_idx
         _ms: int = (
-            timestamp if (timestamp is not None) else int(self.con.lastTradeTime(_idx))
+            timestamp
+            if (timestamp is not None)
+            else int(self.ind.bar[_idx].lastTradeTime)
         )
         self._sync.send_signal(
             nPrice=nPrice,
@@ -148,11 +157,11 @@ class FootprintReader(ABC):
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
-            if self.con.nVolume(idx) > 0:
+            if self.ind.bar[idx].nVolume > 0:
                 if idx > self.last_idx:
                     self._update_closed_bar_and_fp()
                     self._trade_readed_time[0] = int(
-                        self.con.lastTradeTime(self.last_idx)
+                        self.ind.bar[self.last_idx].lastTradeTime
                     )
                     self.last_idx = idx
 
@@ -197,7 +206,7 @@ class FootprintReader(ABC):
             hr=self.headers,
             fp=self.fp,
             fp_state=self.fp_state,
-            caching=self.cachedStatesData,
+            fp_state_cache=self.fp_state_cache,
             nBasePrice=self.con.nBasePrice,
             center=self.con.center,
         )
@@ -246,43 +255,6 @@ class FootprintReader(ABC):
         """
 
         pass
-
-    def bar_state_mask(self, idxBid: int) -> NDArray[int32]:
-        """Returns bitmask slice of active bar indicator flags.
-
-        Args:
-            idxBid (int): Bar Bid column index.
-
-        Returns:
-            NDArray[int32]: Sliced state bitmask array for the specified bar.
-        """
-
-        bar_flags = (
-            c.SF_OPEN
-            | c.SF_HIGH
-            | c.SF_LOW
-            | c.SF_CLOSE
-            | c.SF_POC_BAR
-            | c.SF_VAH_BAR
-            | c.SF_VAL_BAR
-        )
-        bid_ask_flags = (
-            c.SF_DELTA_DOMINATION
-            | c.SF_IMBALANCE
-            | c.SF_ZERO_PRINT
-            | c.SF_FINISHED_AUCTION
-            | c.SF_UNFINISHED_AUCTION
-        )
-        mask = bar_flags | bid_ask_flags
-        idYmin: int64 = self.con.to_idy(self.con.highNprice(idxBid))
-        idyMax: int64 = self.con.to_idy(self.con.lowNprice(idxBid))
-        return self.fp_state[idYmin : idyMax + 1, idxBid : idxBid + 2] & mask
-
-    def fp_state_mask(self, idYmin: int64, idYmax: int64) -> NDArray[int32]:
-        """Returns bitmask slice of auction completion flags for specified row bounds."""
-
-        state = c.SF_FINISHED_AUCTION | c.SF_UNFINISHED_AUCTION
-        return self.fp_state[idYmin:idYmax, self.con.idxVP] & state
 
 
 class BaseFootprintReader(FootprintReader):
@@ -333,7 +305,7 @@ def _update_closed_bar_and_fp_states(
     hr: NDArray[int64],
     fp: NDArray[int64],
     fp_state: NDArray[int32],
-    caching: NDArray[int32],
+    fp_state_cache: NDArray[int64],
     nBasePrice: int,
     center: int,
 ) -> None:
@@ -360,7 +332,7 @@ def _update_closed_bar_and_fp_states(
 
     # Clear Footprint Static State's
     state_2 = c.SF_POC_FP | c.SF_VAH_FP | c.SF_VAL_FP
-    fp_state[caching[c.CSD_POC_FP : c.CSD_VAL_FP + 1], idxVP] &= ~(state_2)
+    fp_state[fp_state_cache[c.CSD_POC_FP : c.CSD_VAL_FP + 1], idxVP] &= ~(state_2)
     state_3 = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
     fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
 
@@ -370,27 +342,27 @@ def _update_closed_bar_and_fp_states(
     vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_BB_UPPER]) + center
 
     if 0 <= vwap < fp_state.shape[0]:
-        fp_state[caching[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP)
+        fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP)
         fp_state[vwap, idxVP] |= c.SF_VWAP
-        caching[c.CSD_VWAP] = vwap
+        fp_state_cache[c.CSD_VWAP] = vwap
     if 0 <= vwap_bb_upper < fp_state.shape[0]:
-        fp_state[caching[c.CSD_UPPER_BB], idxVP] &= ~(c.SF_UPPER_BB)
+        fp_state[fp_state_cache[c.CSD_UPPER_BB], idxVP] &= ~(c.SF_UPPER_BB)
         fp_state[vwap_bb_upper, idxVP] |= c.SF_UPPER_BB
-        caching[c.CSD_UPPER_BB] = vwap_bb_upper
+        fp_state_cache[c.CSD_UPPER_BB] = vwap_bb_upper
     if 0 <= vwap_bb_lower < fp_state.shape[0]:
-        fp_state[caching[c.CSD_LOWER_BB], idxVP] &= ~(c.SF_LOWER_BB)
+        fp_state[fp_state_cache[c.CSD_LOWER_BB], idxVP] &= ~(c.SF_LOWER_BB)
         fp_state[vwap_bb_lower, idxVP] |= c.SF_LOWER_BB
-        caching[c.CSD_LOWER_BB] = vwap_bb_lower
+        fp_state_cache[c.CSD_LOWER_BB] = vwap_bb_lower
 
     # Update POC + VA
     poc: intp = np.argmax(fp[:, idxVP])
     vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
     fp_state[poc, idxVP] |= c.SF_POC_FP
-    caching[c.CSD_POC_FP] = poc
+    fp_state_cache[c.CSD_POC_FP] = poc
     fp_state[vah, idxVP] |= c.SF_VAH_FP
-    caching[c.CSD_VAH_FP] = vah
+    fp_state_cache[c.CSD_VAH_FP] = vah
     fp_state[val, idxVP] |= c.SF_VAL_FP
-    caching[c.CSD_VAL_FP] = val
+    fp_state_cache[c.CSD_VAL_FP] = val
 
     # Update Auction
     high_finished, low_finished = fp[high_idy, lidx + 1] == 0, fp[low_idy, lidx] == 0
