@@ -11,8 +11,8 @@ from ... import constant as c
 from ...settings import SpaceCoords as sc
 from ...utils.monitoring.agent_manager import AgentManager
 from .base_sync import Sync
+from .utils.bar import Bar
 from .utils.fp_converter import FPconverter
-from .utils.indicators import Indicators
 
 
 class FootprintReader(ABC):
@@ -55,15 +55,10 @@ class FootprintReader(ABC):
         self.con: FPconverter = FPconverter(
             footprint=self.fp,
             headers=self.headers,
-            price_prec=manager.cfgCoin.price_prec,
-            qty_prec=manager.cfgCoin.qty_prec,
+            cfgCoin=manager.cfgCoin,
             cfgFP=cfgFP,
         )
-        self.ind: Indicators = Indicators(
-            fp_converter=self.con,
-            fp_state=self.fp_state,
-            fp_state_cache=self.fp_state_cache,
-        )
+        self.bar: Bar = Bar(fp_converter=self.con, fp_state=self.fp_state)
         self._default_space: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
         self.amRow: int = 0
 
@@ -137,7 +132,7 @@ class FootprintReader(ABC):
         _ms: int = (
             timestamp
             if (timestamp is not None)
-            else int(self.ind.bar[_idx].lastTradeTime)
+            else int(self.bar[_idx].ind.time.last_trade)
         )
         self._sync.send_signal(
             nPrice=nPrice,
@@ -157,11 +152,11 @@ class FootprintReader(ABC):
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
-            if self.ind.bar[idx].nVolume > 0:
+            if self.bar[idx].ind.volume.n > 0:
                 if idx > self.last_idx:
                     self._update_closed_bar_and_fp()
                     self._trade_readed_time[0] = int(
-                        self.ind.bar[self.last_idx].lastTradeTime
+                        self.bar[self.last_idx].ind.time.last_trade
                     )
                     self.last_idx = idx
 
@@ -209,6 +204,7 @@ class FootprintReader(ABC):
             fp_state_cache=self.fp_state_cache,
             nBasePrice=self.con.nBasePrice,
             center=self.con.center,
+            scale=self.con.scale,
         )
         if self._fpiu_closed_bar:
             if in_update_closed_bar:
@@ -234,6 +230,7 @@ class FootprintReader(ABC):
             fp_state=self.fp_state,
             nBasePrice=self.con.nBasePrice,
             center=self.con.center,
+            scale=self.con.scale,
         )
         if self._fpiu_bar:
             if in_update_bar:
@@ -308,6 +305,7 @@ def _update_closed_bar_and_fp_states(
     fp_state_cache: NDArray[int64],
     nBasePrice: int,
     center: int,
+    scale: int,
 ) -> None:
     """Numba JIT kernel calculating ATR, VWAP, Bollinger Bands, POC, and Value Area on bar closure."""
 
@@ -317,8 +315,8 @@ def _update_closed_bar_and_fp_states(
     highNprice: int64 = hr[bar, c.BH_High]
     lowNprice: int64 = hr[bar, c.BH_Low]
 
-    high_idy: int64 = (nBasePrice - highNprice) + center
-    low_idy: int64 = (nBasePrice - lowNprice) + center
+    high_idy: int64 = (nBasePrice - highNprice) // scale + center
+    low_idy: int64 = (nBasePrice - lowNprice) // scale + center
 
     # ATR
     if bar > 0:
@@ -329,6 +327,27 @@ def _update_closed_bar_and_fp_states(
         hr[bar, c.BH_ATR] = ((pre_atr * (c.ATR_PERIOD - 1)) + tr) // c.ATR_PERIOD
     else:
         hr[bar, c.BH_ATR] = highNprice - lowNprice
+
+    # PARK
+    log_ratio = np.log(highNprice / lowNprice)
+    cur_var: int = round((log_ratio * log_ratio) * c.VAR_SCALE)
+    if bar > 0:
+        pre_var: int64 = hr[oldBar, c.BH_PARK]
+        hr[bar, c.BH_PARK] = (
+            (pre_var * (c.PARK_PERIOD - 1)) + cur_var
+        ) // c.PARK_PERIOD
+    else:
+        hr[bar, c.BH_PARK] = cur_var
+
+    # AVG VOL
+    cur_vol: int64 = hr[bar, c.BH_Volume]
+    if bar > 0:
+        pre_vol = hr[oldBar, c.BH_AVG_VOL]
+        hr[oldBar, c.BH_AVG_VOL] = (
+            (pre_vol * (c.AVG_VOL_PERIOD - 1)) + cur_vol
+        ) // c.AVG_VOL_PERIOD
+    else:
+        hr[oldBar, c.BH_AVG_VOL] = cur_vol
 
     # Clear Footprint Static State's
     state_2 = c.SF_POC_FP | c.SF_VAH_FP | c.SF_VAL_FP
@@ -383,6 +402,7 @@ def _update_bar_states(
     fp_state: NDArray[int32],
     nBasePrice: int,
     center: int,
+    scale: int,
 ) -> None:
     """Numba JIT kernel calculating active bar OHLC, Zero-Print, Delta Domination, and Imbalances."""
 
@@ -393,10 +413,10 @@ def _update_bar_states(
     lowNprice: int64 = hr[bar, c.BH_Low]
     closeNprice: int64 = hr[bar, c.BH_Close]
 
-    open_idy: int64 = (nBasePrice - openNprice) + center
-    high_idy: int64 = (nBasePrice - highNprice) + center
-    low_idy: int64 = (nBasePrice - lowNprice) + center
-    close_idy: int64 = (nBasePrice - closeNprice) + center
+    open_idy: int64 = (nBasePrice - openNprice) // scale + center
+    high_idy: int64 = (nBasePrice - highNprice) // scale + center
+    low_idy: int64 = (nBasePrice - lowNprice) // scale + center
+    close_idy: int64 = (nBasePrice - closeNprice) // scale + center
 
     idyBid: slice[int64, int64] = slice(idYmin + 1, idYmax + 1)
     idyAsk: slice[int64, int64] = slice(idYmin, idYmax)
@@ -438,9 +458,9 @@ def _update_bar_states(
     )
     poc: intp = np.argmax(vp_bar)
     vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-    hr[bar, c.BH_POC] = (center - (high_idy + poc)) + nBasePrice
-    hr[bar, c.BH_VAH] = (center - (high_idy + vah)) + nBasePrice
-    hr[bar, c.BH_VAL] = (center - (high_idy + val)) + nBasePrice
+    hr[bar, c.BH_POC] = (center - (high_idy + poc)) * scale + nBasePrice
+    hr[bar, c.BH_VAH] = (center - (high_idy + vah)) * scale + nBasePrice
+    hr[bar, c.BH_VAL] = (center - (high_idy + val)) * scale + nBasePrice
     fp_state[(high_idy + poc), idxBid] |= c.SF_POC_BAR
     fp_state[(high_idy + vah), idxBid] |= c.SF_VAH_BAR
     fp_state[(high_idy + val), idxBid] |= c.SF_VAL_BAR

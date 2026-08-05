@@ -47,8 +47,7 @@ class FootprintWriter(ABC):
         self.con: FPconverter = FPconverter(
             footprint=self.footprint,
             headers=self.headers,
-            price_prec=manager.cfgCoin.price_prec,
-            qty_prec=manager.cfgCoin.qty_prec,
+            cfgCoin=manager.cfgCoin,
             cfgFP=cfgFP,
         )
         self.last_idx: memoryview = memoryview(bytearray(8)).cast("q")

@@ -168,7 +168,7 @@ class BarHeaders(IntEnum):
     OpenTime, LastTradeTime = auto(), auto()
     CountTrade = auto()
     # Footprint Reader
-    ATR = auto()
+    ATR, PARK, AvgVolume = auto(), auto(), auto()
     POC, VAH, VAL = auto(), auto(), auto()
     _ConstantCount = auto()
 

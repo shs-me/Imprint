@@ -60,6 +60,8 @@ BH_Time: int = int(BarHeaders.OpenTime)
 BH_LastTradeTime: int = int(BarHeaders.LastTradeTime)
 BH_CountTrade: int = int(BarHeaders.CountTrade)
 BH_ATR: int = int(BarHeaders.ATR)
+BH_PARK: int = int(BarHeaders.PARK)
+BH_AVG_VOL: int = int(BarHeaders.AvgVolume)
 BH_POC: int = int(BarHeaders.POC)
 BH_VAH: int = int(BarHeaders.VAH)
 BH_VAL: int = int(BarHeaders.VAL)
@@ -132,5 +134,8 @@ OF_FILLED: int = int(OrderFlag.FILLED)
 OF_CANCELED: int = int(OrderFlag.CANCELED)
 OF_OCO: int = int(OrderFlag.OCO)
 
-# Tool's setup
+# Tools
 ATR_PERIOD: int = 14
+PARK_PERIOD: int = 12
+AVG_VOL_PERIOD: int = 12
+VAR_SCALE: int = 1_000_000_000

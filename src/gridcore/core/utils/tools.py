@@ -112,7 +112,9 @@ def download_aggTrade_hist_daily_data(
     base_path = f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}/{symbol.upper()}"
     os.makedirs(base_path, exist_ok=True)
 
-    endDate = endDate if date.today() > endDate else date.today()
+    if endDate >= (today := date.today()):
+        endDate = today - timedelta(days=1)
+
     curDate = startDate
     while curDate <= endDate:
         file_name = f"{symbol.upper()}-aggTrades-{curDate.isoformat()}"

@@ -192,6 +192,7 @@ class Footprint(SharedMemorySegments):
 
     timeframe: Timeframe = Timeframe._H
     chart_range: int = 1
+    step_tick: int = 1
     fp_rows: int = 10001
     save_fp_headers: bool = False
     save_algorithm_metadata: bool = False

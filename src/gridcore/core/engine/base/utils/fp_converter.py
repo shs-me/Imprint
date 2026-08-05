@@ -16,15 +16,15 @@ class FPconverter:
         self,
         footprint: NDArray[int64],
         headers: NDArray[int64],
-        price_prec: int,
-        qty_prec: int,
+        cfgCoin: cfg.Coin,
         cfgFP: cfg.Footprint,
     ) -> None:
         self.footprint: NDArray[int64] = footprint
         self.headers: NDArray[int64] = headers
-        self.price_prec: int = price_prec
-        self.qty_prec: int = qty_prec
-
+        self.tick_size: str = cfgCoin.tick_size
+        self.price_prec: int = cfgCoin.price_prec
+        self.qty_prec: int = cfgCoin.qty_prec
+        self.step_tick: int = cfgFP.step_tick
         self.fp_rows: int = cfgFP.fp_rows
         self.fp_cols: int = cfgFP.fp_cols
         self.idxVP: int = cfgFP.colVP
@@ -35,13 +35,16 @@ class FPconverter:
 
         self.price_mult: int = 10**self.price_prec
         self.qty_mult: int = 10**self.qty_prec
+        self.scale: int = round(
+            (float(self.tick_size) * self.step_tick) * self.price_mult
+        )
 
     def init_session(self, price: float | int, timestamp: int):
         """Calibrates converter base price, base timestamp, and grid center origin offset."""
 
         self.nBasePrice: int = (
-            self.to_nPrice(price) if isinstance(price, float) else price
-        )
+            (self.to_nPrice(price) if isinstance(price, float) else price) // self.scale
+        ) * self.scale
         self.baseTimestamp: int = timestamp - (timestamp % self.tims)
         self.center: int = self.fp_rows // 2
 
@@ -56,7 +59,7 @@ class FPconverter:
             int | int64 | None: Grid row index or None if out of bounds.
         """
 
-        idy: int | int64 = (self.nBasePrice - nPrice) + self.center
+        idy: int | int64 = (self.nBasePrice - nPrice) // self.scale + self.center
         if 0 <= idy < self.fp_rows:
             return idy
         else:
@@ -89,7 +92,7 @@ class FPconverter:
         if isinstance(value, (float, float64)):
             return round(value * self.price_mult)
         else:
-            return (self.center - value) + self.nBasePrice
+            return (self.center - value) * self.scale + self.nBasePrice
 
     def to_nQty(self, qty: float) -> int:
         """Converts float quantity to fixed-point int scaling representation."""
@@ -137,57 +140,3 @@ class FPconverter:
             return self.to_strftime((idx & ~1) // 2 * self.tims + self.baseTimestamp)
         else:
             return (idx & ~1) // 2 * self.tims + self.baseTimestamp
-
-
-class ConverterLike:
-    def __init__(self, fp_converter: FPconverter, is_bar: bool) -> None:
-        self._con: FPconverter = fp_converter
-        self._is_bar: bool = is_bar
-
-        self._baseNprice: int64 = int64(0)
-        self._nPrice: int64 = self._baseNprice
-
-        self._baseNqty: int | int64 = 0
-        self._nQty: int | int64 = self._baseNqty
-
-        self._baseIdy: int64 = int64(0)
-        self._idy: int64 = self._baseIdy
-
-        self._baseIdxBid: int | int64 = 0
-        self._idxBid: int | int64 = self._baseIdxBid
-
-    @property
-    def nPrice(self) -> int64:
-        if self._nPrice:
-            value = self._nPrice
-            self._nPrice = self._baseNprice
-        else:
-            value = int64(self._con.to_nPrice(self._idy))
-
-        return value
-
-    @property
-    def nQty(self) -> int | int64:
-        if self._nQty:
-            value = self._nQty
-        else:
-            idy = self._idy if self._idy else self._con.to_idy(self._nPrice)
-            idx = (
-                slice(self._idxBid, self._idxBid + 2) if self._is_bar else self._idxBid
-            )
-            value = sum(self._con.footprint[idy, idx])
-
-        self._reset()
-        return value
-
-    @property
-    def idY(self) -> int64:
-        value = self._idy if self._idy else self._con.to_idy(self._nPrice)
-        self._reset()
-        return value
-
-    def _reset(self) -> None:
-        self._nPrice = self._baseNprice
-        self._nQty = self._baseNqty
-        self._idy = self._baseIdy
-        self._idxBid = self._baseIdxBid
