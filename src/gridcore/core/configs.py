@@ -248,7 +248,6 @@ class Metrics(SharedMemorySegments):
     """Shared memory layout for inter-process synchronization metrics and status flags."""
 
     count_procs: int = 10
-    text_size: int = 1024
 
     def _set_attr_use_shm(self) -> None:
         """Allocates shared memory offsets for process status codes, timestamps, and text buffers."""
@@ -288,7 +287,7 @@ class TextStream(BaseRingBuf, SharedMemorySegments):
 
     data_size: int = 1024
     data_header_size: int = 8
-    cell_amount: int = 64
+    cell_amount: int = 100
     count_reader: int = 10
     count_writer: int = 10
 
