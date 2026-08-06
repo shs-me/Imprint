@@ -1,7 +1,6 @@
 """Live JSON tick payload parser worker."""
 
 import importlib
-import inspect
 from multiprocessing.synchronize import Event
 
 from msgspec.json import Decoder
@@ -9,9 +8,9 @@ from msgspec.json import Decoder
 from ....settings import ParsingProc
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
-from ...base.base_footprint_writer import BaseFootprintWriter, FootprintWriter
+from ...base.base_footprint_writer import FootprintWriter
 from ...base.base_parsing import Parsing
-from .data_structs import AggTrades, BinanceAggTrades
+from .base_adapters import AggTrades
 
 
 class ParsingAgent(Parsing):
@@ -21,7 +20,6 @@ class ParsingAgent(Parsing):
         self,
         manager: AgentManager,
         writer: FootprintWriter,
-        aggTrade: type[AggTrades],
         parsing_event: Event,
         logic_event: Event,
     ) -> None:
@@ -29,7 +27,13 @@ class ParsingAgent(Parsing):
 
         self.parsing_event: Event = parsing_event
         self.logic_event: Event = logic_event
-        self.decoder: Decoder[AggTrades] = Decoder(type=aggTrade, strict=False)
+
+        m_name = manager.cfgSetup.agg_trades_struct_module
+        c_name = manager.cfgSetup.agg_trades_struct_class_name
+        self.agg_trade: type[AggTrades] = getattr(
+            importlib.import_module(m_name), c_name
+        )
+        self.decoder: Decoder[AggTrades] = Decoder(type=self.agg_trade, strict=False)
 
     def alarm_clock(self) -> None:
         """Blocks process on parsing_event until new WebSocket frame arrives."""
@@ -64,18 +68,6 @@ class ParsingAgent(Parsing):
         print(f"Count Prepped Ticks: {self.writer.counterTicks[0]}", flush=True)
 
 
-def resolve_agg_trades_data_struct(manager: AgentManager) -> type[AggTrades]:
-    module = importlib.import_module(manager.cfgSetup.agg_trades_struct_module)
-    aggTrade: type[AggTrades] = BinanceAggTrades
-    for name, obj in inspect.getmembers(module, inspect.isclass):
-        if (name == manager.cfgSetup.agg_trades_struct_class_name) and issubclass(
-            obj, AggTrades
-        ):
-            aggTrade = obj
-
-    return aggTrade
-
-
 @supervisor()
 def run_parsing(
     parsing_event: Event,
@@ -85,9 +77,6 @@ def run_parsing(
 ) -> None:
     """Supervisor-wrapped entry point for live Parsing process."""
 
-    writer = BaseFootprintWriter(kwargs["manager"])
-    aggTrade = resolve_agg_trades_data_struct(kwargs["manager"])
-    agent = ParsingAgent(
-        kwargs["manager"], writer, aggTrade, parsing_event, logic_event
-    )
+    writer = FootprintWriter(kwargs["manager"])
+    agent = ParsingAgent(kwargs["manager"], writer, parsing_event, logic_event)
     agent.run_parsing_engine()

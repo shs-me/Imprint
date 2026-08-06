@@ -2,7 +2,6 @@
 
 import os
 import time
-from abc import ABC
 
 import numpy as np
 from numba import njit
@@ -21,7 +20,7 @@ BHM_VWAP_P2W: int = int(BarHeadersMetadata.VWAP_P2W)
 BHM_ConstantCount: int = int(BarHeadersMetadata._ConstantCount)
 
 
-class FootprintWriter(ABC):
+class FootprintWriter:
     """Base class managing tick ingestion, VWAP variance accumulation, and memory double-buffering."""
 
     def __init__(self, manager: AgentManager) -> None:
@@ -245,13 +244,6 @@ class FootprintWriter(ABC):
 
         if (self.last_idx[0] & ~1) == (self.manager.cfgFootprint.fp_cols - 1 & ~1):
             self.save_fp_headers_array()
-
-
-class BaseFootprintWriter(FootprintWriter):
-    """Default concrete implementation of FootprintWriter."""
-
-    def __init__(self, manager: AgentManager) -> None:
-        super().__init__(manager)
 
 
 @njit(cache=True)

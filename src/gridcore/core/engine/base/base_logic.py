@@ -1,14 +1,11 @@
 """Analysis process engine loop and dynamic algorithm loader."""
 
-import importlib
-import inspect
 from abc import ABC, abstractmethod
 
 from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 from ...utils.monitoring.agent_manager import AgentManager
-from .base_footprint_reader import BaseFootprintReader, FootprintReader
-from .base_sync import Sync
+from .base_footprint_reader import FootprintReader
 
 
 class Logic(ABC):
@@ -18,11 +15,11 @@ class Logic(ABC):
         """Binds metrics buffers, process task references, and active FootprintReader instance."""
 
         self.manager: AgentManager = manager
+        self.reader: FootprintReader = reader
+
         self.set_proc_sc = manager.set_proc_sc
         self.check_base_task = manager.check_base_task
         self.task_status, self.proc_status = manager.task_status, manager.proc_status
-
-        self.reader: FootprintReader = reader
 
         cfgMetrics = manager.cfgMetrics
         self.parsing_complete: memoryview = cfgMetrics.parsing_complete
@@ -100,21 +97,3 @@ class Logic(ABC):
         """Abstract teardown hook invoked upon strategy engine termination."""
 
         pass
-
-
-def resolve_reader(manager: AgentManager, sync: Sync) -> FootprintReader:
-    """Dynamically loads and instantiates target user strategy class from specified module path.
-
-    Returns:
-        FootprintReader: Configured user strategy reader instance.
-    """
-
-    module = importlib.import_module(manager.cfgSetup.algorithm_module)
-    reader: type[FootprintReader] = BaseFootprintReader
-    for name, obj in inspect.getmembers(module, inspect.isclass):
-        if (name == manager.cfgSetup.algorithm_class_name) and issubclass(
-            obj, FootprintReader
-        ):
-            reader = obj
-
-    return reader(manager, sync)

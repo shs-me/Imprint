@@ -11,7 +11,11 @@ from ...core.configs import (
 )
 from ...core.engine.base.base_footprint_reader import FootprintReader
 from ...core.engine.general.execution import Execution
-from ...core.engine.mode.real.data_structs import AggTrades
+from ...core.engine.mode.real.base_adapters import (
+    AggTrades,
+    OrderEncoder,
+    UserStreamDecoder,
+)
 
 __all__ = [
     "Visualization",
@@ -43,7 +47,9 @@ class Backtesting:
 @dataclass
 class Real:
     connector: Connector
-    agg_trade_data_struct: type[AggTrades]
+    agg_trade_struct: type[AggTrades]
+    user_stream_decoder: type[UserStreamDecoder]
+    order_encoder: type[OrderEncoder]
 
 
 @dataclass
@@ -84,11 +90,20 @@ class SetupCore:
 
         else:
             self.setup.agg_trades_struct_module = (
-                self.run_mode.agg_trade_data_struct.__module__
+                self.run_mode.agg_trade_struct.__module__
             )
             self.setup.agg_trades_struct_class_name = (
-                self.run_mode.agg_trade_data_struct.__name__
+                self.run_mode.agg_trade_struct.__name__
             )
+            self.setup.user_stream_decoder_module = (
+                self.run_mode.user_stream_decoder.__module__
+            )
+            self.setup.user_stream_decoder_class_name = (
+                self.run_mode.user_stream_decoder.__name__
+            )
+            self.setup.order_encoder_module = self.run_mode.order_encoder.__module__
+            self.setup.order_encoder_class_name = self.run_mode.order_encoder.__name__
+
             self.setup.backtesting = False
 
         if self.with_execution is not None:

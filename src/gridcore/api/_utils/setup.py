@@ -22,7 +22,7 @@ def run(setup: SetupCore) -> None:
         format="{time:HH:mm:ss.SSS} | {level} | {message}",
     )
 
-    if setup.setup.backtesting:
+    if isinstance(setup.run_mode, Backtesting):
         try:
             startDate, endDate = to_date(
                 [setup.setup.backtest_start_date, setup.setup.backtest_end_date]
@@ -31,9 +31,8 @@ def run(setup: SetupCore) -> None:
             return logger.error(f"Run Core Failed | {e}")
 
         download_aggTrade_hist_daily_data(setup.symbol, startDate, endDate)
-
     else:
-        rest = RestAgent(setup.symbol)
+        rest = RestAgent(setup.symbol, setup.run_mode.connector)
         setup.coin.tick_size = rest.get_tick_size()
         setup.coin.lot_size = rest.get_lot_size()
 

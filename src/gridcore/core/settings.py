@@ -63,6 +63,7 @@ class StatusCodes(IntEnum):
     COMPLETE = "Complete and exit"
     ERROR = "ERROR more info in 'exc_dump'"
     GC_COLLECT = "Collect garbage"
+    HAVE_TEXT = ""
     # - - -
     # PARSING
     UNVALID_DATA = "Unvalid data (0 > price or qty or timestamp)"

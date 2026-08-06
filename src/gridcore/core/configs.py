@@ -43,10 +43,17 @@ class Setup(Configuration):
     execution_class_name: str = ""
     agg_trades_struct_module: str = ""
     agg_trades_struct_class_name: str = ""
+    user_stream_decoder_module: str = ""
+    user_stream_decoder_class_name: str = ""
+    order_encoder_module: str = ""
+    order_encoder_class_name: str = ""
 
 
 @dataclass
 class Connector(Configuration):
+    base_uri_for_rest: str = ""
+    base_uri_for_ws: str = ""
+    base_uri_for_wss: str = ""
     market_data_uri_for_wss: str = ""
     get_user_data_uri_for_wss: str = ""
     set_user_data_uri_for_wss: str = ""

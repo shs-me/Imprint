@@ -16,7 +16,9 @@ class ExecutionAgent(BaseExecution, ABC):
 
         self.execution_event: Event = execution_event
 
-        self.rest: RestAgent = RestAgent(symbol=self.symbol)
+        self.rest: RestAgent = RestAgent(
+            symbol=self.symbol, connector=manager.cfgConnector
+        )
 
     @abstractmethod
     def _alarm_clock(
@@ -42,21 +44,26 @@ class ExecutionAgent(BaseExecution, ABC):
     @abstractmethod
     def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
 
-        timestamp: int = 0
-        order_param: int = 0
-        order_id: int = 0
-        nPrice: int = 0
-        nQty: int = 0
-        nCommission: int = 0
-        nMAE: int = 0
-        nMFE: int = 0
+        data = user_data_raw_buf.cast("q")
+        event_type = data[1]
 
-        self.action_for_getted_executed_order(
-            timestamp, order_param, order_id, nPrice, nQty, nCommission
-        )
-        self.con.update_orders_history(
-            timestamp, order_param, order_id, nPrice, nQty, nCommission, nMAE, nMFE
-        )
+        if event_type == 1:
+            timestamp: int = data[0]
+            order_param: int = data[2]
+            order_id: int = data[3]
+            nPrice: int = data[4]
+            nQty: int = data[5]
+            nCommission: int = data[6]
+
+            self.action_for_getted_executed_order(
+                timestamp, order_param, order_id, nPrice, nQty, nCommission
+            )
+            self.con.update_orders_history(
+                timestamp, order_param, order_id, nPrice, nQty, nCommission, 0, 0
+            )
+
+        elif event_type == 2:
+            new_balance = data[7]
 
     @abstractmethod
     def action_for_getted_executed_order(

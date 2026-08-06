@@ -1,5 +1,4 @@
 import importlib
-import inspect
 from abc import ABC, abstractmethod
 from multiprocessing.synchronize import Event
 
@@ -67,49 +66,11 @@ class Execution(SimExecAgent, RealExecAgent, ABC):
         self._execution._post_final_action(self)
 
 
-class BaseExecution(Execution):
-    def __init__(self, manager: AgentManager, **kwargs):
-        super().__init__(manager, **kwargs)
-
-    def action_for_getted_signal(
-        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
-    ) -> None:
-        pass
-
-    def action_for_getted_executed_order(
-        self,
-        timestamp: int,
-        order_param: int,
-        order_id: int,
-        nPrice: int,
-        nQty: int,
-        nCommission: int,
-    ) -> None:
-        pass
-
-
-def resolve_execution(manager: AgentManager, **kwargs) -> Execution:
-    """Dynamically loads and instantiates target user execution class from specified module path.
-
-    Returns:
-        Execution: Configured user execution instance.
-    """
-
-    module = importlib.import_module(manager.cfgSetup.execution_module)
-    execution: type[Execution] = BaseExecution
-    for name, obj in inspect.getmembers(module, inspect.isclass):
-        if (
-            (name == manager.cfgSetup.execution_class_name)
-            and issubclass(obj, Execution)
-            and obj is not Execution
-        ):
-            execution = obj
-
-    return execution(manager, **kwargs)
-
-
 def run(manager: AgentManager, **kwargs) -> None:
-    agent = resolve_execution(manager, **kwargs)
+    m_name = manager.cfgSetup.execution_module
+    c_name = manager.cfgSetup.execution_class_name
+    execution: type[Execution] = getattr(importlib.import_module(m_name), c_name)
+    agent = execution(manager, **kwargs)
     agent._run_execution_engine()
 
 

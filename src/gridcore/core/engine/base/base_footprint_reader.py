@@ -258,21 +258,6 @@ class FootprintReader(ABC):
         pass
 
 
-class BaseFootprintReader(FootprintReader):
-    """Default no-op implementation of FootprintReader."""
-
-    def __init__(self, manager: AgentManager, sync: Sync) -> None:
-        super().__init__(manager, sync)
-
-    def find_patterns(
-        self,
-        in_update_bar: bool = False,
-        in_update_closed_bar: bool = False,
-        in_update_clusters: bool = False,
-    ) -> None:
-        pass
-
-
 @njit(cache=True)
 def _update_clusters_states(
     idYmin: int64,

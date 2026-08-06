@@ -1,6 +1,7 @@
 """Live Binance Futures WebSocket connection worker."""
 
 import asyncio
+import importlib
 from multiprocessing.synchronize import Semaphore
 
 from websockets.asyncio.client import connect
@@ -8,6 +9,7 @@ from websockets.asyncio.client import connect
 from .....utils.handlers import supervisor
 from .....utils.monitoring.agent_manager import AgentManager
 from ....base.base_wss import Wss
+from ..base_adapters import OrderEncoder
 
 
 class SetUserDataWSSAgent(Wss):
@@ -17,7 +19,12 @@ class SetUserDataWSSAgent(Wss):
         super().__init__(manager=manager)
 
         self.wss_sem: Semaphore = wss_sem
-
+        m_name: str = manager.cfgSetup.order_encoder_module
+        c_name: str = manager.cfgSetup.order_encoder_class_name
+        encoder_type: type[OrderEncoder] = getattr(
+            importlib.import_module(m_name), c_name
+        )
+        self.order_encoder: OrderEncoder = encoder_type()
         self.send_order_uri: str = manager.cfgConnector.set_user_data_uri_for_wss
 
     async def run_wss__engine(self) -> None:

@@ -1,12 +1,13 @@
 """Simulated logic process and signal synchronization worker."""
 
+import importlib
 import time
 
 from ....settings import LogicProc
 from ....utils.handlers import supervisor
 from ....utils.monitoring.agent_manager import AgentManager
 from ...base.base_footprint_reader import FootprintReader
-from ...base.base_logic import Logic, resolve_reader
+from ...base.base_logic import Logic
 from ...base.base_sync import Sync
 
 
@@ -45,7 +46,15 @@ class LogicAgent(Logic):
 def run_logic_sim(proc: LogicProc = LogicProc(), **kwargs) -> None:
     """Supervisor-wrapped entry point for simulated Logic process."""
 
-    sync = SyncTool(kwargs["manager"])
-    reader = resolve_reader(kwargs["manager"], sync)
-    agent = LogicAgent(kwargs["manager"], reader)
+    manager: AgentManager = kwargs["manager"]
+    m_name: str = manager.cfgSetup.algorithm_module
+    c_name: str = manager.cfgSetup.algorithm_class_name
+    reader_type: type[FootprintReader] = getattr(
+        importlib.import_module(m_name), c_name
+    )
+
+    sync = SyncTool(manager)
+    reader: FootprintReader = reader_type(manager, sync)
+
+    agent = LogicAgent(manager, reader)
     agent.run_logic_engine()

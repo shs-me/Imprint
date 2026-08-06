@@ -1,6 +1,7 @@
 """Live Binance Futures WebSocket connection worker."""
 
 import asyncio
+import importlib
 from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
@@ -8,6 +9,8 @@ from websockets.asyncio.client import connect
 from .....utils.handlers import supervisor
 from .....utils.monitoring.agent_manager import AgentManager
 from ....base.base_wss import Wss
+from ..base_adapters import UserStreamDecoder
+from ..rest_agent import RestAgent
 
 
 class GetUserDataWSSAgent(Wss):
@@ -18,6 +21,15 @@ class GetUserDataWSSAgent(Wss):
 
         self.execution_event: Event = execution_event
 
+        m_name: str = manager.cfgSetup.user_stream_decoder_module
+        c_name: str = manager.cfgSetup.user_stream_decoder_class_name
+        decoder_type: type[UserStreamDecoder] = getattr(
+            importlib.import_module(m_name), c_name
+        )
+        self.decoder = decoder_type()
+        self.rest = RestAgent(
+            symbol=self.manager.cfgCoin.symbol, connector=self.manager.cfgConnector
+        )
         self.user_data_uri: str = manager.cfgConnector.get_user_data_uri_for_wss
 
     async def run_wss__engine(self) -> None:
@@ -55,9 +67,9 @@ class GetUserDataWSSAgent(Wss):
                         if execution_event.is_set() is False:
                             execution_event.set()
 
-    async def extend_listen_key(self) -> None:
+    async def _listen_key_keepalive_loop(self):
         while True:
-            pass
+            await asyncio.sleep(30 * 60)
 
 
 @supervisor()

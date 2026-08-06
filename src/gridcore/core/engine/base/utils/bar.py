@@ -17,7 +17,7 @@ class Bar:
 
         self._vplike: VolumeProfileLike = VolumeProfileLike(bar=self)
         self._dplike: DeltaProfileLike = DeltaProfileLike(bar=self)
-        self._indlike: BarIndicatorLike = BarIndicatorLike(bar=self)
+        self._indlike: IndicatorLike = IndicatorLike(bar=self)
 
         self._plike: PriceLike = PriceLike(bar=self)
         self._qlike: QtyLike = QtyLike(bar=self)
@@ -31,7 +31,9 @@ class Bar:
         self._bar_id: int | int64 = 0
 
     def __getitem__(self, idx: int | int64):
-        self._idx, self._idXbid, self._bar_id = idx, self._idx & ~1, self._idXbid // 2
+        self._idx = idx
+        self._idXbid = self._idx & ~1
+        self._bar_id = self._idXbid // 2
         return self
 
     def _get_header(self, header: c.BarHeaders) -> int64:
@@ -68,7 +70,7 @@ class Bar:
         return self._dplike
 
     @property
-    def ind(self) -> BarIndicatorLike:
+    def ind(self) -> IndicatorLike:
         return self._indlike
 
 
@@ -132,7 +134,7 @@ class DeltaProfileLike:
         return self._bar._plike
 
 
-class BarIndicatorLike:
+class IndicatorLike:
     def __init__(self, bar: Bar) -> None:
         self._bar = bar
 
