@@ -85,5 +85,4 @@ class Wss(ABC):
 
     def final_actions(self) -> None:
         """Sets completion process status code upon connection close."""
-
-        self.set_proc_sc(scs.COMPLETE)
+        self.manager.set_text(" ")

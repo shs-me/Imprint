@@ -85,7 +85,6 @@ class MainManager(Manager):
         return True
 
     def check_process_status_code(self) -> None:
-
         if self._main_status[self.market_data_wss]:
             self.check_data_stream_proc()
             self._main_status[self.market_data_wss] = 0
@@ -184,6 +183,9 @@ class MainManager(Manager):
             self.clear_proc_sc(code=sc, proc_id=p_id)
 
     def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> bool:
+        if sc & scs.HAVE_TEXT:
+            print(self.get_text(proc_id), flush=True)
+
         if sc & scs.ERROR:
             logger.error(f"{proc_name}: {scs.ERROR.label}")
             self.close_procs = True
@@ -191,10 +193,6 @@ class MainManager(Manager):
         elif sc & scs.COMPLETE:
             logger.success(f"{proc_name} | {scs.COMPLETE.label}")
             self.procs.pop(proc_id)
-
-        elif sc & scs.HAVE_TEXT:
-            text = self.get_text(proc_id)
-            print(text, flush=True)
 
         elif sc & scs.RING_BUFFER_TEXT_STREAM_OVERFLOW:
             logger.warning(

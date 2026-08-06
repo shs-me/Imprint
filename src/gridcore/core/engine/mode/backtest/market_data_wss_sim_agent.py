@@ -80,6 +80,7 @@ class WssSimAgent(Wss):
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self.final_actions()
+                                self.set_proc_sc(scs.COMPLETE)
                             return
 
                 if prepper.error is None:

@@ -63,7 +63,7 @@ class StatusCodes(IntEnum):
     COMPLETE = "Complete and exit"
     ERROR = "ERROR more info in 'exc_dump'"
     GC_COLLECT = "Collect garbage"
-    HAVE_TEXT = ""
+    HAVE_TEXT = "Have text"
     RING_BUFFER_TEXT_STREAM_OVERFLOW = "Ring Buffer TextStream overflow"
     # - - -
     # PARSING

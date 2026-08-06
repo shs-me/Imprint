@@ -49,6 +49,8 @@ class AgentManager(Manager):
         new_cell: int = cell + 1
         self._ts_wid[self._proc_id] = new_cell if new_cell < self._ts_cell_amount else 0
 
+        self.set_proc_sc(scs.HAVE_TEXT)
+
     def check_base_task(self, complete: bool) -> bool | int:
         """Evaluates task status flags set by MainManager and executes task commands.
 
