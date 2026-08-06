@@ -57,17 +57,19 @@ class MainManager(Manager):
         # - - -
         while True:
             if bool(len(procs)):
+                if not self._sc_sem.get_value():
+                    if self.procs_is_alive():
+                        return
+
                 self._sc_sem.acquire(timeout=60)
 
                 if date.today() > self.startDate:
                     self.set_task_sc_to_proc(scs.GC_COLLECT)
                     self.startDate = date.today()
 
-                if bool(len(procs)):
-                    if self.procs_is_alive():
-                        self.check_process_status_code()
-                        if not self.close_core:
-                            continue
+                self.check_process_status_code()
+                if not self.close_core:
+                    continue
             return
 
     def procs_is_alive(self) -> bool:
