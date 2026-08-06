@@ -11,7 +11,7 @@ from ... import constant as c
 from ...settings import SpaceCoords as sc
 from ...utils.monitoring.agent_manager import AgentManager
 from .base_sync import Sync
-from .utils.bar import Bar
+from .utils.footprint import Footprint
 from .utils.fp_converter import FPconverter
 
 
@@ -53,12 +53,16 @@ class FootprintReader(ABC):
         self._init_array()
 
         self.con: FPconverter = FPconverter(
-            footprint=self.fp,
-            headers=self.headers,
+            footprint=self._fp,
+            headers=self._headers,
             cfgCoin=manager.cfgCoin,
             cfgFP=cfgFP,
         )
-        self.bar: Bar = Bar(fp_converter=self.con, fp_state=self.fp_state)
+        self.fp: Footprint = Footprint(
+            fp_converter=self.con,
+            fp_state=self._fp_state,
+            fp_state_cache=self._fp_state_cache,
+        )
         self._default_space: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
         self.amRow: int = 0
 
@@ -66,15 +70,15 @@ class FootprintReader(ABC):
         """Initializes NumPy wrappers around shared memory Footprint, Header, and Space buffers."""
 
         cfgFP = self._manager.cfgFootprint
-        self.fp: NDArray[int64] = np.ndarray(
+        self._fp: NDArray[int64] = np.ndarray(
             shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols),
             dtype=int64,
             buffer=cfgFP.footprint,
         )
-        self.fp_state: NDArray[int32] = np.zeros(
+        self._fp_state: NDArray[int32] = np.zeros(
             shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols), dtype=int32
         )
-        self.headers: NDArray[int64] = np.ndarray(
+        self._headers: NDArray[int64] = np.ndarray(
             shape=(cfgFP.bar_count, c.BH_ConstantCount),
             dtype=int64,
             buffer=cfgFP.headers,
@@ -83,14 +87,14 @@ class FootprintReader(ABC):
             (2, sc._ConstantCount), dtype=int64, buffer=cfgFP.space
         )
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
-        self.fp_state_cache: NDArray[int64] = np.zeros(
+        self._fp_state_cache: NDArray[int64] = np.zeros(
             (c.CSD_ConstantCount,), dtype=int64
         )
 
     def _init_session(self) -> None:
         """Resets state arrays and calibrates layout converter for a new trading session."""
 
-        self.fp_state.fill(0)
+        self._fp_state.fill(0)
         self.last_idx: int = 0
         self.con.init_session(
             price=self._base_nPrice[0], timestamp=self._base_timestamp[0]
@@ -132,7 +136,7 @@ class FootprintReader(ABC):
         _ms: int = (
             timestamp
             if (timestamp is not None)
-            else int(self.bar[_idx].ind.time.last_trade)
+            else int(self.fp.bar[_idx].ind.time.last_trade)
         )
         self._sync.send_signal(
             nPrice=nPrice,
@@ -152,11 +156,11 @@ class FootprintReader(ABC):
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
-            if self.bar[idx].ind.volume.n > 0:
+            if self.fp.bar[idx].ind.volume.n > 0:
                 if idx > self.last_idx:
                     self._update_closed_bar_and_fp()
                     self._trade_readed_time[0] = int(
-                        self.bar[self.last_idx].ind.time.last_trade
+                        self.fp.bar[self.last_idx].ind.time.last_trade
                     )
                     self.last_idx = idx
 
@@ -181,8 +185,8 @@ class FootprintReader(ABC):
             idXmax=idXmax,
             idxVP=self.con.idxVP,
             idxDP=self.con.idxDP,
-            fp=self.fp,
-            fp_state=self.fp_state,
+            fp=self._fp,
+            fp_state=self._fp_state,
         )
         if self._fpiu_clusters:
             if in_update_clusters:
@@ -198,10 +202,10 @@ class FootprintReader(ABC):
             lidx=self.last_idx,
             idxVP=self.con.idxVP,
             idxDP=self.con.idxDP,
-            hr=self.headers,
-            fp=self.fp,
-            fp_state=self.fp_state,
-            fp_state_cache=self.fp_state_cache,
+            hr=self._headers,
+            fp=self._fp,
+            fp_state=self._fp_state,
+            fp_state_cache=self._fp_state_cache,
             nBasePrice=self.con.nBasePrice,
             center=self.con.center,
             scale=self.con.scale,
@@ -225,9 +229,9 @@ class FootprintReader(ABC):
             idYmax=idYmax,
             idxBid=idxBid,
             idxAsk=idxAsk,
-            hr=self.headers,
-            fp=self.fp,
-            fp_state=self.fp_state,
+            hr=self._headers,
+            fp=self._fp,
+            fp_state=self._fp_state,
             nBasePrice=self.con.nBasePrice,
             center=self.con.center,
             scale=self.con.scale,
@@ -338,16 +342,6 @@ def _update_closed_bar_and_fp_states(
         ) // c.PARK_PERIOD
     else:
         hr[bar, c.BH_PARK] = cur_var
-
-    # AVG VOL
-    cur_vol: int64 = hr[bar, c.BH_Volume]
-    if bar > 0:
-        pre_vol = hr[oldBar, c.BH_AVG_VOL]
-        hr[oldBar, c.BH_AVG_VOL] = (
-            (pre_vol * (c.AVG_VOL_PERIOD - 1)) + cur_vol
-        ) // c.AVG_VOL_PERIOD
-    else:
-        hr[oldBar, c.BH_AVG_VOL] = cur_vol
 
     # Clear Footprint Static State's
     state_2 = c.SF_POC_FP | c.SF_VAH_FP | c.SF_VAL_FP

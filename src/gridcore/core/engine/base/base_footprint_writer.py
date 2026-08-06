@@ -3,7 +3,6 @@
 import os
 import time
 from abc import ABC
-from math import sqrt
 
 import numpy as np
 from numba import njit
@@ -306,15 +305,16 @@ def _update_footprint_and_headers_and_indicators_and_coords(
 
     meta_data[0, BHM_VWAP_W] += qty
     meta_data[0, BHM_VWAP_PW] += price * qty
-    meta_data[0, BHM_VWAP_P2W] += price**2 * qty
+    meta_data[0, BHM_VWAP_P2W] += (price**2) * qty
     vwap: float64 = meta_data[0, BHM_VWAP_PW] / meta_data[0, BHM_VWAP_W]
-    std_dev: float = sqrt(
-        max(0.0, (meta_data[0, BHM_VWAP_P2W] / meta_data[0, BHM_VWAP_W]) - (vwap**2))
+    variance = max(
+        0.0, ((meta_data[0, BHM_VWAP_P2W] / meta_data[0, BHM_VWAP_W]) - (vwap**2))
     )
-    upper_bb, lower_bb = vwap + (1.5 * std_dev), vwap - (1.5 * std_dev)
+    vwsd = np.sqrt(variance)
+    upper_band, lower_band = vwap + (2.0 * vwsd), vwap - (2.0 * vwsd)
     dirty_hr[bar, c.BH_VWAP] = round(vwap * price_mult)
-    dirty_hr[bar, c.BH_VWAP_BB_LOWER] = round(lower_bb * price_mult)
-    dirty_hr[bar, c.BH_VWAP_BB_UPPER] = round(upper_bb * price_mult)
+    dirty_hr[bar, c.BH_VWAP_BB_LOWER] = round(lower_band * price_mult)
+    dirty_hr[bar, c.BH_VWAP_BB_UPPER] = round(upper_band * price_mult)
 
     # Update Space Coords
     buf: int = space_flag[0]

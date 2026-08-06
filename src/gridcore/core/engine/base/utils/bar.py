@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from numba.core.types import np
 from numpy import float64, int32, int64
 from numpy.typing import NDArray
@@ -13,159 +15,184 @@ class Bar:
         self._con: FPconverter = fp_converter
         self._fp_state: NDArray[int32] = fp_state
 
-        self.clusters = BarClusters(bar=self)
-        self.ind = BarIndicators(bar=self)
+        self._vplike: VolumeProfileLike = VolumeProfileLike(bar=self)
+        self._dplike: DeltaProfileLike = DeltaProfileLike(bar=self)
+        self._indlike: BarIndicatorLike = BarIndicatorLike(bar=self)
 
         self._plike: PriceLike = PriceLike(bar=self)
+        self._qlike: QtyLike = QtyLike(bar=self)
         self._vlike: VolumeLike = VolumeLike(bar=self)
         self._llike: VolatilityLike = VolatilityLike(bar=self)
-        self._tlike: TimeLike = TimeLike(bar=self)
+        self._trlike: TradeLike = TradeLike(bar=self)
+        self._tilike: TimeLike = TimeLike(bar=self)
 
         self._idx: int | int64 = 0
+        self._idXbid: int | int64 = 0
+        self._bar_id: int | int64 = 0
 
     def __getitem__(self, idx: int | int64):
-        self._idx = idx
+        self._idx, self._idXbid, self._bar_id = idx, self._idx & ~1, self._idXbid // 2
         return self
 
     def _get_header(self, header: c.BarHeaders) -> int64:
         """Extracts header value for specified bar index and BarHeaders field."""
 
-        return self._con.headers[(self._idx & ~1) // 2, header]
-
-
-class BarClusters:
-    def __init__(self, bar: Bar) -> None:
-        self._bar = bar
-        self._create_clusters_mask()
-
-    def _create_clusters_mask(self) -> None:
-        idXbid = self._bar._idx & ~1
-        idYmin: int64 = self._bar.ind.high.id
-        idYmax: int64 = self._bar.ind.low.id
-
-        self._clusters: NDArray[int64] = self._bar._con.footprint[
-            idYmin : idYmax + 1, idXbid : idXbid + 2
-        ]
-
-        bar_flags = (
-            c.SF_OPEN
-            | c.SF_HIGH
-            | c.SF_LOW
-            | c.SF_CLOSE
-            | c.SF_POC_BAR
-            | c.SF_VAH_BAR
-            | c.SF_VAL_BAR
-        )
-        bid_ask_flags = c.SF_DELTA_DOMINATION | c.SF_IMBALANCE | c.SF_ZERO_PRINT
-        mask = bar_flags | bid_ask_flags
-
-        self._clusters_states: NDArray[int32] = (
-            self._bar._fp_state[idYmin : idYmax + 1, idXbid : idXbid + 2] & mask
-        )
+        return self._con.headers[self._bar_id, header]
 
     @property
     def base(self) -> NDArray[int64]:
-        return self._clusters
+        idYmin, idYmax = self.ind.high.id, self.ind.low.id
+        return self._con.footprint[idYmin : idYmax + 1, self._idXbid : self._idXbid + 2]
 
-    def states(self) -> NDArray[int32]:
-        return self._clusters_states
+    @property
+    def bid(self) -> NDArray[int64]:
+        idYmin, idYmax = self.ind.high.id, self.ind.low.id
+        return self._con.footprint[idYmin : idYmax + 1, self._idXbid]
+
+    @property
+    def ask(self) -> NDArray[int64]:
+        idYmin, idYmax = self.ind.high.id, self.ind.low.id
+        return self._con.footprint[idYmin : idYmax + 1, self._idXbid + 1]
+
+    @property
+    def state(self) -> NDArray[int32]:
+        idYmin, idYmax = self.ind.high.id, self.ind.low.id
+        return self._fp_state[idYmin : idYmax + 1, self._idXbid : self._idXbid + 2]
+
+    @property
+    def vp(self) -> VolumeProfileLike:
+        return self._vplike
+
+    @property
+    def dp(self) -> DeltaProfileLike:
+        return self._dplike
+
+    @property
+    def ind(self) -> BarIndicatorLike:
+        return self._indlike
 
 
-class BarIndicators:
+class VolumeProfileLike:
     def __init__(self, bar: Bar) -> None:
         self._bar = bar
 
     @property
-    def open(self):
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.Open)
+    def base(self) -> NDArray[int64]:
+        return self._bar.bid + self._bar.ask
+
+    @property
+    def poc(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.POC)
         return self._bar._plike
 
     @property
-    def high(self):
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.High)
+    def vah(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VAH)
         return self._bar._plike
 
     @property
-    def low(self):
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.Low)
+    def val(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VAL)
         return self._bar._plike
 
-    @property
-    def close(self):
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.Close)
-        return self._bar._plike
+
+class DeltaProfileLike:
+    def __init__(self, bar: Bar) -> None:
+        self._bar = bar
 
     @property
-    def poc(self):
-        self._bar._plike._idxBid = self._bar._idx & ~1
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.POC)
-        return self._bar._plike
-
-    @property
-    def vah(self):
-        self._bar._plike._idxBid = self._bar._idx & ~1
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.VAH)
-        return self._bar._plike
-
-    @property
-    def val(self):
-        self._bar._plike._idxBid = self._bar._idx & ~1
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.VAL)
-        return self._bar._plike
-
-    @property
-    def vwap(self):
-        self._bar._plike._idxBid = self._bar._idx & ~1
-        self._bar._plike._nPrice = self._bar._get_header(header=c.BarHeaders.VWAP)
-        return self._bar._plike
-
-    @property
-    def vwap_bb_upper(self):
-        self._bar._plike._nPrice = self._bar._get_header(
-            header=c.BarHeaders.VWAP_BB_UPPER
-        )
-        return self._bar._plike
-
-    @property
-    def vwap_bb_lower(self):
-        self._bar._plike._nPrice = self._bar._get_header(
-            header=c.BarHeaders.VWAP_BB_LOWER
-        )
-        return self._bar._plike
-
-    @property
-    def volatility(self):
-        return self._bar._llike
-
-    @property
-    def time(self):
-        return self._bar._tlike
-
-    @property
-    def volume(self):
-        return self._bar._vlike
+    def base(self) -> NDArray[int64]:
+        return self._bar.bid - self._bar.ask
 
     @property
     def delta(self) -> int64:
-        return self._bar._get_header(header=c.BarHeaders.Delta)
+        return self._bar._get_header(c.BarHeaders.Delta)
 
     @property
     def cvd(self) -> int64:
-        return self._bar._get_header(header=c.BarHeaders.CVD)
+        return self._bar._get_header(c.BarHeaders.CVD)
 
     @property
-    def count_trade(self) -> int64:
-        return self._bar._get_header(header=c.BarHeaders.CountTrade)
+    def delta_ratio(self) -> float:
+        return self.delta / self._bar.ind.volume.n
+
+    @property
+    def poc(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.POC)
+        return self._bar._plike
+
+    @property
+    def vah(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VAH)
+        return self._bar._plike
+
+    @property
+    def val(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VAL)
+        return self._bar._plike
+
+
+class BarIndicatorLike:
+    def __init__(self, bar: Bar) -> None:
+        self._bar = bar
+
+    @property
+    def open(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.Open)
+        return self._bar._plike
+
+    @property
+    def high(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.High)
+        return self._bar._plike
+
+    @property
+    def low(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.Low)
+        return self._bar._plike
+
+    @property
+    def close(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.Close)
+        return self._bar._plike
+
+    @property
+    def volume(self) -> VolumeLike:
+        return self._bar._vlike
+
+    @property
+    def time(self) -> TimeLike:
+        return self._bar._tilike
+
+    @property
+    def trade(self) -> TradeLike:
+        return self._bar._trlike
+
+    @property
+    def volatility(self) -> VolatilityLike:
+        return self._bar._llike
+
+    @property
+    def vwap(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP)
+        return self._bar._plike
+
+    @property
+    def vwap_band_upper(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP_BB_UPPER)
+        return self._bar._plike
+
+    @property
+    def vwap_band_lower(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP_BB_LOWER)
+        return self._bar._plike
 
 
 class PriceLike:
     def __init__(self, bar: Bar) -> None:
-        self._con: FPconverter = bar._con
-
-        self._qlike: QtyLike = QtyLike(price_like=self)
+        self._bar = bar
 
         self._nPrice: int64 = int64(0)
-        self._idxBid: int | int64 = 0
 
     @property
     def n(self) -> int64:
@@ -173,16 +200,16 @@ class PriceLike:
 
     @property
     def id(self) -> int64:
-        return self._con.to_idy(self._nPrice)
+        return self._bar._con.to_idy(self._nPrice)
 
     @property
     def qty(self):
-        return self._qlike
+        return self._bar._qlike
 
 
 class QtyLike:
-    def __init__(self, price_like: PriceLike) -> None:
-        self._plike = price_like
+    def __init__(self, bar: Bar) -> None:
+        self._bar = bar
 
     @property
     def delta(self) -> int64:
@@ -194,11 +221,11 @@ class QtyLike:
 
     @property
     def bid(self) -> int64:
-        return self._plike._con.footprint[self._plike.id, self._plike._idxBid]
+        return self._bar._con.footprint[self._bar._plike.id, self._bar._idXbid]
 
     @property
     def ask(self) -> int64:
-        return self._plike._con.footprint[self._plike.id, self._plike._idxBid + 1]
+        return self._bar._con.footprint[self._bar._plike.id, self._bar._idXbid + 1]
 
 
 class VolumeLike:
@@ -211,7 +238,12 @@ class VolumeLike:
 
     @property
     def avg(self) -> int64:
-        return self._bar._get_header(c.BarHeaders.AvgVolume)
+        bar_min, bar_max = max(0, self._bar._bar_id - 20), self._bar._bar_id + 1
+        return self._bar._con.headers[bar_min:bar_max, c.BarHeaders.Volume].mean()
+
+    @property
+    def avg_trade_size(self) -> int64:
+        return self.n // self._bar.ind.trade.count
 
 
 class VolatilityLike:
@@ -247,9 +279,22 @@ class VolatilityLike:
     @property
     def parkinson_percent(self) -> float64:
         return np.sqrt(
-            (self._bar._get_header(header=c.BarHeaders.PARK) / c.VAR_SCALE)
-            * PARK_FACTOR
+            (self._bar._get_header(c.BarHeaders.PARK) / c.VAR_SCALE) * PARK_FACTOR
         )
+
+
+class TradeLike:
+    def __init__(self, bar: Bar) -> None:
+        self._bar = bar
+
+    @property
+    def count(self) -> int64:
+        return self._bar._get_header(c.BarHeaders.CountTrade)
+
+    @property
+    def avg_count(self) -> int64:
+        bar_min, bar_max = max(0, self._bar._bar_id - 20), self._bar._bar_id + 1
+        return self._bar._con.headers[bar_min:bar_max, c.BarHeaders.CountTrade].mean()
 
 
 class TimeLike:
