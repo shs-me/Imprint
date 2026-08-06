@@ -20,6 +20,7 @@ class Manager(ABC):
     cfgGetUserStream: cfg.GetUserStream
     cfgSetUserStream: cfg.SetUserStream
     cfgSignal: cfg.Signal
+    _text_stream: cfg.TextStream
     _sc_sem: Semaphore
     _general_event: Event
 
@@ -32,9 +33,20 @@ class Manager(ABC):
     ) -> None:
         self._segments: dict[str, slice] = segments
         self._shm_buf: memoryview = shm_buf
+
         self.configs_init(configs)
         self.main_tools_init(main_tools)
-        self._main_status: memoryview = self.cfgMetrics.main.cast("q")
+
+        self._procs_status: memoryview = self.cfgMetrics.procs_status.cast("q")
+        self._main_status: memoryview = self.cfgMetrics.main_status.cast("q")
+
+        self._ts_safe_lag: int = self._text_stream.safe_lag
+        self._ts_cell_amount: int = self._text_stream.cell_amount
+        self._ts_data: memoryview = self._text_stream.data
+        self._ts_data_size: int = self._text_stream.data_size
+        self._ts_data_header: memoryview = self._text_stream.data_header.cast("q")
+        self._ts_rid: memoryview = self._text_stream.reader_id.cast("q")
+        self._ts_wid: memoryview = self._text_stream.writer_id.cast("q")
 
     def configs_init(self, configs: list) -> None:
         """Associates configuration class instances with manager attributes and shared memory segments."""

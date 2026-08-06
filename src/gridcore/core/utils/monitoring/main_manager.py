@@ -22,19 +22,20 @@ class MainManager(Manager):
         super().__init__(segments, shm_buf, configs, main_tools)
 
         self.startDate: date = date.today()
-        self.status_buf: memoryview = self.cfgMetrics.status.cast("q")
         self.close_procs: bool = False
         self.close_core: bool = False
 
     def get_text(self, proc_id: int) -> str:
         """Retrieves and decodes text status message for specified process ID."""
-
-        text_buf: memoryview = self.cfgMetrics.text
-        start = proc_id * self.cfgMetrics.text_size
-        len_t, start = text_buf[start : start + 8].cast("q")[0], start + 8
         text: str = f"{self.procs[proc_id]['proc_name']}: "
-        if len_t > 0:
-            text = text + bytes(text_buf[start : start + len_t]).decode()
+
+        cell: int = self._ts_rid[proc_id]
+        need_cell: int = (proc_id * self._ts_cell_amount) + cell
+        lrd: int = self._ts_data_header[need_cell]
+        start: int = need_cell * self._ts_data_size
+        text = text + bytes(self._ts_data[start : start + lrd]).decode()
+        new_cell: int = cell + 1
+        self._ts_rid[proc_id] = new_cell if new_cell < self._ts_cell_amount else 0
 
         return text
 
@@ -84,22 +85,22 @@ class MainManager(Manager):
         return True
 
     def check_process_status_code(self) -> None:
-        proc_call = self._main_status[0]
 
-        if proc_call & (1 << self.market_data_wss):
+        if self._main_status[self.market_data_wss]:
             self.check_data_stream_proc()
+            self._main_status[self.market_data_wss] = 0
 
-        if proc_call & (1 << self.parsing):
+        if self._main_status[self.parsing]:
             self.check_parsing_proc()
+            self._main_status[self.parsing] = 0
 
-        if proc_call & (1 << self.logic):
+        if self._main_status[self.logic]:
             self.check_logic_proc()
+            self._main_status[self.logic] = 0
 
-        if proc_call & (1 << self.execution):
+        if self._main_status[self.execution]:
             self.check_execution_proc()
-
-        if proc_call != 0:
-            self._main_status[0] &= ~(proc_call)
+            self._main_status[self.execution] = 0
 
         if self.close_procs:
             self.kill_procs()
@@ -189,8 +190,16 @@ class MainManager(Manager):
 
         elif sc & scs.COMPLETE:
             logger.success(f"{proc_name} | {scs.COMPLETE.label}")
-            print(self.get_text(proc_id), flush=True)
             self.procs.pop(proc_id)
+
+        elif sc & scs.HAVE_TEXT:
+            text = self.get_text(proc_id)
+            print(text, flush=True)
+
+        elif sc & scs.RING_BUFFER_TEXT_STREAM_OVERFLOW:
+            logger.warning(
+                f"{proc_name} | {scs.RING_BUFFER_TEXT_STREAM_OVERFLOW.label}"
+            )
 
         else:
             return False
@@ -201,7 +210,7 @@ class MainManager(Manager):
         p_id = proc
         p_name = self.procs[p_id]["proc_name"]
         p_task_id = self.procs[p_id]["task_id"]
-        p_sc = self.status_buf[p_id]
+        p_sc = self._procs_status[p_id]
         return p_id, p_name, p_task_id, p_sc
 
     def set_task_sc_to_proc(self, code: scs, task_id: int | None = None):
@@ -214,12 +223,12 @@ class MainManager(Manager):
     def set_sc(self, id: int, code: scs) -> None:
         """Sets status bitmask for target slot ID."""
 
-        self.status_buf[id] |= code
+        self._procs_status[id] |= code
 
     def clear_proc_sc(self, code: scs | int, proc_id: int) -> None:
         """Clears status bitmask flags for specified process ID."""
 
-        self.status_buf[proc_id] &= ~(code)
+        self._procs_status[proc_id] &= ~(code)
 
     def kill_procs(self) -> None:
         """Terminates and joins all active worker processes."""

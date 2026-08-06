@@ -253,9 +253,8 @@ class Metrics(SharedMemorySegments):
     def _set_attr_use_shm(self) -> None:
         """Allocates shared memory offsets for process status codes, timestamps, and text buffers."""
 
-        self.main: Any = INT(INT64)
-        self.status: Any = INT((self.count_procs * 2) * INT64)
-        self.text: Any = INT(self.count_procs * self.text_size)
+        self.procs_status: Any = INT((self.count_procs * 2) * INT64)
+        self.main_status: Any = INT(self.count_procs * INT64)
         self.time_start_reading: Any = INT(INT64)
         self.trade_readed_time: Any = INT(INT64)
         self.parsing_complete: Any = INT(UBYTE)
@@ -269,14 +268,34 @@ class BaseRingBuf(ABC):
     data_size: int = 1024
     data_header_size: int = 8
     cell_amount: int = 10_000
+    count_writer: int = 1
+    count_reader: int = 1
 
     def _set_attr_use_shm(self) -> None:
         """Allocates shared memory offsets for reader/writer head positions and data cell arrays."""
 
-        self.reader_id: Any = INT(INT64)
-        self.writer_id: Any = INT(INT64)
-        self.data: Any = INT(self.cell_amount * self.data_size)
-        self.data_header: Any = INT(self.cell_amount * self.data_header_size)
+        self.reader_id: Any = INT(self.count_reader * INT64)
+        self.writer_id: Any = INT(self.count_writer * INT64)
+        self.data: Any = INT(self.count_writer * (self.cell_amount * self.data_size))
+        self.data_header: Any = INT(
+            self.count_writer * (self.cell_amount * self.data_header_size)
+        )
+
+
+@dataclass
+class TextStream(BaseRingBuf, SharedMemorySegments):
+    "Shared memory ring buffer for procs text stream"
+
+    data_size: int = 1024
+    data_header_size: int = 8
+    cell_amount: int = 64
+    count_reader: int = 10
+    count_writer: int = 10
+
+    def __post_init__(self) -> None:
+        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
+        super().__post_init__()
+        self.safe_lag: int = int(self.cell_amount * 0.9)
 
 
 @dataclass

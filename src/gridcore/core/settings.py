@@ -64,6 +64,7 @@ class StatusCodes(IntEnum):
     ERROR = "ERROR more info in 'exc_dump'"
     GC_COLLECT = "Collect garbage"
     HAVE_TEXT = ""
+    RING_BUFFER_TEXT_STREAM_OVERFLOW = "Ring Buffer TextStream overflow"
     # - - -
     # PARSING
     UNVALID_DATA = "Unvalid data (0 > price or qty or timestamp)"

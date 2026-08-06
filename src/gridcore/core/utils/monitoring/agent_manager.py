@@ -25,23 +25,29 @@ class AgentManager(Manager):
 
         self._proc_id: int = proc_id
         self._task_id: int = task_id
-        self._proc_spec_id: int = 1 << self._proc_id
 
-        self.task_status: memoryview = self.cfgMetrics.status.cast("q")[
-            task_id : task_id + 1
-        ]
-        self.proc_status: memoryview = self.cfgMetrics.status.cast("q")[
-            proc_id : proc_id + 1
-        ]
+        self.proc_status: memoryview = self._procs_status[proc_id : proc_id + 1]
+        self.task_status: memoryview = self._procs_status[task_id : task_id + 1]
 
     def set_text(self, text: str) -> None:
         """Writes formatted process status text message to shared memory text buffer."""
 
-        text_buf: memoryview = self.cfgMetrics.text
-        b_text, start = text.encode(), self._proc_id * self.cfgMetrics.text_size
-        set_len, start = text_buf[start : start + 8].cast("q"), start + 8
-        set_len[0] = len(b_text)
-        text_buf[start : start + len(b_text)] = b_text
+        lag: int = (
+            (self._ts_wid[self._proc_id] - self._ts_rid[self._proc_id])
+            + self._ts_cell_amount
+        ) % self._ts_cell_amount
+        if lag > self._ts_safe_lag:
+            return self.set_proc_sc(scs.RING_BUFFER_TEXT_STREAM_OVERFLOW)
+
+        b_text = text.encode()
+
+        cell: int = self._ts_wid[self._proc_id]
+        need_cell: int = (self._proc_id * self._ts_cell_amount) + cell
+        self._ts_data_header[need_cell] = len(b_text)
+        start: int = need_cell * self._ts_data_size
+        self._ts_data[start : start + len(b_text)] = b_text
+        new_cell: int = cell + 1
+        self._ts_wid[self._proc_id] = new_cell if new_cell < self._ts_cell_amount else 0
 
     def check_base_task(self, complete: bool) -> bool | int:
         """Evaluates task status flags set by MainManager and executes task commands.
@@ -97,7 +103,7 @@ class AgentManager(Manager):
         """Sets status code bitmask for process and signals MainManager semaphore."""
 
         self.proc_status[0] |= code
-        self._main_status[0] |= self._proc_spec_id
+        self._main_status[self._proc_id] = 1
         self._sc_sem.release()
 
     def set_task_sc(self, code: scs | int) -> None:
