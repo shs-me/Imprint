@@ -57,11 +57,7 @@ class MainManager(Manager):
         # - - -
         while True:
             if bool(len(procs)):
-                if not self._sc_sem.get_value():
-                    if self.procs_is_alive():
-                        return
-
-                self._sc_sem.acquire(timeout=60)
+                self._sc_sem.acquire(timeout=30)
 
                 if date.today() > self.startDate:
                     self.set_task_sc_to_proc(scs.GC_COLLECT)
@@ -71,20 +67,6 @@ class MainManager(Manager):
                 if not self.close_core:
                     continue
             return
-
-    def procs_is_alive(self) -> bool:
-        """Validates that all registered worker processes are active.
-
-        Returns:
-            bool: True if all processes are running.
-        """
-
-        for k, v in self.procs.items():
-            if v["proc"].is_alive() is False:
-                logger.critical(f"Process {v['proc_name']} is dead.")
-                return False
-
-        return True
 
     def check_process_status_code(self) -> None:
         if self._main_status[self.market_data_wss]:
@@ -124,6 +106,8 @@ class MainManager(Manager):
         if sc != 0:
             self.clear_proc_sc(code=sc, proc_id=p_id)
 
+        self.proc_is_alive(p_id)
+
     def check_parsing_proc(self) -> None:
         p_id, p_name, p_task_id, sc = self.get_proc_data(self.parsing)
 
@@ -150,6 +134,8 @@ class MainManager(Manager):
         if sc != 0:
             self.clear_proc_sc(code=sc, proc_id=p_id)
 
+        self.proc_is_alive(p_id)
+
     def check_logic_proc(self) -> None:
         p_id, p_name, p_task_id, sc = self.get_proc_data(self.logic)
 
@@ -162,6 +148,8 @@ class MainManager(Manager):
 
         if sc != 0:
             self.clear_proc_sc(code=sc, proc_id=p_id)
+
+        self.proc_is_alive(p_id)
 
     def check_execution_proc(self) -> None:
         p_id, p_name, p_task_id, sc = self.get_proc_data(self.execution)
@@ -183,6 +171,8 @@ class MainManager(Manager):
 
         if sc != 0:
             self.clear_proc_sc(code=sc, proc_id=p_id)
+
+        self.proc_is_alive(p_id)
 
     def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> bool:
         if sc & scs.HAVE_TEXT:
@@ -229,6 +219,12 @@ class MainManager(Manager):
         """Clears status bitmask flags for specified process ID."""
 
         self._procs_status[proc_id] &= ~(code)
+
+    def proc_is_alive(self, proc_id: int) -> None:
+        if self.procs.get(proc_id) and not self._sc_sem.get_value():
+            if not self.procs[proc_id]["proc"].is_alive():
+                logger.critical(f"Process {self.procs[proc_id]['proc_name']} is dead.")
+                self.close_procs = True
 
     def kill_procs(self) -> None:
         """Terminates and joins all active worker processes."""
