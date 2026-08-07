@@ -45,11 +45,19 @@ class AgentManager(Manager):
         need_cell: int = (self._proc_id * self._ts_cell_amount) + cell
         self._ts_data_header[need_cell] = len(b_text)
         start: int = need_cell * self._ts_data_size
-        self._ts_data[start : start + len(b_text)] = b_text
+        self._ts_data[start : (start + 8)].cast("q")[0] = round(time.time() * 1000)
+        self._ts_data[(start + 8) : (start + 8) + len(b_text)] = b_text
         new_cell: int = cell + 1
         self._ts_wid[self._proc_id] = new_cell if new_cell < self._ts_cell_amount else 0
 
         self.set_proc_sc(scs.HAVE_TEXT)
+
+    def have_status(self) -> bool:
+        if self.proc_status[0] != 0 or self.task_status[0] != 0:
+            if not (self.proc_status[0] == scs.HAVE_TEXT) or self.task_status[0] != 0:
+                return True
+
+        return False
 
     def check_base_task(self, complete: bool) -> bool | int:
         """Evaluates task status flags set by MainManager and executes task commands.
@@ -105,7 +113,7 @@ class AgentManager(Manager):
         """Sets status code bitmask for process and signals MainManager semaphore."""
 
         self.proc_status[0] |= code
-        self._main_status[self._proc_id] = 1
+        self._main_status[self._proc_id] += 1
         self._sc_sem.release()
 
     def set_task_sc(self, code: scs | int) -> None:

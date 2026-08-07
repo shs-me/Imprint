@@ -25,8 +25,9 @@ class BaseExecution(ABC):
         self.manager: AgentManager = manager
 
         self.set_proc_sc = manager.set_proc_sc
+        self.have_status = manager.have_status
+        self.task_status = manager.task_status
         self.check_base_task = manager.check_base_task
-        self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
         cfgSN = manager.cfgSignal
         self.sn_cell_amount: int = cfgSN.cell_amount
@@ -39,7 +40,7 @@ class BaseExecution(ABC):
         self.gus_cell_amount: int = cfgGUS.cell_amount
         self.gus_data: memoryview = cfgGUS.data
         self.gus_data_size: int = cfgGUS.data_size
-        self.gus_data_header: memoryview = cfgGUS.data_header.cast("q")
+        self.gus_data_header: memoryview = cfgGUS.data_header
         self.WB_2: memoryview = cfgGUS.writer_id.cast("q")
         self.RB_2: memoryview = cfgGUS.reader_id.cast("q")
 
@@ -47,7 +48,7 @@ class BaseExecution(ABC):
         self.sus_cell_amount: int = cfgSUS.cell_amount
         self.sus_data: memoryview = cfgSUS.data
         self.sus_data_size: int = cfgSUS.data_size
-        self.sus_data_header: memoryview = cfgSUS.data_header.cast("q")
+        self.sus_data_header: memoryview = cfgSUS.data_header
         self.sus_wid: memoryview = cfgSUS.writer_id.cast("q")
         self.sus_rid: memoryview = cfgSUS.reader_id.cast("q")
 
@@ -70,14 +71,14 @@ class BaseExecution(ABC):
         """Primary execution engine loop processing incoming trade signals and user stream updates."""
 
         # LocalLinks
-        proc_status, task_status = self.proc_status, self.task_status
+        have_status, task_status = self.have_status, self.task_status
         WB_1, RB_1, WB_2, RB_2 = self.WB_1, self.RB_1, self.WB_2, self.RB_2
         alarm_clock = self._alarm_clock
         # - - -
         while True:
             # - - -
             while True:
-                if proc_status[0] != 0 or task_status[0] != 0:
+                if have_status():
                     task: bool | int = self.check_base_task(complete=self._complete())
                     if isinstance(task, bool):
                         if task:

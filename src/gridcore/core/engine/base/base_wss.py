@@ -15,8 +15,9 @@ class Wss(ABC):
 
         self.manager: AgentManager = manager
         self.set_proc_sc = manager.set_proc_sc
+        self.have_status = manager.have_status
+        self.task_status = manager.task_status
         self.check_base_task = manager.check_base_task
-        self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
         cfgDS = self.manager.cfgDataStream
         self.ds_safe_lag: int = cfgDS.safe_lag

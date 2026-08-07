@@ -36,6 +36,10 @@ class KwgsKeys(IntEnum):
     ShmName, ShmSize = auto(), auto()
 
 
+class LogLevel(IntEnum):
+    INFO, SUCCESS, WARNING, ERROR, CRITICAL = 0, auto(), auto(), auto(), auto()
+
+
 class StatusCodes(IntEnum):
     """Process status codes and bitmask enumeration.
     64-bit status code flags representing process lifecycle states, pipeline warnings, and errors."""

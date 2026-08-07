@@ -7,8 +7,6 @@ from multiprocessing.synchronize import Event as EventT
 from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
 
-from loguru import logger
-
 from .constant import DIRS_LIST
 from .engine.general.execution import run_execution, run_execution_sim
 from .engine.mode.backtest.logic_sim_agent import run_logic_sim
@@ -17,7 +15,14 @@ from .engine.mode.backtest.parsing_sim_agent import run_parsing_sim
 from .engine.mode.real.logic_agent import run_logic
 from .engine.mode.real.parsing_agent import run_parsing
 from .engine.mode.real.ws_streams.market_data_wss import run_market_data_wss
-from .settings import DataStreamProc, ExecutionProc, LogicProc, ParsingProc, ProcsData
+from .settings import (
+    DataStreamProc,
+    ExecutionProc,
+    LogicProc,
+    LogLevel,
+    ParsingProc,
+    ProcsData,
+)
 from .utils.handlers import supervisor
 from .utils.monitoring.main_manager import MainManager
 
@@ -51,11 +56,11 @@ class MainAgent:
     def run_core_engine(self) -> None:
         """Creates required output directories, spawns worker processes, and starts the MainManager loop."""
 
-        logger.info("-- Core -- | Started, init...")
+        self.manager.logger("Init started.", LogLevel.INFO)
         try:
             self.check_dirs()
             if self.run_procs():
-                logger.info("-- Core -- | Init completed.")
+                self.manager.logger("Init completed", LogLevel.INFO)
 
                 self.manager.run(
                     procs=self.procs,
@@ -68,7 +73,7 @@ class MainAgent:
         except KeyboardInterrupt:
             pass
         finally:
-            logger.info("-- Core -- | Close the Core.")
+            self.manager.logger("Close the core.\n", LogLevel.INFO)
 
     def check_dirs(self) -> None:
         """Ensures required working directories (data, logs, dump) exist on local disk."""
@@ -129,7 +134,7 @@ class MainAgent:
         """
 
         sig: inspect.Signature = inspect.signature(func)
-        proc_name: str = func.__name__.removeprefix("run_").upper()
+        proc_name: str = func.__name__.split("_")[1].capitalize()
         kwargs = {}
         for param_name, param in sig.parameters.items():
             if hasattr(self, param_name):
@@ -142,7 +147,9 @@ class MainAgent:
                     if ann is param.annotation:
                         setattr(self, ann_name, proc_id)
             else:
-                return logger.error(f"Missing arg: [{param_name}] for [{proc_name}]")
+                return self.manager.logger(
+                    f"Missing arg: [{param_name}] for [{proc_name}]", LogLevel.ERROR
+                )
 
         kwargs = self.base_kwargs | kwargs
 
@@ -166,7 +173,9 @@ class MainAgent:
         )
         proc.start()
         self.procs[kwargs["proc_id"]]["proc"] = proc
-        logger.success(f"-- Core -- | Process [{name}: pid[{proc.pid}]], started.")
+        self.manager.logger(
+            f"Process {name}: pid[{proc.pid}], started.", LogLevel.SUCCESS
+        )
 
 
 @supervisor(is_main=True)

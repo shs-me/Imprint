@@ -14,8 +14,9 @@ class Parsing(ABC):
     def __init__(self, manager: AgentManager, writer: FootprintWriter) -> None:
         self.manager: AgentManager = manager
         self.set_proc_sc = manager.set_proc_sc
+        self.have_status = manager.have_status
+        self.task_status = manager.task_status
         self.check_base_task = manager.check_base_task
-        self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
         self.writer: FootprintWriter = writer
 
@@ -41,7 +42,7 @@ class Parsing(ABC):
 
         # LocalLinks
         writer = self.writer
-        proc_status, task_status = self.proc_status, self.task_status
+        have_status, task_status = self.have_status, self.task_status
         rCellC, wCellC = self.rCellC, self.wCellC
         data, data_size = self.data, self.data_size
         data_header = self.data_header
@@ -54,7 +55,7 @@ class Parsing(ABC):
         while True:
             init_session: bool = False
             while True:
-                if (proc_status[0] != 0) or (task_status[0] != 0):
+                if have_status():
                     task: bool | int = self.check_base_task(self.complete())
                     if isinstance(task, bool):
                         if task:

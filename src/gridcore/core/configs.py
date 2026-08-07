@@ -303,7 +303,7 @@ class Signal(BaseRingBuf, SharedMemorySegments):
 
     data_size: int = 24
     data_header_size: int = 1
-    cell_amount: int = 10_000
+    cell_amount: int = 1000
 
     def __post_init__(self) -> None:
         """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
@@ -315,9 +315,9 @@ class Signal(BaseRingBuf, SharedMemorySegments):
 class GetUserStream(BaseRingBuf, SharedMemorySegments):
     """Shared memory ring buffer layout for user execution events."""
 
-    data_size: int = 1024
-    data_header_size: int = 8
-    cell_amount: int = 10_000
+    data_size: int = 128
+    data_header_size: int = 1
+    cell_amount: int = 1000
 
     def __post_init__(self) -> None:
         """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
@@ -329,9 +329,9 @@ class GetUserStream(BaseRingBuf, SharedMemorySegments):
 class SetUserStream(BaseRingBuf, SharedMemorySegments):
     """Shared memory ring buffer layout for user execution events."""
 
-    data_size: int = 1024
-    data_header_size: int = 8
-    cell_amount: int = 10_000
+    data_size: int = 128
+    data_header_size: int = 1
+    cell_amount: int = 1000
 
     def __post_init__(self) -> None:
         """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""

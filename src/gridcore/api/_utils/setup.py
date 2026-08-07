@@ -15,13 +15,7 @@ __all__ = ["run"]
 @error_handler()
 def run(setup: SetupCore) -> None:
     logger.remove()
-    logger.add(
-        constant.CORE_LOG_PATH,
-        rotation="10 MB",
-        enqueue=True,
-        format="{time:HH:mm:ss.SSS} | {level} | {message}",
-    )
-
+    logger.add(constant.CORE_LOG_PATH, format="{time} | {level} | {message}")
     if isinstance(setup.run_mode, Backtesting):
         try:
             startDate, endDate = to_date(
@@ -40,6 +34,17 @@ def run(setup: SetupCore) -> None:
     for obj in setup.args:
         kwargs[obj.__class__.__name__] = obj
 
+    logger.remove()
+    logger.add(
+        constant.CORE_LOG_PATH,
+        format=(
+            ("{elapsed} | " if setup.setup.backtesting else "")
+            + "{extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
+        ),
+        rotation="10 MB",
+        colorize=True,
+        enqueue=True,
+    )
     if isinstance(setup.run_mode, Backtesting):
         if setup.run_mode.with_visualization:
             if not setup.run_mode.with_visualization.only_visualization:

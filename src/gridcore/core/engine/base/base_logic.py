@@ -18,8 +18,9 @@ class Logic(ABC):
         self.reader: FootprintReader = reader
 
         self.set_proc_sc = manager.set_proc_sc
+        self.have_status = manager.have_status
+        self.task_status = manager.task_status
         self.check_base_task = manager.check_base_task
-        self.task_status, self.proc_status = manager.task_status, manager.proc_status
 
         cfgMetrics = manager.cfgMetrics
         self.parsing_complete: memoryview = cfgMetrics.parsing_complete
@@ -31,13 +32,13 @@ class Logic(ABC):
 
         # LocalLinks
         reader, spareFlag = self.reader, self.reader._spare_flag
-        proc_status, task_status = self.proc_status, self.task_status
+        have_status, task_status = self.have_status, self.task_status
         alarm_clock = self.alarm_clock
         # - - -
         while True:
             init_session, self.pass_lag, self.pass_lag_limit = False, 0, 3
             while True:
-                if (proc_status[0] != 0) or (task_status[0] != 0):
+                if have_status():
                     task: bool | int = self.check_base_task(self.complete())
                     if isinstance(task, bool):
                         if task:

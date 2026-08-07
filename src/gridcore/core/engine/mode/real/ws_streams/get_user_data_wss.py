@@ -37,7 +37,7 @@ class GetUserDataWSSAgent(Wss):
 
         # Local Links
         execution_event = self.execution_event
-        proc_status, task_status = self.proc_status, self.task_status
+        have_status, task_status = self.have_status, self.task_status
         wid, rid = self.gus_wid, self.gus_rid
         data, data_size = self.gus_data, self.gus_data_size
         data_header = self.gus_data_header
@@ -48,7 +48,7 @@ class GetUserDataWSSAgent(Wss):
             # - - -
             async with connect(self.user_data_uri, ping_interval=20) as ws:
                 while True:
-                    if proc_status[0] != 0 or task_status[0] != 0:
+                    if have_status():
                         task: bool | int = self.check_base_task(complete=True)
                         if isinstance(task, bool):
                             if task:

@@ -32,7 +32,7 @@ class SetUserDataWSSAgent(Wss):
 
         # Local Links
         wss_sem = self.wss_sem
-        proc_status, task_status = self.proc_status, self.task_status
+        have_status, task_status = self.have_status, self.task_status
         wid, rid = self.sus_wid, self.sus_rid
         data, data_size = self.sus_data, self.sus_data_size
         data_header = self.sus_data_header
@@ -43,7 +43,7 @@ class SetUserDataWSSAgent(Wss):
             # - - -
             async with connect(self.send_order_uri, ping_interval=20) as ws:
                 while True:
-                    if proc_status[0] != 0 or task_status[0] != 0:
+                    if have_status():
                         task: bool | int = self.check_base_task(complete=True)
                         if isinstance(task, bool):
                             if task:

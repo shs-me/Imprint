@@ -73,7 +73,7 @@ class MatchingEngine:
         self.gus_cell_amount: int = cfgGUS.cell_amount
         self.gus_data: memoryview = cfgGUS.data
         self.gus_data_size: int = cfgGUS.data_size
-        self.gus_data_header: memoryview = cfgGUS.data_header.cast("q")
+        self.gus_data_header: memoryview = cfgGUS.data_header
         self.gus_wid: memoryview = cfgGUS.writer_id.cast("q")
         self.gus_rid: memoryview = cfgGUS.reader_id.cast("q")
 
@@ -81,7 +81,7 @@ class MatchingEngine:
         self.sus_cell_amount: int = cfgSUS.cell_amount
         self.sus_data: memoryview = cfgSUS.data
         self.sus_data_size: int = cfgSUS.data_size
-        self.sus_data_header: memoryview = cfgSUS.data_header.cast("q")
+        self.sus_data_header: memoryview = cfgSUS.data_header
         self.sus_wid: memoryview = cfgSUS.writer_id.cast("q")
         self.sus_rid: memoryview = cfgSUS.reader_id.cast("q")
 
