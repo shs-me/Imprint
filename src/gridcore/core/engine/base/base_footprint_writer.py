@@ -30,8 +30,9 @@ class FootprintWriter:
         self.set_proc_sc = manager.set_proc_sc
 
         cfgFP = manager.cfgFootprint
-        self.space_flag: memoryview = cfgFP.space_flag
-        self.spare_flag: memoryview = cfgFP.spare_flag
+        self.wait_bbox_read: bool = cfgFP.wait_bbox_read_in_every_tick
+        self.bbox_flag: memoryview = cfgFP.bbox_flag
+        self.spare_flags: memoryview = cfgFP.spare_flags
         self.base_nPrice: memoryview = cfgFP.base_price.cast("q")
         self.base_timestamp: memoryview = cfgFP.base_timestamp.cast("q")
         self.save_fp_headers: bool = cfgFP.save_fp_headers
@@ -49,8 +50,13 @@ class FootprintWriter:
             cfgFP=cfgFP,
         )
         self.last_idx: memoryview = memoryview(bytearray(8)).cast("q")
-        self.counterTicks: memoryview = memoryview(bytearray(8)).cast("Q")
-        self.defaultSpace: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
+        self.counter_ticks: memoryview = memoryview(bytearray(8)).cast("Q")
+        self.default_space: tuple[int, int, int, int] = (
+            self.con.fp_rows,
+            self.con.fp_cols,
+            0,
+            0,
+        )
         self.base_fp_dump_path: str = (
             f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.cfgCoin.symbol.upper()}"
         )
@@ -75,7 +81,7 @@ class FootprintWriter:
         )
 
         self.meta_data: NDArray[float64] = np.ndarray(
-            shape=(2, BHM_ConstantCount), dtype=float64, buffer=cfgFP.metadata
+            shape=(2, BHM_ConstantCount), dtype=float64
         )
 
         self.headers: NDArray[int64] = np.ndarray(
@@ -87,8 +93,8 @@ class FootprintWriter:
             shape=(cfgFP.bar_count, c.BH_ConstantCount), dtype=int64
         )
 
-        self.space: NDArray[int64] = np.ndarray(
-            shape=(2, SpaceCoords._ConstantCount), dtype=int64, buffer=cfgFP.space
+        self.bbox: NDArray[int64] = np.ndarray(
+            (2, SpaceCoords._ConstantCount), dtype=int64, buffer=cfgFP.bbox
         )
 
     def init_session(self, price: float, timestamp: int) -> None:
@@ -99,7 +105,7 @@ class FootprintWriter:
         self.headers.fill(0)
         self.meta_data.fill(0)
         self.last_idx[0] = 0
-        self.space[:] = self.defaultSpace
+        self.bbox[:] = self.default_space
 
         self.con.init_session(
             (self._pre_price if self.has_pre_trade else price),
@@ -121,10 +127,23 @@ class FootprintWriter:
         if self.has_pre_trade:
             pre_price, pre_qty, pre_timestamp, pre_is_sell = self.pre_trade
             self.update(pre_price, pre_qty, pre_timestamp, pre_is_sell)
+            if self.wait_bbox_read:
+                self.wait_read_bbox()
+                self.spare_flags[1] = 1
+                self.pre_trade = price, qty, timestamp, is_sell
+                return self.copy_to()
 
         self.update(price, qty, timestamp, is_sell)
-
+        if self.wait_bbox_read:
+            self.wait_read_bbox()
         return self.copy_to()
+
+    def post_update(self) -> None:
+        if self.wait_bbox_read:
+            self.update(*self.pre_trade)
+            self.wait_read_bbox()
+            self.spare_flags[1] = 0
+            self.copy_to()
 
     def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> None:
         nPrice: int = self.con.to_nPrice(price)
@@ -133,7 +152,7 @@ class FootprintWriter:
         if idx is not None:
             if idy is not None:
                 self.last_idx[0] = idx
-                self.update_footprint_and_headers_and_indicators_and_coords(
+                _update(
                     price=price,
                     qty=qty,
                     timestamp=timestamp,
@@ -141,17 +160,26 @@ class FootprintWriter:
                     nPrice=nPrice,
                     idy=idy,
                     idx=idx,
+                    idxVP=self.idxVP,
+                    idxDP=self.idxDP,
+                    price_mult=self.con.price_mult,
+                    qty_mult=self.con.qty_mult,
+                    dirty_fp=self.dirty_footprint,
+                    dirty_hr=self.dirty_headers,
+                    bbox=self.bbox,
+                    bbox_flag=self.bbox_flag,
+                    meta_data=self.meta_data,
                 )
             else:
                 self.set_proc_sc(code=scs.FP_IDY_FILLED)
                 self.pre_trade = price, qty, timestamp, is_sell
 
         else:
-            self.wait_read_space()
+            self.wait_read_bbox()
             self.set_proc_sc(code=scs.FP_IDX_FILLED)
             self.pre_trade = price, qty, timestamp, is_sell
 
-        self.counterTicks[0] += 1
+        self.counter_ticks[0] += 1
 
     @property
     def pre_trade(self) -> tuple[float, float, int, bool]:
@@ -166,58 +194,27 @@ class FootprintWriter:
         self._pre_price, self._pre_qty, self._pre_timestamp, self._pre_is_sell = trade
         self.has_pre_trade = True
 
-    def update_footprint_and_headers_and_indicators_and_coords(
-        self,
-        price: float,
-        qty: float,
-        timestamp: int,
-        is_sell: bool,
-        nPrice: int,
-        idy: int,
-        idx: int,
-    ) -> None:
-        """Dispatches tick parameter tuple to Numba JIT calculation kernel."""
-
-        _update_footprint_and_headers_and_indicators_and_coords(
-            price=price,
-            qty=qty,
-            timestamp=timestamp,
-            is_sell=is_sell,
-            nPrice=nPrice,
-            idy=idy,
-            idx=idx,
-            idxVP=self.idxVP,
-            idxDP=self.idxDP,
-            price_mult=self.con.price_mult,
-            qty_mult=self.con.qty_mult,
-            dirty_fp=self.dirty_footprint,
-            dirty_hr=self.dirty_headers,
-            space=self.space,
-            space_flag=self.space_flag,
-            meta_data=self.meta_data,
-        )
-
-    def wait_read_space(self) -> None:
+    def wait_read_bbox(self) -> None:
         """Blocks until reader process releases spare buffer lock."""
 
-        while self.spare_flag[0] == 1:
+        while self.spare_flags[0] == 1:
             time.sleep(0)
 
     def copy_to(self) -> bool:
         """Flushes local dirty array updates to active shared memory buffer when spare flag is clear."""
 
-        if self.spare_flag[0] == 0:
+        if self.spare_flags[0] == 0:
             _copy_to(
                 idxVP=self.idxVP,
                 fp=self.footprint,
                 dirty_fp=self.dirty_footprint,
                 hr=self.headers,
                 dirty_hr=self.dirty_headers,
-                space=self.space,
-                space_flag=self.space_flag,
+                bbox=self.bbox,
+                bbox_flag=self.bbox_flag,
             )
             self.time_start_reading[0] = time.perf_counter_ns()
-            self.spare_flag[0] = 1
+            self.spare_flags[0] = 1
             return True
         return False
 
@@ -236,14 +233,14 @@ class FootprintWriter:
     def pre_re_init(self) -> None:
         """Saves Footprint headers and emits re-initialization status code prior to grid reset."""
 
-        self.wait_read_space()
+        self.wait_read_bbox()
         self.save_fp_headers_array()
         self.set_proc_sc(scs.FP_RE_INIT)
 
-    def space_is_read(self) -> bool:
+    def bbox_is_read(self) -> bool:
         """Checks if active modify bounding box matches default state."""
 
-        return bool(np.all(self.space[:] == self.defaultSpace))
+        return bool(np.all(self.bbox[:] == self.default_space))
 
     def final_actions(self) -> None:
         """Flushes remaining Footprint headers to disk upon process completion."""
@@ -253,7 +250,7 @@ class FootprintWriter:
 
 
 @njit(cache=True)
-def _update_footprint_and_headers_and_indicators_and_coords(
+def _update(
     price: float,
     qty: float,
     timestamp: int,
@@ -267,20 +264,68 @@ def _update_footprint_and_headers_and_indicators_and_coords(
     qty_mult: int,
     dirty_fp: NDArray[int64],
     dirty_hr: NDArray[int64],
-    space: NDArray[int64],
-    space_flag: memoryview,
+    bbox: NDArray[int64],
+    bbox_flag: memoryview,
     meta_data: NDArray[float64],
 ) -> None:
     """Numba JIT kernel updating volume profile, bar headers, VWAP, BB, and space coordinates."""
 
     nQty: int = round(qty * qty_mult)
-    # Update Dirty Footprint
+
+    _update_dirty_footprint(
+        is_sell=is_sell,
+        nQty=nQty,
+        idy=idy,
+        idx=idx,
+        idxVP=idxVP,
+        idxDP=idxDP,
+        dirty_fp=dirty_fp,
+    )
+    _update_dirty_headers(
+        price=price,
+        qty=qty,
+        timestamp=timestamp,
+        is_sell=is_sell,
+        nPrice=nPrice,
+        nQty=nQty,
+        idx=idx,
+        price_mult=price_mult,
+        dirty_hr=dirty_hr,
+        meta_data=meta_data,
+    )
+    _update_bbox(idy=idy, idx=idx, bbox=bbox, bbox_flag=bbox_flag)
+
+
+@njit(cache=True)
+def _update_dirty_footprint(
+    is_sell: bool,
+    nQty: int,
+    idy: int,
+    idx: int,
+    idxVP: int,
+    idxDP: int,
+    dirty_fp: NDArray[int64],
+) -> None:
     dirty_fp[idy, idx] += nQty
-    dirty_fp[idy, idxVP] += nQty  # VolumeProfile
-    dirty_fp[idy, idxDP] += -nQty if is_sell else nQty  # Delta Profile
-    # Update Dirty BarHeaders
+    dirty_fp[idy, idxVP] += nQty
+    dirty_fp[idy, idxDP] += -nQty if is_sell else nQty
+
+
+@njit(cache=True)
+def _update_dirty_headers(
+    price: float,
+    qty: float,
+    timestamp: int,
+    is_sell: bool,
+    nPrice: int,
+    nQty: int,
+    idx: int,
+    price_mult: int,
+    dirty_hr: NDArray[int64],
+    meta_data: NDArray[float64],
+) -> None:
     bar: int = (idx & ~1) // 2
-    if dirty_hr[bar, c.BH_CountTrade] == 0:  # Init Bar
+    if dirty_hr[bar, c.BH_CountTrade] == 0:
         dirty_hr[bar, c.BH_Open : c.BH_Close + 1] = nPrice
         dirty_hr[bar, c.BH_Time] = timestamp
 
@@ -314,14 +359,18 @@ def _update_footprint_and_headers_and_indicators_and_coords(
     dirty_hr[bar, c.BH_VWAP_BB_LOWER] = round(lower_band * price_mult)
     dirty_hr[bar, c.BH_VWAP_BB_UPPER] = round(upper_band * price_mult)
 
-    # Update Space Coords
-    buf: int = space_flag[0]
-    idYmin, idXmin, idYmax, idXmax = space[buf, :]
+
+@njit(cache=True)
+def _update_bbox(
+    idy: int, idx: int, bbox: NDArray[int64], bbox_flag: memoryview
+) -> None:
+    buf: int = bbox_flag[0]
+    idYmin, idXmin, idYmax, idXmax = bbox[buf, :]
     idYmin: int | int64 = idy if idYmin > idy else idYmin
     idXmin: int | int64 = idx if idXmin > idx else idXmin
     idYmax: int | int64 = idy + 1 if idYmax <= idy else idYmax
     idXmax: int | int64 = idx + 1 if idXmax <= idx else idXmax
-    space[buf, :] = idYmin, idXmin, idYmax, idXmax
+    bbox[buf, :] = idYmin, idXmin, idYmax, idXmax
 
 
 @njit(cache=True)
@@ -331,13 +380,13 @@ def _copy_to(
     dirty_fp: NDArray[int64],
     hr: NDArray[int64],
     dirty_hr: NDArray[int64],
-    space: NDArray[int64],
-    space_flag: memoryview,
+    bbox: NDArray[int64],
+    bbox_flag: memoryview,
 ) -> None:
     """Numba JIT kernel performing targeted memory copy of modified regions into shared memory."""
 
-    buf: int = space_flag[0]
-    idYmin, idXmin, idYmax, idXmax = space[buf, :]
+    buf: int = bbox_flag[0]
+    idYmin, idXmin, idYmax, idXmax = bbox[buf, :]
 
     idxMin, idxMax = (idXmin & ~1) // 2, ((idXmax - 1) & ~1) // 2 + 1
     fp[idYmin:idYmax, idXmin:idXmax] = dirty_fp[idYmin:idYmax, idXmin:idXmax]
@@ -346,4 +395,4 @@ def _copy_to(
         idxMin:idxMax, : c.BH_CountTrade + 1
     ]
 
-    space_flag[0] = 1 if (buf == 0) else 0
+    bbox_flag[0] = 1 if (buf == 0) else 0

@@ -97,12 +97,12 @@ class Parsing(ABC):
     def final_actions(self) -> None:
         """Flushes remaining pending updates to shared memory and sets parsing completion flag."""
 
-        self.writer.wait_read_space()
-        if not self.writer.space_is_read():
+        self.writer.wait_read_bbox()
+        if not self.writer.bbox_is_read():
             if self.writer.copy_to():
                 self.post_final_action()
 
-        self.writer.wait_read_space()
+        self.writer.wait_read_bbox()
         self.parsing_complete[0] = 1
         self.writer.final_actions()
 

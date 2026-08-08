@@ -25,7 +25,7 @@ class Configuration(ABC):
         """Converts percentage string fields (e.g., '10%') into basis points integers relative to 10,000."""
         self.percent: int = 10_000
         for name, value in self.__dict__.items():
-            if isinstance(value, str):
+            if isinstance(value, str) and "%" in value:
                 setattr(
                     self, name, round(float(value.split("%")[0]) / 100 * self.percent)
                 )
@@ -201,6 +201,7 @@ class Footprint(SharedMemorySegments):
     chart_range: int = 1
     step_tick: int = 1
     fp_rows: int = 10001
+    wait_bbox_read_in_every_tick: bool = False
     save_fp_headers: bool = False
     save_algorithm_metadata: bool = False
 
@@ -230,17 +231,17 @@ class Footprint(SharedMemorySegments):
 
     def _set_attr_use_shm(self) -> None:
         """Defines shared memory offset allocations for Footprint arrays, headers, and flags."""
+        self.bbox: Any
 
         self._init_data()
 
         self.footprint: Any = INT(self.fp_rows * self.fp_panel_cols * INT64)
         self.headers: Any = INT(self.bar_count * BarHeaders._ConstantCount * INT64)
-        self.metadata: Any = INT(6 * FLOAT64)
-        self.space: Any = INT(SpaceCoords._ConstantCount * 2 * INT64)
+        self.bbox = INT(SpaceCoords._ConstantCount * 2 * INT64)
         self.base_price: Any = INT(INT64)
         self.base_timestamp: Any = INT(INT64)
-        self.space_flag: Any = INT(UBYTE)
-        self.spare_flag: Any = INT(UBYTE)
+        self.bbox_flag: Any = INT(UBYTE)
+        self.spare_flags: Any = INT(2 * UBYTE)
 
 
 @dataclass

@@ -40,12 +40,15 @@ class LogicAgent(Logic):
     def alarm_clock(self) -> None:
         """Blocks process on logic_event until Footprint update occurs."""
 
-        if (self.reader._spare_flag[0] == 0) and (self.parsing_complete[0] == 0):
+        if (self.reader._spare_flags[0] == 0) and (self.parsing_complete[0] == 0):
             if self.logic_event.is_set() is False:
                 self.logic_event.wait()
 
     def post_update(self) -> None:
         """Clears logic_event after strategy evaluation cycle completes."""
+
+        if self.reader._spare_flags[1] == 1:
+            return
 
         if self.logic_event.is_set():
             self.logic_event.clear()
@@ -77,5 +80,6 @@ def run_logic(
 
     sync = SyncTool(manager, execution_event)
     reader: FootprintReader = reader_type(manager, sync)
+    manager.set_text(f"{reader.__class__.__name__} used as {FootprintReader.__name__}")
     agent = LogicAgent(manager, reader, logic_event)
     agent.run_logic_engine()

@@ -8,7 +8,7 @@ from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
 from ... import constant as c
-from ...settings import SpaceCoords as sc
+from ...settings import SpaceCoords
 from ...utils.monitoring.agent_manager import AgentManager
 from .base_sync import Sync
 from .utils.footprint import Footprint
@@ -42,8 +42,8 @@ class FootprintReader(ABC):
         self._fpiu_clusters: bool = find_patterns_in_update_clusters
 
         cfgFP = manager.cfgFootprint
-        self._space_flag: memoryview = cfgFP.space_flag
-        self._spare_flag: memoryview = cfgFP.spare_flag
+        self._bbox_flag: memoryview = cfgFP.bbox_flag
+        self._spare_flags: memoryview = cfgFP.spare_flags
         self._base_nPrice: memoryview = cfgFP.base_price.cast("q")
         self._base_timestamp: memoryview = cfgFP.base_timestamp.cast("q")
 
@@ -63,7 +63,12 @@ class FootprintReader(ABC):
             fp_state=self._fp_state,
             fp_state_cache=self._fp_state_cache,
         )
-        self._default_space: list[int] = [self.con.fp_rows, self.con.fp_cols, 0, 0]
+        self._default_space: tuple[int, int, int, int] = (
+            cfgFP.fp_rows,
+            cfgFP.fp_cols,
+            0,
+            0,
+        )
         self.amRow: int = 0
 
     def _init_array(self) -> None:
@@ -83,12 +88,13 @@ class FootprintReader(ABC):
             dtype=int64,
             buffer=cfgFP.headers,
         )
-        self._space: NDArray[int64] = np.ndarray(
-            (2, sc._ConstantCount), dtype=int64, buffer=cfgFP.space
-        )
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
         self._fp_state_cache: NDArray[int64] = np.zeros(
             (c.CSD_ConstantCount,), dtype=int64
+        )
+
+        self._bbox: NDArray[int64] = np.ndarray(
+            (2, SpaceCoords._ConstantCount), dtype=int64, buffer=cfgFP.bbox
         )
 
     def _init_session(self) -> None:
@@ -151,8 +157,8 @@ class FootprintReader(ABC):
     def _update_states(self) -> None:
         """Executes Numba update routines for clusters, closed bars, and active bar state flags."""
 
-        oldBuf: int = 1 if (self._space_flag[0] == 0) else 0
-        idYmin, idXmin, idYmax, idXmax = self._space[oldBuf, :]
+        oldBuf = 1 if (self._bbox_flag[0] == 0) else 0
+        idYmin, idXmin, idYmax, idXmax = self._bbox[oldBuf, :]
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
@@ -166,7 +172,7 @@ class FootprintReader(ABC):
 
                 self._update_bar(idYmin, idYmax, idxBid, idxAsk)
 
-        self._space[oldBuf, :] = self._default_space
+        self._bbox[oldBuf, :] = self._default_space
 
     def _update_clusters(
         self,

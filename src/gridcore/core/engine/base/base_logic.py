@@ -31,7 +31,7 @@ class Logic(ABC):
         """Main process loop evaluating strategy logic upon shared memory flag updates."""
 
         # LocalLinks
-        reader, spareFlag = self.reader, self.reader._spare_flag
+        reader, spare_flags = self.reader, self.reader._spare_flags
         have_status, task_status = self.have_status, self.task_status
         alarm_clock = self.alarm_clock
         # - - -
@@ -53,7 +53,7 @@ class Logic(ABC):
 
                 alarm_clock()
 
-                if spareFlag[0] == 1:
+                if spare_flags[0] == 1:
                     if init_session is False:
                         reader._init_session()
                         init_session = True
@@ -61,7 +61,7 @@ class Logic(ABC):
                     reader._update_states()
                     self.check_lag()
                     self.post_update()
-                    spareFlag[0] = 0
+                    spare_flags[0] = 0
 
     def complete(self) -> bool:
         """Checks if upstream parsing engine has completed tick ingestion."""

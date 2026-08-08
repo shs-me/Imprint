@@ -70,6 +70,7 @@ def run(manager: AgentManager, **kwargs) -> None:
     m_name = manager.cfgSetup.execution_module
     c_name = manager.cfgSetup.execution_class_name
     execution: type[Execution] = getattr(importlib.import_module(m_name), c_name)
+    manager.set_text(f"{execution.__name__} used as {Execution.__name__}")
     agent = execution(manager, **kwargs)
     agent._run_execution_engine()
 

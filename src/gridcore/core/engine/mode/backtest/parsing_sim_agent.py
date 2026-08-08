@@ -39,7 +39,7 @@ class ParsingAgent(Parsing):
         """Logs total prepped tick count upon process teardown."""
 
         super().final_actions()
-        self.manager.set_text(f"Count Prepped Ticks: {self.writer.counterTicks[0]}")
+        self.manager.set_text(f"Count Prepped Ticks: {self.writer.counter_ticks[0]}")
 
     def post_final_action(self) -> None:
         pass

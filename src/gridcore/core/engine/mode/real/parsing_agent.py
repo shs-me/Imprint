@@ -33,6 +33,9 @@ class ParsingAgent(Parsing):
         self.agg_trade: type[AggTrades] = getattr(
             importlib.import_module(m_name), c_name
         )
+        manager.set_text(
+            f"{self.agg_trade.__class__.__name__} used as {AggTrades.__name__}"
+        )
         self.decoder: Decoder[AggTrades] = Decoder(type=self.agg_trade, strict=False)
 
     def alarm_clock(self) -> None:
@@ -65,7 +68,7 @@ class ParsingAgent(Parsing):
         if self.logic_event.is_set() is False:
             self.logic_event.set()
 
-        print(f"Count Prepped Ticks: {self.writer.counterTicks[0]}", flush=True)
+        print(f"Count Prepped Ticks: {self.writer.counter_ticks[0]}", flush=True)
 
 
 @supervisor()
