@@ -196,7 +196,7 @@ def _update_equity_ohlc(
                     prev_bar += 1
                     break
 
-            while prev_bar < bar:
+            while 0 <= prev_bar < bar:
                 eh[prev_bar, EquityT] = base_timestamp[0] + (prev_bar * timeframe)
                 eh[prev_bar, EquityO:] = prev_eq, prev_eq, prev_eq, prev_eq
                 prev_bar += 1

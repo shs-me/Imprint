@@ -101,7 +101,10 @@ class FootprintWriter:
         self.last_idx[0] = 0
         self.space[:] = self.defaultSpace
 
-        self.con.init_session(price, timestamp)
+        self.con.init_session(
+            (self._pre_price if self.has_pre_trade else price),
+            (self._pre_timestamp if self.has_pre_trade else timestamp),
+        )
 
         self.base_nPrice[0] = self.con.nBasePrice
         self.base_timestamp[0] = self.con.baseTimestamp
@@ -152,8 +155,11 @@ class FootprintWriter:
 
     @property
     def pre_trade(self) -> tuple[float, float, int, bool]:
-        self.has_pre_trade = False
-        return self._pre_price, self._pre_qty, self._pre_timestamp, self._pre_is_sell
+        _ = self
+        _.has_pre_trade = False
+        trade = _._pre_price, _._pre_qty, _._pre_timestamp, _._pre_is_sell
+        _._pre_price, _._pre_qty, _._pre_timestamp, _._pre_is_sell = 0, 0, 0, True
+        return trade
 
     @pre_trade.setter
     def pre_trade(self, trade: tuple[float, float, int, bool]) -> None:

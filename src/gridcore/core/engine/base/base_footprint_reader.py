@@ -335,9 +335,9 @@ def _update_closed_bar_and_fp_states(
     fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
 
     # Update VWAP+BB
-    vwap = (nBasePrice - hr[bar, c.BH_VWAP]) + center
-    vwap_bb_lower = (nBasePrice - hr[bar, c.BH_VWAP_BB_LOWER]) + center
-    vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_BB_UPPER]) + center
+    vwap = (nBasePrice - hr[bar, c.BH_VWAP]) // scale + center
+    vwap_bb_lower = (nBasePrice - hr[bar, c.BH_VWAP_BB_LOWER]) // scale + center
+    vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_BB_UPPER]) // scale + center
 
     if 0 <= vwap < fp_state.shape[0]:
         fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP)
@@ -397,12 +397,13 @@ def _update_bar_states(
     low_idy: int64 = (nBasePrice - lowNprice) // scale + center
     close_idy: int64 = (nBasePrice - closeNprice) // scale + center
 
-    idyBid: slice[int64, int64] = slice(idYmin + 1, idYmax + 1)
-    idyAsk: slice[int64, int64] = slice(idYmin, idYmax)
+    ymax_climp = min(idYmax + 1, fp.shape[0] - 1)
+    idyBid: slice[int64, int64] = slice(idYmin + 1, ymax_climp + 1)
+    idyAsk: slice[int64, int64] = slice(idYmin, ymax_climp)
 
     # Clear State's
     state1 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
-    fp_state[idYmin : idYmax + 1, idxBid : idxBid + 2] &= ~(state1)
+    fp_state[idYmin:ymax_climp, idxBid : idxBid + 2] &= ~(state1)
     state2 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
     state3 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
     fp_state[high_idy : low_idy + 1, idxBid] &= ~(state2 | state3)

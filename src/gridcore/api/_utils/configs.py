@@ -106,6 +106,9 @@ class SetupCore:
 
             self.setup.backtesting = False
 
+            args.append(self.coin)
+            args.append(self.run_mode.connector)
+
         if self.with_execution is not None:
             self.setup.execution = True
             self.setup.execution_module = self.with_execution.__module__

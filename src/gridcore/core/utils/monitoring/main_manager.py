@@ -92,15 +92,14 @@ class MainManager(Manager):
 
         p_id, p_name, p_task_id, sc = self.get_proc_data(self.market_data_wss)
 
-        if self.action_for_base_sc(sc, p_id, p_name):
-            pass
+        self.action_for_base_sc(sc, p_id, p_name)
 
-        elif sc & scs.DATA_PREPPERED:
+        if sc & scs.DATA_PREPPERED:
             self.logger(scs.DATA_PREPPERED.label, LogLevel.WARNING, p_name)
             self.set_task_sc_to_proc(scs.COMPLETE)
             self.clear_proc_sc(scs.DATA_PREPPERED, p_id)
 
-        elif sc & scs.BIG_RAW_DATA:
+        if sc & scs.BIG_RAW_DATA:
             self.logger(scs.BIG_RAW_DATA.label, LogLevel.WARNING, p_name)
             self.close_procs = True
             self.clear_proc_sc(scs.BIG_RAW_DATA, p_id)
@@ -113,26 +112,25 @@ class MainManager(Manager):
 
         p_id, p_name, p_task_id, sc = self.get_proc_data(self.parsing)
 
-        if self.action_for_base_sc(sc, p_id, p_name):
-            pass
+        self.action_for_base_sc(sc, p_id, p_name)
 
-        elif sc & scs.UNVALID_DATA:
+        if sc & scs.UNVALID_DATA:
             self.logger(scs.UNVALID_DATA.label, LogLevel.WARNING, p_name)
             self.close_procs = True
             self.clear_proc_sc(scs.UNVALID_DATA, p_id)
 
-        elif sc & scs.FP_IDX_FILLED:
+        if sc & scs.FP_IDX_FILLED:
             self.logger(scs.FP_IDX_FILLED.label, LogLevel.WARNING, p_name)
             self.set_task_sc_to_proc(scs.FP_RE_INIT, p_task_id)
             self.set_task_sc_to_proc(scs.FP_RE_INIT, self.procs[self.logic]["task_id"])
             self.clear_proc_sc(scs.FP_IDX_FILLED, p_id)
 
-        elif sc & scs.FP_IDY_FILLED:
+        if sc & scs.FP_IDY_FILLED:
             self.logger(scs.FP_IDY_FILLED.label, LogLevel.WARNING, p_name)
             self.close_procs = True
             self.clear_proc_sc(scs.FP_IDY_FILLED, p_id)
 
-        elif sc & scs.FP_RE_INIT:
+        if sc & scs.FP_RE_INIT:
             self.logger(scs.FP_RE_INIT.label, LogLevel.SUCCESS, p_name)
             self.set_task_sc_to_proc(scs.RUN, p_task_id)
             self.clear_proc_sc(scs.FP_RE_INIT, p_id)
@@ -145,10 +143,9 @@ class MainManager(Manager):
 
         p_id, p_name, p_task_id, sc = self.get_proc_data(self.logic)
 
-        if self.action_for_base_sc(sc, p_id, p_name):
-            pass
+        self.action_for_base_sc(sc, p_id, p_name)
 
-        elif sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:
+        if sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:
             self.logger(scs.ANALYSIS_LAG_MORE_SAFE_LAG.label, LogLevel.WARNING, p_name)
             self.set_task_sc_to_proc(scs.RUN, p_task_id)
             self.clear_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG, p_id)
@@ -161,27 +158,26 @@ class MainManager(Manager):
 
         p_id, p_name, p_task_id, sc = self.get_proc_data(self.execution)
 
-        if self.action_for_base_sc(sc, p_id, p_name):
-            pass
+        self.action_for_base_sc(sc, p_id, p_name)
 
-        elif sc & scs.LOSS_MORE_LIMIT:
+        if sc & scs.LOSS_MORE_LIMIT:
             self.logger(scs.LOSS_MORE_LIMIT.label, LogLevel.WARNING, p_name)
             self.close_procs = True
             self.clear_proc_sc(scs.LOSS_MORE_LIMIT, p_id)
 
-        elif sc & scs.QTY_LESS_LIMIT:
+        if sc & scs.QTY_LESS_LIMIT:
             self.logger(scs.QTY_LESS_LIMIT.label, LogLevel.WARNING, p_name)
             self.close_procs = True
             self.clear_proc_sc(scs.QTY_LESS_LIMIT, p_id)
 
-        elif sc & scs.ORDER_LIMIT:
+        if sc & scs.ORDER_LIMIT:
             self.logger(scs.ORDER_LIMIT.label, LogLevel.WARNING, p_name)
             self.close_procs = True
             self.clear_proc_sc(scs.ORDER_LIMIT, p_id)
 
         self.proc_is_alive(p_id)
 
-    def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> bool:
+    def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> None:
         if sc & scs.HAVE_TEXT:
             logs: list[tuple[int, str]] = self.get_text(proc_id)
             for timestamp, log in logs:
@@ -194,21 +190,16 @@ class MainManager(Manager):
             self.close_procs = True
             self.clear_proc_sc(scs.ERROR, proc_id)
 
-        elif sc & scs.COMPLETE:
+        if sc & scs.COMPLETE:
             self.logger(scs.COMPLETE.label, LogLevel.WARNING, proc_name)
             self.procs.pop(proc_id)
             self.clear_proc_sc(scs.COMPLETE, proc_id)
 
-        elif sc & scs.RING_BUFFER_TEXT_STREAM_OVERFLOW:
+        if sc & scs.RING_BUFFER_TEXT_STREAM_OVERFLOW:
             self.logger(
                 scs.RING_BUFFER_TEXT_STREAM_OVERFLOW.label, LogLevel.WARNING, proc_name
             )
             self.clear_proc_sc(scs.RING_BUFFER_TEXT_STREAM_OVERFLOW, proc_id)
-
-        else:
-            return False
-
-        return True
 
     def get_proc_data(self, proc: int) -> tuple[int, str, int, int]:
         p_id = proc

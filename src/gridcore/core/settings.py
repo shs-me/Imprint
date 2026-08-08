@@ -68,6 +68,7 @@ class StatusCodes(IntEnum):
     ERROR = "ERROR more info in 'exc_dump'"
     GC_COLLECT = "Collect garbage"
     HAVE_TEXT = "Have text"
+    BIG_TEXT_SIZE = "Text size > data cell size in ring buffer"
     RING_BUFFER_TEXT_STREAM_OVERFLOW = "Ring Buffer TextStream overflow"
     # - - -
     # PARSING

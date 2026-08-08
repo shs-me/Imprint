@@ -241,7 +241,9 @@ class VolumeLike:
     @property
     def avg(self) -> int64:
         bar_min, bar_max = max(0, self._bar._bar_id - 20), self._bar._bar_id + 1
-        return self._bar._con.headers[bar_min:bar_max, c.BarHeaders.Volume].mean()
+        return int64(
+            self._bar._con.headers[bar_min:bar_max, c.BarHeaders.Volume].mean()
+        )
 
     @property
     def avg_trade_size(self) -> int64:
@@ -262,12 +264,12 @@ class VolatilityLike:
 
     @property
     def change(self) -> int64:
-        return self._bar.ind.open.n - self._bar.ind.close.n
+        return self._bar.ind.close.n - self._bar.ind.open.n
 
     @property
     def change_percent(self) -> float64:
         open, close = self._bar.ind.open.n, self._bar.ind.close.n
-        return (close / open - 1) if (close >= open) else -(open / close - 1)
+        return (close / open - 1) if (close >= open) else -abs(open / close - 1)
 
     @property
     def atr(self) -> int64:

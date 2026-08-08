@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 from numba import njit
-from numpy import int64, uint8
+from numpy import bool_, int64, uint8
 from numpy.typing import NDArray
 
 from .... import constant as c
@@ -115,11 +115,14 @@ class MatchingEngine:
 
     def _update_order_book(self) -> None:
         """Appends pending order to simulated order book array."""
-
         raw_data = self._get_user_data()
         timestamp, order_param, client_order_id, nPrice, nQty = struct.unpack(
             "@qqqqq", raw_data
         )
+
+        if self.obRow[0] >= self.order_book.shape[0]:
+            self.manager.set_proc_sc(scs.ORDER_LIMIT)
+            return
 
         self.order_book[self.obRow[0], c.OB_timestamp] = timestamp
         self.order_book[self.obRow[0], c.OB_orderParam] = order_param
@@ -127,9 +130,6 @@ class MatchingEngine:
         self.order_book[self.obRow[0], c.OB_nPrice] = nPrice
         self.order_book[self.obRow[0], c.OB_nQty] = nQty
         self.obRow[0] += 1
-
-        if self.obRow[0] > self.order_book.shape[0]:
-            self.manager.set_proc_sc(scs.ORDER_LIMIT)
 
         self.data_example[self.deRow[0], :] = (
             timestamp,
@@ -261,7 +261,9 @@ def _processing_order(
         return
 
     if bool(order_param & c.OF_OCO):
-        mask = order_book[: obRow[0], c.OB_clientOrderID] == client_order_id
+        mask: NDArray[bool_] = (
+            order_book[: obRow[0], c.OB_clientOrderID] == client_order_id
+        )
         order_book[: obRow[0], c.OB_orderParam][mask] &= ~(c.OF_NEW)
         order_book[: obRow[0], c.OB_orderParam][mask] |= c.OF_CANCELED
 
