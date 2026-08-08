@@ -86,6 +86,8 @@ class Parsing(ABC):
                         price[0], qty[0], timestamp[0], self.is_sell
                     ):
                         update_success()
+                        if writer.spare_flags[1] == 1:
+                            writer.post_update()
 
                     post_update()
 
