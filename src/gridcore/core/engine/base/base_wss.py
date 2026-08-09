@@ -81,7 +81,7 @@ class Wss(ABC):
             writer_id[0] = new_cell if new_cell < cell_amount else 0
             return True
         else:
-            self.set_proc_sc(code=scs.BIG_RAW_DATA)
+            self.set_proc_sc(code=scs.BIG_RAW_DATA, wait_main_task=True)
             return False
 
     def final_actions(self) -> None:

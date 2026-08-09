@@ -25,6 +25,7 @@ class Bar:
         self._llike: VolatilityLike = VolatilityLike(bar=self)
         self._trlike: TradeLike = TradeLike(bar=self)
         self._tilike: TimeLike = TimeLike(bar=self)
+        self._fplike: FPindLike = FPindLike(bar=self)
 
         self._idx: int | int64 = 0
         self._idXbid: int | int64 = 0
@@ -175,19 +176,8 @@ class IndicatorLike:
         return self._bar._llike
 
     @property
-    def vwap(self) -> PriceLike:
-        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP)
-        return self._bar._plike
-
-    @property
-    def vwap_band_upper(self) -> PriceLike:
-        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP_BB_UPPER)
-        return self._bar._plike
-
-    @property
-    def vwap_band_lower(self) -> PriceLike:
-        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP_BB_LOWER)
-        return self._bar._plike
+    def fp_ind(self) -> FPindLike:
+        return self._bar._fplike
 
 
 class PriceLike:
@@ -312,3 +302,38 @@ class TimeLike:
     @property
     def last_trade(self) -> int64:
         return self._bar._get_header(header=c.BarHeaders.LastTradeTime)
+
+
+class FPindLike:
+    def __init__(self, bar: Bar) -> None:
+        self._bar = bar
+
+    @property
+    def vwap(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP)
+        return self._bar._plike
+
+    @property
+    def vwap_upper_band(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP_UPPER_BAND)
+        return self._bar._plike
+
+    @property
+    def vwap_lower_band(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VWAP_LOWER_BAND)
+        return self._bar._plike
+
+    @property
+    def poc(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.POC_FP)
+        return self._bar._plike
+
+    @property
+    def vah(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VAH_FP)
+        return self._bar._plike
+
+    @property
+    def val(self) -> PriceLike:
+        self._bar._plike._nPrice = self._bar._get_header(c.BarHeaders.VAL_FP)
+        return self._bar._plike

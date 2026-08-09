@@ -80,13 +80,15 @@ class WssSimAgent(Wss):
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self.final_actions()
-                                self.set_proc_sc(scs.COMPLETE)
+                                self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
                             return
 
                 if prepper.error is None:
                     if not prepper.queue:
                         if prepper.complete:
-                            self.set_proc_sc(code=scs.DATA_PREPPERED)
+                            self.set_proc_sc(
+                                code=scs.DATA_PREPPERED, wait_main_task=True
+                            )
 
                         time.sleep(0)
                         continue

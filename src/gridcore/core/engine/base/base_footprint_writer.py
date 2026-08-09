@@ -171,12 +171,12 @@ class FootprintWriter:
                     meta_data=self.meta_data,
                 )
             else:
-                self.set_proc_sc(code=scs.FP_IDY_FILLED)
+                self.set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=True)
                 self.pre_trade = price, qty, timestamp, is_sell
 
         else:
             self.wait_read_bbox()
-            self.set_proc_sc(code=scs.FP_IDX_FILLED)
+            self.set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=True)
             self.pre_trade = price, qty, timestamp, is_sell
 
         self.counter_ticks[0] += 1
@@ -235,7 +235,7 @@ class FootprintWriter:
 
         self.wait_read_bbox()
         self.save_fp_headers_array()
-        self.set_proc_sc(scs.FP_RE_INIT)
+        self.set_proc_sc(scs.FP_RE_INIT, wait_main_task=True)
 
     def bbox_is_read(self) -> bool:
         """Checks if active modify bounding box matches default state."""
@@ -356,8 +356,8 @@ def _update_dirty_headers(
     vwsd = np.sqrt(variance)
     upper_band, lower_band = vwap + (2.0 * vwsd), vwap - (2.0 * vwsd)
     dirty_hr[bar, c.BH_VWAP] = round(vwap * price_mult)
-    dirty_hr[bar, c.BH_VWAP_BB_LOWER] = round(lower_band * price_mult)
-    dirty_hr[bar, c.BH_VWAP_BB_UPPER] = round(upper_band * price_mult)
+    dirty_hr[bar, c.BH_VWAP_LOWER_BAND] = round(lower_band * price_mult)
+    dirty_hr[bar, c.BH_VWAP_UPPER_BAND] = round(upper_band * price_mult)
 
 
 @njit(cache=True)

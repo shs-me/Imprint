@@ -84,7 +84,7 @@ class BaseExecution(ABC):
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self._final_actions()
-                                self.set_proc_sc(scs.COMPLETE)
+                                self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
                             return
 
                 alarm_clock(WB_1, RB_1, WB_2, RB_2)
@@ -131,11 +131,11 @@ class BaseExecution(ABC):
                     nQty: int = self.con.entryNqtyWithLeverage(nPrice, nominalNqty)
                     self.action_for_getted_signal(timestamp, order_param, nPrice, nQty)
                 else:
-                    self.set_proc_sc(code=scs.QTY_LESS_LIMIT)
+                    self.set_proc_sc(code=scs.QTY_LESS_LIMIT, wait_main_task=True)
             else:
                 pass
         else:
-            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT)
+            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
             self._post_final_action()
 
     def _get_signal_data(self) -> tuple[int, int, int]:

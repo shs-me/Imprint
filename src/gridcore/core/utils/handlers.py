@@ -21,7 +21,7 @@ def error_handler(set_status_code: bool = False):
                 if set_status_code and args:
                     manager = getattr(args[0], "manager", None)
                     if manager and hasattr(manager, "set_proc_sc"):
-                        manager.set_proc_sc(code)
+                        manager.set_proc_sc(code, wait_main_task=False)
 
             try:
                 return func(*args, **kwargs)

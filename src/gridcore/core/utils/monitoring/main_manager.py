@@ -147,7 +147,6 @@ class MainManager(Manager):
 
         if sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:
             self.logger(scs.ANALYSIS_LAG_MORE_SAFE_LAG.label, LogLevel.WARNING, p_name)
-            self.set_task_sc_to_proc(scs.RUN, p_task_id)
             self.clear_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG, p_id)
 
         self.proc_is_alive(p_id)
@@ -178,12 +177,6 @@ class MainManager(Manager):
         self.proc_is_alive(p_id)
 
     def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> None:
-        if sc & scs.HAVE_TEXT:
-            logs: list[tuple[int, str]] = self.get_text(proc_id)
-            for timestamp, log in logs:
-                self.logger(log, LogLevel.INFO, proc_name, timestamp)
-
-            self.clear_proc_sc(scs.HAVE_TEXT, proc_id)
 
         if sc & scs.ERROR:
             self.logger(scs.ERROR.label, LogLevel.ERROR, proc_name)
@@ -194,6 +187,17 @@ class MainManager(Manager):
             self.logger(scs.COMPLETE.label, LogLevel.WARNING, proc_name)
             self.procs.pop(proc_id)
             self.clear_proc_sc(scs.COMPLETE, proc_id)
+
+        if sc & scs.HAVE_TEXT:
+            logs: list[tuple[int, str]] = self.get_text(proc_id)
+            for timestamp, log in logs:
+                self.logger(log, LogLevel.INFO, proc_name, timestamp)
+
+            self.clear_proc_sc(scs.HAVE_TEXT, proc_id)
+
+        if sc & scs.BIG_TEXT_SIZE:
+            self.logger(scs.BIG_TEXT_SIZE.label, LogLevel.WARNING, proc_name)
+            self.clear_proc_sc(scs.BIG_TEXT_SIZE, proc_id)
 
         if sc & scs.RING_BUFFER_TEXT_STREAM_OVERFLOW:
             self.logger(

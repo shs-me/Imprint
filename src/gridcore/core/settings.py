@@ -95,7 +95,7 @@ class StateFlags(IntFlag):
     # Footprint: RealTime
     BID_DELTA_DOMINATION_FP, ASK_DELTA_DOMINATION_FP = auto(), auto()
     # Footprint: Static
-    VWAP, UPPER_BB, LOWER_BB = auto(), auto(), auto()
+    VWAP_FP, UPPER_BAND_FP, LOWER_BAND_FP = auto(), auto(), auto()
     POC_FP, VAL_FP, VAH_FP = auto(), auto(), auto()
     # Bar States
     OPEN, CLOSE, HIGH, LOW = auto(), auto(), auto(), auto()
@@ -171,12 +171,13 @@ class BarHeaders(IntEnum):
     # Footprint Writer
     Open, High, Low, Close = 0, auto(), auto(), auto()
     Volume, Delta, CVD = auto(), auto(), auto()
-    VWAP, VWAP_BB_UPPER, VWAP_BB_LOWER = auto(), auto(), auto()
+    VWAP, VWAP_UPPER_BAND, VWAP_LOWER_BAND = auto(), auto(), auto()
     OpenTime, LastTradeTime = auto(), auto()
     CountTrade = auto()
     # Footprint Reader
     ATR, PARK = auto(), auto()
     POC, VAH, VAL = auto(), auto(), auto()
+    POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
     _ConstantCount = auto()
 
 

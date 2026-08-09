@@ -121,7 +121,7 @@ class MatchingEngine:
         )
 
         if self.obRow[0] >= self.order_book.shape[0]:
-            self.manager.set_proc_sc(scs.ORDER_LIMIT)
+            self.manager.set_proc_sc(scs.ORDER_LIMIT, wait_main_task=True)
             return
 
         self.order_book[self.obRow[0], c.OB_timestamp] = timestamp

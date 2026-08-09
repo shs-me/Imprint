@@ -59,7 +59,7 @@ class LogicAgent(Logic):
         if self.reader._sync.lag_is_safe() is False:
             self.pass_lag += 1
             if self.pass_lag >= self.pass_lag_limit:
-                self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG)
+                self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG, wait_main_task=False)
 
     def post_final_action(self) -> None:
         self.reader._sync.sync_with_execution()

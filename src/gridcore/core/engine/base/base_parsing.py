@@ -61,7 +61,7 @@ class Parsing(ABC):
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self.final_actions()
-                                self.set_proc_sc(scs.COMPLETE)
+                                self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
                             return
 
                     elif task & scs.FP_RE_INIT:
@@ -146,7 +146,7 @@ class Parsing(ABC):
             if (self.price[0] > 0) and (self.qty[0] > 0) and (self.timestamp[0] > 0):
                 return True
 
-            self.set_proc_sc(code=scs.UNVALID_DATA)
+            self.set_proc_sc(code=scs.UNVALID_DATA, wait_main_task=True)
 
         return False
 

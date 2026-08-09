@@ -44,7 +44,7 @@ class Logic(ABC):
                         if task:
                             if task_status[0] & scs.COMPLETE:
                                 self.final_actions()
-                                self.set_proc_sc(scs.COMPLETE)
+                                self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
 
                             return
 

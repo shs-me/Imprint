@@ -175,12 +175,7 @@ class FootprintReader(ABC):
         self._bbox[oldBuf, :] = self._default_space
 
     def _update_clusters(
-        self,
-        idYmin: int64,
-        idYmax: int64,
-        idXmin: int64,
-        idXmax: int64,
-        in_update_clusters: bool = True,
+        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
     ) -> None:
         """Invokes cluster-level state updates and pattern recognition callbacks."""
 
@@ -195,13 +190,15 @@ class FootprintReader(ABC):
             fp_state=self._fp_state,
         )
         if self._fpiu_clusters:
-            if in_update_clusters:
-                self.find_patterns(in_update_clusters=in_update_clusters)
+            self.find_patterns_in_update_clusters(idYmin, idYmax, idXmin, idXmax)
 
-    def _update_closed_bar_and_fp(
-        self,
-        in_update_closed_bar: bool = True,
+    @abstractmethod
+    def find_patterns_in_update_clusters(
+        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
     ) -> None:
+        pass
+
+    def _update_closed_bar_and_fp(self) -> None:
         """Invokes closed bar calculation routines and updates static Footprint indicators."""
 
         _update_closed_bar_and_fp_states(
@@ -217,16 +214,14 @@ class FootprintReader(ABC):
             scale=self.con.scale,
         )
         if self._fpiu_closed_bar:
-            if in_update_closed_bar:
-                self.find_patterns(in_update_closed_bar=in_update_closed_bar)
+            self.find_patterns_in_update_closed_bar()
+
+    @abstractmethod
+    def find_patterns_in_update_closed_bar(self) -> None:
+        pass
 
     def _update_bar(
-        self,
-        idYmin: int64,
-        idYmax: int64,
-        idxBid: int,
-        idxAsk: int,
-        in_update_bar: bool = True,
+        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
         """Invokes active bar state updates and triggers pattern scanning callbacks."""
 
@@ -243,24 +238,12 @@ class FootprintReader(ABC):
             scale=self.con.scale,
         )
         if self._fpiu_bar:
-            if in_update_bar:
-                self.find_patterns(in_update_bar=in_update_bar)
+            self.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
 
     @abstractmethod
-    def find_patterns(
-        self,
-        in_update_bar: bool = False,
-        in_update_closed_bar: bool = False,
-        in_update_clusters: bool = False,
+    def find_patterns_in_update_bar(
+        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
-        """Abstract pattern detection entry point overridden by user strategy implementations.
-
-        Args:
-            in_update_bar (bool): True if invoked during active bar tick updates.
-            in_update_closed_bar (bool): True if invoked upon bar closure.
-            in_update_clusters (bool): True if invoked during cluster-level volume updates.
-        """
-
         pass
 
 
@@ -342,20 +325,20 @@ def _update_closed_bar_and_fp_states(
 
     # Update VWAP+BB
     vwap = (nBasePrice - hr[bar, c.BH_VWAP]) // scale + center
-    vwap_bb_lower = (nBasePrice - hr[bar, c.BH_VWAP_BB_LOWER]) // scale + center
-    vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_BB_UPPER]) // scale + center
+    vwap_bb_lower = (nBasePrice - hr[bar, c.BH_VWAP_LOWER_BAND]) // scale + center
+    vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_UPPER_BAND]) // scale + center
 
     if 0 <= vwap < fp_state.shape[0]:
-        fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP)
-        fp_state[vwap, idxVP] |= c.SF_VWAP
+        fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP_FP)
+        fp_state[vwap, idxVP] |= c.SF_VWAP_FP
         fp_state_cache[c.CSD_VWAP] = vwap
     if 0 <= vwap_bb_upper < fp_state.shape[0]:
-        fp_state[fp_state_cache[c.CSD_UPPER_BB], idxVP] &= ~(c.SF_UPPER_BB)
-        fp_state[vwap_bb_upper, idxVP] |= c.SF_UPPER_BB
+        fp_state[fp_state_cache[c.CSD_UPPER_BB], idxVP] &= ~(c.SF_UPPER_BAND_FP)
+        fp_state[vwap_bb_upper, idxVP] |= c.SF_UPPER_BAND_FP
         fp_state_cache[c.CSD_UPPER_BB] = vwap_bb_upper
     if 0 <= vwap_bb_lower < fp_state.shape[0]:
-        fp_state[fp_state_cache[c.CSD_LOWER_BB], idxVP] &= ~(c.SF_LOWER_BB)
-        fp_state[vwap_bb_lower, idxVP] |= c.SF_LOWER_BB
+        fp_state[fp_state_cache[c.CSD_LOWER_BB], idxVP] &= ~(c.SF_LOWER_BAND_FP)
+        fp_state[vwap_bb_lower, idxVP] |= c.SF_LOWER_BAND_FP
         fp_state_cache[c.CSD_LOWER_BB] = vwap_bb_lower
 
     # Update POC + VA
@@ -363,10 +346,13 @@ def _update_closed_bar_and_fp_states(
     vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
     fp_state[poc, idxVP] |= c.SF_POC_FP
     fp_state_cache[c.CSD_POC_FP] = poc
+    hr[bar, c.BH_POC_FP] = (center - poc) * scale + nBasePrice
     fp_state[vah, idxVP] |= c.SF_VAH_FP
     fp_state_cache[c.CSD_VAH_FP] = vah
+    hr[bar, c.BH_VAH_FP] = (center - vah) * scale + nBasePrice
     fp_state[val, idxVP] |= c.SF_VAL_FP
     fp_state_cache[c.CSD_VAL_FP] = val
+    hr[bar, c.BH_VAL_FP] = (center - val) * scale + nBasePrice
 
     # Update Auction
     high_finished, low_finished = fp[high_idy, lidx + 1] == 0, fp[low_idy, lidx] == 0
