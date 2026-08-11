@@ -23,7 +23,6 @@ class Backtest(Base, ABC):
             longUnrealizedNpnl=self.acm.longUnrealizedNpnl,
             shortUnrealizedNpnl=self.acm.shortUnrealizedNpnl,
         )
-        self.count_open_position: int = 0
 
     @abstractmethod
     def _alarm_clock(
@@ -105,6 +104,15 @@ class Backtest(Base, ABC):
         self.acm.final_action()
         self.manager.set_text(
             (
-                f"Balance: {self.con.nBalance / self.con.scale}. Locked Balance: {self.con.lockedNbalance / self.con.scale}"
+                f"Balance: {self.con.nBalance / self.con.scale} \n"
+                f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
+                f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
+                f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
+                f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
+                f"Long Open Qty: {self.con._longNqty[0] / self.con.qtyMult} \n"
+                f"Short Open Qty: {self.con._shortNqty[0] / self.con.qtyMult} \n"
+                f"Count Orders in History: {self.con.ohWid[0]} \n"
+                f"Count Active Orders: {self.acm.obRow[0]} \n"
+                f"Count Open Positions: {self.count_open_position}"
             )
         )

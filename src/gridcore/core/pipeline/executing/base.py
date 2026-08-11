@@ -51,6 +51,7 @@ class Base(ABC):
             qty_prec=manager.cfgCoin.qty_prec,
         )
         self.acm = AccountManager(manager)
+        self.count_open_position: int = 0
         self.readed_timestamp: int = 0
 
     @error_handler(set_status_code=True)
@@ -110,8 +111,8 @@ class Base(ABC):
             else:
                 pass
         else:
-            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
             self._post_final_action()
+            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
 
     def _get_signal_data(self) -> tuple[int, int, int]:
         cell: int = self.sn_rid[0]

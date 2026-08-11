@@ -72,9 +72,8 @@ class MainAgent:
     def check_dirs(self) -> None:
         """Ensures required working directories (data, logs, dump) exist on local disk."""
 
-        for _dir in DIRS_LIST:
-            if not os.path.exists(_dir):
-                os.mkdir(_dir)
+        for dir in DIRS_LIST:
+            os.makedirs(dir, exist_ok=True)
 
     def run_procs(self) -> bool:
         """Spawns configured worker processes and applies initial execution flags."""
