@@ -8,13 +8,8 @@ from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
 
 from .constant import DIRS_LIST
-from .engine.general.execution import run_execution, run_execution_sim
-from .engine.mode.backtest.logic_sim_agent import run_logic_sim
-from .engine.mode.backtest.market_data_wss_sim_agent import run_wss_sim
-from .engine.mode.backtest.parsing_sim_agent import run_parsing_sim
-from .engine.mode.real.logic_agent import run_logic
-from .engine.mode.real.parsing_agent import run_parsing
-from .engine.mode.real.ws_streams.market_data_wss import run_market_data_wss
+from .ipc import HostManager, supervisor
+from .pipeline import run_analyzing, run_executing, run_parsing, run_streaming
 from .settings import (
     DataStreamProc,
     ExecutionProc,
@@ -23,8 +18,6 @@ from .settings import (
     ParsingProc,
     ProcsData,
 )
-from .utils.handlers import supervisor
-from .utils.monitoring.main_manager import MainManager
 
 
 class MainAgent:
@@ -35,10 +28,10 @@ class MainAgent:
     logic: LogicProc
     execution: ExecutionProc
 
-    def __init__(self, manager: MainManager, **kwargs) -> None:
+    def __init__(self, manager: HostManager, **kwargs) -> None:
         """Initializes synchronization events and process registry containers."""
 
-        self.manager: MainManager = manager
+        self.manager: HostManager = manager
 
         self.base_kwargs: dict = kwargs
 
@@ -47,11 +40,10 @@ class MainAgent:
 
         self.procs: dict[int, ProcsData] = {}
 
-        if not self.is_backtesting:
-            self.execution_event: EventT = Event()
-            self.parsing_event: EventT = Event()
-            self.logic_event: EventT = Event()
-            self.wss_sem: SemT = Semaphore(0)
+        self.execution_event: EventT = Event()
+        self.parsing_event: EventT = Event()
+        self.logic_event: EventT = Event()
+        self.wss_sem: SemT = Semaphore(0)
 
     def run_core_engine(self) -> None:
         """Creates required output directories, spawns worker processes, and starts the MainManager loop."""
@@ -111,11 +103,11 @@ class MainAgent:
         """
 
         funcs: list[FunctionType] = []
-        funcs.append((run_wss_sim if self.is_backtesting else run_market_data_wss))
-        funcs.append(run_parsing_sim if self.is_backtesting else run_parsing)
-        funcs.append(run_logic_sim if self.is_backtesting else run_logic)
+        funcs.append(run_streaming)
+        funcs.append(run_parsing)
+        funcs.append(run_analyzing)
         if self.with_execution:
-            funcs.append(run_execution_sim if self.is_backtesting else run_execution)
+            funcs.append(run_executing)
 
         return funcs
 

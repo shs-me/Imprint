@@ -302,7 +302,7 @@ class TextStream(BaseRingBuf, SharedMemorySegments):
 class Signal(BaseRingBuf, SharedMemorySegments):
     """Shared memory ring buffer layout for strategy trade signals."""
 
-    data_size: int = 24
+    data_size: int = 32
     data_header_size: int = 1
     cell_amount: int = 1000
 

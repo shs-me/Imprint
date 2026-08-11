@@ -9,9 +9,9 @@ from ...core.configs import (
     RiskManagment,
     Setup,
 )
-from ...core.engine.base.base_footprint_reader import FootprintReader
-from ...core.engine.general.execution import Execution
-from ...core.engine.mode.real.base_adapters import (
+from ...core.footprint import BaseFootprintReader
+from ...core.pipeline.executing import BaseExecution
+from ...core.pipeline.utils.base_adapters import (
     AggTrades,
     OrderEncoder,
     UserStreamDecoder,
@@ -54,7 +54,7 @@ class Real:
 
 @dataclass
 class Strategy:
-    algorithm: type[FootprintReader]
+    algorithm: type[BaseFootprintReader]
     footprint: Footprint
     risk_managment: RiskManagment
 
@@ -64,7 +64,7 @@ class SetupCore:
     run_mode: Backtesting | Real
     strategy: Strategy
     symbol: str = "DASHUSDT"
-    with_execution: type[Execution] | None = None
+    with_execution: type[BaseExecution] | None = None
 
     def __post_init__(self) -> None:
         args: list[Configuration] = [

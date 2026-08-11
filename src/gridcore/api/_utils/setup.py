@@ -3,8 +3,8 @@ import importlib.util
 from loguru import logger
 
 from ...core import constant
-from ...core.engine.mode.real.rest_agent import RestAgent
 from ...core.main import run_core
+from ...core.pipeline.utils.rest_agent import RestAgent
 from ...core.utils.handlers import error_handler
 from ...core.utils.tools import download_aggTrade_hist_daily_data, to_date
 from .configs import Backtesting, SetupCore
