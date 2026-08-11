@@ -11,8 +11,7 @@ class Backtest(Base):
         super().__init__(manager=manager, writer=writer)
 
     def alarm_clock(self) -> None:
-        while self.ds_wid[0] == self.ds_rid[0]:
-            time.sleep(0)
+        time.sleep(0)
 
     def set_trade_data(self, raw_data: memoryview) -> None:
         self.price[0], self.qty[0], self.timestamp[0], self.is_sell = struct.unpack(

@@ -18,8 +18,7 @@ class Backtest(Base):
         super().__init__(manager=manager, reader=reader)
 
     def alarm_clock(self) -> None:
-        while (self.reader._spare_flags[0] == 0) and (self.parsing_complete[0] == 0):
-            time.sleep(0)
+        time.sleep(0)
 
     def check_lag(self) -> None:
         pass

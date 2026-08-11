@@ -50,20 +50,23 @@ class Base(ABC):
                         self.writer.pre_re_init()
                         break
 
-                self.alarm_clock()
-                if self.get_trade_data():
-                    if init_session is False:
-                        self.writer.init_session(self.price[0], self.timestamp[0])
-                        init_session = True
+                if self.ds_wid[0] == self.ds_rid[0]:
+                    self.alarm_clock()
 
-                    if self.writer.update_footprint(
-                        self.price[0], self.qty[0], self.timestamp[0], self.is_sell
-                    ):
-                        self.update_success()
-                        if self.writer.spare_flags[1] == 1:
-                            self.writer.post_update()
+                if self.ds_wid[0] != self.ds_rid[0]:
+                    if self.get_trade_data():
+                        if init_session is False:
+                            self.writer.init_session(self.price[0], self.timestamp[0])
+                            init_session = True
 
-                    self.post_update()
+                        if self.writer.update_footprint(
+                            self.price[0], self.qty[0], self.timestamp[0], self.is_sell
+                        ):
+                            self.update_success()
+                            if self.writer.spare_flags[1] == 1:
+                                self.writer.post_update()
+
+                        self.post_update()
 
     def complete(self) -> bool:
         return self.ds_wid[0] == self.ds_rid[0]
@@ -87,18 +90,17 @@ class Base(ABC):
         pass
 
     def get_trade_data(self) -> bool:
-        if self.ds_wid[0] != self.ds_rid[0]:
-            cell: int = self.ds_rid[0]
-            lrd: int = self.ds_data_header[cell]
-            start: int = cell * self.ds_data_size
-            new_cell: int = cell + 1
-            self.set_trade_data(self.ds_data[start : start + lrd])
-            self.ds_rid[0] = new_cell if new_cell < self.ds_cell_amount else 0
+        cell: int = self.ds_rid[0]
+        lrd: int = self.ds_data_header[cell]
+        start: int = cell * self.ds_data_size
+        new_cell: int = cell + 1
+        self.set_trade_data(self.ds_data[start : start + lrd])
+        self.ds_rid[0] = new_cell if new_cell < self.ds_cell_amount else 0
 
-            if (self.price[0] > 0) and (self.qty[0] > 0) and (self.timestamp[0] > 0):
-                return True
+        if (self.price[0] > 0) and (self.qty[0] > 0) and (self.timestamp[0] > 0):
+            return True
 
-            self.set_proc_sc(code=scs.UNVALID_DATA, wait_main_task=True)
+        self.set_proc_sc(code=scs.UNVALID_DATA, wait_main_task=True)
 
         return False
 

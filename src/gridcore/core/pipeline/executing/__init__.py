@@ -20,6 +20,6 @@ def run_executing(
     c_name = manager.cfgSetup.execution_class_name
 
     execution: type[BaseExecution] = getattr(importlib.import_module(m_name), c_name)
-    manager.set_text(f"{execution.__name__} used as {BaseExecution.__name__}")
+    manager.set_text(f"{execution.__name__} used as BaseExecution")
     agent = execution(manager, execution_event=execution_event)
     agent._run_execution_engine()

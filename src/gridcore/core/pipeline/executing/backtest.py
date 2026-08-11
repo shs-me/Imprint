@@ -30,15 +30,14 @@ class Backtest(Base, ABC):
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
         matching = False
-        while self.logic_complete[0] == 0:
-            if self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
-                matching = True
-            if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
-                break
-            if matching:
-                self.acm.start(self.trade_readed_time[0])
+        if self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
+            matching = True
+        if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
+            return
+        if matching:
+            self.acm.start(self.trade_readed_time[0])
 
-            time.sleep(0)
+        time.sleep(0)
 
     @abstractmethod
     def _pre_execute_signal_action(self, time_get_signal: int) -> None:

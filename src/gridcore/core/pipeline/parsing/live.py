@@ -33,8 +33,7 @@ class Live(Base):
         self.decoder: Decoder[AggTrades] = Decoder(type=self.agg_trade, strict=False)
 
     def alarm_clock(self) -> None:
-        if self.ds_wid[0] == self.ds_rid[0]:
-            self.parsing_event.wait()
+        self.parsing_event.wait(0.1)
 
     def set_trade_data(self, raw_data: memoryview) -> None:
         trade = self.decoder.decode(raw_data[:])
@@ -52,8 +51,10 @@ class Live(Base):
             if self.parsing_event.is_set():
                 self.parsing_event.clear()
 
+    def final_actions(self) -> None:
+        super().final_actions()
+        self.manager.set_text(f"Count Prepped Ticks: {self.writer.counter_ticks[0]}")
+
     def post_final_action(self) -> None:
         if self.logic_event.is_set() is False:
             self.logic_event.set()
-
-        self.manager.set_text(f"Count Prepped Ticks: {self.writer.counter_ticks[0]}")

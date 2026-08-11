@@ -20,16 +20,16 @@ class Base(ABC):
         self.sn_cell_amount: int = cfgSN.cell_amount
         self.sn_data_size: int = cfgSN.data_size // 8
         self.sn_data: memoryview = cfgSN.data.cast("q")
-        self.WB_1: memoryview = cfgSN.writer_id.cast("q")
-        self.RB_1: memoryview = cfgSN.reader_id.cast("q")
+        self.sn_wid: memoryview = cfgSN.writer_id.cast("q")
+        self.sn_rid: memoryview = cfgSN.reader_id.cast("q")
 
         cfgGUS = manager.cfgGetUserStream
         self.gus_cell_amount: int = cfgGUS.cell_amount
         self.gus_data: memoryview = cfgGUS.data
         self.gus_data_size: int = cfgGUS.data_size
         self.gus_data_header: memoryview = cfgGUS.data_header
-        self.WB_2: memoryview = cfgGUS.writer_id.cast("q")
-        self.RB_2: memoryview = cfgGUS.reader_id.cast("q")
+        self.gus_wid: memoryview = cfgGUS.writer_id.cast("q")
+        self.gus_rid: memoryview = cfgGUS.reader_id.cast("q")
 
         cfgSUS = manager.cfgSetUserStream
         self.sus_cell_amount: int = cfgSUS.cell_amount
@@ -56,23 +56,22 @@ class Base(ABC):
     @error_handler(set_status_code=True)
     def _run_execution_engine(self) -> None:
         # LocalLinks
-        have_status, task_status = self.have_status, self.task_status
-        WB_1, RB_1, WB_2, RB_2 = self.WB_1, self.RB_1, self.WB_2, self.RB_2
-        alarm_clock = self._alarm_clock
+        WB_1, RB_1, WB_2, RB_2 = self.sn_wid, self.sn_rid, self.gus_wid, self.gus_rid
         # - - -
         while True:
             # - - -
             while True:
-                if have_status():
+                if self.have_status():
                     task: bool | int = self.check_base_task(complete=self._complete())
                     if isinstance(task, bool):
                         if task:
-                            if task_status[0] & scs.COMPLETE:
+                            if self.task_status[0] & scs.COMPLETE:
                                 self._final_actions()
                                 self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
                             return
 
-                alarm_clock(WB_1, RB_1, WB_2, RB_2)
+                if self.logic_complete[0] == 0:
+                    self._alarm_clock(WB_1, RB_1, WB_2, RB_2)
 
                 if WB_1[0] != RB_1[0]:
                     self._check_signal_buf()
@@ -81,7 +80,7 @@ class Base(ABC):
 
     def _complete(self) -> bool:
         return (self.logic_complete[0] == 1) and (
-            (self.WB_1[0] == self.RB_1[0]) and (self.WB_2[0] == self.RB_2[0])
+            (self.sn_wid[0] == self.sn_rid[0]) and (self.gus_wid[0] == self.gus_rid[0])
         )
 
     @abstractmethod
@@ -114,14 +113,13 @@ class Base(ABC):
             self._post_final_action()
 
     def _get_signal_data(self) -> tuple[int, int, int]:
-
-        cell: int = self.RB_1[0]
+        cell: int = self.sn_rid[0]
         start: int = cell * self.sn_data_size
         get_data: memoryview = self.sn_data[start : start + self.sn_data_size]
         signal_id = get_data[0]
         nPrice, timestamp, order_param = get_data[1], get_data[2], get_data[3]
         new_cell: int = cell + 1
-        self.RB_1[0] = new_cell if (new_cell < self.sn_cell_amount) else 0
+        self.sn_rid[0] = new_cell if (new_cell < self.sn_cell_amount) else 0
         return nPrice, timestamp, order_param
 
     @abstractmethod
@@ -135,18 +133,17 @@ class Base(ABC):
         pass
 
     def _check_user_data_buf(self) -> None:
-        while self.WB_2[0] != self.RB_2[0]:
+        while self.gus_wid[0] != self.gus_rid[0]:
             raw_buf = self._get_user_data()
             self._preppare_user_data(raw_buf)
 
     def _get_user_data(self) -> memoryview:
-
-        cell: int = self.RB_2[0]
+        cell: int = self.gus_rid[0]
         start: int = cell * self.gus_data_size
         len_raw_data: int = self.gus_data_header[cell]
         raw_data: memoryview = self.gus_data[start : start + len_raw_data]
         new_cell: int = cell + 1
-        self.RB_2[0] = new_cell if (new_cell < self.gus_cell_amount) else 0
+        self.gus_rid[0] = new_cell if (new_cell < self.gus_cell_amount) else 0
         return raw_data
 
     @abstractmethod

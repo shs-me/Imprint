@@ -83,37 +83,41 @@ class Node(Base):
                 self._wait_main_task = False
 
             task_sc: int = self.task_status[0]
-            _return_data, _clear_task, _set_proc_sc = task_sc, True, None
+            return_data: int | bool = task_sc
+            clear_task: int = 0
+            set_proc_sc: int = 0
 
             if task_sc & scs.RUN:
-                _return_data = False
+                return_data = False
+                clear_task |= scs.RUN
 
             if task_sc & scs.STOP:
                 self._general_event.wait()
-                _return_data = False
+                return_data = False
+                clear_task |= scs.STOP
 
             if task_sc & scs.EXIT:
-                _return_data, _clear_task, _set_proc_sc = True, False, scs.EXIT
+                return_data = True
+                set_proc_sc |= scs.EXIT
 
             if task_sc & scs.COMPLETE:
-                _return_data, _clear_task = (
-                    (True, False) if complete else (False, False)
-                )
+                return_data = True if complete else False
 
             if task_sc & scs.GC_COLLECT:
                 gc.collect()
-                _return_data = False
+                return_data = False
+                clear_task |= scs.GC_COLLECT
 
             if task_sc & (scs.QTY_LESS_LIMIT | scs.LOSS_MORE_LIMIT):
-                _return_data = True
+                return_data = True
 
-            if _clear_task:
+            if clear_task:
                 self.clear_task_sc(task_sc)
 
-            if _set_proc_sc:
-                self.set_proc_sc(_set_proc_sc, wait_main_task=True)
+            if set_proc_sc:
+                self.set_proc_sc(set_proc_sc, wait_main_task=True)
 
-            return _return_data
+            return return_data
 
         else:
             return False

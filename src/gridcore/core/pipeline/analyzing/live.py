@@ -26,9 +26,8 @@ class Live(Base):
         self.logic_event: Event = logic_event
 
     def alarm_clock(self) -> None:
-        if (self.reader._spare_flags[0] == 0) and (self.parsing_complete[0] == 0):
-            if self.logic_event.is_set() is False:
-                self.logic_event.wait()
+        if self.logic_event.is_set() is False:
+            self.logic_event.wait(timeout=0.1)
 
     def post_update(self) -> None:
         if self.reader._spare_flags[1] == 1:

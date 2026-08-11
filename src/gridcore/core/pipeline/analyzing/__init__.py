@@ -34,9 +34,7 @@ def run_analyzing(
         sync = SyncViaEvent(manager, execution_event)
 
     reader: BaseFootprintReader = reader_type(manager, sync)
-    manager.set_text(
-        f"{reader.__class__.__name__} used as {BaseFootprintReader.__name__}"
-    )
+    manager.set_text(f"{reader.__class__.__name__} used as BaseFootprintReader")
 
     if manager.cfgSetup.backtesting:
         from .backtest import Backtest as BacktestAgent

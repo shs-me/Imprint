@@ -40,7 +40,8 @@ class Base(ABC):
                     elif task & scs.FP_RE_INIT:
                         break
 
-                self.alarm_clock()
+                if (flag[0] == 0) and (self.parsing_complete[0] == 0):
+                    self.alarm_clock()
 
                 if flag[0] == 1:
                     if init_session is False:

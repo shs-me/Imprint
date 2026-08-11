@@ -29,6 +29,7 @@ class Host(Base):
     ) -> None:
         super().__init__(segments, shm_buf, configs, main_tools)
 
+        self.with_execution = self.cfgSetup.execution
         self.startDate: date = date.today()
         self.time_format: str = (
             "%H:%M:%S.%f" if self.cfgSetup.backtesting else "%Y:%m:%d-%H:%M:%S.%f"
@@ -78,9 +79,10 @@ class Host(Base):
             self.check_logic_proc()
             self._main_status[self.logic] -= 1
 
-        if self._main_status[self.execution]:
-            self.check_execution_proc()
-            self._main_status[self.execution] -= 1
+        if self.with_execution:
+            if self._main_status[self.execution]:
+                self.check_execution_proc()
+                self._main_status[self.execution] -= 1
 
         if self.close_procs:
             self.kill_procs()
@@ -177,6 +179,12 @@ class Host(Base):
         self.proc_is_alive(p_id)
 
     def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> None:
+        if sc & scs.HAVE_TEXT:
+            logs: list[tuple[int, str]] = self.get_text(proc_id)
+            for timestamp, log in logs:
+                self.logger(log, LogLevel.INFO, proc_name, timestamp)
+
+            self.clear_proc_sc(scs.HAVE_TEXT, proc_id)
 
         if sc & scs.ERROR:
             self.logger(scs.ERROR.label, LogLevel.ERROR, proc_name)
@@ -187,13 +195,6 @@ class Host(Base):
             self.logger(scs.COMPLETE.label, LogLevel.WARNING, proc_name)
             self.procs.pop(proc_id)
             self.clear_proc_sc(scs.COMPLETE, proc_id)
-
-        if sc & scs.HAVE_TEXT:
-            logs: list[tuple[int, str]] = self.get_text(proc_id)
-            for timestamp, log in logs:
-                self.logger(log, LogLevel.INFO, proc_name, timestamp)
-
-            self.clear_proc_sc(scs.HAVE_TEXT, proc_id)
 
         if sc & scs.BIG_TEXT_SIZE:
             self.logger(scs.BIG_TEXT_SIZE.label, LogLevel.WARNING, proc_name)

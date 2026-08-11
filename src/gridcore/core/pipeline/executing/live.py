@@ -25,7 +25,7 @@ class Live(Base, ABC):
         if (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0]):
             self.execution_event.clear()
             if (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0]):
-                self.execution_event.wait(timeout=60)
+                self.execution_event.wait(timeout=0.1)
 
     @abstractmethod
     def _pre_execute_signal_action(self, time_get_signal: int) -> None:

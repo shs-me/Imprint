@@ -45,6 +45,8 @@ class MainAgent:
         self.logic_event: EventT = Event()
         self.wss_sem: SemT = Semaphore(0)
 
+        self.execution = ExecutionProc(10)
+
     def run_core_engine(self) -> None:
         """Creates required output directories, spawns worker processes, and starts the MainManager loop."""
 
