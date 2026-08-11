@@ -29,7 +29,7 @@ class Sync(ABC):
     @property
     def signal_id(self) -> int:
         self._signal_id += 1
-        return self.signal_id
+        return self._signal_id
 
     def send_signal(
         self,
@@ -47,7 +47,7 @@ class Sync(ABC):
         if (
             (self.sn_wid[0] - self.sn_rid[0] + self.sn_cell_amount)
             % self.sn_cell_amount
-        ) > self.safe_lag:
+        ) > self.sn_safe_lag:
             return
 
         orderParam = 0
