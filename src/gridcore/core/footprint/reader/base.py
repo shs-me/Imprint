@@ -11,7 +11,7 @@ from ...settings import SpaceCoords
 from ..models import Converter, FootprintLike
 
 
-class Reader(ABC):
+class Base(ABC):
     def __init__(self, manager: NodeManager) -> None:
         self._manager: NodeManager = manager
 

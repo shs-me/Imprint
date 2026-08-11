@@ -6,11 +6,11 @@ from numpy.typing import NDArray
 
 from ... import constant as c
 from ...ipc import NodeManager
-from .base import Reader
+from .base import Base
 from .sync import Sync
 
 
-class Synced(Reader, ABC):
+class Synced(Base, ABC):
     def __init__(
         self,
         manager: NodeManager,
@@ -19,7 +19,7 @@ class Synced(Reader, ABC):
         find_patterns_in_update_closed_bar: bool = False,
         find_patterns_in_update_clusters: bool = False,
     ) -> None:
-        super().__init__(manager=manager)
+        Base.__init__(self, manager=manager)
 
         self._sync: Sync = sync
         self._fpiu_bar: bool = find_patterns_in_update_bar
@@ -27,26 +27,26 @@ class Synced(Reader, ABC):
         self._fpiu_clusters: bool = find_patterns_in_update_clusters
 
     def _init_array(self) -> None:
-        super()._init_array()
+        Base._init_array(self)
         self.algorithm_metadata: NDArray[int64] = np.zeros((2, 2), dtype=int64)
         self.amRow: int = 0
 
     def _update_clusters(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
     ) -> None:
-        super()._update_clusters(idYmin, idYmax, idXmin, idXmax)
+        Base._update_clusters(self, idYmin, idYmax, idXmin, idXmax)
         if self._fpiu_clusters:
             self.find_patterns_in_update_clusters(idYmin, idYmax, idXmin, idXmax)
 
     def _update_bar(
         self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
-        super()._update_bar(idYmin, idYmax, idxBid, idxAsk)
+        Base._update_bar(self, idYmin, idYmax, idxBid, idxAsk)
         if self._fpiu_bar:
             self.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
 
     def _update_closed_bar_and_fp(self) -> None:
-        super()._update_closed_bar_and_fp()
+        Base._update_closed_bar_and_fp(self)
         if self._fpiu_closed_bar:
             self.find_patterns_in_update_closed_bar()
 

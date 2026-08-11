@@ -38,6 +38,7 @@ class Base(ABC):
                             return
 
                     elif task & scs.FP_RE_INIT:
+                        print(1)
                         break
 
                 if (flag[0] == 0) and (self.parsing_complete[0] == 0):

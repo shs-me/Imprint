@@ -88,12 +88,10 @@ class Node(Base):
             set_proc_sc: int = 0
 
             if task_sc & scs.RUN:
-                return_data = False
                 clear_task |= scs.RUN
 
             if task_sc & scs.STOP:
                 self._general_event.wait()
-                return_data = False
                 clear_task |= scs.STOP
 
             if task_sc & scs.EXIT:
@@ -101,18 +99,18 @@ class Node(Base):
                 set_proc_sc |= scs.EXIT
 
             if task_sc & scs.COMPLETE:
-                return_data = True if complete else False
+                if complete:
+                    return_data = True
 
             if task_sc & scs.GC_COLLECT:
                 gc.collect()
-                return_data = False
                 clear_task |= scs.GC_COLLECT
 
             if task_sc & (scs.QTY_LESS_LIMIT | scs.LOSS_MORE_LIMIT):
                 return_data = True
 
             if clear_task:
-                self.clear_task_sc(task_sc)
+                self.clear_task_sc(clear_task)
 
             if set_proc_sc:
                 self.set_proc_sc(set_proc_sc, wait_main_task=True)
