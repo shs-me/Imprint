@@ -62,13 +62,14 @@ class Base(ABC):
             # - - -
             while True:
                 if self.have_status():
-                    task: bool | int = self.check_base_task(complete=self._complete())
-                    if isinstance(task, bool):
-                        if task:
-                            if self.task_status[0] & scs.COMPLETE:
-                                self._final_actions()
-                                self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
-                            return
+                    task: int = self.check_base_task()
+                    if task & scs.EXIT:
+                        return self.set_proc_sc(scs.EXIT, wait_main_task=False)
+
+                    if task & scs.COMPLETE:
+                        if self._complete():
+                            self._final_actions()
+                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
 
                 if self.logic_complete[0] == 0:
                     self._alarm_clock(WB_1, RB_1, WB_2, RB_2)

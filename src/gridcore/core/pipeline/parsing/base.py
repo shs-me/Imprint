@@ -38,15 +38,16 @@ class Base(ABC):
             init_session: bool = False
             while True:
                 if self.have_status():
-                    task: bool | int = self.check_base_task(self.complete())
-                    if isinstance(task, bool):
-                        if task:
-                            if self.task_status[0] & scs.COMPLETE:
-                                self.final_actions()
-                                self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
-                            return
+                    task: int = self.check_base_task()
+                    if task & scs.EXIT:
+                        return self.set_proc_sc(scs.EXIT, wait_main_task=False)
 
-                    elif task & scs.FP_RE_INIT:
+                    if task & scs.COMPLETE:
+                        if self.complete():
+                            self.final_actions()
+                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
+
+                    if task & scs.FP_RE_INIT:
                         self.writer.pre_re_init()
                         break
 

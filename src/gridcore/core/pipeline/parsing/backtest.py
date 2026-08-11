@@ -25,6 +25,7 @@ class Backtest(Base):
         return super().post_update()
 
     def final_actions(self) -> None:
+        super().final_actions()
         self.manager.set_text(f"Count Prepped Ticks: {self.writer.counter_ticks[0]}")
 
     def post_final_action(self) -> None:

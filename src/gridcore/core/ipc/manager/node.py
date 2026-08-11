@@ -65,16 +65,7 @@ class Node(Base):
 
         return False
 
-    def check_base_task(self, complete: bool) -> bool | int:
-        """Evaluates task status flags set by MainManager and executes task commands.
-
-        Args:
-            complete (bool): True if worker process has completed pipeline work.
-
-        Returns:
-            bool | int: Task action indicator or task status code.
-        """
-
+    def check_base_task(self) -> int:
         if self.task_status[0] != 0 or self.proc_status[0] != 0:
             if self._wait_main_task:
                 while self.task_status[0] == 0:
@@ -83,9 +74,8 @@ class Node(Base):
                 self._wait_main_task = False
 
             task_sc: int = self.task_status[0]
-            return_data: int | bool = task_sc
+            return_data: int = task_sc
             clear_task: int = 0
-            set_proc_sc: int = 0
 
             if task_sc & scs.RUN:
                 clear_task |= scs.RUN
@@ -94,26 +84,15 @@ class Node(Base):
                 self._general_event.wait()
                 clear_task |= scs.STOP
 
-            if task_sc & scs.EXIT:
-                return_data = True
-                set_proc_sc |= scs.EXIT
-
-            if task_sc & scs.COMPLETE:
-                if complete:
-                    return_data = True
-
             if task_sc & scs.GC_COLLECT:
                 gc.collect()
                 clear_task |= scs.GC_COLLECT
 
-            if task_sc & (scs.QTY_LESS_LIMIT | scs.LOSS_MORE_LIMIT):
-                return_data = True
+            if task_sc & (scs.FP_RE_INIT):
+                clear_task |= scs.FP_RE_INIT
 
             if clear_task:
                 self.clear_task_sc(clear_task)
-
-            if set_proc_sc:
-                self.set_proc_sc(set_proc_sc, wait_main_task=True)
 
             return return_data
 

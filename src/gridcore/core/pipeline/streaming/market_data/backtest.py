@@ -62,13 +62,14 @@ class Backtest(Base):
             # - - -
             while True:
                 if have_status():
-                    task: bool | int = self.check_base_task(self.complete())
-                    if isinstance(task, bool):
-                        if task:
-                            if task_status[0] & scs.COMPLETE:
-                                self.final_actions()
-                                self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
-                            return
+                    task: int = self.check_base_task()
+                    if task & scs.EXIT:
+                        return self.set_proc_sc(scs.EXIT, wait_main_task=False)
+
+                    if task & scs.COMPLETE:
+                        if self.complete():
+                            self.final_actions()
+                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
 
                 if prepper.error is None:
                     if not prepper.queue:

@@ -3,7 +3,7 @@ from multiprocessing.synchronize import Event
 from websockets.asyncio.client import connect
 
 from ....ipc import NodeManager
-from ..base import Base
+from ..base import Base, scs
 
 
 class Live(Base):
@@ -29,10 +29,13 @@ class Live(Base):
             async with connect(self.agg_trades_uri, ping_interval=20) as ws:
                 while True:
                     if have_status():
-                        task: bool | int = self.check_base_task(complete=True)
-                        if isinstance(task, bool):
-                            if task:
-                                return
+                        task: int = self.check_base_task()
+                        if task & scs.EXIT:
+                            return self.set_proc_sc(scs.EXIT, wait_main_task=False)
+
+                        if task & scs.COMPLETE:
+                            self.final_actions()
+                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
 
                     raw_data = await ws.recv(decode=False)
                     alarm_clock(wid, rid, cell_amount, safe_lag)
