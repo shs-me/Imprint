@@ -1,9 +1,10 @@
 import numpy as np
+from numba import njit
 from numpy import int64
 from numpy.typing import NDArray
 
-from .... import configs as cfg
-from .... import constant as c
+from .. import configs as cfg
+from .. import constant as c
 
 
 class Converter:
@@ -54,7 +55,7 @@ class Converter:
 
         self.oh_rows: int = 10_000
         self.oh_cols: int = c.TP_ConstantCount
-
+        self._have_pending_orders: bool = False
         self._init_array()
 
     def _init_array(self) -> None:
@@ -212,6 +213,14 @@ class Converter:
         slTicks: int = nPrice * self._slDev // 10_000
         return nPrice + (-slTicks if is_long else slTicks)
 
+    @property
+    def have_pending_orders(self) -> bool:
+        return self._have_pending_orders
+
+    @have_pending_orders.setter
+    def have_pending_orders(self, value: bool) -> None:
+        self._have_pending_orders = value
+
     def is_averaging(self, order_param: int) -> bool:
         """Checks whether incoming signal increases an existing active position."""
 
@@ -219,9 +228,9 @@ class Converter:
         is_buy = bool(order_param & c.OF_BUY)
 
         if is_buy and is_long:
-            return True if self._longNqty[0] else False
+            return True if (self._longNqty[0] or self.have_pending_orders) else False
         elif not is_buy and not is_long:
-            return True if self._shortNqty[0] else False
+            return True if (self._shortNqty[0] or self.have_pending_orders) else False
         else:
             return False
 
@@ -230,3 +239,33 @@ class Converter:
 
         if self.cfgAC.save_orders_history:
             np.save(c.ORDERS_HISTORY_DUMP_PATH, self.orders_history[: self.ohWid[0], :])
+
+
+@njit(cache=True)
+def to_nMargin(
+    nPrice: int,
+    nQty: int,
+    leverage: int,
+    price_mult: int,
+    qty_mult: int,
+    scale_mult: int,
+) -> int:
+    margin: float = ((nQty / qty_mult) * (nPrice / price_mult)) / leverage
+    return round(margin * scale_mult)
+
+
+@njit(cache=True)
+def to_nPnl(
+    closeNprice: int,
+    nQty: int,
+    is_long: bool,
+    longEntryNprice: int,
+    shortEntryNprice: int,
+    price_mult: int,
+    qty_mult: int,
+    scale_mult: int,
+) -> int:
+    entryNprice: int = longEntryNprice if is_long else shortEntryNprice
+    diffNprice: int = (closeNprice - entryNprice) * (1 if is_long else -1)
+    pnl: float = (diffNprice / price_mult) * (nQty / qty_mult)
+    return round(pnl * scale_mult)

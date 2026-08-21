@@ -1,9 +1,9 @@
 import time
 from abc import ABC, abstractmethod
 
+from ...exchange_sim import ExchangeSim
 from ...ipc import NodeManager
 from .base import Base
-from .simulation import ExchangeSim
 
 
 class Backtest(Base, ABC):

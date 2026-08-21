@@ -1,10 +1,10 @@
 import struct
 from abc import ABC, abstractmethod
 
+from ...account import AccountConverter, AccountManager
 from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
-from .account import AccountConverter, AccountManager
 
 
 class Base(ABC):

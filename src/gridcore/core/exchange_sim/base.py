@@ -6,15 +6,15 @@ from numba import njit
 from numpy import int64, uint8
 from numpy.typing import NDArray
 
-from .... import constant as c
-from ....ipc import NodeManager
+from .. import constant as c
 from ..account import manager as am
+from ..ipc import NodeManager
 from . import matching_engine as me
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
-class Exchange(am.Manager, me.MatchingEngine):
+class Base(am.Manager, me.MatchingEngine):
     def __init__(self, manager: NodeManager) -> None:
         am.Manager.__init__(self, manager)
         me.MatchingEngine.__init__(self, manager)
@@ -143,7 +143,7 @@ def _start(
 
         trade_nPrice: int = dfm[row, 0]
 
-        uNpnl = am._update_unrealized_nPnl(
+        uNpnl = am.update_unrealized_nPnl(
             trade_nPrice=trade_nPrice,
             unrealizedNpnl=unrealizedNpnl,
             longUnrealizedNpnl=longUnrealizedNpnl,
@@ -163,7 +163,7 @@ def _start(
         dynamicNbalance[0] = nBalance[0] + uNpnl
         availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
 
-        am._update_equity_ohlc(
+        am.update_equity_ohlc(
             trade_timestamp=trade_timestamp,
             current_equity=dynamicNbalance[0],
             equity_history=equity_history,
@@ -211,7 +211,7 @@ def _start(
                 short_mfe=short_mfe,
             )
 
-        uNpnl = am._update_unrealized_nPnl(
+        uNpnl = am.update_unrealized_nPnl(
             trade_nPrice=trade_nPrice,
             unrealizedNpnl=unrealizedNpnl,
             longUnrealizedNpnl=longUnrealizedNpnl,
@@ -231,7 +231,7 @@ def _start(
         dynamicNbalance[0] = nBalance[0] + uNpnl
         availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
 
-        am._update_equity_ohlc(
+        am.update_equity_ohlc(
             trade_timestamp=trade_timestamp,
             current_equity=dynamicNbalance[0],
             equity_history=equity_history,
@@ -305,7 +305,7 @@ def _update_positions(
                 data_example[de_row, 6] = 0
                 data_example[de_row, 7] = 0
 
-            am._update_position(
+            am.update_position(
                 nPrice=nPrice,
                 nQty=nQty,
                 is_long=is_long,

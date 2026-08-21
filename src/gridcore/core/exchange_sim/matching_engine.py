@@ -6,10 +6,10 @@ from numba import njit
 from numpy import bool_, int64, uint8
 from numpy.typing import NDArray
 
-from .... import constant as c
-from ....ipc import NodeManager
-from ....pipeline.utils.base_data_prepper import BaseDataPrepper
-from ....settings import StatusCodes as scs
+from .. import constant as c
+from ..ipc import NodeManager
+from ..pipeline.utils.base_data_prepper import BaseDataPrepper
+from ..settings import StatusCodes as scs
 
 
 class DataPrepper(BaseDataPrepper):
