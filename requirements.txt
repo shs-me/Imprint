@@ -1,8 +1,7 @@
-colorama==0.4.6
-llvmlite==0.48.0
-loguru==0.7.3
-msgspec==0.21.1
 numba==0.66.0
 numpy==2.4.6
+msgspec==0.21.1
 websockets==16.1.1
-win32_setctime==1.2.0
+loguru==0.7.3
+matplotlib==3.11.1
+pytest==9.1.1
