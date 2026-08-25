@@ -3,9 +3,8 @@ from datetime import datetime
 
 from numpy import float64, int64
 from numpy.typing import NDArray
-from pandas import DataFrame
 
-from ..settings import CloseTrades, OpenTrades
+from ..settings import OHLC, CloseTrades, OpenTrades
 from . import metrics as m
 from .equity_history import analyze_equity_history
 from .orders_history import analyze_orders_history
@@ -24,7 +23,7 @@ class Stats:
     scale_mult: int
     equity: NDArray[int64]
     orders: NDArray[int64]
-    ohlc: DataFrame
+    ohlc: OHLC
 
     def __post_init__(self) -> None:
         result = analyze_equity_history(self.scale_mult, self.equity)

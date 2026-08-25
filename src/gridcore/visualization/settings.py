@@ -1,6 +1,17 @@
 from datetime import datetime
 from typing import TypedDict
 
+from numpy import datetime64, float64
+from numpy.typing import NDArray
+
+
+class OHLC(TypedDict):
+    open: NDArray[float64]
+    high: NDArray[float64]
+    low: NDArray[float64]
+    close: NDArray[float64]
+    time: NDArray[datetime64]
+
 
 class CloseTrades(TypedDict):
     time: datetime

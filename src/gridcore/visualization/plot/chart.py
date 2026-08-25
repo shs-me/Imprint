@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from matplotlib.axes import Axes
+from numpy import float64
 
 from ..analyze import Stats
 from .utils import (
@@ -14,11 +15,11 @@ from .utils import (
 
 
 def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
-    if stats.ohlc.empty:
+    if not stats.ohlc["time"][0]:
         return not_data_for_plot(ax)
 
     # Base Price Line
-    base_price = stats.ohlc["Close"].iloc[0]
+    base_price: float64 = stats.ohlc["close"][0]
     ax.axhline(
         base_price,
         color="#757575",
@@ -31,8 +32,8 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
 
     # Price Line
     ax.plot(
-        stats.ohlc.index,
-        stats.ohlc["Close"],
+        stats.ohlc["time"],
+        stats.ohlc["close"],
         color="#546E7A",
         alpha=0.6,
         linewidth=1.0,
@@ -40,20 +41,20 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
     )
 
     ax.fill_between(
-        stats.ohlc.index,
+        stats.ohlc["time"],
         base_price,
-        stats.ohlc["Close"],
-        where=(stats.ohlc["Close"] >= base_price),
+        stats.ohlc["close"],
+        where=(stats.ohlc["close"] >= base_price),
         color="#00E676",
         alpha=0.12,
         interpolate=True,
         zorder=2,
     )
     ax.fill_between(
-        stats.ohlc.index,
+        stats.ohlc["time"],
         base_price,
-        stats.ohlc["Close"],
-        where=(stats.ohlc["Close"] < base_price),
+        stats.ohlc["close"],
+        where=(stats.ohlc["close"] < base_price),
         color="#FF1744",
         alpha=0.12,
         interpolate=True,

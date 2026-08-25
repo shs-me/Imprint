@@ -2,13 +2,24 @@ import os
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
 from numpy import int64
 from numpy.typing import NDArray
 
 from ..core import constant as c
 from .analyze import Stats
 from .plot import render
+from .settings import OHLC
+
+
+def get_ohlc(price_mult: int, headers: NDArray[int64]) -> OHLC:
+    ohlc: OHLC = {
+        "open": headers[:, c.BH_Open] / price_mult,
+        "high": headers[:, c.BH_High] / price_mult,
+        "low": headers[:, c.BH_Low] / price_mult,
+        "close": headers[:, c.BH_Close] / price_mult,
+        "time": headers[:, c.BH_Time].astype("datetime64[ms]"),
+    }
+    return ohlc
 
 
 def get_headers_paths(
@@ -44,20 +55,6 @@ def data_load(
     return equity_history, orders_history, headers
 
 
-def get_ohlc(price_mult: int, headers: NDArray[int64]) -> pd.DataFrame:
-    df = pd.DataFrame()
-    df["Open"] = headers[:, c.BH_Open] / price_mult
-    df["High"] = headers[:, c.BH_High] / price_mult
-    df["Low"] = headers[:, c.BH_Low] / price_mult
-    df["Close"] = headers[:, c.BH_Close] / price_mult
-    df["OpenTime"] = headers[:, c.BH_Time]
-
-    df.set_index(df["OpenTime"], inplace=True)
-
-    df.index = pd.to_datetime(df.index, unit="ms")
-    return df
-
-
 def run(
     footprint_headers_path: str,
     symbol: str,
@@ -73,24 +70,32 @@ def run(
     timeframe: int,
 ) -> None:
     headers_paths = get_headers_paths(
-        footprint_headers_path, symbol, start_date, end_date
+        footprint_headers_path=footprint_headers_path,
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date,
     )
     equity_history, orders_history, headers = data_load(
-        equity_history_path, orders_history_path, headers_paths
+        equity_history_path=equity_history_path,
+        orders_history_path=orders_history_path,
+        headers_paths=headers_paths,
     )
-    ohlc = get_ohlc(price_mult, headers)
+    ohlc = get_ohlc(
+        price_mult=price_mult,
+        headers=headers,
+    )
     stats = Stats(
-        symbol,
-        start_date,
-        end_date,
-        start_balance,
-        leverage,
-        timeframe,
-        price_mult,
-        qty_mult,
-        scale_mult,
-        equity_history,
-        orders_history,
-        ohlc,
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date,
+        start_balance=start_balance,
+        leverage=leverage,
+        timeframe=timeframe,
+        price_mult=price_mult,
+        qty_mult=qty_mult,
+        scale_mult=scale_mult,
+        equity=equity_history,
+        orders=orders_history,
+        ohlc=ohlc,
     )
     render(stats)
