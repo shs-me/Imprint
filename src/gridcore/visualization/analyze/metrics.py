@@ -74,11 +74,17 @@ def calculate_profit_factor(
 
 
 def calculate_avg_mfe_pct(trades_close: list[CloseTrades]) -> float:
-    return float(np.mean([tc["mfe_pct"] for tc in trades_close if tc["mfe_pct"] > 0]))
+    mfe_pcts: list[float] = [
+        tc["mfe_pct"] for tc in trades_close if (tc["mfe_pct"] > 0)
+    ]
+    return float(np.mean(mfe_pcts) if mfe_pcts else 0.0)
 
 
 def calculate_avg_mae_pct(trades_close: list[CloseTrades]) -> float:
-    return float(np.mean([tc["mae_pct"] for tc in trades_close if tc["mae_pct"] > 0]))
+    mae_pcts: list[float] = [
+        tc["mae_pct"] for tc in trades_close if (tc["mae_pct"] < 0)
+    ]
+    return float(np.mean(mae_pcts) if mae_pcts else 0.0)
 
 
 def calculate_avg_hold_time_positions(

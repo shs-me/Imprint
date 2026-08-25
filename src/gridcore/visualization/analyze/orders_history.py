@@ -56,31 +56,29 @@ def analyze_orders_history(
             dt: datetime = datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc)
             price: float = nPrice / price_mult
             qty: float = nQty / qty_mult
-
-            update_position(
-                nPrice=nPrice,
-                nQty=nQty,
-                is_long=is_long,
-                is_open=is_open,
-                is_maker=is_maker,
-                nCommission=nCommission,
-                price_mult=price_mult,
-                qty_mult=qty_mult,
-                scale_mult=scale_mult,
-                leverage=leverage,
-                nBalance=nBalance,
-                lockedNbalance=lockedNbalance,
-                longNqty=longNqty,
-                longEntryNprice=longEntryNprice,
-                shortNqty=shortNqty,
-                shortEntryNprice=shortEntryNprice,
-                long_mae=long_mae,
-                long_mfe=long_mfe,
-                short_mae=short_mae,
-                short_mfe=short_mfe,
-            )
-
             if is_open:
+                update_position(
+                    nPrice=nPrice,
+                    nQty=nQty,
+                    is_long=is_long,
+                    is_open=is_open,
+                    is_maker=is_maker,
+                    nCommission=nCommission,
+                    price_mult=price_mult,
+                    qty_mult=qty_mult,
+                    scale_mult=scale_mult,
+                    leverage=leverage,
+                    nBalance=nBalance,
+                    lockedNbalance=lockedNbalance,
+                    longNqty=longNqty,
+                    longEntryNprice=longEntryNprice,
+                    shortNqty=shortNqty,
+                    shortEntryNprice=shortEntryNprice,
+                    long_mae=long_mae,
+                    long_mfe=long_mfe,
+                    short_mae=short_mae,
+                    short_mfe=short_mfe,
+                )
                 trades_open.append(
                     {
                         "time": dt,
@@ -125,7 +123,28 @@ def analyze_orders_history(
                     mae, mae_pct = 0.0, 0.0
 
                 all_pnls.append(pnl)
-
+                update_position(
+                    nPrice=nPrice,
+                    nQty=nQty,
+                    is_long=is_long,
+                    is_open=is_open,
+                    is_maker=is_maker,
+                    nCommission=nCommission,
+                    price_mult=price_mult,
+                    qty_mult=qty_mult,
+                    scale_mult=scale_mult,
+                    leverage=leverage,
+                    nBalance=nBalance,
+                    lockedNbalance=lockedNbalance,
+                    longNqty=longNqty,
+                    longEntryNprice=longEntryNprice,
+                    shortNqty=shortNqty,
+                    shortEntryNprice=shortEntryNprice,
+                    long_mae=long_mae,
+                    long_mfe=long_mfe,
+                    short_mae=short_mae,
+                    short_mfe=short_mfe,
+                )
                 trades_close.append(
                     {
                         "time": dt,

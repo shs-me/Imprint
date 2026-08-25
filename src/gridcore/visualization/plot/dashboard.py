@@ -22,8 +22,10 @@ def plot_info_dashboard(ax: Axes, stats: Stats) -> None:
         ),
         (
             "Net Profit",
-            f"{get_usd(stats.net_profit)}{abs(stats.net_profit):,.2f}\
-            ({stats.net_profit / stats.start_balance * 100:+.2f}%)",
+            (
+                f"{get_usd(stats.net_profit)}{abs(stats.net_profit):,.2f} "
+                f"({stats.net_profit / stats.start_balance * 100:+.2f}%)"
+            ),
             "#00E676" if stats.net_profit >= 0 else "#FF1744",
         ),
         (
