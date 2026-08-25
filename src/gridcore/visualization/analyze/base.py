@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime
 
-from numpy import float64, int64
+from numpy import datetime64, float64, int64
 from numpy.typing import NDArray
 
 from ..settings import OHLC, CloseTrades, OpenTrades
@@ -27,7 +26,7 @@ class Stats:
 
     def __post_init__(self) -> None:
         result = analyze_equity_history(self.scale_mult, self.equity)
-        self.eq_times: list[datetime] = result[0]
+        self.eq_times: NDArray[datetime64] = result[0]
         self.eq_open: NDArray[float64] = result[1]
         self.eq_high: NDArray[float64] = result[2]
         self.eq_low: NDArray[float64] = result[3]

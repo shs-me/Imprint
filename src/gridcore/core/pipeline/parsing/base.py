@@ -27,10 +27,10 @@ class Base(ABC):
         cfgMetrics = self.manager.cfgMetrics
         self.parsing_complete: memoryview = cfgMetrics.parsing_complete
 
-        self.price: memoryview[float] = memoryview(bytearray(8)).cast("d")
-        self.qty: memoryview[float] = memoryview(bytearray(8)).cast("d")
+        self.nPrice: memoryview = memoryview(bytearray(8)).cast("q")
+        self.nQty: memoryview = memoryview(bytearray(8)).cast("q")
         self.timestamp: memoryview = memoryview(bytearray(8)).cast("q")
-        self.is_sell: bool = False
+        self.is_sell: memoryview = memoryview(bytearray(8)).cast("q")
 
     @error_handler(set_status_code=True)
     def run_parsing_engine(self) -> None:
@@ -57,11 +57,14 @@ class Base(ABC):
                 if self.ds_wid[0] != self.ds_rid[0]:
                     if self.get_trade_data():
                         if init_session is False:
-                            self.writer.init_session(self.price[0], self.timestamp[0])
+                            self.writer.init_session(self.nPrice[0], self.timestamp[0])
                             init_session = True
 
                         if self.writer.update_footprint(
-                            self.price[0], self.qty[0], self.timestamp[0], self.is_sell
+                            self.nPrice[0],
+                            self.nQty[0],
+                            self.timestamp[0],
+                            self.is_sell[0],
                         ):
                             self.update_success()
                             if self.writer.spare_flags[1] == 1:
@@ -98,7 +101,7 @@ class Base(ABC):
         self.set_trade_data(self.ds_data[start : start + lrd])
         self.ds_rid[0] = new_cell if new_cell < self.ds_cell_amount else 0
 
-        if (self.price[0] > 0) and (self.qty[0] > 0) and (self.timestamp[0] > 0):
+        if (self.nPrice[0] > 0) and (self.nQty[0] > 0) and (self.timestamp[0] > 0):
             return True
 
         self.set_proc_sc(code=scs.UNVALID_DATA, wait_main_task=True)

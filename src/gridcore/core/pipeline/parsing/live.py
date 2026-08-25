@@ -37,10 +37,10 @@ class Live(Base):
 
     def set_trade_data(self, raw_data: memoryview) -> None:
         trade = self.decoder.decode(raw_data[:])
-        self.price[0] = trade.price()
-        self.qty[0] = trade.qty()
+        self.nPrice[0] = round(trade.price() * self.writer.con.price_mult)
+        self.nQty[0] = round(trade.qty() * self.writer.con.qty_mult)
         self.timestamp[0] = trade.timestamp()
-        self.is_sell = trade.is_sell()
+        self.is_sell[0] = trade.is_sell()
 
     def update_success(self) -> None:
         if self.logic_event.is_set() is False:

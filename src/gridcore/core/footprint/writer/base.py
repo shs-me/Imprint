@@ -49,10 +49,10 @@ class Writer:
         )
 
         self.has_pre_trade: bool = False
-        self._pre_price: float = 0.0
-        self._pre_qty: float = 0.0
+        self._pre_price: int = 0
+        self._pre_qty: int = 0
         self._pre_timestamp: int = 0
-        self._pre_is_sell: bool = False
+        self._pre_is_sell: int = 0
 
     def _init_array(self) -> None:
         cfgFP = self.manager.cfgFootprint
@@ -82,7 +82,7 @@ class Writer:
             shape=(2, BHM_ConstantCount), dtype=float64
         )
 
-    def init_session(self, price: float, timestamp: int) -> None:
+    def init_session(self, nPrice: int, timestamp: int) -> None:
         self.dirty_footprint.fill(0)
         self.dirty_headers.fill(0)
         self.footprint.fill(0)
@@ -92,7 +92,7 @@ class Writer:
         self.bbox[:] = self.bbox_default_value
 
         self.con.init_session(
-            (self._pre_price if self.has_pre_trade else price),
+            (self._pre_price if self.has_pre_trade else nPrice),
             (self._pre_timestamp if self.has_pre_trade else timestamp),
         )
 
@@ -100,7 +100,7 @@ class Writer:
         self.base_timestamp[0] = self.con.baseTimestamp
 
     def update_footprint(
-        self, price: float, qty: float, timestamp: int, is_sell: bool
+        self, nPrice: int, nQty: int, timestamp: int, is_sell: int
     ) -> bool:
         if self.has_pre_trade:
             pre_price, pre_qty, pre_timestamp, pre_is_sell = self.pre_trade
@@ -108,33 +108,33 @@ class Writer:
             if self.wait_bbox_read:
                 self.wait_read_bbox()
                 self.spare_flags[1] = 1
-                self.pre_trade = price, qty, timestamp, is_sell
+                self.pre_trade = nPrice, nQty, timestamp, is_sell
                 return self.copy_to()
 
-        self.update(price, qty, timestamp, is_sell)
+        self.update(nPrice, nQty, timestamp, is_sell)
         if self.wait_bbox_read:
             self.wait_read_bbox()
         return self.copy_to()
 
-    def update(self, price: float, qty: float, timestamp: int, is_sell: bool) -> None:
-        nPrice: int = self.con.to_nPrice(price)
+    def update(self, nPrice: int, nQty: int, timestamp: int, is_sell: int) -> None:
         idy: int | None = self.con.to_idy(nPrice=nPrice)
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         if idx is not None:
             if idy is not None:
                 self.last_idx[0] = idx
                 _update(
-                    price=price,
-                    qty=qty,
+                    nPrice=nPrice,
+                    nQty=nQty,
                     timestamp=timestamp,
                     is_sell=is_sell,
-                    nPrice=nPrice,
                     idy=idy,
                     idx=idx,
                     idxVP=self.idxVP,
                     idxDP=self.idxDP,
                     price_mult=self.con.price_mult,
+                    price_prec=self.con.price_prec,
                     qty_mult=self.con.qty_mult,
+                    qty_prec=self.con.qty_prec,
                     dirty_fp=self.dirty_footprint,
                     dirty_hr=self.dirty_headers,
                     bbox=self.bbox,
@@ -143,12 +143,12 @@ class Writer:
                 )
             else:
                 self.set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=True)
-                self.pre_trade = price, qty, timestamp, is_sell
+                self.pre_trade = nPrice, nQty, timestamp, is_sell
 
         else:
             self.wait_read_bbox()
             self.set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=True)
-            self.pre_trade = price, qty, timestamp, is_sell
+            self.pre_trade = nPrice, nQty, timestamp, is_sell
 
         self.counter_ticks[0] += 1
 
@@ -180,7 +180,7 @@ class Writer:
         return False
 
     @property
-    def pre_trade(self) -> tuple[float, float, int, bool]:
+    def pre_trade(self) -> tuple[int, int, int, int]:
         _ = self
         _.has_pre_trade = False
         trade = _._pre_price, _._pre_qty, _._pre_timestamp, _._pre_is_sell
@@ -188,24 +188,25 @@ class Writer:
         return trade
 
     @pre_trade.setter
-    def pre_trade(self, trade: tuple[float, float, int, bool]) -> None:
+    def pre_trade(self, trade: tuple[int, int, int, int]) -> None:
         self._pre_price, self._pre_qty, self._pre_timestamp, self._pre_is_sell = trade
         self.has_pre_trade = True
 
 
 @njit(cache=True)
 def _update(
-    price: float,
-    qty: float,
-    timestamp: int,
-    is_sell: bool,
     nPrice: int,
+    nQty: int,
+    timestamp: int,
+    is_sell: int,
     idy: int,
     idx: int,
     idxVP: int,
     idxDP: int,
     price_mult: int,
+    price_prec: int,
     qty_mult: int,
+    qty_prec: int,
     dirty_fp: NDArray[int64],
     dirty_hr: NDArray[int64],
     bbox: NDArray[int64],
@@ -214,11 +215,9 @@ def _update(
 ) -> None:
     """Numba JIT kernel updating volume profile, bar headers, VWAP, BB, and space coordinates."""
 
-    nQty: int = round(qty * qty_mult)
-
     _update_dirty_footprint(
-        is_sell=is_sell,
         nQty=nQty,
+        is_sell=is_sell,
         idy=idy,
         idx=idx,
         idxVP=idxVP,
@@ -226,14 +225,15 @@ def _update(
         dirty_fp=dirty_fp,
     )
     _update_dirty_headers(
-        price=price,
-        qty=qty,
-        timestamp=timestamp,
-        is_sell=is_sell,
         nPrice=nPrice,
         nQty=nQty,
+        timestamp=timestamp,
+        is_sell=is_sell,
         idx=idx,
         price_mult=price_mult,
+        price_prec=price_prec,
+        qty_mult=qty_mult,
+        qty_prec=qty_prec,
         dirty_hr=dirty_hr,
         meta_data=meta_data,
     )
@@ -242,7 +242,7 @@ def _update(
 
 @njit(cache=True)
 def _update_dirty_footprint(
-    is_sell: bool,
+    is_sell: int,
     nQty: int,
     idy: int,
     idx: int,
@@ -257,14 +257,15 @@ def _update_dirty_footprint(
 
 @njit(cache=True)
 def _update_dirty_headers(
-    price: float,
-    qty: float,
-    timestamp: int,
-    is_sell: bool,
     nPrice: int,
     nQty: int,
+    timestamp: int,
+    is_sell: int,
     idx: int,
     price_mult: int,
+    price_prec: int,
+    qty_mult: int,
+    qty_prec: int,
     dirty_hr: NDArray[int64],
     meta_data: NDArray[float64],
 ) -> None:
@@ -289,6 +290,9 @@ def _update_dirty_headers(
         dirty_hr[bar, c.BH_CVD] = dirty_hr[bar, c.BH_Delta] + dirty_hr[oldBar, c.BH_CVD]
     else:
         dirty_hr[bar, c.BH_CVD] = dirty_hr[bar, c.BH_Delta]
+
+    price = round(nPrice / price_mult, price_prec)
+    qty = round(nQty / qty_mult, qty_prec)
 
     meta_data[0, BHM_VWAP_W] += qty
     meta_data[0, BHM_VWAP_PW] += price * qty

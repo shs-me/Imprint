@@ -1,15 +1,7 @@
-"""Diagnostic dump generators and historical data downloader utilities."""
-
-import inspect
 import json
 import os
-import sys
-import traceback
-import zipfile
 from datetime import date, datetime, timedelta
-from types import TracebackType
 from typing import Any
-from urllib import request
 
 from .. import constant as c
 
@@ -28,7 +20,9 @@ class DebugEncoder(json.JSONEncoder):
 
 
 def dump_exception() -> None:
-    """Formats active exception traceback and frame local variables into `dump/exc_dump.json`."""
+    import sys
+    import traceback
+    from types import TracebackType
 
     exc_type, exc_value, exc_tb = sys.exc_info()
 
@@ -62,7 +56,7 @@ def dump_exception() -> None:
 
 
 def process_value(val: Any, max_len: int = 100) -> Any:
-    """Safely formats local frame variable values for JSON diagnostic dumps."""
+    import inspect
 
     if isinstance(val, memoryview):
         return {
@@ -104,44 +98,85 @@ def process_value(val: Any, max_len: int = 100) -> Any:
     return repr(val)
 
 
-def download_aggTrade_hist_daily_data(
-    symbol: str, startDate: date, endDate: date
-) -> bool:
-    """Downloads and extracts Binance Vision daily aggTrade CSV files for specified symbol and date range."""
-
-    base_path = f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}/{symbol.upper()}"
-    os.makedirs(base_path, exist_ok=True)
-
-    if endDate >= (today := date.today()):
-        endDate = today - timedelta(days=1)
-
-    curDate = startDate
-    while curDate <= endDate:
-        file_name = f"{symbol.upper()}-aggTrades-{curDate.isoformat()}"
-        zip_path = f"{base_path}/{file_name}.zip"
-        file_path = f"{base_path}/{curDate.isoformat()}.csv"
-        if os.path.exists(file_path) is False:
-            url = f"{c.BASE_UM_AGGTRADES_DAILY_URL}{symbol.upper()}/{file_name}.zip"
-            download_file(url, zip_path)
-            with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                file_path_ = zip_ref.extract(zip_ref.namelist()[0])
-
-            os.rename(file_path_, file_path)
-            os.remove(zip_path)
-
-        curDate += timedelta(days=1)
-
-    return True
-
-
 def to_date(iso_f_dates: list[str]):
     """Converts list of ISO format date strings into datetime.date objects."""
 
     return [date.fromisoformat(d) for d in iso_f_dates]
 
 
+def download_agg_trades_history(
+    symbol: str, start_date: date, end_date: date, price_mult: int, qty_mult: int
+) -> bool:
+    import zipfile
+
+    import numpy as np
+    from numpy import int64
+    from numpy.typing import NDArray
+
+    agg_trades_dtype = np.dtype(
+        [
+            ("price", "float64"),
+            ("qty", "float64"),
+            ("timestamp", "int64"),
+            ("is_buyer_maker", "bool_"),
+        ]
+    )
+
+    symbol = symbol.upper()
+    dir: str = f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}/{symbol}"
+
+    os.makedirs(dir, exist_ok=True)
+
+    if end_date >= (today := date.today()):
+        end_date = today - timedelta(days=1)
+
+    cur_date: date = start_date
+    while cur_date <= end_date:
+        file_name_for_download: str = f"{symbol}-aggTrades-{cur_date.isoformat()}"
+        path_for_downloaded_file: str = f"{dir}/{file_name_for_download}.zip"
+
+        base_file_path: str = f"{dir}/{cur_date.isoformat()}"
+        npy_file_path: str = f"{base_file_path}.npy"
+        csv_file_path: str = f"{base_file_path}.csv"
+
+        if os.path.exists(npy_file_path) is False:
+            if os.path.exists(csv_file_path) is False:
+                url: str = f"{c.BASE_UM_AGGTRADES_DAILY_URL}{symbol}/{file_name_for_download}.zip"
+
+                download_file(url, path_for_downloaded_file)
+
+                with zipfile.ZipFile(path_for_downloaded_file, "r") as zip_ref:
+                    file_path_ = zip_ref.extract(zip_ref.namelist()[0])
+
+                os.rename(file_path_, csv_file_path)
+                os.remove(path_for_downloaded_file)
+
+            arr: Any = np.genfromtxt(
+                fname=csv_file_path,
+                usecols=(1, 2, 5, 6),
+                dtype=agg_trades_dtype,
+                skip_header=1,
+                delimiter=",",
+            )
+            agg_trades: NDArray[int64] = np.ndarray(
+                shape=(arr.shape[0], 4), dtype=int64
+            )
+            agg_trades[:, 0] = (arr["price"] * price_mult).astype(int64)
+            agg_trades[:, 1] = (arr["qty"] * qty_mult).astype(int64)
+            agg_trades[:, 2] = arr["timestamp"].astype(int64)
+            agg_trades[:, 3] = arr["is_buyer_maker"].astype(int64)
+
+            np.save(npy_file_path, agg_trades)
+            os.remove(csv_file_path)
+
+        cur_date += timedelta(days=1)
+
+    return True
+
+
 def download_file(url: str, path: str) -> None:
     """Downloads file from target URL to disk path with progress streaming."""
+    from urllib import request
 
     dl_file = request.urlopen(url)
     length = dl_file.getheader("content-length")

@@ -4,7 +4,7 @@ from ...core import constant
 from ...core.main import run_core
 from ...core.pipeline.utils.rest_agent import RestAgent
 from ...core.utils.handlers import error_handler
-from ...core.utils.tools import download_aggTrade_hist_daily_data, to_date
+from ...core.utils.tools import download_agg_trades_history, to_date
 from .configs import Backtesting, SetupCore
 
 __all__ = ["run"]
@@ -22,7 +22,9 @@ def run(setup: SetupCore) -> None:
         except ValueError as e:
             return logger.error(f"Run Core Failed | {e}")
 
-        download_aggTrade_hist_daily_data(setup.symbol, startDate, endDate)
+        download_agg_trades_history(
+            setup.symbol, startDate, endDate, setup.coin.price_mult, setup.coin.qty_mult
+        )
     else:
         rest = RestAgent(setup.symbol, setup.run_mode.connector)
         setup.coin.tick_size = rest.get_tick_size()

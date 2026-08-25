@@ -36,15 +36,10 @@ class DataPrepper(BaseDataPrepper):
         ) > self.safe_lag:
             time.sleep(0)
 
-    def prepper_data(self, data: bytes) -> None:
-        list_data: list[bytes] = data.split(b",")
-        if len(list_data) >= 6:
-            self.dfm[self.dfmWid[0], :] = (
-                round(float(list_data[1]) * self.price_mult),
-                int(list_data[5]),
-            )
-            new_row: int = self.dfmWid[0] + 1
-            self.dfmWid[0] = new_row if (new_row < self.max_row) else 0
+    def prepper_data(self, line: NDArray[int64]) -> None:
+        self.dfm[self.dfmWid[0], :] = line[0], line[2]
+        new_row: int = self.dfmWid[0] + 1
+        self.dfmWid[0] = new_row if (new_row < self.max_row) else 0
 
     def post_prepper(self) -> None:
         pass

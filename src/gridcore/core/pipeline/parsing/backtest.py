@@ -14,9 +14,8 @@ class Backtest(Base):
         time.sleep(0)
 
     def set_trade_data(self, raw_data: memoryview) -> None:
-        self.price[0], self.qty[0], self.timestamp[0], self.is_sell = struct.unpack(
-            "@ddq?", raw_data
-        )
+        data: tuple[int, int, int, int] = struct.unpack("@qqqq", raw_data)
+        self.nPrice[0], self.nQty[0], self.timestamp[0], self.is_sell[0] = data
 
     def update_success(self) -> None:
         return super().update_success()

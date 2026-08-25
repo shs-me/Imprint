@@ -67,7 +67,7 @@ class Base(ABC):
         self._fp_state.fill(0)
         self.last_idx: int = 0
         self.con.init_session(
-            price=self._base_nPrice[0], timestamp=self._base_timestamp[0]
+            nPrice=self._base_nPrice[0], timestamp=self._base_timestamp[0]
         )
 
     def _update_states(self) -> None:

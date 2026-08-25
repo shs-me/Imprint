@@ -39,12 +39,10 @@ class Converter:
             (float(self.tick_size) * self.step_tick) * self.price_mult
         )
 
-    def init_session(self, price: float | int, timestamp: int):
+    def init_session(self, nPrice: int, timestamp: int):
         """Calibrates converter base price, base timestamp, and grid center origin offset."""
 
-        self.nBasePrice: int = (
-            (self.to_nPrice(price) if isinstance(price, float) else price) // self.scale
-        ) * self.scale
+        self.nBasePrice: int = (nPrice // self.scale) * self.scale
         self.baseTimestamp: int = timestamp - (timestamp % self.tims)
         self.center: int = self.fp_rows // 2
 
@@ -65,7 +63,7 @@ class Converter:
         else:
             return None
 
-    def to_idx(self, timestamp: int, is_sell: bool) -> int | None:
+    def to_idx(self, timestamp: int, is_sell: int) -> int | None:
         """Maps timestamp and trade side to Footprint grid X-axis column index.
 
         Returns:

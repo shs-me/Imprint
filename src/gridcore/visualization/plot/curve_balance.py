@@ -13,7 +13,7 @@ from .utils import (
 
 
 def plot_curve_balance(ax: Axes, stats: Stats) -> None:
-    if not stats.eq_times:
+    if not stats.eq_times[0]:
         return not_data_for_plot(ax)
 
     base_balance: float = stats.start_balance

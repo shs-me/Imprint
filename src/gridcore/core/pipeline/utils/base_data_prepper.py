@@ -6,6 +6,10 @@ from abc import ABC, abstractmethod
 from datetime import date
 from threading import Thread
 
+import numpy as np
+from numpy import int64
+from numpy.typing import NDArray
+
 from ...constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
 
 
@@ -40,19 +44,20 @@ class BaseDataPrepper(ABC):
         self.subP.start()
 
     def run_prepper_engine(self) -> None:
-        """Main loop iterating through CSV files, parsing rows, and executing pipeline callbacks."""
+        """Main loop iterating through NPY files, parsing rows, and executing pipeline callbacks."""
 
         try:
             data_paths: list[str] = self.get_data_paths()
             for path in data_paths:
-                with open(file=path, mode="rb") as f:
-                    next(f)
-                    for line in f:
-                        if not self.complete:
-                            self.alarm_clock()
-                            self.prepper_data(line)
-                        else:
-                            break
+                arr: NDArray[int64] = np.load(file=path, mmap_mode="r")
+                max_row: int = arr.shape[0]
+                for row in range(max_row):
+                    if not self.complete:
+                        line: NDArray[int64] = arr[row, :]
+                        self.alarm_clock()
+                        self.prepper_data(line)
+                    else:
+                        break
 
             self.post_prepper()
             self.complete = True
@@ -61,14 +66,16 @@ class BaseDataPrepper(ABC):
             self.error = f"Prepper Error: {e}\n{traceback.format_exc()}"
             self.complete = True
 
-    def get_data_paths(self) -> list[str]:
-        """Filters and returns sorted list of CSV file paths matching target date scope.
+    def get_data_paths(self, endwith: str = ".npy") -> list[str]:
+        """Filters and returns sorted list of NPY file paths matching target date scope.
 
         Returns:
-            list[str]: Absolute file paths to target CSV files.
+            list[str]: Absolute file paths to target NPY files.
         """
 
-        paths: list[str] = [p for p in os.listdir(self.base_path) if p.endswith(".csv")]
+        paths: list[str] = [
+            p for p in os.listdir(self.base_path) if p.endswith(endwith)
+        ]
         dates: list[date] = sorted([date.fromisoformat(p.split(".")[0]) for p in paths])
         startDate: date = (
             dates[0]
@@ -79,7 +86,7 @@ class BaseDataPrepper(ABC):
             dates[-1] if (self.end_date is None) else date.fromisoformat(self.end_date)
         )
         needDates: list[date] = [d for d in dates if (startDate <= d <= endDate)]
-        return [f"{self.base_path}/{date.isoformat(d)}.csv" for d in needDates]
+        return [f"{self.base_path}/{date.isoformat(d)}{endwith}" for d in needDates]
 
     @abstractmethod
     def alarm_clock(self) -> None:
@@ -88,8 +95,8 @@ class BaseDataPrepper(ABC):
         pass
 
     @abstractmethod
-    def prepper_data(self, data: bytes) -> None:
-        """Abstract row parser hook invoked for each raw CSV byte string line."""
+    def prepper_data(self, line: NDArray[int64]) -> None:
+        """Abstract row parser hook invoked for each NPY line."""
 
         pass
 

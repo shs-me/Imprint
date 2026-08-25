@@ -2,6 +2,9 @@ import struct
 import time
 from collections import deque
 
+from numpy import int64
+from numpy.typing import NDArray
+
 from ....ipc import NodeManager
 from ....settings import StatusCodes as scs
 from ....utils.handlers import error_handler
@@ -19,18 +22,8 @@ class DataPrepper(BaseDataPrepper):
         while len(self.queue) == self.queue.maxlen:
             time.sleep(0)
 
-    def prepper_data(self, data: bytes) -> None:
-        list_data: list[bytes] = data.split(b",")
-        if len(list_data) >= 6:
-            self.queue.append(
-                struct.pack(
-                    "@ddq?",
-                    float(list_data[1]),
-                    float(list_data[2]),
-                    int(list_data[5]),
-                    b"true" in list_data[6],
-                )
-            )
+    def prepper_data(self, line: NDArray[int64]) -> None:
+        self.queue.append(struct.pack("@qqqq", line[0], line[1], line[2], line[3]))
 
     def post_prepper(self) -> None:
         pass
