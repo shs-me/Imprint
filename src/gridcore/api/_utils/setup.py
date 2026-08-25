@@ -1,5 +1,3 @@
-import importlib.util
-
 from loguru import logger
 
 from ...core import constant
@@ -50,24 +48,23 @@ def run(setup: SetupCore) -> None:
             if not setup.run_mode.with_visualization.only_visualization:
                 run_core(**kwargs)
 
-            vis_spec = importlib.util.find_spec("gridcore_visualization")
-            if vis_spec is not None:
-                vis_module = importlib.import_module("gridcore_visualization")
-                vis_module.run(
-                    symbol=setup.coin.symbol,
-                    timeframe=setup.strategy.footprint.timeframe,
-                    price_prec=setup.coin.price_prec,
-                    qty_prec=setup.coin.qty_prec,
-                    scale=setup.run_mode.account.scale_prec,
-                    start_date=setup.run_mode.backtest_start_date,
-                    end_date=setup.run_mode.backtest_end_date,
-                    footprint_headers_path=constant.BASE_FOOTPRINT_DUMP_PATH,
-                    start_balance=setup.run_mode.account.balance,
-                    orders_history_path=constant.ORDERS_HISTORY_DUMP_PATH,
-                    equity_history_path=constant.EQUITY_HISTORY_DUMP_PATH,
-                )
-            else:
-                logger.warning('"gridcore-visualization" package not found')
+            from ... import visualization as vis
+
+            vis.run(
+                footprint_headers_path=constant.BASE_FOOTPRINT_DUMP_PATH,
+                symbol=setup.coin.symbol,
+                start_date=setup.run_mode.backtest_start_date,
+                end_date=setup.run_mode.backtest_end_date,
+                equity_history_path=constant.EQUITY_HISTORY_DUMP_PATH,
+                orders_history_path=constant.ORDERS_HISTORY_DUMP_PATH,
+                start_balance=setup.run_mode.account.balance,
+                price_mult=setup.coin.price_mult,
+                qty_mult=setup.coin.qty_mult,
+                scale_mult=setup.run_mode.account.scale_mult,
+                leverage=setup.run_mode.account.leverage,
+                timeframe=setup.strategy.footprint.timeframe,
+            )
+
         else:
             run_core(**kwargs)
     else:

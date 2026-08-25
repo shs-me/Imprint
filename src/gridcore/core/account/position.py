@@ -1,16 +1,17 @@
 from numba import njit
+from numpy import int64
 
 from .converter import to_nMargin, to_nPnl
 
 
 @njit(cache=True)
 def update_position(
-    nPrice: int,
-    nQty: int,
+    nPrice: int | int64,
+    nQty: int | int64,
     is_long: bool,
     is_open: bool,
     is_maker: bool,
-    nCommission: int,
+    nCommission: int | int64,
     price_mult: int,
     qty_mult: int,
     scale_mult: int,

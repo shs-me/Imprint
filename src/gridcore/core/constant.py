@@ -3,6 +3,7 @@
 from .settings import (
     BarHeaders,
     CachedStatesData,
+    EquityHeaders,
     OrderBook,
     OrderFlag,
     StateFlags,
@@ -110,6 +111,14 @@ OB_clientOrderID: int = int(OrderBook.clientOrderID)
 OB_nPrice: int = int(OrderBook.nPrice)
 OB_nQty: int = int(OrderBook.nQty)
 OB_ConstantCount: int = int(OrderBook._ConstantCount)
+
+# Equity Header
+EH_Timestamp: int = int(EquityHeaders.Timestamp)
+EH_Open: int = int(EquityHeaders.Open)
+EH_High: int = int(EquityHeaders.High)
+EH_Low: int = int(EquityHeaders.Low)
+EH_Close: int = int(EquityHeaders.Close)
+EH_ConstantCount: int = int(EquityHeaders._ConstantCount)
 
 # Trade Param
 TP_nPrice: int = int(TradeParam.nPrice)

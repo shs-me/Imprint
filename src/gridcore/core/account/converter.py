@@ -256,8 +256,8 @@ def to_nMargin(
 
 @njit(cache=True)
 def to_nPnl(
-    closeNprice: int,
-    nQty: int,
+    closeNprice: int | int64,
+    nQty: int | int64,
     is_long: bool,
     longEntryNprice: int,
     shortEntryNprice: int,
@@ -265,7 +265,7 @@ def to_nPnl(
     qty_mult: int,
     scale_mult: int,
 ) -> int:
-    entryNprice: int = longEntryNprice if is_long else shortEntryNprice
-    diffNprice: int = (closeNprice - entryNprice) * (1 if is_long else -1)
+    entryNprice: int | int64 = longEntryNprice if is_long else shortEntryNprice
+    diffNprice: int | int64 = (closeNprice - entryNprice) * (1 if is_long else -1)
     pnl: float = (diffNprice / price_mult) * (nQty / qty_mult)
     return round(pnl * scale_mult)

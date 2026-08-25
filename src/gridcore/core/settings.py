@@ -155,6 +155,12 @@ class OrderBook(IntEnum):
 
 
 @verify(CONTINUOUS, UNIQUE)
+class EquityHeaders(IntEnum):
+    Timestamp, Open, High, Low, Close = 0, auto(), auto(), auto(), auto()
+    _ConstantCount = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
 class TradeParam(IntEnum):
     """Index mapping for trade execution record array columns."""
 
