@@ -16,8 +16,10 @@ class Base(ABC):
         self._manager: NodeManager = manager
         self._set_proc_sc = manager.set_proc_sc
 
-        self._tick_by_tick: bool = True
-        self.__save_fp_headers: bool = manager.cfgFootprint.save_fp_headers
+        cfgFP = manager.cfgFootprint
+        self._tick_by_tick_analyze: bool = cfgFP.tick_by_tick_analyze
+        self.__save_fp_headers: bool = cfgFP.save_fp_headers
+
         self.__base_fp_dump_path: str = (
             f"{c.BASE_FOOTPRINT_DUMP_PATH}/{manager.cfgCoin.symbol.upper()}"
         )
@@ -28,20 +30,20 @@ class Base(ABC):
             footprint=self._footprint,
             headers=self._headers,
             cfgCoin=manager.cfgCoin,
-            cfgFP=manager.cfgFootprint,
+            cfgFP=cfgFP,
         )
         self._re_init_session: bool = True
 
     def _init_array(self) -> None:
         cfgFP = self._manager.cfgFootprint
-        self._footprint: NDArray[int64] = np.ndarray(
+        self._footprint: NDArray[int64] = np.zeros(
             shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols),
             dtype=int64,
         )
-        self._headers: NDArray[int64] = np.ndarray(
+        self._headers: NDArray[int64] = np.zeros(
             shape=(cfgFP.bar_count, c.BH_ConstantCount), dtype=int64
         )
-        self._bbox: NDArray[int64] = np.ndarray((4,), dtype=int64)
+        self._bbox: NDArray[int64] = np.zeros((4,), dtype=int64)
         self._bbox_default_value: NDArray[int64] = np.array(
             [cfgFP.fp_rows, cfgFP.fp_cols, 0, 0], dtype=int64
         )

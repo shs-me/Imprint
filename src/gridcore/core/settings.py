@@ -9,11 +9,7 @@ class DataStreamProc(int):
     pass
 
 
-class ParsingProc(int):
-    pass
-
-
-class LogicProc(int):
+class EngineProc(int):
     pass
 
 
@@ -71,13 +67,11 @@ class StatusCodes(IntEnum):
     BIG_TEXT_SIZE = "Text size > data cell size in ring buffer"
     RING_BUFFER_TEXT_STREAM_OVERFLOW = "Ring Buffer TextStream overflow"
     # - - -
-    # PARSING
+    # Engine
     UNVALID_DATA = "Unvalid data (0 > price or qty or timestamp)"
     FP_IDX_FILLED = "Footprint X axis filled or (IDX < 0)"
     FP_IDY_FILLED = "Footprint Y axis filled"
-    # Logic
     ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
-    # PARSING/LOGIC
     FP_RE_INIT = "Footprint re-initializated"
     # WSS/SIM
     BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"

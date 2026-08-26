@@ -1,4 +1,4 @@
-from ..core.footprint import BaseFootprintReader
+from ..core.footprint import FootprintEngine
 from ..core.pipeline.executing import BaseExecution
 from ..core.pipeline.utils.base_adapters import (
     AggTrades,
@@ -8,7 +8,7 @@ from ..core.pipeline.utils.base_adapters import (
 
 __all__ = [
     "BaseExecution",
-    "BaseFootprintReader",
+    "FootprintEngine",
     "AggTrades",
     "OrderEncoder",
     "UserStreamDecoder",

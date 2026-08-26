@@ -7,10 +7,9 @@ from loguru import logger
 
 from ...settings import (
     DataStreamProc,
+    EngineProc,
     ExecutionProc,
-    LogicProc,
     LogLevel,
-    ParsingProc,
     ProcsData,
 )
 from ...settings import StatusCodes as scs
@@ -41,16 +40,14 @@ class Host(Base):
         self,
         procs: dict[int, ProcsData],
         market_data_wss: DataStreamProc,
-        parsing: ParsingProc,
-        logic: LogicProc,
+        engine: EngineProc,
         execution: ExecutionProc,
     ) -> None:
         """Primary supervisor loop waiting on process semaphores and handling status code events."""
 
         self.procs: dict[int, ProcsData] = procs
         self.market_data_wss: DataStreamProc = market_data_wss
-        self.parsing: ParsingProc = parsing
-        self.logic: LogicProc = logic
+        self.engine: EngineProc = engine
         self.execution: ExecutionProc = execution
         # - - -
         while True:
@@ -71,13 +68,9 @@ class Host(Base):
             self.check_data_stream_proc()
             self._main_status[self.market_data_wss] -= 1
 
-        if self._main_status[self.parsing]:
-            self.check_parsing_proc()
-            self._main_status[self.parsing] -= 1
-
-        if self._main_status[self.logic]:
-            self.check_logic_proc()
-            self._main_status[self.logic] -= 1
+        if self._main_status[self.engine]:
+            self.check_engine_proc()
+            self._main_status[self.engine] -= 1
 
         if self.with_execution:
             if self._main_status[self.execution]:
@@ -108,11 +101,11 @@ class Host(Base):
 
         self.proc_is_alive(p_id)
 
-    def check_parsing_proc(self) -> None:
-        if not self.procs.get(self.parsing):
+    def check_engine_proc(self) -> None:
+        if not self.procs.get(self.engine):
             return
 
-        p_id, p_name, p_task_id, sc = self.get_proc_data(self.parsing)
+        p_id, p_name, p_task_id, sc = self.get_proc_data(self.engine)
 
         self.action_for_base_sc(sc, p_id, p_name)
 
@@ -123,8 +116,6 @@ class Host(Base):
 
         if sc & scs.FP_IDX_FILLED:
             self.logger(scs.FP_IDX_FILLED.label, LogLevel.WARNING, p_name)
-            self.set_task_sc_to_proc(scs.FP_RE_INIT, p_task_id)
-            self.set_task_sc_to_proc(scs.FP_RE_INIT, self.procs[self.logic]["task_id"])
             self.clear_proc_sc(scs.FP_IDX_FILLED, p_id)
 
         if sc & scs.FP_IDY_FILLED:
@@ -134,18 +125,7 @@ class Host(Base):
 
         if sc & scs.FP_RE_INIT:
             self.logger(scs.FP_RE_INIT.label, LogLevel.SUCCESS, p_name)
-            self.set_task_sc_to_proc(scs.RUN, p_task_id)
             self.clear_proc_sc(scs.FP_RE_INIT, p_id)
-
-        self.proc_is_alive(p_id)
-
-    def check_logic_proc(self) -> None:
-        if not self.procs.get(self.logic):
-            return
-
-        p_id, p_name, p_task_id, sc = self.get_proc_data(self.logic)
-
-        self.action_for_base_sc(sc, p_id, p_name)
 
         if sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:
             self.logger(scs.ANALYSIS_LAG_MORE_SAFE_LAG.label, LogLevel.WARNING, p_name)

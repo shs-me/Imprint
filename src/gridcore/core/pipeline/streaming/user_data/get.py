@@ -42,7 +42,7 @@ class Get(Base):
             async with connect(self.user_data_uri, ping_interval=20) as ws:
                 while True:
                     if have_status():
-                        task: bool | int = self.check_base_task(complete=True)
+                        task: int = self.check_base_task()
                         if isinstance(task, bool):
                             if task:
                                 return

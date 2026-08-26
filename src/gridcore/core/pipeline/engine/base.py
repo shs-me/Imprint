@@ -25,7 +25,7 @@ class Base(ABC):
         self.ds_rid: memoryview = cfgDS.reader_id.cast("q")
 
         cfgMetrics = self.manager.cfgMetrics
-        self.engine_complete: memoryview = cfgMetrics.logic_complete
+        self.engine_complete: memoryview = cfgMetrics.engine_complete
 
         self.nPrice: memoryview = memoryview(bytearray(8)).cast("q")
         self.nQty: memoryview = memoryview(bytearray(8)).cast("q")
@@ -59,7 +59,7 @@ class Base(ABC):
                         )
 
                         if self.ds_wid[0] != self.ds_rid[0]:
-                            if not self.engine._tick_by_tick:
+                            if not self.engine._tick_by_tick_analyze:
                                 if not self.engine._re_init_session:
                                     continue
 

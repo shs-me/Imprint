@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from .settings import BarHeaders, SpaceCoords, Timeframe
+from .settings import Timeframe
 
 OFFSET = 0
 UBYTE = 1
@@ -152,6 +152,37 @@ class Coin(Configuration):
 
 
 @dataclass
+class Footprint(Configuration):
+    timeframe: Timeframe = Timeframe._H
+    chart_range: int = 1
+    step_tick: int = 1
+    fp_rows: int = 10001
+    tick_by_tick_analyze: bool = False
+    save_fp_headers: bool = False
+
+    def __post_init__(self) -> None:
+        self.colVP: int = -2
+        self.colDP: int = -1
+        self.bar_count: int = self._get_bar_count(day=self.chart_range)
+        self.fp_cols: int = self.bar_count * 2
+        self.fp_panel_cols: int = self.fp_cols + 2
+
+    def _get_bar_count(self, day: int) -> int:
+        """Computes total expected bars for the specified chart day range and timeframe.
+
+        Args:
+            day (int): Chart scope range in days.
+
+        Returns:
+            int: Calculated bar capacity.
+        """
+
+        dayMs: int = (day if day >= 1 else 1) * 24 * 60 * 60 * 1000
+        ivlMs: int = self.timeframe
+        return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
+
+
+@dataclass
 class SharedMemorySegments(Configuration, ABC):
     """Abstract base class for shared memory offset calculation and segment management."""
 
@@ -186,65 +217,6 @@ class SharedMemorySegments(Configuration, ABC):
 
 
 @dataclass
-class Footprint(SharedMemorySegments):
-    """Shared memory configuration layout for Footprint matrix and header buffers.
-
-    Attributes:
-        timeframe (Timeframe): Bar aggregation timeframe interval.
-        chart_range (int): Historical window size in days.
-        fp_rows (int): Price row capacity in Footprint grid.
-        save_fp_headers (bool): Flag to persist Footprint headers.
-        save_algorithm_metadata (bool): Flag to persist strategy analytics.
-    """
-
-    timeframe: Timeframe = Timeframe._H
-    chart_range: int = 1
-    step_tick: int = 1
-    fp_rows: int = 10001
-    wait_bbox_read_in_every_tick: bool = False
-    save_fp_headers: bool = False
-    save_algorithm_metadata: bool = False
-
-    def _init_data(self) -> None:
-        """Calculates total bar count and column dimensions for Footprint layout."""
-
-        self.colVP, self.colDP = -2, -1
-        self.bar_count: int = self._get_bar_count(day=self.chart_range)
-        self.fp_cols: int = self.bar_count * 2
-        self.fp_panel_cols: int = self.fp_cols + 2
-
-    def _get_bar_count(self, day: int) -> int:
-        """Computes total expected bars for the specified chart day range and timeframe.
-
-        Args:
-            day (int): Chart scope range in days.
-
-        Returns:
-            int: Calculated bar capacity.
-        """
-
-        dayMs, ivlMs = (
-            (day if day >= 1 else 1) * 24 * 60 * 60 * 1000,
-            self.timeframe,
-        )
-        return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
-
-    def _set_attr_use_shm(self) -> None:
-        """Defines shared memory offset allocations for Footprint arrays, headers, and flags."""
-        self.bbox: Any
-
-        self._init_data()
-
-        self.footprint: Any = INT(self.fp_rows * self.fp_panel_cols * INT64)
-        self.headers: Any = INT(self.bar_count * BarHeaders._ConstantCount * INT64)
-        self.bbox = INT(SpaceCoords._ConstantCount * 2 * INT64)
-        self.base_price: Any = INT(INT64)
-        self.base_timestamp: Any = INT(INT64)
-        self.bbox_flag: Any = INT(UBYTE)
-        self.spare_flags: Any = INT(2 * UBYTE)
-
-
-@dataclass
 class Metrics(SharedMemorySegments):
     """Shared memory layout for inter-process synchronization metrics and status flags."""
 
@@ -257,8 +229,7 @@ class Metrics(SharedMemorySegments):
         self.main_status: Any = INT(self.count_procs * INT64)
         self.time_start_reading: Any = INT(INT64)
         self.trade_readed_time: Any = INT(INT64)
-        self.parsing_complete: Any = INT(UBYTE)
-        self.logic_complete: Any = INT(UBYTE)
+        self.engine_complete: Any = INT(UBYTE)
 
 
 @dataclass

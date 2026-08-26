@@ -21,9 +21,14 @@ class Converter:
     ) -> None:
         self.footprint: NDArray[int64] = footprint
         self.headers: NDArray[int64] = headers
+
         self.tick_size: str = cfgCoin.tick_size
         self.price_prec: int = cfgCoin.price_prec
+        self.price_mult: int = cfgCoin.price_mult
         self.qty_prec: int = cfgCoin.qty_prec
+        self.qty_mult: int = cfgCoin.qty_mult
+
+        self.tims: int = cfgFP.timeframe
         self.step_tick: int = cfgFP.step_tick
         self.fp_rows: int = cfgFP.fp_rows
         self.fp_cols: int = cfgFP.fp_cols
@@ -31,10 +36,7 @@ class Converter:
         self.idxDP: int = cfgFP.colDP
         self.fp_panel_cols: int = cfgFP.fp_panel_cols
         self.bar_count: int = cfgFP.bar_count
-        self.tims: int = cfgFP.timeframe
 
-        self.price_mult: int = 10**self.price_prec
-        self.qty_mult: int = 10**self.qty_prec
         self.scale: int = round(
             (float(self.tick_size) * self.step_tick) * self.price_mult
         )
@@ -42,7 +44,7 @@ class Converter:
     def init_session(self, nPrice: int, timestamp: int):
         """Calibrates converter base price, base timestamp, and grid center origin offset."""
 
-        self.nBasePrice: int = (nPrice // self.scale) * self.scale
+        self.baseNprice: int = (nPrice // self.scale) * self.scale
         self.baseTimestamp: int = timestamp - (timestamp % self.tims)
         self.center: int = self.fp_rows // 2
 
@@ -57,7 +59,7 @@ class Converter:
             int | int64 | None: Grid row index or None if out of bounds.
         """
 
-        idy: int | int64 = (self.nBasePrice - nPrice) // self.scale + self.center
+        idy: int | int64 = (self.baseNprice - nPrice) // self.scale + self.center
         if 0 <= idy < self.fp_rows:
             return idy
         else:
@@ -90,7 +92,7 @@ class Converter:
         if isinstance(value, (float, float64)):
             return round(value * self.price_mult)
         else:
-            return (self.center - value) * self.scale + self.nBasePrice
+            return (self.center - value) * self.scale + self.baseNprice
 
     def to_nQty(self, qty: float) -> int:
         """Converts float quantity to fixed-point int scaling representation."""

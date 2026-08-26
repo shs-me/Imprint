@@ -20,7 +20,7 @@ class Reader(Writer, ABC):
             manager.cfgMetrics.trade_readed_time.cast("q")
         )
 
-        self.last_bar: int = 0
+        self.last_idx: int = 0
         self.fp: FootprintLike = FootprintLike(
             converter=self.con,
             fp_state=self.__footprint_state,
@@ -44,7 +44,7 @@ class Reader(Writer, ABC):
         super()._init_session(nPrice, timestamp)
 
         self.__footprint_state.fill(0)
-        self.last_bar = 0
+        self.last_idx = 0
 
     def _analyze_footprint(self) -> None:
         idYmin, idXmin, idYmax, idXmax = self._bbox
@@ -86,7 +86,7 @@ class Reader(Writer, ABC):
             fp=self._footprint,
             fp_state=self.__footprint_state,
             fp_state_cache=self.__fp_state_cache,
-            nBasePrice=self.con.nBasePrice,
+            baseNprice=self.con.baseNprice,
             center=self.con.center,
             scale=self.con.scale,
         )
@@ -102,7 +102,7 @@ class Reader(Writer, ABC):
             hr=self._headers,
             fp=self._footprint,
             fp_state=self.__footprint_state,
-            nBasePrice=self.con.nBasePrice,
+            baseNprice=self.con.baseNprice,
             center=self.con.center,
             scale=self.con.scale,
         )
@@ -142,7 +142,7 @@ def _update_closed_bar_and_fp_states(
     fp: NDArray[int64],
     fp_state: NDArray[int32],
     fp_state_cache: NDArray[int64],
-    nBasePrice: int,
+    baseNprice: int,
     center: int,
     scale: int,
 ) -> None:
@@ -154,8 +154,8 @@ def _update_closed_bar_and_fp_states(
     highNprice: int64 = hr[bar, c.BH_High]
     lowNprice: int64 = hr[bar, c.BH_Low]
 
-    high_idy: int64 = (nBasePrice - highNprice) // scale + center
-    low_idy: int64 = (nBasePrice - lowNprice) // scale + center
+    high_idy: int64 = (baseNprice - highNprice) // scale + center
+    low_idy: int64 = (baseNprice - lowNprice) // scale + center
 
     # ATR
     if bar > 0:
@@ -185,9 +185,9 @@ def _update_closed_bar_and_fp_states(
     fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
 
     # Update VWAP+BB
-    vwap = (nBasePrice - hr[bar, c.BH_VWAP]) // scale + center
-    vwap_bb_lower = (nBasePrice - hr[bar, c.BH_VWAP_LOWER_BAND]) // scale + center
-    vwap_bb_upper = (nBasePrice - hr[bar, c.BH_VWAP_UPPER_BAND]) // scale + center
+    vwap = (baseNprice - hr[bar, c.BH_VWAP]) // scale + center
+    vwap_bb_lower = (baseNprice - hr[bar, c.BH_VWAP_LOWER_BAND]) // scale + center
+    vwap_bb_upper = (baseNprice - hr[bar, c.BH_VWAP_UPPER_BAND]) // scale + center
 
     if 0 <= vwap < fp_state.shape[0]:
         fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP_FP)
@@ -207,13 +207,13 @@ def _update_closed_bar_and_fp_states(
     vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
     fp_state[poc, idxVP] |= c.SF_POC_FP
     fp_state_cache[c.CSD_POC_FP] = poc
-    hr[bar, c.BH_POC_FP] = (center - poc) * scale + nBasePrice
+    hr[bar, c.BH_POC_FP] = (center - poc) * scale + baseNprice
     fp_state[vah, idxVP] |= c.SF_VAH_FP
     fp_state_cache[c.CSD_VAH_FP] = vah
-    hr[bar, c.BH_VAH_FP] = (center - vah) * scale + nBasePrice
+    hr[bar, c.BH_VAH_FP] = (center - vah) * scale + baseNprice
     fp_state[val, idxVP] |= c.SF_VAL_FP
     fp_state_cache[c.CSD_VAL_FP] = val
-    hr[bar, c.BH_VAL_FP] = (center - val) * scale + nBasePrice
+    hr[bar, c.BH_VAL_FP] = (center - val) * scale + baseNprice
 
     # Update Auction
     high_finished, low_finished = fp[high_idy, lidx + 1] == 0, fp[low_idy, lidx] == 0
@@ -232,7 +232,7 @@ def _update_bar_states(
     hr: NDArray[int64],
     fp: NDArray[int64],
     fp_state: NDArray[int32],
-    nBasePrice: int,
+    baseNprice: int,
     center: int,
     scale: int,
 ) -> None:
@@ -245,10 +245,10 @@ def _update_bar_states(
     lowNprice: int64 = hr[bar, c.BH_Low]
     closeNprice: int64 = hr[bar, c.BH_Close]
 
-    open_idy: int64 = (nBasePrice - openNprice) // scale + center
-    high_idy: int64 = (nBasePrice - highNprice) // scale + center
-    low_idy: int64 = (nBasePrice - lowNprice) // scale + center
-    close_idy: int64 = (nBasePrice - closeNprice) // scale + center
+    open_idy: int64 = (baseNprice - openNprice) // scale + center
+    high_idy: int64 = (baseNprice - highNprice) // scale + center
+    low_idy: int64 = (baseNprice - lowNprice) // scale + center
+    close_idy: int64 = (baseNprice - closeNprice) // scale + center
 
     ymax_climp = min(idYmax + 1, fp.shape[0] - 1)
     idyBid: slice[int64, int64] = slice(idYmin + 1, ymax_climp + 1)
@@ -291,9 +291,9 @@ def _update_bar_states(
     )
     poc: intp = np.argmax(vp_bar)
     vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-    hr[bar, c.BH_POC] = (center - (high_idy + poc)) * scale + nBasePrice
-    hr[bar, c.BH_VAH] = (center - (high_idy + vah)) * scale + nBasePrice
-    hr[bar, c.BH_VAL] = (center - (high_idy + val)) * scale + nBasePrice
+    hr[bar, c.BH_POC] = (center - (high_idy + poc)) * scale + baseNprice
+    hr[bar, c.BH_VAH] = (center - (high_idy + vah)) * scale + baseNprice
+    hr[bar, c.BH_VAL] = (center - (high_idy + val)) * scale + baseNprice
     fp_state[(high_idy + poc), idxBid] |= c.SF_POC_BAR
     fp_state[(high_idy + vah), idxBid] |= c.SF_VAH_BAR
     fp_state[(high_idy + val), idxBid] |= c.SF_VAL_BAR

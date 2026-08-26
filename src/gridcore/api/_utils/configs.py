@@ -9,7 +9,7 @@ from ...core.configs import (
     RiskManagment,
     Setup,
 )
-from ...core.footprint import BaseFootprintReader
+from ...core.footprint import FootprintEngine
 from ...core.pipeline.executing import BaseExecution
 from ...core.pipeline.utils.base_adapters import (
     AggTrades,
@@ -54,7 +54,7 @@ class Real:
 
 @dataclass
 class Strategy:
-    algorithm: type[BaseFootprintReader]
+    algorithm: type[FootprintEngine]
     footprint: Footprint
     risk_managment: RiskManagment
 

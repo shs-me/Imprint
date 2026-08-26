@@ -40,6 +40,7 @@ class Live(Base):
             f"{self.agg_trade.__class__.__name__} used as {AggTrades.__name__}"
         )
         self.decoder: Decoder[AggTrades] = Decoder(type=self.agg_trade, strict=False)
+        self.pass_lag: int = 0
         self.pass_lag_limit: int = 2
 
     @override

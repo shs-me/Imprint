@@ -7,16 +7,16 @@ from ..base import Base, scs
 
 
 class Live(Base):
-    def __init__(self, manager: NodeManager, parsing_event: Event) -> None:
+    def __init__(self, manager: NodeManager, engine_event: Event) -> None:
         super().__init__(manager=manager)
 
-        self.parsing_event: Event = parsing_event
+        self.engine_event: Event = engine_event
 
         self.agg_trades_uri: str = manager.cfgConnector.market_data_uri_for_wss
 
     async def run_wss__engine(self) -> None:
         # Local Links
-        parsing_event = self.parsing_event
+        engine_event = self.engine_event
         have_status, task_status = self.have_status, self.task_status
         wid, rid = self.ds_wid, self.ds_rid
         data, data_size = self.ds_data, self.ds_data_size
@@ -47,5 +47,5 @@ class Live(Base):
                         data_size=data_size,
                         cell_amount=cell_amount,
                     ):
-                        if parsing_event.is_set() is False:
-                            parsing_event.set()
+                        if engine_event.is_set() is False:
+                            engine_event.set()

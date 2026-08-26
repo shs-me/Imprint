@@ -28,7 +28,7 @@ class Writer(Base, ABC):
     def _init_array(self) -> None:
         super()._init_array()
 
-        self.__meta_data: NDArray[float64] = np.ndarray(
+        self.__meta_data: NDArray[float64] = np.zeros(
             shape=(2, BHM_ConstantCount), dtype=float64
         )
 
@@ -71,7 +71,7 @@ class Writer(Base, ABC):
                     meta_data=self.__meta_data,
                 )
             else:
-                # self._set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=False)
+                self._set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=False)
                 if self.__bbox_is_read():
                     self._init_session(nPrice, timestamp)
                     self.__update(nPrice, nQty, timestamp, is_sell)
@@ -79,7 +79,7 @@ class Writer(Base, ABC):
                     self._re_init_session = True
 
         else:
-            # self._set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=False)
+            self._set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=False)
             if self.__bbox_is_read():
                 self._init_session(nPrice, timestamp)
                 self.__update(nPrice, nQty, timestamp, is_sell)

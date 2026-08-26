@@ -1,9 +1,9 @@
 import importlib
 from multiprocessing.synchronize import Event
 
-from ...footprint.engine import FootprintEngine
+from ...footprint import FootprintEngine
 from ...ipc import NodeManager, supervisor
-from ...settings import LogicProc
+from ...settings import EngineProc
 
 __all__ = ["run_engine"]
 
@@ -12,7 +12,7 @@ __all__ = ["run_engine"]
 def run_engine(
     engine_event: Event,
     execution_event: Event,
-    proc: LogicProc = LogicProc(),
+    proc: EngineProc = EngineProc(),
     **kwargs,
 ) -> None:
     manager: NodeManager = kwargs["manager"]
@@ -34,7 +34,7 @@ def run_engine(
         sync = SyncViaEvent(manager, execution_event)
 
     engine: FootprintEngine = engine_type(manager, sync)
-    manager.set_text(f"{engine.__class__.__name__} used as BaseFootprintReader")
+    manager.set_text(f"{engine.__class__.__name__} used as FootprintEngine")
 
     if manager.cfgSetup.backtesting:
         from .backtest import Backtest as BacktestAgent

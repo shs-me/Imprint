@@ -41,7 +41,7 @@ class Base(ABC):
 
         cfgMetrics = manager.cfgMetrics
         self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
-        self.logic_complete: memoryview = cfgMetrics.logic_complete
+        self.engine_complete: memoryview = cfgMetrics.engine_complete
 
         self.symbol: str = manager.cfgCoin.symbol
         self.con: AccountConverter = AccountConverter(
@@ -72,7 +72,7 @@ class Base(ABC):
                             self._final_actions()
                             return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
 
-                if self.logic_complete[0] == 0:
+                if self.engine_complete[0] == 0:
                     self._alarm_clock(WB_1, RB_1, WB_2, RB_2)
 
                 if WB_1[0] != RB_1[0]:
@@ -81,7 +81,7 @@ class Base(ABC):
                     self._check_user_data_buf()
 
     def _complete(self) -> bool:
-        return (self.logic_complete[0] == 1) and (
+        return (self.engine_complete[0] == 1) and (
             (self.sn_wid[0] == self.sn_rid[0]) and (self.gus_wid[0] == self.gus_rid[0])
         )
 

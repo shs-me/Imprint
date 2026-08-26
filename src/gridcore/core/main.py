@@ -9,13 +9,12 @@ from types import FunctionType
 
 from .constant import DIRS_LIST
 from .ipc import HostManager, supervisor
-from .pipeline import run_analyzing, run_executing, run_parsing, run_streaming
+from .pipeline import run_engine, run_executing, run_streaming
 from .settings import (
     DataStreamProc,
+    EngineProc,
     ExecutionProc,
-    LogicProc,
     LogLevel,
-    ParsingProc,
     ProcsData,
 )
 
@@ -24,8 +23,7 @@ class MainAgent:
     """Process coordinator responsible for instantiating IPC tools and launching daemon processes."""
 
     market_data_wss: DataStreamProc
-    parsing: ParsingProc
-    logic: LogicProc
+    engine: EngineProc
     execution: ExecutionProc
 
     def __init__(self, manager: HostManager, **kwargs) -> None:
@@ -41,8 +39,7 @@ class MainAgent:
         self.procs: dict[int, ProcsData] = {}
 
         self.execution_event: EventT = Event()
-        self.parsing_event: EventT = Event()
-        self.logic_event: EventT = Event()
+        self.engine_event: EventT = Event()
         self.wss_sem: SemT = Semaphore(0)
 
         self.execution = ExecutionProc(10)
@@ -59,8 +56,7 @@ class MainAgent:
                 self.manager.run(
                     procs=self.procs,
                     market_data_wss=self.market_data_wss,
-                    parsing=self.parsing,
-                    logic=self.logic,
+                    engine=self.engine,
                     execution=self.execution,
                 )
 
@@ -100,13 +96,12 @@ class MainAgent:
         """Resolves pipeline target functions based on backtesting and execution flags.
 
         Returns:
-            list[FunctionType]: Process target functions for WSS, Parsing, Logic, and Execution.
+            list[FunctionType]: Process target functions for WSS, Engine and Execution.
         """
 
         funcs: list[FunctionType] = []
         funcs.append(run_streaming)
-        funcs.append(run_parsing)
-        funcs.append(run_analyzing)
+        funcs.append(run_engine)
         if self.with_execution:
             funcs.append(run_executing)
 

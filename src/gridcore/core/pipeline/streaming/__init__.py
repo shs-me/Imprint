@@ -8,7 +8,7 @@ __all__ = ["run_streaming"]
 
 @supervisor()
 def run_streaming(
-    parsing_event: Event,
+    engine_event: Event,
     proc: DataStreamProc = DataStreamProc(),
     **kwargs,
 ) -> None:
@@ -24,5 +24,5 @@ def run_streaming(
 
         from .market_data.live import Live as LiveAgent
 
-        agent = LiveAgent(manager=manager, parsing_event=parsing_event)
+        agent = LiveAgent(manager, engine_event)
         asyncio.run(agent.run_wss__engine())

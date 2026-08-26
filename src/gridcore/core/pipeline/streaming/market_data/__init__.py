@@ -8,7 +8,7 @@ __all__ = ["run_market_data_stream"]
 
 @supervisor()
 def run_market_data_stream(
-    parsing_event: Event,
+    engine_event: Event,
     proc: DataStreamProc = DataStreamProc(),
     **kwargs,
 ) -> None:
@@ -17,12 +17,12 @@ def run_market_data_stream(
     if manager.cfgSetup.backtesting:
         from .backtest import Backtest as BacktestAgent
 
-        agent = BacktestAgent(manager=kwargs["manager"])
+        agent = BacktestAgent(manager)
         agent.run_wss_engine()
     else:
         import asyncio
 
         from .live import Live as LiveAgent
 
-        agent = LiveAgent(manager=kwargs["manager"], parsing_event=parsing_event)
+        agent = LiveAgent(manager, engine_event)
         asyncio.run(agent.run_wss__engine())
