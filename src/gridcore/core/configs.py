@@ -157,7 +157,6 @@ class Footprint(Configuration):
     chart_range: int = 1
     step_tick: int = 1
     fp_rows: int = 10001
-    tick_by_tick_analyze: bool = False
     save_fp_headers: bool = False
 
     def __post_init__(self) -> None:

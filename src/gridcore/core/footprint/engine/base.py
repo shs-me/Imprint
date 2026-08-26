@@ -17,7 +17,6 @@ class Base(ABC):
         self._set_proc_sc = manager.set_proc_sc
 
         cfgFP = manager.cfgFootprint
-        self._tick_by_tick_analyze: bool = cfgFP.tick_by_tick_analyze
         self.__save_fp_headers: bool = cfgFP.save_fp_headers
 
         self.__base_fp_dump_path: str = (

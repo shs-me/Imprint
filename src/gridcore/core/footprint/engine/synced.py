@@ -87,16 +87,20 @@ class Synced(Reader, ABC):
         self,
         manager: NodeManager,
         sync: Sync,
-        find_patterns_in_update_bar: bool = False,
-        find_patterns_in_update_closed_bar: bool = False,
         find_patterns_in_update_clusters: bool = False,
+        find_patterns_in_update_closed_bar: bool = False,
+        find_patterns_in_update_bar: bool = False,
     ) -> None:
         super().__init__(manager)
 
         self._sync: Sync = sync
-        self.__fpiu_bar: bool = find_patterns_in_update_bar
-        self.__fpiu_closed_bar: bool = find_patterns_in_update_closed_bar
         self.__fpiu_clusters: bool = find_patterns_in_update_clusters
+        self.__fpiu_closed_bar: bool = find_patterns_in_update_closed_bar
+        self.__fpiu_bar: bool = find_patterns_in_update_bar
+
+        self._tick_by_tick_analyze: bool = (
+            True if (self.__fpiu_bar or self.__fpiu_clusters) else False
+        )
 
     @override
     def _update_clusters(

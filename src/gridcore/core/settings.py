@@ -179,19 +179,3 @@ class BarHeaders(IntEnum):
     POC, VAH, VAL = auto(), auto(), auto()
     POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
     _ConstantCount = auto()
-
-
-@verify(CONTINUOUS, UNIQUE)
-class BarHeadersMetadata(IntEnum):
-    """Index mapping for VWAP running variance calculation metadata array."""
-
-    VWAP_W, VWAP_PW, VWAP_P2W = 0, auto(), auto()
-    _ConstantCount = auto()
-
-
-@verify(CONTINUOUS, UNIQUE)
-class SpaceCoords(IntEnum):
-    """Index mapping for modified region bounding box coordinates array."""
-
-    IDYmin, IDXmin, IDYmax, IDXmax = 0, auto(), auto(), auto()
-    _ConstantCount = auto()

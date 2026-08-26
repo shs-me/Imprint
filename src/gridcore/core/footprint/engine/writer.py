@@ -8,14 +8,24 @@ from numpy.typing import NDArray
 
 from ... import constant as c
 from ...ipc import NodeManager
-from ...settings import BarHeadersMetadata
 from ...settings import StatusCodes as scs
 from .base import Base
 
-BHM_VWAP_W: int = int(BarHeadersMetadata.VWAP_W)
-BHM_VWAP_PW: int = int(BarHeadersMetadata.VWAP_PW)
-BHM_VWAP_P2W: int = int(BarHeadersMetadata.VWAP_P2W)
-BHM_ConstantCount: int = int(BarHeadersMetadata._ConstantCount)
+(
+    BHM_VWAP_W,
+    BHM_VWAP_PW,
+    BHM_VWAP_P2W,
+    BHM_ConstantCount,
+) = [v for v in range(4)]
+(
+    FU_idxVP,
+    FU_idxDP,
+    FU_price_mult,
+    FU_price_prec,
+    FU_qty_mult,
+    FU_qty_prec,
+    FU_ConstantCount,
+) = [v for v in range(7)]
 
 
 class Writer(Base, ABC):
@@ -24,6 +34,13 @@ class Writer(Base, ABC):
 
         self._counter_ticks: int = 0
 
+        self.__args[FU_idxVP] = self.con.idxVP
+        self.__args[FU_idxDP] = self.con.idxDP
+        self.__args[FU_price_mult] = self.con.price_mult
+        self.__args[FU_price_prec] = self.con.price_prec
+        self.__args[FU_qty_mult] = self.con.qty_mult
+        self.__args[FU_qty_prec] = self.con.qty_prec
+
     @override
     def _init_array(self) -> None:
         super()._init_array()
@@ -31,6 +48,7 @@ class Writer(Base, ABC):
         self.__meta_data: NDArray[float64] = np.zeros(
             shape=(2, BHM_ConstantCount), dtype=float64
         )
+        self.__args: NDArray[int64] = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
 
     @override
     def _init_session(self, nPrice: int, timestamp: int) -> None:
@@ -59,12 +77,7 @@ class Writer(Base, ABC):
                     is_sell=is_sell,
                     idy=idy,
                     idx=idx,
-                    idxVP=self.con.idxVP,
-                    idxDP=self.con.idxDP,
-                    price_mult=self.con.price_mult,
-                    price_prec=self.con.price_prec,
-                    qty_mult=self.con.qty_mult,
-                    qty_prec=self.con.qty_prec,
+                    args=self.__args,
                     footprint=self._footprint,
                     headers=self._headers,
                     bbox=self._bbox,
@@ -98,17 +111,17 @@ def _update(
     is_sell: int,
     idy: int,
     idx: int,
-    idxVP: int,
-    idxDP: int,
-    price_mult: int,
-    price_prec: int,
-    qty_mult: int,
-    qty_prec: int,
+    args: NDArray[int64],
     footprint: NDArray[int64],
     headers: NDArray[int64],
     bbox: NDArray[int64],
     meta_data: NDArray[float64],
 ) -> None:
+    idxVP, idxDP = args[FU_idxVP], args[FU_idxDP]
+    price_mult, price_prec = args[FU_price_mult], args[FU_price_prec]
+    qty_mult, qty_prec = args[FU_qty_mult], args[FU_qty_prec]
+    # - - -
+
     # Update Footprint
     footprint[idy, idx] += nQty
     footprint[idy, idxVP] += nQty
