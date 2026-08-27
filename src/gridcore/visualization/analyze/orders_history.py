@@ -4,7 +4,8 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from ...core import constant as c
-from ...core.account.position import to_nPnl, update_position
+from ...core.account.converter import to_nPnl
+from ...core.account.position import update_position
 from ..settings import CloseTrades, OpenTrades
 
 
@@ -37,13 +38,13 @@ def analyze_orders_history(
     ohRow: int = orders.shape[0]
 
     for row in range(ohRow):
-        nPrice: int64 = orders[row, c.TP_nPrice]
-        nQty: int64 = orders[row, c.TP_nQty]
-        timestamp: int64 = orders[row, c.TP_timestamp]
-        orderParam: int64 = orders[row, c.TP_orderParam]
-        nCommission: int64 = orders[row, c.TP_commission]
-        nMAE: int64 = orders[row, c.TP_nMAE]
-        nMFE: int64 = orders[row, c.TP_nMFE]
+        nPrice: int = int(orders[row, c.TP_nPrice])
+        nQty: int = int(orders[row, c.TP_nQty])
+        timestamp: int = int(orders[row, c.TP_timestamp])
+        orderParam: int = int(orders[row, c.TP_orderParam])
+        nCommission: int = int(orders[row, c.TP_commission])
+        nMAE: int = int(orders[row, c.TP_nMAE])
+        nMFE: int = int(orders[row, c.TP_nMFE])
 
         is_filled: bool = bool(orderParam & c.OF_FILLED)
         is_maker: bool = bool(orderParam & c.OF_LIMIT)

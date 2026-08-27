@@ -2,7 +2,9 @@
 
 import gc
 import time
+from multiprocessing.synchronize import Event, Semaphore
 
+from ... import configs as cfg
 from ...settings import StatusCodes as scs
 from .base import Base
 
@@ -14,8 +16,8 @@ class Node(Base):
         self,
         segments: dict[str, slice],
         shm_buf: memoryview,
-        configs: list,
-        main_tools: list,
+        configs: list[cfg.Configuration],
+        main_tools: list[Event | Semaphore],
         proc_id: int,
         task_id: int,
     ) -> None:
@@ -60,7 +62,10 @@ class Node(Base):
 
     def have_status(self) -> bool:
         if self.proc_status[0] != 0 or self.task_status[0] != 0:
-            if not (self.proc_status[0] == scs.HAVE_TEXT) or self.task_status[0] != 0:
+            if (
+                not (self.proc_status[0] == scs.HAVE_TEXT.value)
+                or self.task_status[0] != 0
+            ):
                 return True
 
         return False

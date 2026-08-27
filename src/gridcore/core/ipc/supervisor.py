@@ -1,5 +1,9 @@
 import gc
 from functools import wraps
+from typing import Callable, ParamSpec, TypeVar
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def supervisor(is_main: bool = False):
@@ -9,12 +13,12 @@ def supervisor(is_main: bool = False):
         is_main (bool): True if decorating main orchestrator process entry point.
     """
 
-    def decorator(func):
+    def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
         @wraps(wrapped=func)
-        def wrapper(**kwargs) -> None:
+        def wrapper(*_args: P.args, **kwargs: P.kwargs) -> R | None:
             from .dispatcher import Dispatcher
 
-            dp: Dispatcher = Dispatcher(is_main=is_main, **kwargs)
+            dp: Dispatcher = Dispatcher(is_main=is_main, kwg=kwargs)
             try:
                 gc.collect()
                 gc.disable()

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import matplotlib.ticker as mticker
 from matplotlib.axes import Axes
 
@@ -19,7 +21,7 @@ def plot_curve_balance(ax: Axes, stats: Stats) -> None:
     base_balance: float = stats.start_balance
 
     # Base Balance Line
-    ax.axhline(
+    ax.axhline(  # pyright: ignore[reportUnknownMemberType])
         base_balance,
         color="#757575",
         linestyle="--",
@@ -30,8 +32,8 @@ def plot_curve_balance(ax: Axes, stats: Stats) -> None:
     )
 
     # Equity
-    ax.plot(
-        stats.eq_times,  # type: ignore
+    ax.plot(  # pyright: ignore[reportUnknownMemberType])
+        stats.eq_times,
         stats.eq_close,
         color="#00E5FF",
         alpha=0.8,
@@ -40,8 +42,8 @@ def plot_curve_balance(ax: Axes, stats: Stats) -> None:
         zorder=3,
     )
 
-    ax.fill_between(
-        stats.eq_times,  # type: ignore
+    ax.fill_between(  # pyright: ignore[reportUnknownMemberType])
+        stats.eq_times,
         base_balance,
         stats.eq_close,
         where=(stats.eq_close >= base_balance),
@@ -50,8 +52,8 @@ def plot_curve_balance(ax: Axes, stats: Stats) -> None:
         interpolate=True,
         zorder=2,
     )
-    ax.fill_between(
-        stats.eq_times,  # type: ignore
+    ax.fill_between(  # pyright: ignore[reportUnknownMemberType])
+        stats.eq_times,
         base_balance,
         stats.eq_close,
         where=(stats.eq_close < base_balance),
@@ -62,15 +64,15 @@ def plot_curve_balance(ax: Axes, stats: Stats) -> None:
     )
 
     # Drawdown
-    ax_dd = ax.twinx()
+    ax_dd: Axes = ax.twinx()  # pyright: ignore[reportUnknownMemberType])
 
     for spine in ax_dd.spines.values():
         spine.set_visible(False)
 
     if stats.trades_close:
-        times_close = [tc["time"] for tc in stats.trades_close]
-        ax_dd.fill_between(
-            times_close,  # type: ignore
+        times_close: list[datetime] = [tc["time"] for tc in stats.trades_close]
+        ax_dd.fill_between(  # pyright: ignore[reportUnknownMemberType])
+            times_close,  # pyright: ignore[reportArgumentType])
             0,
             stats.static_drawdowns,
             color="#FF1744",
@@ -80,8 +82,8 @@ def plot_curve_balance(ax: Axes, stats: Stats) -> None:
         )
 
     if stats.dynamic_drawdowns:
-        ax_dd.plot(
-            stats.eq_times,  # type: ignore
+        ax_dd.plot(  # pyright: ignore[reportUnknownMemberType])
+            stats.eq_times,
             stats.dynamic_drawdowns,
             color="#FF1744",
             alpha=0.45,
@@ -91,11 +93,17 @@ def plot_curve_balance(ax: Axes, stats: Stats) -> None:
         )
 
     ax_dd.set_ylim(-108, 8)
-    ax_dd.tick_params(
-        axis="y", direction="in", pad=-25, colors="#FF5252", labelsize=7.5
+    ax_dd.tick_params(  # pyright: ignore[reportUnknownMemberType])
+        axis="y",
+        direction="in",
+        pad=-25,
+        colors="#FF5252",
+        labelsize=7.5,
     )
     ax_dd.yaxis.set_major_formatter(
-        mticker.FuncFormatter(lambda y, _: f"{y:.0f}%" if y <= 0 else "")
+        mticker.FuncFormatter(
+            lambda y, _: f"{y:.0f}%" if y <= 0 else "",
+        )
     )
 
     run_base_action(ax)

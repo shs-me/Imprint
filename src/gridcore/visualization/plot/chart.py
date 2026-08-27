@@ -20,7 +20,7 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
 
     # Base Price Line
     base_price: float64 = stats.ohlc["close"][0]
-    ax.axhline(
+    ax.axhline(  # pyright: ignore[reportUnknownMemberType])
         base_price,
         color="#757575",
         linestyle="--",
@@ -31,7 +31,7 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
     )
 
     # Price Line
-    ax.plot(
+    ax.plot(  # pyright: ignore[reportUnknownMemberType])
         stats.ohlc["time"],
         stats.ohlc["close"],
         color="#546E7A",
@@ -40,7 +40,7 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
         zorder=3,
     )
 
-    ax.fill_between(
+    ax.fill_between(  # pyright: ignore[reportUnknownMemberType])
         stats.ohlc["time"],
         base_price,
         stats.ohlc["close"],
@@ -50,7 +50,7 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
         interpolate=True,
         zorder=2,
     )
-    ax.fill_between(
+    ax.fill_between(  # pyright: ignore[reportUnknownMemberType])
         stats.ohlc["time"],
         base_price,
         stats.ohlc["close"],
@@ -64,8 +64,8 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
     # Markers Long / Short / Close
     buy_x: list[datetime] = [to["time"] for to in stats.trades_open if to["is_long"]]
     buy_y: list[float] = [to["price"] for to in stats.trades_open if to["is_long"]]
-    ax.scatter(
-        buy_x,  # type: ignore
+    ax.scatter(  # pyright: ignore[reportUnknownMemberType])
+        buy_x,  # pyright: ignore[reportArgumentType])
         buy_y,
         marker="^",
         color="#00E676",
@@ -80,8 +80,8 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
         to["time"] for to in stats.trades_open if not to["is_long"]
     ]
     sell_y: list[float] = [to["price"] for to in stats.trades_open if not to["is_long"]]
-    ax.scatter(
-        sell_x,  # type: ignore
+    ax.scatter(  # pyright: ignore[reportUnknownMemberType])
+        sell_x,  # pyright: ignore[reportArgumentType])
         sell_y,
         marker="v",
         color="#FF1744",
@@ -98,8 +98,8 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
     close_long_y: list[float] = [
         tc["price"] for tc in stats.trades_close if tc["is_long"]
     ]
-    ax.scatter(
-        close_long_x,  # type: ignore
+    ax.scatter(  # pyright: ignore[reportUnknownMemberType])
+        close_long_x,  # pyright: ignore[reportArgumentType])
         close_long_y,
         marker="x",
         color="#00E676",
@@ -115,8 +115,8 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
     close_short_y: list[float] = [
         tc["price"] for tc in stats.trades_close if not tc["is_long"]
     ]
-    ax.scatter(
-        close_short_x,  # type: ignore
+    ax.scatter(  # pyright: ignore[reportUnknownMemberType])
+        close_short_x,  # pyright: ignore[reportArgumentType])
         close_short_y,
         marker="x",
         color="#FF1744",

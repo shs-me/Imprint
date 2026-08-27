@@ -1,34 +1,47 @@
 """Shared memory layout and component configuration data structures."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import override
 
 from .settings import Timeframe
 
-OFFSET = 0
-UBYTE = 1
-INT64 = 8
-FLOAT64 = 8
+PERCENT: int = 10_000
+
+OFFSET: int = 0
+UBYTE: int = 1
+INT64: int = 8
+FLOAT64: int = 8
 
 
-class INT(int):
-    """Integer subclass marking fields designated for shared memory offset allocation."""
+@dataclass
+class Segment:
+    size: int
 
-    pass
+    offset: tuple[int, int] = field(init=False)
+    view: memoryview = field(init=False)
+
+    def __getitem__(self, data: tuple[int, int] | memoryview) -> None:
+        if isinstance(data, tuple):
+            self.offset = data
+        else:
+            self.view = data
+
+
+@dataclass
+class Percent:
+    str_: str
+
+    int_: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.int_ = round(float(self.str_.split("%")[0]) / 100 * PERCENT)
 
 
 class Configuration(ABC):
     """Abstract base class for engine configuration objects."""
 
-    def percent_to_int(self) -> None:
-        """Converts percentage string fields (e.g., '10%') into basis points integers relative to 10,000."""
-        self.percent: int = 10_000
-        for name, value in self.__dict__.items():
-            if isinstance(value, str) and "%" in value:
-                setattr(
-                    self, name, round(float(value.split("%")[0]) / 100 * self.percent)
-                )
+    pass
 
 
 @dataclass
@@ -61,75 +74,36 @@ class Connector(Configuration):
 
 @dataclass
 class Account(Configuration):
-    """Account balance, leverage, and commission configurations.
-
-    Attributes:
-        leverage (int): Account leverage multiplier.
-        balance (float): Initial account equity in quote currency.
-        min_order_size (float): Minimum order size in quote currency.
-        taker_commission (Any): Taker fee percentage or raw value.
-        maker_commission (Any): Maker fee percentage or raw value.
-        slippage (Any): Expected slippage deviation percentage.
-        latency_ms (Any): Simulated execution latency in milliseconds.
-        scale_prec (int): Fixed-point scaling precision exponent.
-        save_orders_history (bool): Flag to persist order execution logs to disk.
-    """
-
     leverage: int = 20
     balance: float = 100.0
     min_order_size: float = 5.0
-    taker_commission: Any = "0.05%"
-    maker_commission: Any = "0.02%"
-    slippage: Any = "0.05%"
-    latency_ms: Any = 100
-    scale_prec: Any = 15
+    taker_commission: Percent = field(default_factory=lambda: Percent("0.05%"))
+    maker_commission: Percent = field(default_factory=lambda: Percent("0.02%"))
+    slippage: Percent = field(default_factory=lambda: Percent("0.05%"))
+    latency_ms: int = 100
+    scale_prec: int = 15
     active_order_limit: int = 1000
     save_orders_history: bool = False
 
-    def __post_init__(self) -> None:
-        """Applies basis point conversions and calculates scale precision multiplier."""
+    scale_mult: int = field(init=False)
 
-        self.percent_to_int()
+    def __post_init__(self) -> None:
         self.scale_mult = 10**self.scale_prec
 
 
 @dataclass
 class RiskManagment(Configuration):
-    """Strategy risk management and execution parameters.
-
-    Attributes:
-        max_lock_balance (Any): Maximum balance allowed for active margin lock.
-        max_loss_balance (Any): Maximum tolerable account loss limit.
-        entry_qty (Any): Position entry size proportion of available balance.
-        tp_dev (Any): Take-profit price deviation percentage.
-        sl_dev (Any): Stop-loss price deviation percentage.
-        pass_signal_if_analysis_time_big (int): Safe analysis processing latency threshold in microseconds.
-        pass_execute_signal_if_timer_ms_exepired (int): Signal execution expiry threshold in milliseconds.
-    """
-
-    max_lock_balance: Any = "10%"
-    max_loss_balance: Any = "10%"
-    entry_qty: Any = "1%"
-    tp_dev: Any = "5%"
-    sl_dev: Any = "5%"
+    max_lock_balance: Percent = field(default_factory=lambda: Percent("10%"))
+    max_loss_balance: Percent = field(default_factory=lambda: Percent("10%"))
+    entry_qty: Percent = field(default_factory=lambda: Percent("1%"))
+    tp_dev: Percent = field(default_factory=lambda: Percent("5%"))
+    sl_dev: Percent = field(default_factory=lambda: Percent("5%"))
     pass_signal_if_analysis_time_big: int = 50_000
     pass_execute_signal_if_timer_ms_exepired: int = 1_000
-
-    def __post_init__(self):
-        """Applies percentage basis point conversions for strategy attributes."""
-        self.percent_to_int()
 
 
 @dataclass
 class Coin(Configuration):
-    """Symbol specifications and fixed-point precision settings.
-
-    Attributes:
-        symbol (str): Trading pair ticker symbol.
-        tick_size (str): Minimum price tick increment.
-        lot_size (str): Minimum quantity lot increment.
-    """
-
     symbol: str = "DASHUSDT"
     tick_size: str = "0.01"
     lot_size: str = "0.001"
@@ -153,29 +127,26 @@ class Coin(Configuration):
 
 @dataclass
 class Footprint(Configuration):
-    timeframe: Timeframe = Timeframe._H
+    timeframe: Timeframe = Timeframe.H1
     chart_range: int = 1
     step_tick: int = 1
     fp_rows: int = 10001
     save_fp_headers: bool = False
 
+    colVP: int = field(init=False)
+    colDP: int = field(init=False)
+    bar_count: int = field(init=False)
+    fp_cols: int = field(init=False)
+    fp_panel_cols: int = field(init=False)
+
     def __post_init__(self) -> None:
-        self.colVP: int = -2
-        self.colDP: int = -1
-        self.bar_count: int = self._get_bar_count(day=self.chart_range)
-        self.fp_cols: int = self.bar_count * 2
-        self.fp_panel_cols: int = self.fp_cols + 2
+        self.colVP = -2
+        self.colDP = -1
+        self.bar_count = self._get_bar_count(day=self.chart_range)
+        self.fp_cols = self.bar_count * 2
+        self.fp_panel_cols = self.fp_cols + 2
 
     def _get_bar_count(self, day: int) -> int:
-        """Computes total expected bars for the specified chart day range and timeframe.
-
-        Args:
-            day (int): Chart scope range in days.
-
-        Returns:
-            int: Calculated bar capacity.
-        """
-
         dayMs: int = (day if day >= 1 else 1) * 24 * 60 * 60 * 1000
         ivlMs: int = self.timeframe
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
@@ -191,7 +162,7 @@ class SharedMemorySegments(Configuration, ABC):
         """Triggers shared memory attribute initialization and page-aligned size calculation."""
 
         self._set_attr_use_shm()
-        self.shm_size = ((self._get_need_shm_size() // 4096) + 1) * 4096
+        self.shm_size = ((self.__get_need_shm_size() // 4096) + 1) * 4096
 
     @abstractmethod
     def _set_attr_use_shm(self) -> None:
@@ -199,18 +170,11 @@ class SharedMemorySegments(Configuration, ABC):
 
         pass
 
-    def _get_need_shm_size(self) -> int:
-        """Calculates cumulative byte offsets for fields typed with INT.
-
-        Returns:
-            int: Total required byte size for shared memory allocation.
-        """
-
-        offset = 0
-        for attr_name, attr_obj in self.__dict__.items():
-            if isinstance(attr_obj, INT):
-                new_value = (offset, (offset := (offset + attr_obj)))
-                setattr(self, attr_name, new_value)
+    def __get_need_shm_size(self) -> int:
+        offset: int = 0
+        for _attr_name, attr_obj in self.__dict__.items():
+            if isinstance(attr_obj, Segment):
+                attr_obj[(offset, (offset := (offset + attr_obj.size)))]
 
         return offset
 
@@ -221,14 +185,15 @@ class Metrics(SharedMemorySegments):
 
     count_procs: int = 10
 
+    @override
     def _set_attr_use_shm(self) -> None:
         """Allocates shared memory offsets for process status codes, timestamps, and text buffers."""
 
-        self.procs_status: Any = INT((self.count_procs * 2) * INT64)
-        self.main_status: Any = INT(self.count_procs * INT64)
-        self.time_start_reading: Any = INT(INT64)
-        self.trade_readed_time: Any = INT(INT64)
-        self.engine_complete: Any = INT(UBYTE)
+        self.procs_status: Segment = Segment((self.count_procs * 2) * INT64)
+        self.main_status: Segment = Segment(self.count_procs * INT64)
+        self.time_start_reading: Segment = Segment(INT64)
+        self.trade_readed_time: Segment = Segment(INT64)
+        self.engine_complete: Segment = Segment(UBYTE)
 
 
 @dataclass
@@ -244,10 +209,12 @@ class BaseRingBuf(ABC):
     def _set_attr_use_shm(self) -> None:
         """Allocates shared memory offsets for reader/writer head positions and data cell arrays."""
 
-        self.reader_id: Any = INT(self.count_reader * INT64)
-        self.writer_id: Any = INT(self.count_writer * INT64)
-        self.data: Any = INT(self.count_writer * (self.cell_amount * self.data_size))
-        self.data_header: Any = INT(
+        self.reader_id: Segment = Segment(self.count_reader * INT64)
+        self.writer_id: Segment = Segment(self.count_writer * INT64)
+        self.data: Segment = Segment(
+            self.count_writer * (self.cell_amount * self.data_size)
+        )
+        self.data_header: Segment = Segment(
             self.count_writer * (self.cell_amount * self.data_header_size)
         )
 

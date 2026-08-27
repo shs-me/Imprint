@@ -21,8 +21,8 @@ class Get(Base):
         decoder_type: type[UserStreamDecoder] = getattr(
             importlib.import_module(m_name), c_name
         )
-        self.decoder = decoder_type()
-        self.rest = RestAgent(
+        self.decoder: UserStreamDecoder = decoder_type()
+        self.rest: RestAgent = RestAgent(
             symbol=self.manager.cfgCoin.symbol, connector=self.manager.cfgConnector
         )
         self.user_data_uri: str = manager.cfgConnector.get_user_data_uri_for_wss
@@ -30,7 +30,6 @@ class Get(Base):
     async def run_wss__engine(self) -> None:
         # Local Links
         execution_event = self.execution_event
-        have_status, task_status = self.have_status, self.task_status
         wid, rid = self.gus_wid, self.gus_rid
         data, data_size = self.gus_data, self.gus_data_size
         data_header = self.gus_data_header
@@ -41,8 +40,8 @@ class Get(Base):
             # - - -
             async with connect(self.user_data_uri, ping_interval=20) as ws:
                 while True:
-                    if have_status():
-                        task: int = self.check_base_task()
+                    if self.manager.have_status():
+                        task: int = self.manager.check_base_task()
                         if isinstance(task, bool):
                             if task:
                                 return

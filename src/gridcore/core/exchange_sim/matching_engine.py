@@ -1,5 +1,6 @@
 import struct
 import time
+from typing import override
 
 import numpy as np
 from numba import njit
@@ -30,17 +31,20 @@ class DataPrepper(BaseDataPrepper):
         self.max_row: int = self.dfm.shape[0]
         self.safe_lag: int = round(self.max_row * 0.9)
 
+    @override
     def alarm_clock(self) -> None:
         while (
             (self.dfmWid[0] - self.dfmRid[0] + self.max_row) % self.max_row
         ) > self.safe_lag:
             time.sleep(0)
 
+    @override
     def prepper_data(self, line: NDArray[int64]) -> None:
         self.dfm[self.dfmWid[0], :] = line[0], line[2]
         new_row: int = self.dfmWid[0] + 1
         self.dfmWid[0] = new_row if (new_row < self.max_row) else 0
 
+    @override
     def post_prepper(self) -> None:
         pass
 
@@ -53,24 +57,24 @@ class MatchingEngine:
         self.manager: NodeManager = manager
 
         cfgAC = manager.cfgAccount
-        self.slippage: int = cfgAC.slippage
+        self.slippage: int = cfgAC.slippage.int_
         self.order_book_row: int = cfgAC.active_order_limit
 
         cfgGUS = manager.cfgGetUserStream
         self.gus_cell_amount: int = cfgGUS.cell_amount
-        self.gus_data: memoryview = cfgGUS.data
+        self.gus_data: memoryview = cfgGUS.data.view
         self.gus_data_size: int = cfgGUS.data_size
-        self.gus_data_header: memoryview = cfgGUS.data_header
-        self.gus_wid: memoryview = cfgGUS.writer_id.cast("q")
-        self.gus_rid: memoryview = cfgGUS.reader_id.cast("q")
+        self.gus_data_header: memoryview = cfgGUS.data_header.view
+        self.gus_wid: memoryview = cfgGUS.writer_id.view.cast("q")
+        self.gus_rid: memoryview = cfgGUS.reader_id.view.cast("q")
 
         cfgSUS = manager.cfgSetUserStream
         self.sus_cell_amount: int = cfgSUS.cell_amount
-        self.sus_data: memoryview = cfgSUS.data
+        self.sus_data: memoryview = cfgSUS.data.view
         self.sus_data_size: int = cfgSUS.data_size
-        self.sus_data_header: memoryview = cfgSUS.data_header
-        self.sus_wid: memoryview = cfgSUS.writer_id.cast("q")
-        self.sus_rid: memoryview = cfgSUS.reader_id.cast("q")
+        self.sus_data_header: memoryview = cfgSUS.data_header.view
+        self.sus_wid: memoryview = cfgSUS.writer_id.view.cast("q")
+        self.sus_rid: memoryview = cfgSUS.reader_id.view.cast("q")
 
         self.trade_readed_time: memoryview = memoryview(bytearray(8)).cast("q")
         self.order_id: memoryview = memoryview(bytearray(8)).cast("q")
@@ -142,7 +146,7 @@ class MatchingEngine:
 
 
 @njit(cache=True)
-def _matching(
+def matching(
     trade_timestamp: int,
     trade_nPrice: int,
     order_book: NDArray[int64],
@@ -290,7 +294,7 @@ def _compact_order_book(
 
 
 @njit(cache=True)
-def _set_user_data(
+def set_user_data(
     data: NDArray[uint8],
     data_buf: NDArray[uint8],
     data_buf_size: int,

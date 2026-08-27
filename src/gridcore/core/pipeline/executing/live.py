@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from multiprocessing.synchronize import Event
+from typing import override
 
 from ...ipc import NodeManager
 from ..utils.rest_agent import RestAgent
@@ -17,6 +18,7 @@ class Live(Base, ABC):
         )
 
     @abstractmethod
+    @override
     def _alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
@@ -28,16 +30,19 @@ class Live(Base, ABC):
                 self.execution_event.wait(timeout=0.1)
 
     @abstractmethod
+    @override
     def _pre_execute_signal_action(self, time_get_signal: int) -> None:
         pass
 
     @abstractmethod
+    @override
     def action_for_getted_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
         pass
 
     @abstractmethod
+    @override
     def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
 
         data = user_data_raw_buf.cast("q")
@@ -59,9 +64,10 @@ class Live(Base, ABC):
             )
 
         elif event_type == 2:
-            new_balance = data[7]
+            pass
 
     @abstractmethod
+    @override
     def action_for_getted_executed_order(
         self,
         timestamp: int,
@@ -74,5 +80,6 @@ class Live(Base, ABC):
         pass
 
     @abstractmethod
+    @override
     def _post_final_action(self) -> None:
         pass

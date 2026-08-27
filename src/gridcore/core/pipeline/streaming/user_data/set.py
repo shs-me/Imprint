@@ -24,7 +24,6 @@ class Set(Base):
     async def run_wss__engine(self) -> None:
         # Local Links
         wss_sem = self.wss_sem
-        have_status, task_status = self.have_status, self.task_status
         wid, rid = self.sus_wid, self.sus_rid
         data, data_size = self.sus_data, self.sus_data_size
         data_header = self.sus_data_header
@@ -35,8 +34,8 @@ class Set(Base):
             # - - -
             async with connect(self.send_order_uri, ping_interval=20) as ws:
                 while True:
-                    if have_status():
-                        task: bool | int = self.check_base_task(complete=True)
+                    if self.manager.have_status():
+                        task: int = self.manager.check_base_task()
                         if isinstance(task, bool):
                             if task:
                                 return

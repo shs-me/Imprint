@@ -46,53 +46,36 @@ def plot_trade_distribution(ax: Axes, stats: Stats) -> None:
 
     bins: NDArray[float64] = np.unique(np.concatenate([bins_neg, bins_pos]))
 
-    ax.hist(
-        p_pnls_pct,
-        bins=bins,  # type: ignore
-        orientation="horizontal",
-        alpha=0.30,
-        color="#00E676",
-        edgecolor="#FFFFFF",
-        linewidth=0.7,
-        zorder=3,
-        label="TP",
-    )
-    ax.hist(
-        mfes_pct,
-        bins=bins,  # type: ignore
-        orientation="horizontal",
-        alpha=0.70,
-        color="#00E676",
-        edgecolor="#FFFFFF",
-        linewidth=0.7,
-        zorder=2,
-        label="MFE",
-    )
-    ax.hist(
-        maes_pct,
-        bins=bins,  # type: ignore
-        orientation="horizontal",
-        alpha=0.70,
-        color="#FF1744",
-        edgecolor="#FFFFFF",
-        linewidth=0.7,
-        zorder=2,
-        label="MAE",
-    )
-    ax.hist(
-        l_pnls_pct,
-        bins=bins,  # type: ignore
-        orientation="horizontal",
-        alpha=0.30,
-        color="#FF1744",
-        edgecolor="#FFFFFF",
-        linewidth=0.7,
-        zorder=3,
-        label="SL",
-    )
+    xs: list[list[float]] = [p_pnls_pct, mfes_pct, maes_pct, l_pnls_pct]
+    alphas: list[float] = [0.3, 0.7, 0.7, 0.3]
+    colors: list[str] = ["#00E676", "#00E676", "#FF1744", "#FF1744"]
+    zorders: list[int] = [3, 2, 2, 3]
+    labels: list[str] = ["TP", "MFE", "MAE", "SL"]
 
-    ax.axhline(0, color="#FFFFFF", linestyle="-", linewidth=0.8, alpha=0.6, zorder=4)
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda y, _: f"{y:+.1f}%"))
+    for x, a, c, z, la in zip(xs, alphas, colors, zorders, labels):
+        ax.hist(  # pyright: ignore[reportUnknownMemberType])
+            x,
+            bins=bins,  # pyright: ignore[reportArgumentType])
+            orientation="horizontal",
+            alpha=a,
+            color=c,
+            edgecolor="#FFFFFF",
+            linewidth=0.7,
+            zorder=z,
+            label=la,
+        )
+
+    ax.axhline(  # pyright: ignore[reportUnknownMemberType])
+        0,
+        color="#FFFFFF",
+        linestyle="-",
+        linewidth=0.8,
+        alpha=0.6,
+        zorder=4,
+    )
+    ax.yaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda y, _: f"{y:+.1f}%"),
+    )
     ax.yaxis.tick_right()
     ax.invert_xaxis()
 

@@ -2,47 +2,44 @@
 
 import inspect
 import os
+from dataclasses import dataclass, field
 from multiprocessing import Event, Process, Semaphore
 from multiprocessing.synchronize import Event as EventT
 from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
+from typing import Any
 
 from .constant import DIRS_LIST
 from .ipc import HostManager, supervisor
 from .pipeline import run_engine, run_executing, run_streaming
 from .settings import (
-    DataStreamProc,
-    EngineProc,
-    ExecutionProc,
     LogLevel,
     ProcsData,
+    ProcsIds,
 )
 
 
+@dataclass
 class MainAgent:
     """Process coordinator responsible for instantiating IPC tools and launching daemon processes."""
 
-    market_data_wss: DataStreamProc
-    engine: EngineProc
-    execution: ExecutionProc
+    manager: HostManager
+    base_kwargs: dict[str, Any]
+    procs: dict[int, ProcsData] = field(default_factory=lambda: {})
 
-    def __init__(self, manager: HostManager, **kwargs) -> None:
-        """Initializes synchronization events and process registry containers."""
+    is_backtesting: bool = field(init=False)
+    with_execution: bool = field(init=False)
+    wss_sem: SemT = field(init=False)
+    engine_event: EventT = field(init=False)
+    execution_event: EventT = field(init=False)
 
-        self.manager: HostManager = manager
+    def __post_init__(self) -> None:
+        self.is_backtesting = self.manager.cfgSetup.backtesting
+        self.with_execution = self.manager.cfgSetup.execution
 
-        self.base_kwargs: dict = kwargs
-
-        self.is_backtesting: bool = self.manager.cfgSetup.backtesting
-        self.with_execution: bool = self.manager.cfgSetup.execution
-
-        self.procs: dict[int, ProcsData] = {}
-
-        self.execution_event: EventT = Event()
-        self.engine_event: EventT = Event()
-        self.wss_sem: SemT = Semaphore(0)
-
-        self.execution = ExecutionProc(10)
+        self.wss_sem = Semaphore(0)
+        self.engine_event = Event()
+        self.execution_event = Event()
 
     def run_core_engine(self) -> None:
         """Creates required output directories, spawns worker processes, and starts the MainManager loop."""
@@ -53,12 +50,7 @@ class MainAgent:
             if self.run_procs():
                 self.manager.logger("Init completed", LogLevel.INFO)
 
-                self.manager.run(
-                    procs=self.procs,
-                    market_data_wss=self.market_data_wss,
-                    engine=self.engine,
-                    execution=self.execution,
-                )
+                self.manager.run(procs=self.procs)
 
         except KeyboardInterrupt:
             pass
@@ -74,9 +66,9 @@ class MainAgent:
     def run_procs(self) -> bool:
         """Spawns configured worker processes and applies initial execution flags."""
 
-        procs_funcs: list[FunctionType] = self.get_procs_funcs()
-        count_procs: int = len(procs_funcs)
-        procs_ids: list[int] = [i for i in range(count_procs)]
+        procs_data: list[tuple[FunctionType, int]] = self.get_procs_funcs()
+        procs_funcs: list[FunctionType] = [f for f, _ in procs_data]
+        procs_ids: list[int] = [i for _, i in procs_data]
         task_ids: list[int] = [i + 10 for i in procs_ids]
 
         self.manager.general_event(False, task_ids)
@@ -92,48 +84,29 @@ class MainAgent:
         self.manager.general_event(True, task_ids)
         return True
 
-    def get_procs_funcs(self) -> list[FunctionType]:
-        """Resolves pipeline target functions based on backtesting and execution flags.
-
-        Returns:
-            list[FunctionType]: Process target functions for WSS, Engine and Execution.
-        """
-
-        funcs: list[FunctionType] = []
-        funcs.append(run_streaming)
-        funcs.append(run_engine)
+    def get_procs_funcs(self) -> list[tuple[FunctionType, int]]:
+        funcs: list[tuple[FunctionType, int]] = []
+        funcs.append((run_streaming, ProcsIds.streaming))
+        funcs.append((run_engine, ProcsIds.engine))
         if self.with_execution:
-            funcs.append(run_executing)
+            funcs.append((run_executing, ProcsIds.executing))
 
         return funcs
 
     def get_kwargs_for_func(
         self, func: FunctionType, proc_id: int, task_id: int
-    ) -> dict | None:
-        """Resolves required arguments for target worker process signatures.
-
-        Args:
-            func (FunctionType): Target process function.
-            proc_id (int): Assigned process identifier.
-            task_id (int): Assigned task status identifier.
-
-        Returns:
-            dict | None: Resolved keyword arguments or None if required parameters are missing.
-        """
-
+    ) -> dict[str, Any] | None:
         sig: inspect.Signature = inspect.signature(func)
         proc_name: str = func.__name__.split("_")[1].capitalize()
-        kwargs = {}
-        for param_name, param in sig.parameters.items():
+        kwargs: dict[str, Any] = {}
+        for param_name, _param in sig.parameters.items():
             if hasattr(self, param_name):
                 val = getattr(self, param_name)
                 kwargs[param_name] = val
+
             elif param_name == "kwargs":
                 kwargs["proc_id"], kwargs["task_id"] = proc_id, task_id
-            elif param.annotation in self.__annotations__.values():
-                for ann_name, ann in self.__annotations__.items():
-                    if ann is param.annotation:
-                        setattr(self, ann_name, proc_id)
+
             else:
                 return self.manager.logger(
                     f"Missing arg: [{param_name}] for [{proc_name}]", LogLevel.ERROR
@@ -141,17 +114,13 @@ class MainAgent:
 
         kwargs = self.base_kwargs | kwargs
 
-        self.procs[proc_id] = {"proc_name": proc_name, "task_id": task_id}  # type: ignore
+        self.procs[proc_id] = {  # pyright: ignore[reportArgumentType]
+            "proc_name": proc_name,
+            "task_id": task_id,
+        }
         return kwargs
 
-    def run_proc(self, func: FunctionType, kwargs: dict) -> None:
-        """Spawns a target process as a daemon subprocess.
-
-        Args:
-            func (FunctionType): Target process function.
-            kwargs (dict): Arguments passed to target process.
-        """
-
+    def run_proc(self, func: FunctionType, kwargs: dict[str, Any]) -> None:
         name: str = self.procs[kwargs["proc_id"]]["proc_name"]
         proc: Process = Process(
             target=func,
@@ -167,8 +136,8 @@ class MainAgent:
 
 
 @supervisor(is_main=True)
-def run_core(**kwargs) -> None:
+def run_core(**kwargs: Any) -> None:
     """Supervisor-wrapped entry point for spawning the core multiprocessing architecture."""
-
-    state = MainAgent(kwargs.pop("manager"), **kwargs)
+    manager: HostManager = kwargs.pop("manager")
+    state = MainAgent(manager, kwargs)
     state.run_core_engine()

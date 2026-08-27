@@ -84,15 +84,15 @@ class Writer(Base, ABC):
                     meta_data=self.__meta_data,
                 )
             else:
-                self._set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=False)
+                self._manager.set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=False)
                 if self.__bbox_is_read():
                     self._init_session(nPrice, timestamp)
                     self.__update(nPrice, nQty, timestamp, is_sell)
                 else:
-                    self._re_init_session = True
+                    self._re_init_session: bool = True
 
         else:
-            self._set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=False)
+            self._manager.set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=False)
             if self.__bbox_is_read():
                 self._init_session(nPrice, timestamp)
                 self.__update(nPrice, nQty, timestamp, is_sell)

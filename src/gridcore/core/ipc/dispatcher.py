@@ -2,9 +2,11 @@
 
 import inspect
 from copy import deepcopy
+from dataclasses import dataclass, field
 from multiprocessing import Event, Semaphore
 from multiprocessing.shared_memory import SharedMemory
 from types import FunctionType
+from typing import Any
 
 from .. import configs
 from ..configs import Configuration, SharedMemorySegments
@@ -13,12 +15,15 @@ from ..utils.handlers import error_handler
 from .manager import HostManager, NodeManager
 
 
+@dataclass
 class Dispatcher:
     """IPC resource allocator instantiating SharedMemory blocks and manager interfaces."""
 
-    def __init__(self, is_main: bool, **kwargs) -> None:
-        self.is_main: bool = is_main
-        self.kwg: dict = kwargs
+    is_main: bool
+    kwg: dict[str, Any]
+
+    shm: SharedMemory = field(init=False)
+    shm_buf: memoryview = field(init=False)
 
     @error_handler()
     def run_client(self, func: FunctionType) -> None:
@@ -55,9 +60,6 @@ class Dispatcher:
 
     def shm_init(self) -> tuple[SharedMemory, memoryview] | None:
         """Allocates new SharedMemory block for main process or attaches to existing segment for workers."""
-
-        self.shm: SharedMemory
-        self.shm_buf: memoryview
 
         if self.is_main:
             self.shm = SharedMemory(

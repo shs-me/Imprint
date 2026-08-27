@@ -27,9 +27,9 @@ class RestAgent:
         if self.api_key == "" or self.secret_key == "":
             raise RuntimeError("API_KEY or SECRET_KEY not found")
 
-        self._symbol_info: dict[str, Any] | None = None
+        self._symbol_info: dict[str, object] | None = None
 
-    def _sign_query(self, params: dict[str, Any]) -> str:
+    def _sign_query(self, params: dict[str, object]) -> str:
         """Appends timestamp and generates HMAC SHA256 signature for private endpoints."""
         params["timestamp"] = int(time.time() * 1000)
         query_str = urlencode(params)

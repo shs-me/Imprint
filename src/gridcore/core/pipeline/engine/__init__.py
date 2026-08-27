@@ -1,20 +1,15 @@
 import importlib
 from multiprocessing.synchronize import Event
+from typing import Any
 
 from ...footprint import FootprintEngine
 from ...ipc import NodeManager, supervisor
-from ...settings import EngineProc
 
 __all__ = ["run_engine"]
 
 
 @supervisor()
-def run_engine(
-    engine_event: Event,
-    execution_event: Event,
-    proc: EngineProc = EngineProc(),
-    **kwargs,
-) -> None:
+def run_engine(engine_event: Event, execution_event: Event, **kwargs: Any) -> None:
     manager: NodeManager = kwargs["manager"]
 
     m_name: str = manager.cfgSetup.algorithm_module

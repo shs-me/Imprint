@@ -15,27 +15,28 @@ class Converter:
         price_prec: int,
         qty_prec: int,
     ) -> None:
-        self.pricePrec, self.qtyPrec = price_prec, qty_prec
+        self.pricePrec: int = price_prec
+        self.qtyPrec: int = qty_prec
         self.priceMult: int = 10**self.pricePrec
         self.qtyMult: int = 10**self.qtyPrec
 
-        self.cfgST = cfgStrategy
-        self._entryQty: int = self.cfgST.entry_qty
-        self._tpDev: int = self.cfgST.tp_dev
-        self._slDev: int = self.cfgST.sl_dev
-        self._max_lock_balance: int = self.cfgST.max_lock_balance
-        self._max_loss_balance: int = self.cfgST.max_loss_balance
+        self.cfgST: cfg.RiskManagment = cfgStrategy
+        self._entryQty: int = self.cfgST.entry_qty.int_
+        self._tpDev: int = self.cfgST.tp_dev.int_
+        self._slDev: int = self.cfgST.sl_dev.int_
+        self._max_lock_balance: int = self.cfgST.max_lock_balance.int_
+        self._max_loss_balance: int = self.cfgST.max_loss_balance.int_
         self.timer: int = self.cfgST.pass_execute_signal_if_timer_ms_exepired
 
-        self.cfgAC = cfgAccount
+        self.cfgAC: cfg.Account = cfgAccount
         self._scalePrec: int = self.cfgAC.scale_prec
         self.scale: int = 10**self._scalePrec
         self.latency: int = self.cfgAC.latency_ms
         self.leverage: int = self.cfgAC.leverage
         self.startNbalance: int = round(self.cfgAC.balance * self.scale)
         self.minOrderNsize: int = round(self.cfgAC.min_order_size * self.scale)
-        self.takerNcommission: int = self.cfgAC.taker_commission
-        self.makerNcommission: int = self.cfgAC.maker_commission
+        self.takerNcommission: int = self.cfgAC.taker_commission.int_
+        self.makerNcommission: int = self.cfgAC.maker_commission.int_
 
         self._nBalance: memoryview = memoryview(bytearray(8)).cast("q")
         self._lockedNbalance: memoryview = memoryview(bytearray(8)).cast("q")

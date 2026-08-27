@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ...core.configs import (
     Account,
@@ -66,13 +66,17 @@ class SetupCore:
     symbol: str = "DASHUSDT"
     with_execution: type[BaseExecution] | None = None
 
+    coin: Coin = field(init=False)
+    setup: Setup = field(init=False)
+    args: tuple[Configuration, ...] = field(init=False)
+
     def __post_init__(self) -> None:
         args: list[Configuration] = [
             self.strategy.risk_managment,
             self.strategy.footprint,
         ]
-        self.coin: Coin = Coin(symbol=self.symbol)
-        self.setup: Setup = Setup(
+        self.coin = Coin(symbol=self.symbol)
+        self.setup = Setup(
             algorithm_module=self.strategy.algorithm.__module__,
             algorithm_class_name=self.strategy.algorithm.__name__,
         )
@@ -118,4 +122,4 @@ class SetupCore:
 
         args.append(self.setup)
 
-        self.args: tuple[Configuration, ...] = tuple(args)
+        self.args = tuple(args)

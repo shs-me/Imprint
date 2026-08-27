@@ -1,5 +1,6 @@
 import time
 from abc import ABC, abstractmethod
+from typing import override
 
 from ...exchange_sim import ExchangeSim
 from ...ipc import NodeManager
@@ -25,6 +26,7 @@ class Backtest(Base, ABC):
         )
 
     @abstractmethod
+    @override
     def _alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
@@ -39,21 +41,24 @@ class Backtest(Base, ABC):
         time.sleep(0)
 
     @abstractmethod
+    @override
     def _pre_execute_signal_action(self, time_get_signal: int) -> None:
         timestamp = time_get_signal + self.con.latency
         while timestamp > self.acm.trade_readed_time[0]:
             self.acm.start(timestamp)
             self._check_user_data_buf()
 
-        self.readed_timestamp = self.acm.trade_readed_time[0]
+        self.readed_timestamp: int = self.acm.trade_readed_time[0]
 
     @abstractmethod
+    @override
     def action_for_getted_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
         pass
 
     @abstractmethod
+    @override
     def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
         get_data: memoryview = user_data_raw_buf.cast("q")
         timestamp: int = get_data[0]
@@ -73,6 +78,7 @@ class Backtest(Base, ABC):
         )
 
     @abstractmethod
+    @override
     def action_for_getted_executed_order(
         self,
         timestamp: int,
@@ -85,6 +91,7 @@ class Backtest(Base, ABC):
         pass
 
     @abstractmethod
+    @override
     def _final_actions(self) -> None:
         max_timestamp = 9_999_999_999_999
         while self.acm.trade_readed_time[0] < max_timestamp:
@@ -99,6 +106,7 @@ class Backtest(Base, ABC):
         self._post_final_action()
 
     @abstractmethod
+    @override
     def _post_final_action(self) -> None:
         self.con.final_action()
         self.acm.final_action()

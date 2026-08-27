@@ -17,7 +17,7 @@ class Reader(Writer, ABC):
         super().__init__(manager)
 
         self.__trade_readed_time: memoryview = (
-            manager.cfgMetrics.trade_readed_time.cast("q")
+            manager.cfgMetrics.trade_readed_time.view.cast("q")
         )
 
         self.last_idx: int = 0
@@ -81,7 +81,6 @@ class Reader(Writer, ABC):
         _update_closed_bar_and_fp_states(
             lidx=self.last_idx,
             idxVP=self.con.idxVP,
-            idxDP=self.con.idxDP,
             hr=self._headers,
             fp=self._footprint,
             fp_state=self.__footprint_state,
@@ -137,7 +136,6 @@ def _update_clusters_states(
 def _update_closed_bar_and_fp_states(
     lidx: int,
     idxVP: int,
-    idxDP: int,
     hr: NDArray[int64],
     fp: NDArray[int64],
     fp_state: NDArray[int32],

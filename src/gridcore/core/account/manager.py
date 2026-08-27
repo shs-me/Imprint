@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 from .. import constant as c
 from ..ipc import NodeManager
 from .converter import to_nMargin, to_nPnl
-from .position import update_position  # noqa:F401
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -26,8 +25,8 @@ class Manager:
         self.scale_mult: int = cfgAC.scale_mult
         self.latency: int = cfgAC.latency_ms
         self.leverage: int = cfgAC.leverage
-        self.takerNcommission: int = cfgAC.taker_commission
-        self.makerNcommission: int = cfgAC.maker_commission
+        self.takerNcommission: int = cfgAC.taker_commission.int_
+        self.makerNcommission: int = cfgAC.maker_commission.int_
         self.startNbalance: int = round(cfgAC.balance * self.scale_mult)
 
         cfgFP = manager.cfgFootprint

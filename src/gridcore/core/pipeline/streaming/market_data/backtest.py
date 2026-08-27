@@ -1,6 +1,7 @@
 import struct
 import time
 from collections import deque
+from typing import override
 
 from numpy import int64
 from numpy.typing import NDArray
@@ -16,15 +17,18 @@ class DataPrepper(BaseDataPrepper):
     def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
         super().__init__(symbol, start_date, end_date)
 
-        self.queue: deque = deque(maxlen=10000)
+        self.queue: deque[bytes] = deque(maxlen=10000)
 
+    @override
     def alarm_clock(self) -> None:
         while len(self.queue) == self.queue.maxlen:
             time.sleep(0)
 
+    @override
     def prepper_data(self, line: NDArray[int64]) -> None:
         self.queue.append(struct.pack("@qqqq", line[0], line[1], line[2], line[3]))
 
+    @override
     def post_prepper(self) -> None:
         pass
 
@@ -33,7 +37,7 @@ class Backtest(Base):
     def __init__(self, manager: NodeManager) -> None:
         super().__init__(manager=manager)
 
-        self.prepper = DataPrepper(
+        self.prepper: DataPrepper = DataPrepper(
             symbol=manager.cfgCoin.symbol,
             start_date=manager.cfgSetup.backtest_start_date,
             end_date=manager.cfgSetup.backtest_end_date,
@@ -44,7 +48,6 @@ class Backtest(Base):
     def run_wss_engine(self) -> None:
         # Local Links
         prepper = self.prepper
-        have_status, task_status = self.have_status, self.task_status
         wid, rid = self.ds_wid, self.ds_rid
         data, data_size = self.ds_data, self.ds_data_size
         data_header = self.ds_data_header
@@ -54,20 +57,22 @@ class Backtest(Base):
         while True:
             # - - -
             while True:
-                if have_status():
-                    task: int = self.check_base_task()
+                if self.manager.have_status():
+                    task: int = self.manager.check_base_task()
                     if task & scs.EXIT:
-                        return self.set_proc_sc(scs.EXIT, wait_main_task=False)
+                        return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
 
                     if task & scs.COMPLETE:
                         if self.complete():
                             self.final_actions()
-                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
+                            return self.manager.set_proc_sc(
+                                scs.COMPLETE, wait_main_task=False
+                            )
 
                 if prepper.error is None:
                     if not prepper.queue:
                         if prepper.complete:
-                            self.set_proc_sc(
+                            self.manager.set_proc_sc(
                                 code=scs.DATA_PREPPERED, wait_main_task=True
                             )
 

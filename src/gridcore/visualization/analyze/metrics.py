@@ -161,14 +161,13 @@ def calculate_dynamic_drawdown(
     start_balance: float,
     eq_high: NDArray[float64],
     eq_low: NDArray[float64],
-    eq_close: NDArray[float64],
 ) -> tuple[float64, float64, list[float64]]:
     peak: float64 = float64(start_balance)
     max_dyn_dd_val: float64 = float64(0.0)
     max_dyn_dd_pct: float64 = float64(0.0)
     dynamic_drawdowns: list[float64] = []
 
-    for high, low, c_val in zip(eq_high, eq_low, eq_close):
+    for high, low in zip(eq_high, eq_low):
         if high > peak:
             peak = high
 

@@ -1,17 +1,13 @@
 from multiprocessing.synchronize import Event
+from typing import Any
 
 from ...ipc import NodeManager, supervisor
-from ...settings import DataStreamProc
 
 __all__ = ["run_streaming"]
 
 
 @supervisor()
-def run_streaming(
-    engine_event: Event,
-    proc: DataStreamProc = DataStreamProc(),
-    **kwargs,
-) -> None:
+def run_streaming(engine_event: Event, **kwargs: Any) -> None:
     manager: NodeManager = kwargs["manager"]
 
     if manager.cfgSetup.backtesting:

@@ -14,7 +14,6 @@ from ..models.converter import Converter
 class Base(ABC):
     def __init__(self, manager: NodeManager) -> None:
         self._manager: NodeManager = manager
-        self._set_proc_sc = manager.set_proc_sc
 
         cfgFP = manager.cfgFootprint
         self.__save_fp_headers: bool = cfgFP.save_fp_headers
@@ -59,7 +58,7 @@ class Base(ABC):
             timestamp=(timestamp),
         )
         self._re_init_session = False
-        self._set_proc_sc(scs.FP_RE_INIT, wait_main_task=False)
+        self._manager.set_proc_sc(scs.FP_RE_INIT, wait_main_task=False)
 
     def __save_fp_headers_array(self) -> None:
         if self.__save_fp_headers and self._headers[-1, 0] != 0:

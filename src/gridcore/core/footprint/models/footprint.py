@@ -63,8 +63,8 @@ class FootprintLike:
 
 class VolumeProfileLike:
     def __init__(self, fp: FootprintLike) -> None:
-        self._fp = fp
-        self._idx = self._fp._con.idxVP
+        self._fp: FootprintLike = fp
+        self._idx: int = self._fp._con.idxVP
 
     @property
     def base(self) -> NDArray[int64]:
@@ -92,8 +92,8 @@ class VolumeProfileLike:
 
 class DeltaProfileLike:
     def __init__(self, fp: FootprintLike) -> None:
-        self._fp = fp
-        self._idx = self._fp._con.idxDP
+        self._fp: FootprintLike = fp
+        self._idx: int = self._fp._con.idxVP
 
     @property
     def base(self) -> NDArray[int64]:
@@ -106,7 +106,7 @@ class DeltaProfileLike:
 
 class PriceLike:
     def __init__(self, fp: FootprintLike) -> None:
-        self._fp = fp
+        self._fp: FootprintLike = fp
 
         self._idy: int64 = int64(0)
 

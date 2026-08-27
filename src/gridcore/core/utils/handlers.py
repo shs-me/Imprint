@@ -1,31 +1,25 @@
 from functools import wraps
+from typing import Callable, ParamSpec, TypeVar
 
 from ..settings import StatusCodes as scs
 from .tools import dump_exception
 
+P = ParamSpec("P")
+R = TypeVar("R")
+
 
 def error_handler(set_status_code: bool = False):
-    """Decorator capturing uncaught exceptions, writing crash dumps, and updating process status.
-
-    Args:
-        set_status_code (bool): Flag to automatically report scs.ERROR status code to manager.
-    """
-
-    def decorator(func):
-        @wraps(wrapped=func)
-        def wrapper(*args, **kwargs):
-            def set_sc(set_status_code: bool, args: tuple, code: scs) -> None:
+    def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
+        @wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                dump_exception()
                 if set_status_code and args:
                     manager = getattr(args[0], "manager", None)
                     if manager and hasattr(manager, "set_proc_sc"):
-                        manager.set_proc_sc(code, wait_main_task=False)
-
-            try:
-                return func(*args, **kwargs)
-
-            except Exception:
-                dump_exception()
-                set_sc(set_status_code, args, scs.ERROR)
+                        manager.set_proc_sc(scs.ERROR, wait_main_task=False)
 
         return wrapper
 

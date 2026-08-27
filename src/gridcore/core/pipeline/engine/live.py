@@ -60,7 +60,9 @@ class Live(Base):
         if self.engine._sync.lag_is_safe() is False:
             self.pass_lag += 1
             if self.pass_lag >= self.pass_lag_limit:
-                self.set_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG, wait_main_task=False)
+                self.manager.set_proc_sc(
+                    scs.ANALYSIS_LAG_MORE_SAFE_LAG, wait_main_task=False
+                )
 
         if self.ds_wid[0] == self.ds_rid[0]:
             if self.engine_event.is_set():

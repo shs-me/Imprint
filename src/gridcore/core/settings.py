@@ -5,24 +5,16 @@ from multiprocessing import Process
 from typing import TypedDict
 
 
-class DataStreamProc(int):
-    pass
-
-
-class EngineProc(int):
-    pass
-
-
-class ExecutionProc(int):
-    pass
-
-
 class ProcsData(TypedDict):
     """Typed dictionary representing managed worker process state and metadata."""
 
     proc_name: str
     task_id: int
     proc: Process
+
+
+class ProcsIds(IntEnum):
+    streaming, engine, executing = 0, auto(), auto()
 
 
 class KwgsKeys(IntEnum):
@@ -40,7 +32,7 @@ class StatusCodes(IntEnum):
     """Process status codes and bitmask enumeration.
     64-bit status code flags representing process lifecycle states, pipeline warnings, and errors."""
 
-    label: str
+    label: str  # pyright: ignore[reportUninitializedInstanceVariable]
 
     def __new__(cls, sc_label: str):
         """Dynamically constructs single-bit bitmask flag integer for each status enum entry."""
@@ -122,12 +114,12 @@ class OrderFlag(IntFlag):
 class Timeframe(IntEnum):
     """Bar aggregation time intervals in milliseconds."""
 
-    _30S = 30 * 1000
-    _M = 1 * 60 * 1000
-    _5M = 5 * 60 * 1000
-    _15M = 15 * 60 * 1000
-    _30M = 30 * 60 * 1000
-    _H = 1 * 60 * 60 * 1000
+    S30 = 30 * 1000
+    M1 = 1 * 60 * 1000
+    M5 = 5 * 60 * 1000
+    M15 = 15 * 60 * 1000
+    M30 = 30 * 60 * 1000
+    H1 = 1 * 60 * 60 * 1000
 
 
 @verify(CONTINUOUS, UNIQUE)
@@ -136,7 +128,7 @@ class CachedStatesData(IntEnum):
 
     VWAP, UPPER_BB, LOWER_BB = 0, auto(), auto()
     POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
-    _ConstantCount = auto()
+    ConstantCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
@@ -145,13 +137,13 @@ class OrderBook(IntEnum):
 
     timestamp, orderParam, clientOrderID = 0, auto(), auto()
     nPrice, nQty = auto(), auto()
-    _ConstantCount = auto()
+    ConstantCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
 class EquityHeaders(IntEnum):
     Timestamp, Open, High, Low, Close = 0, auto(), auto(), auto(), auto()
-    _ConstantCount = auto()
+    ConstantCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
@@ -161,7 +153,7 @@ class TradeParam(IntEnum):
     nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
     nCommission, orderID = auto(), auto()
     nMAE, nMFE = auto(), auto()
-    _ConstantCount = auto()
+    ConstantCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
@@ -178,4 +170,4 @@ class BarHeaders(IntEnum):
     ATR, PARK = auto(), auto()
     POC, VAH, VAL = auto(), auto(), auto()
     POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
-    _ConstantCount = auto()
+    ConstantCount = auto()

@@ -11,21 +11,16 @@ class Base(ABC):
         self.manager: NodeManager = manager
         self.engine: FootprintEngine = engine
 
-        self.set_proc_sc = manager.set_proc_sc
-        self.have_status = manager.have_status
-        self.task_status = manager.task_status
-        self.check_base_task = manager.check_base_task
-
         cfgDS = self.manager.cfgDataStream
         self.ds_cell_amount: int = cfgDS.cell_amount
         self.ds_data_size: int = cfgDS.data_size
-        self.ds_data: memoryview = cfgDS.data
-        self.ds_data_header: memoryview = cfgDS.data_header
-        self.ds_wid: memoryview = cfgDS.writer_id.cast("q")
-        self.ds_rid: memoryview = cfgDS.reader_id.cast("q")
+        self.ds_data: memoryview = cfgDS.data.view
+        self.ds_data_header: memoryview = cfgDS.data_header.view
+        self.ds_wid: memoryview = cfgDS.writer_id.view.cast("q")
+        self.ds_rid: memoryview = cfgDS.reader_id.view.cast("q")
 
         cfgMetrics = self.manager.cfgMetrics
-        self.engine_complete: memoryview = cfgMetrics.engine_complete
+        self.engine_complete: memoryview = cfgMetrics.engine_complete.view
 
         self.nPrice: memoryview = memoryview(bytearray(8)).cast("q")
         self.nQty: memoryview = memoryview(bytearray(8)).cast("q")
@@ -36,15 +31,17 @@ class Base(ABC):
     def run_engine(self) -> None:
         while True:
             while True:
-                if self.have_status():
-                    task: int = self.check_base_task()
+                if self.manager.have_status():
+                    task: int = self.manager.check_base_task()
                     if task & scs.EXIT:
-                        return self.set_proc_sc(scs.EXIT, wait_main_task=False)
+                        return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
 
                     if task & scs.COMPLETE:
                         if self.complete():
                             self.final_actions()
-                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
+                            return self.manager.set_proc_sc(
+                                scs.COMPLETE, wait_main_task=False
+                            )
 
                 if self.ds_wid[0] == self.ds_rid[0]:
                     self.alarm_clock()
@@ -107,7 +104,7 @@ class Base(ABC):
         if (self.nPrice[0] > 0) and (self.nQty[0] > 0) and (self.timestamp[0] > 0):
             return True
 
-        self.set_proc_sc(code=scs.UNVALID_DATA, wait_main_task=True)
+        self.manager.set_proc_sc(code=scs.UNVALID_DATA, wait_main_task=True)
 
         return False
 

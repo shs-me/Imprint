@@ -1,6 +1,7 @@
 """Simulated account equity tracking, margin maintenance, and position ledger."""
 
 import time
+from typing import override
 
 from numba import njit
 from numpy import int64, uint8
@@ -8,17 +9,19 @@ from numpy.typing import NDArray
 
 from .. import constant as c
 from ..account import manager as am
+from ..account.position import update_position
 from ..ipc import NodeManager
-from . import matching_engine as me
+from .matching_engine import MatchingEngine, matching, set_user_data
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
-class Base(am.Manager, me.MatchingEngine):
+class Base(am.Manager, MatchingEngine):
     def __init__(self, manager: NodeManager) -> None:
         am.Manager.__init__(self, manager)
-        me.MatchingEngine.__init__(self, manager)
+        MatchingEngine.__init__(self, manager)
 
+    @override
     def post_update_lockedNbalance(self) -> None:
         self._update_order_book()
 
@@ -174,7 +177,7 @@ def _start(
         if obRow[0] == 0:
             continue
 
-        executed: bool = me._matching(
+        executed: bool = matching(
             trade_timestamp=trade_timestamp,
             trade_nPrice=trade_nPrice,
             order_book=order_book,
@@ -276,9 +279,16 @@ def _update_positions(
     max_de_row: int = deRow[0]
     for de_row in range(max_de_row):
         deRow[0] -= 1
-        trade_timestamp, order_param, order_id, nPrice, nQty, nCommission, mae, mfe = (
-            data_example[de_row, :]
-        )
+        (
+            _trade_timestamp,
+            order_param,
+            _order_id,
+            nPrice,
+            nQty,
+            nCommission,
+            _mae,
+            _mfe,
+        ) = data_example[de_row, :]
 
         is_buy = bool(order_param & c.OF_BUY)
         is_long = bool(order_param & c.OF_LONG)
@@ -305,7 +315,7 @@ def _update_positions(
                 data_example[de_row, 6] = 0
                 data_example[de_row, 7] = 0
 
-            am.update_position(
+            update_position(
                 nPrice=nPrice,
                 nQty=nQty,
                 is_long=is_long,
@@ -331,7 +341,7 @@ def _update_positions(
         elif bool(order_param & c.OF_NEW) and (not is_maker):
             continue
 
-        me._set_user_data(
+        set_user_data(
             data=data_example[de_row, :].view(uint8),
             data_buf=data_buf,
             data_buf_size=data_buf_size,

@@ -11,10 +11,12 @@ from .reader import Reader
 
 class Sync(ABC):
     def __init__(self, manager: NodeManager) -> None:
-        self.manager = manager
+        self.manager: NodeManager = manager
 
         cfgMetrics = manager.cfgMetrics
-        self.time_start_reading: memoryview = cfgMetrics.time_start_reading.cast("q")
+        self.time_start_reading: memoryview = cfgMetrics.time_start_reading.view.cast(
+            "q"
+        )
 
         cfgRM = manager.cfgRiskManagment
         self.safe_lag: int = cfgRM.pass_signal_if_analysis_time_big
@@ -23,11 +25,11 @@ class Sync(ABC):
         self.sn_cell_amount: int = cfgSN.cell_amount
         self.sn_safe_lag: int = cfgSN.safe_lag
         self.sn_data_size: int = cfgSN.data_size // 8
-        self.sn_data: memoryview = cfgSN.data.cast("q")
-        self.sn_wid: memoryview = cfgSN.writer_id.cast("q")
-        self.sn_rid: memoryview = cfgSN.reader_id.cast("q")
+        self.sn_data: memoryview = cfgSN.data.view.cast("q")
+        self.sn_wid: memoryview = cfgSN.writer_id.view.cast("q")
+        self.sn_rid: memoryview = cfgSN.reader_id.view.cast("q")
 
-        self._signal_id = 0
+        self._signal_id: int = 0
         self._count_send_signal: int = 0
 
     @property

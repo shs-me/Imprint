@@ -68,7 +68,7 @@ BH_VAL: int = int(BarHeaders.VAL)
 BH_POC_FP: int = int(BarHeaders.POC_FP)
 BH_VAH_FP: int = int(BarHeaders.VAH_FP)
 BH_VAL_FP: int = int(BarHeaders.VAL_FP)
-BH_ConstantCount: int = int(BarHeaders._ConstantCount)
+BH_ConstantCount: int = int(BarHeaders.ConstantCount)
 
 # StateFlag
 SF_BID_DELTA_DOMINATION_FP: int = int(StateFlags.BID_DELTA_DOMINATION_FP)
@@ -102,7 +102,7 @@ CSD_LOWER_BB: int = int(CachedStatesData.LOWER_BB)
 CSD_POC_FP: int = int(CachedStatesData.POC_FP)
 CSD_VAH_FP: int = int(CachedStatesData.VAH_FP)
 CSD_VAL_FP: int = int(CachedStatesData.VAL_FP)
-CSD_ConstantCount: int = int(CachedStatesData._ConstantCount)
+CSD_ConstantCount: int = int(CachedStatesData.ConstantCount)
 
 # OrderBook
 OB_timestamp: int = int(OrderBook.timestamp)
@@ -110,7 +110,7 @@ OB_orderParam: int = int(OrderBook.orderParam)
 OB_clientOrderID: int = int(OrderBook.clientOrderID)
 OB_nPrice: int = int(OrderBook.nPrice)
 OB_nQty: int = int(OrderBook.nQty)
-OB_ConstantCount: int = int(OrderBook._ConstantCount)
+OB_ConstantCount: int = int(OrderBook.ConstantCount)
 
 # Equity Header
 EH_Timestamp: int = int(EquityHeaders.Timestamp)
@@ -118,7 +118,7 @@ EH_Open: int = int(EquityHeaders.Open)
 EH_High: int = int(EquityHeaders.High)
 EH_Low: int = int(EquityHeaders.Low)
 EH_Close: int = int(EquityHeaders.Close)
-EH_ConstantCount: int = int(EquityHeaders._ConstantCount)
+EH_ConstantCount: int = int(EquityHeaders.ConstantCount)
 
 # Trade Param
 TP_nPrice: int = int(TradeParam.nPrice)
@@ -129,7 +129,7 @@ TP_orderID: int = int(TradeParam.orderID)
 TP_commission: int = int(TradeParam.nCommission)
 TP_nMAE: int = int(TradeParam.nMAE)
 TP_nMFE: int = int(TradeParam.nMFE)
-TP_ConstantCount: int = int(TradeParam._ConstantCount)
+TP_ConstantCount: int = int(TradeParam.ConstantCount)
 
 # OrderFlag
 OF_LONG: int = int(OrderFlag.LONG)

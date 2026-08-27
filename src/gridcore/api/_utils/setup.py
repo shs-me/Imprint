@@ -1,6 +1,12 @@
 from loguru import logger
 
-from ...core import constant
+from ...core.configs import Configuration
+from ...core.constant import (
+    BASE_FOOTPRINT_DUMP_PATH,
+    CORE_LOG_PATH,
+    EQUITY_HISTORY_DUMP_PATH,
+    ORDERS_HISTORY_DUMP_PATH,
+)
 from ...core.main import run_core
 from ...core.pipeline.utils.rest_agent import RestAgent
 from ...core.utils.handlers import error_handler
@@ -13,7 +19,7 @@ __all__ = ["run"]
 @error_handler()
 def run(setup: SetupCore) -> None:
     logger.remove()
-    logger.add(constant.CORE_LOG_PATH, format="{time} | {level} | {message}")
+    logger.add(CORE_LOG_PATH, format="{time} | {level} | {message}")
     if isinstance(setup.run_mode, Backtesting):
         try:
             startDate, endDate = to_date(
@@ -30,13 +36,13 @@ def run(setup: SetupCore) -> None:
         setup.coin.tick_size = rest.get_tick_size()
         setup.coin.lot_size = rest.get_lot_size()
 
-    kwargs = {}
+    kwargs: dict[str, Configuration] = {}
     for obj in setup.args:
         kwargs[obj.__class__.__name__] = obj
 
     logger.remove()
     logger.add(
-        constant.CORE_LOG_PATH,
+        CORE_LOG_PATH,
         format=(
             ("{elapsed} | " if setup.setup.backtesting else "")
             + "{extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
@@ -50,15 +56,15 @@ def run(setup: SetupCore) -> None:
             if not setup.run_mode.with_visualization.only_visualization:
                 run_core(**kwargs)
 
-            from ... import visualization as vis
+            from ...visualization import run as run_vis
 
-            vis.run(
-                footprint_headers_path=constant.BASE_FOOTPRINT_DUMP_PATH,
+            run_vis(
+                footprint_headers_path=BASE_FOOTPRINT_DUMP_PATH,
                 symbol=setup.coin.symbol,
                 start_date=setup.run_mode.backtest_start_date,
                 end_date=setup.run_mode.backtest_end_date,
-                equity_history_path=constant.EQUITY_HISTORY_DUMP_PATH,
-                orders_history_path=constant.ORDERS_HISTORY_DUMP_PATH,
+                equity_history_path=EQUITY_HISTORY_DUMP_PATH,
+                orders_history_path=ORDERS_HISTORY_DUMP_PATH,
                 start_balance=setup.run_mode.account.balance,
                 price_mult=setup.coin.price_mult,
                 qty_mult=setup.coin.qty_mult,

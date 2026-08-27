@@ -4,6 +4,7 @@ from abc import ABC
 from multiprocessing.synchronize import Event, Semaphore
 
 from ... import configs as cfg
+from ...configs import Segment
 
 
 class Base(ABC):
@@ -28,8 +29,8 @@ class Base(ABC):
         self,
         segments: dict[str, slice],
         shm_buf: memoryview,
-        configs: list,
-        main_tools: list,
+        configs: list[cfg.Configuration],
+        main_tools: list[Event | Semaphore],
     ) -> None:
         self._segments: dict[str, slice] = segments
         self._shm_buf: memoryview = shm_buf
@@ -37,18 +38,18 @@ class Base(ABC):
         self.configs_init(configs)
         self.main_tools_init(main_tools)
 
-        self._procs_status: memoryview = self.cfgMetrics.procs_status.cast("q")
-        self._main_status: memoryview = self.cfgMetrics.main_status.cast("q")
+        self._procs_status: memoryview = self.cfgMetrics.procs_status.view.cast("q")
+        self._main_status: memoryview = self.cfgMetrics.main_status.view.cast("q")
 
         self._ts_safe_lag: int = self._text_stream.safe_lag
         self._ts_cell_amount: int = self._text_stream.cell_amount
-        self._ts_data: memoryview = self._text_stream.data
+        self._ts_data: memoryview = self._text_stream.data.view
         self._ts_data_size: int = self._text_stream.data_size
-        self._ts_data_header: memoryview = self._text_stream.data_header.cast("q")
-        self._ts_rid: memoryview = self._text_stream.reader_id.cast("q")
-        self._ts_wid: memoryview = self._text_stream.writer_id.cast("q")
+        self._ts_data_header: memoryview = self._text_stream.data_header.view.cast("q")
+        self._ts_rid: memoryview = self._text_stream.reader_id.view.cast("q")
+        self._ts_wid: memoryview = self._text_stream.writer_id.view.cast("q")
 
-    def configs_init(self, configs: list) -> None:
+    def configs_init(self, configs: list[cfg.Configuration]) -> None:
         """Associates configuration class instances with manager attributes and shared memory segments."""
 
         for attr_name, attr_type in self.__annotations__.items():
@@ -62,16 +63,13 @@ class Base(ABC):
     def bind_shm_segments(self, cfg: object) -> None:
         """Binds tuple byte offsets to memoryview slices over active shared memory buffer."""
 
+        buf: memoryview = self._shm_buf[self._segments[cfg.__class__.__name__]]
         for attr_name in list(cfg.__dict__.keys()):
             attr_val = getattr(cfg, attr_name)
-            if isinstance(attr_val, tuple):
-                if len(attr_val) == 2:
-                    shm: memoryview = self._shm_buf[
-                        self._segments[cfg.__class__.__name__]
-                    ]
-                    setattr(cfg, attr_name, shm[slice(*attr_val)])
+            if isinstance(attr_val, Segment):
+                attr_val[buf[slice(*attr_val.offset)]]
 
-    def main_tools_init(self, tools: list) -> None:
+    def main_tools_init(self, tools: list[Event | Semaphore]) -> None:
         """Binds IPC events and semaphores to manager attributes."""
 
         for attr_name, attr_type in self.__annotations__.items():

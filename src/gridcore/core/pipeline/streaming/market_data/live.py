@@ -3,7 +3,8 @@ from multiprocessing.synchronize import Event
 from websockets.asyncio.client import connect
 
 from ....ipc import NodeManager
-from ..base import Base, scs
+from ....settings import StatusCodes as scs
+from ..base import Base
 
 
 class Live(Base):
@@ -17,7 +18,6 @@ class Live(Base):
     async def run_wss__engine(self) -> None:
         # Local Links
         engine_event = self.engine_event
-        have_status, task_status = self.have_status, self.task_status
         wid, rid = self.ds_wid, self.ds_rid
         data, data_size = self.ds_data, self.ds_data_size
         data_header = self.ds_data_header
@@ -28,14 +28,18 @@ class Live(Base):
             # - - -
             async with connect(self.agg_trades_uri, ping_interval=20) as ws:
                 while True:
-                    if have_status():
-                        task: int = self.check_base_task()
+                    if self.manager.have_status():
+                        task: int = self.manager.check_base_task()
                         if task & scs.EXIT:
-                            return self.set_proc_sc(scs.EXIT, wait_main_task=False)
+                            return self.manager.set_proc_sc(
+                                scs.EXIT, wait_main_task=False
+                            )
 
                         if task & scs.COMPLETE:
                             self.final_actions()
-                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
+                            return self.manager.set_proc_sc(
+                                scs.COMPLETE, wait_main_task=False
+                            )
 
                     raw_data = await ws.recv(decode=False)
                     alarm_clock(wid, rid, cell_amount, safe_lag)

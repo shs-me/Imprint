@@ -2,16 +2,12 @@
 
 import time
 from datetime import date, datetime
+from multiprocessing.synchronize import Event, Semaphore
 
 from loguru import logger
 
-from ...settings import (
-    DataStreamProc,
-    EngineProc,
-    ExecutionProc,
-    LogLevel,
-    ProcsData,
-)
+from ... import configs as cfg
+from ...settings import LogLevel, ProcsData, ProcsIds
 from ...settings import StatusCodes as scs
 from .base import Base
 
@@ -23,12 +19,12 @@ class Host(Base):
         self,
         segments: dict[str, slice],
         shm_buf: memoryview,
-        configs: list,
-        main_tools: list,
+        configs: list[cfg.Configuration],
+        main_tools: list[Event | Semaphore],
     ) -> None:
         super().__init__(segments, shm_buf, configs, main_tools)
 
-        self.with_execution = self.cfgSetup.execution
+        self.with_execution: bool = self.cfgSetup.execution
         self.startDate: date = date.today()
         self.time_format: str = (
             "%H:%M:%S.%f" if self.cfgSetup.backtesting else "%Y:%m:%d-%H:%M:%S.%f"
@@ -36,19 +32,10 @@ class Host(Base):
         self.close_procs: bool = False
         self.close_core: bool = False
 
-    def run(
-        self,
-        procs: dict[int, ProcsData],
-        market_data_wss: DataStreamProc,
-        engine: EngineProc,
-        execution: ExecutionProc,
-    ) -> None:
+    def run(self, procs: dict[int, ProcsData]) -> None:
         """Primary supervisor loop waiting on process semaphores and handling status code events."""
 
         self.procs: dict[int, ProcsData] = procs
-        self.market_data_wss: DataStreamProc = market_data_wss
-        self.engine: EngineProc = engine
-        self.execution: ExecutionProc = execution
         # - - -
         while True:
             if bool(len(procs)):
@@ -64,28 +51,28 @@ class Host(Base):
             return
 
     def check_process_status_code(self) -> None:
-        if self._main_status[self.market_data_wss]:
+        if self._main_status[ProcsIds.streaming]:
             self.check_data_stream_proc()
-            self._main_status[self.market_data_wss] -= 1
+            self._main_status[ProcsIds.streaming] -= 1
 
-        if self._main_status[self.engine]:
+        if self._main_status[ProcsIds.engine]:
             self.check_engine_proc()
-            self._main_status[self.engine] -= 1
+            self._main_status[ProcsIds.engine] -= 1
 
         if self.with_execution:
-            if self._main_status[self.execution]:
+            if self._main_status[ProcsIds.executing]:
                 self.check_execution_proc()
-                self._main_status[self.execution] -= 1
+                self._main_status[ProcsIds.executing] -= 1
 
         if self.close_procs:
             self.kill_procs()
             self.close_core = True
 
     def check_data_stream_proc(self) -> None:
-        if not self.procs.get(self.market_data_wss):
+        if not self.procs.get(ProcsIds.streaming):
             return
 
-        p_id, p_name, p_task_id, sc = self.get_proc_data(self.market_data_wss)
+        p_id, p_name, _p_task_id, sc = self.get_proc_data(ProcsIds.streaming)
 
         self.action_for_base_sc(sc, p_id, p_name)
 
@@ -102,10 +89,10 @@ class Host(Base):
         self.proc_is_alive(p_id)
 
     def check_engine_proc(self) -> None:
-        if not self.procs.get(self.engine):
+        if not self.procs.get(ProcsIds.engine):
             return
 
-        p_id, p_name, p_task_id, sc = self.get_proc_data(self.engine)
+        p_id, p_name, _p_task_id, sc = self.get_proc_data(ProcsIds.engine)
 
         self.action_for_base_sc(sc, p_id, p_name)
 
@@ -134,10 +121,10 @@ class Host(Base):
         self.proc_is_alive(p_id)
 
     def check_execution_proc(self) -> None:
-        if not self.procs.get(self.execution):
+        if not self.procs.get(ProcsIds.executing):
             return
 
-        p_id, p_name, p_task_id, sc = self.get_proc_data(self.execution)
+        p_id, p_name, _p_task_id, sc = self.get_proc_data(ProcsIds.executing)
 
         self.action_for_base_sc(sc, p_id, p_name)
 
@@ -196,9 +183,9 @@ class Host(Base):
     def set_task_sc_to_proc(self, code: scs, task_id: int | None = None):
         """Dispatches task status code to specified task slot or all active processes."""
 
-        for p, _ in self.procs.items():
-            if (_["task_id"] == task_id) or (task_id is None):
-                self.set_sc(_["task_id"], code)
+        for _p, v in self.procs.items():
+            if (v["task_id"] == task_id) or (task_id is None):
+                self.set_sc(v["task_id"], code)
 
     def set_sc(self, id: int, code: scs) -> None:
         """Sets status bitmask for target slot ID."""

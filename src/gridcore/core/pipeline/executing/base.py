@@ -11,37 +11,32 @@ class Base(ABC):
     def __init__(self, manager: NodeManager) -> None:
         self.manager: NodeManager = manager
 
-        self.set_proc_sc = manager.set_proc_sc
-        self.have_status = manager.have_status
-        self.task_status = manager.task_status
-        self.check_base_task = manager.check_base_task
-
         cfgSN = manager.cfgSignal
         self.sn_cell_amount: int = cfgSN.cell_amount
         self.sn_data_size: int = cfgSN.data_size // 8
-        self.sn_data: memoryview = cfgSN.data.cast("q")
-        self.sn_wid: memoryview = cfgSN.writer_id.cast("q")
-        self.sn_rid: memoryview = cfgSN.reader_id.cast("q")
+        self.sn_data: memoryview = cfgSN.data.view.cast("q")
+        self.sn_wid: memoryview = cfgSN.writer_id.view.cast("q")
+        self.sn_rid: memoryview = cfgSN.reader_id.view.cast("q")
 
         cfgGUS = manager.cfgGetUserStream
         self.gus_cell_amount: int = cfgGUS.cell_amount
-        self.gus_data: memoryview = cfgGUS.data
+        self.gus_data: memoryview = cfgGUS.data.view
         self.gus_data_size: int = cfgGUS.data_size
-        self.gus_data_header: memoryview = cfgGUS.data_header
-        self.gus_wid: memoryview = cfgGUS.writer_id.cast("q")
-        self.gus_rid: memoryview = cfgGUS.reader_id.cast("q")
+        self.gus_data_header: memoryview = cfgGUS.data_header.view
+        self.gus_wid: memoryview = cfgGUS.writer_id.view.cast("q")
+        self.gus_rid: memoryview = cfgGUS.reader_id.view.cast("q")
 
         cfgSUS = manager.cfgSetUserStream
         self.sus_cell_amount: int = cfgSUS.cell_amount
-        self.sus_data: memoryview = cfgSUS.data
+        self.sus_data: memoryview = cfgSUS.data.view
         self.sus_data_size: int = cfgSUS.data_size
-        self.sus_data_header: memoryview = cfgSUS.data_header
-        self.sus_wid: memoryview = cfgSUS.writer_id.cast("q")
-        self.sus_rid: memoryview = cfgSUS.reader_id.cast("q")
+        self.sus_data_header: memoryview = cfgSUS.data_header.view
+        self.sus_wid: memoryview = cfgSUS.writer_id.view.cast("q")
+        self.sus_rid: memoryview = cfgSUS.reader_id.view.cast("q")
 
         cfgMetrics = manager.cfgMetrics
-        self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.cast("q")
-        self.engine_complete: memoryview = cfgMetrics.engine_complete
+        self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.view.cast("q")
+        self.engine_complete: memoryview = cfgMetrics.engine_complete.view
 
         self.symbol: str = manager.cfgCoin.symbol
         self.con: AccountConverter = AccountConverter(
@@ -62,15 +57,17 @@ class Base(ABC):
         while True:
             # - - -
             while True:
-                if self.have_status():
-                    task: int = self.check_base_task()
+                if self.manager.have_status():
+                    task: int = self.manager.check_base_task()
                     if task & scs.EXIT:
-                        return self.set_proc_sc(scs.EXIT, wait_main_task=False)
+                        return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
 
                     if task & scs.COMPLETE:
                         if self._complete():
                             self._final_actions()
-                            return self.set_proc_sc(scs.COMPLETE, wait_main_task=False)
+                            return self.manager.set_proc_sc(
+                                scs.COMPLETE, wait_main_task=False
+                            )
 
                 if self.engine_complete[0] == 0:
                     self._alarm_clock(WB_1, RB_1, WB_2, RB_2)
@@ -107,18 +104,20 @@ class Base(ABC):
                     nQty: int = self.con.entryNqtyWithLeverage(nPrice, nominalNqty)
                     self.action_for_getted_signal(timestamp, order_param, nPrice, nQty)
                 else:
-                    self.set_proc_sc(code=scs.QTY_LESS_LIMIT, wait_main_task=True)
+                    self.manager.set_proc_sc(
+                        code=scs.QTY_LESS_LIMIT, wait_main_task=True
+                    )
             else:
                 pass
         else:
             self._post_final_action()
-            self.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
+            self.manager.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
 
     def _get_signal_data(self) -> tuple[int, int, int]:
         cell: int = self.sn_rid[0]
         start: int = cell * self.sn_data_size
         get_data: memoryview = self.sn_data[start : start + self.sn_data_size]
-        signal_id = get_data[0]
+        # signal_id = get_data[0]
         nPrice, timestamp, order_param = get_data[1], get_data[2], get_data[3]
         new_cell: int = cell + 1
         self.sn_rid[0] = new_cell if (new_cell < self.sn_cell_amount) else 0

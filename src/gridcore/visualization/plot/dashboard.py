@@ -80,7 +80,7 @@ def plot_info_dashboard(ax: Axes, stats: Stats) -> None:
         ),
     ]
 
-    ax.text(
+    ax.text(  # pyright: ignore[reportUnknownMemberType])
         0.05,
         1.0,
         f"SYSTEM KPI ({stats.symbol})",
@@ -89,7 +89,7 @@ def plot_info_dashboard(ax: Axes, stats: Stats) -> None:
         color="#00E5FF",
         fontfamily="monospace",
     )
-    ax.text(
+    ax.text(  # pyright: ignore[reportUnknownMemberType])
         0.05,
         0.95,
         f"Period: {stats.start_date} to {stats.end_date}",
@@ -101,7 +101,7 @@ def plot_info_dashboard(ax: Axes, stats: Stats) -> None:
     y_pos: float = 0.90
     for label, val, color in kpis:
         y_pos -= 0.065
-        ax.text(
+        ax.text(  # pyright: ignore[reportUnknownMemberType])
             0.05,
             y_pos,
             f"{label:<22}",
@@ -109,7 +109,7 @@ def plot_info_dashboard(ax: Axes, stats: Stats) -> None:
             color="#CFD8DC",
             fontfamily="monospace",
         )
-        ax.text(
+        ax.text(  # pyright: ignore[reportUnknownMemberType])
             0.58,
             y_pos,
             f"{val:>20}",

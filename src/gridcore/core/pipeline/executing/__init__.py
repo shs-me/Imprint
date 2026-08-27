@@ -1,19 +1,15 @@
 import importlib
 from multiprocessing.synchronize import Event
+from typing import Any
 
 from ...ipc import NodeManager, supervisor
-from ...settings import ExecutionProc
 from .router import Router as BaseExecution
 
 __all__ = ["run_executing", "BaseExecution"]
 
 
 @supervisor()
-def run_executing(
-    execution_event: Event,
-    proc: ExecutionProc = ExecutionProc(),
-    **kwargs,
-) -> None:
+def run_executing(execution_event: Event, **kwargs: Any) -> None:
     manager: NodeManager = kwargs["manager"]
 
     m_name = manager.cfgSetup.execution_module

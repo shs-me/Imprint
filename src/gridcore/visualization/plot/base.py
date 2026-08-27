@@ -2,6 +2,7 @@ import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 from ..analyze import Stats
 from .chart import plot_chart_with_markers
@@ -12,8 +13,7 @@ from .trade_distribution import plot_trade_distribution
 
 def render(stats: Stats) -> None:
     plt.style.use("dark_background")
-    fig = plt.figure(figsize=(16, 9), facecolor="#121212")
-
+    fig: Figure = plt.figure(figsize=(16, 9), facecolor="#121212")  # pyright: ignore[reportUnknownMemberType]
     gs = gridspec.GridSpec(
         2, 2, width_ratios=[3.0, 1.3], height_ratios=[1.0, 1.2], figure=fig
     )
@@ -30,8 +30,8 @@ def render(stats: Stats) -> None:
 
     ax_chart.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
     ax_chart.xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.setp(ax_equity.get_xticklabels(), visible=False)
+    plt.setp(ax_equity.get_xticklabels(), visible=False)  # pyright: ignore[reportUnknownMemberType]
     fig.subplots_adjust(
         left=0.05, bottom=0.06, right=0.96, top=0.94, wspace=0.15, hspace=0.16
     )
-    plt.show()
+    plt.show()  # pyright: ignore[reportUnknownMemberType]

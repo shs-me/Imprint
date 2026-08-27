@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, override
 
 from .. import constant as c
 
@@ -9,7 +9,8 @@ from .. import constant as c
 class DebugEncoder(json.JSONEncoder):
     """Custom JSON encoder handling set, range, datetime, and non-serializable objects."""
 
-    def default(self, o):
+    @override
+    def default(self, o: Any):
         if isinstance(o, (set, range)):
             return list(o)
         if isinstance(o, datetime):
@@ -26,7 +27,7 @@ def dump_exception() -> None:
 
     exc_type, exc_value, exc_tb = sys.exc_info()
 
-    data = {
+    data: dict[str, str | list[str] | dict[str, Any]] = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "type": exc_type.__name__ if exc_type else "UnknownError",
         "message": str(exc_value),
@@ -41,10 +42,11 @@ def dump_exception() -> None:
 
         frame_locals = tb.tb_frame.f_locals
         for var_name, var_val in frame_locals.items():
-            try:
-                data["locals"][var_name] = process_value(var_val)
-            except Exception as e:
-                data["locals"][var_name] = f"<Error processing value: {e}>"
+            if isinstance(data["locals"], dict):
+                try:
+                    data["locals"][var_name] = process_value(var_val)
+                except Exception as e:
+                    data["locals"][var_name] = f"<Error processing value: {e}>"
 
     try:
         with open(file=c.EXC_DUMP_PATH, mode="a", encoding="utf-8") as f:
@@ -151,7 +153,7 @@ def download_agg_trades_history(
                 os.rename(file_path_, csv_file_path)
                 os.remove(path_for_downloaded_file)
 
-            arr: Any = np.genfromtxt(
+            arr: NDArray[np.void] = np.genfromtxt(
                 fname=csv_file_path,
                 usecols=(1, 2, 5, 6),
                 dtype=agg_trades_dtype,

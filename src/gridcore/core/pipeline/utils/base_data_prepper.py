@@ -77,14 +77,8 @@ class BaseDataPrepper(ABC):
             p for p in os.listdir(self.base_path) if p.endswith(endwith)
         ]
         dates: list[date] = sorted([date.fromisoformat(p.split(".")[0]) for p in paths])
-        startDate: date = (
-            dates[0]
-            if (self.start_date is None)
-            else date.fromisoformat(self.start_date)
-        )
-        endDate: date = (
-            dates[-1] if (self.end_date is None) else date.fromisoformat(self.end_date)
-        )
+        startDate: date = date.fromisoformat(self.start_date)
+        endDate: date = date.fromisoformat(self.end_date)
         needDates: list[date] = [d for d in dates if (startDate <= d <= endDate)]
         return [f"{self.base_path}/{date.isoformat(d)}{endwith}" for d in needDates]
 
