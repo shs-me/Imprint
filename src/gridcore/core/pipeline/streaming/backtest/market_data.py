@@ -33,7 +33,7 @@ class DataPrepper(BaseDataPrepper):
         pass
 
 
-class Backtest(Base):
+class MarketDataStream(Base):
     def __init__(self, manager: NodeManager) -> None:
         super().__init__(manager=manager)
 

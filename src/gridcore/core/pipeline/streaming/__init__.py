@@ -1,4 +1,4 @@
-from multiprocessing.synchronize import Event
+from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
 from ...ipc import NodeManager, supervisor
@@ -7,18 +7,23 @@ __all__ = ["run_streaming"]
 
 
 @supervisor()
-def run_streaming(engine_event: Event, **kwargs: Any) -> None:
+def run_streaming(
+    engine_event: Event,
+    wss_sem: Semaphore,
+    execution_event: Event,
+    **kwargs: Any,
+) -> None:
     manager: NodeManager = kwargs["manager"]
 
     if manager.cfgSetup.backtesting:
-        from .market_data.backtest import Backtest as BacktestAgent
+        from .backtest import BacktestAgent
 
         agent = BacktestAgent(manager=manager)
         agent.run_wss_engine()
     else:
         import asyncio
 
-        from .market_data.live import Live as LiveAgent
+        from .live import LiveAgent
 
-        agent = LiveAgent(manager, engine_event)
-        asyncio.run(agent.run_wss__engine())
+        agent = LiveAgent(manager, engine_event, wss_sem, execution_event)
+        asyncio.run(agent.run_market_data_stream())

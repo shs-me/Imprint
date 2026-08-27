@@ -7,7 +7,7 @@ from ....settings import StatusCodes as scs
 from ..base import Base
 
 
-class Live(Base):
+class MarketData(Base):
     def __init__(self, manager: NodeManager, engine_event: Event) -> None:
         super().__init__(manager=manager)
 
@@ -15,7 +15,7 @@ class Live(Base):
 
         self.agg_trades_uri: str = manager.cfgConnector.market_data_uri_for_wss
 
-    async def run_wss__engine(self) -> None:
+    async def run_market_data_stream(self) -> None:
         # Local Links
         engine_event = self.engine_event
         wid, rid = self.ds_wid, self.ds_rid

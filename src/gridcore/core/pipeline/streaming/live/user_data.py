@@ -1,16 +1,18 @@
 import importlib
-from multiprocessing.synchronize import Semaphore
+from multiprocessing.synchronize import Event, Semaphore
 
 from websockets.asyncio.client import connect
 
 from ....ipc import NodeManager
 from ...utils.base_adapters import OrderEncoder
-from ..base import Base
+from .market_data import MarketData
 
 
-class Set(Base):
-    def __init__(self, manager: NodeManager, wss_sem: Semaphore) -> None:
-        super().__init__(manager=manager)
+class UserData(MarketData):
+    def __init__(
+        self, manager: NodeManager, engine_event: Event, wss_sem: Semaphore
+    ) -> None:
+        super().__init__(manager, engine_event)
 
         self.wss_sem: Semaphore = wss_sem
         m_name: str = manager.cfgSetup.order_encoder_module
@@ -21,7 +23,7 @@ class Set(Base):
         self.order_encoder: OrderEncoder = encoder_type()
         self.send_order_uri: str = manager.cfgConnector.set_user_data_uri_for_wss
 
-    async def run_wss__engine(self) -> None:
+    async def run_user_data_stream(self) -> None:
         # Local Links
         wss_sem = self.wss_sem
         wid, rid = self.sus_wid, self.sus_rid
