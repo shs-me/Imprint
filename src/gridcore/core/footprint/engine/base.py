@@ -78,19 +78,25 @@ class Base(ABC):
 
         if self._re_init_idx:
             self._manager.set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=False)
-            self._footprint.fill(0)
-            self._headers.fill(0)
-            self._bbox[:] = self._bbox_default_value
-
-            self.con.init_session(nPrice=(nPrice), timestamp=(timestamp))
+            self._init_idx(nPrice, timestamp)
             self._re_init_idx = False
         else:
             self._manager.set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=False)
-            self._init_array(nPrice=nPrice)
+            self._init_idy(nPrice)
             self._re_init_idy = False
 
         self._re_init_session = False
         self._manager.set_proc_sc(scs.FP_RE_INIT, wait_main_task=False)
+
+    def _init_idx(self, nPrice: int, timestamp: int) -> None:
+        self._footprint.fill(0)
+        self._headers.fill(0)
+        self._bbox[:] = self._bbox_default_value
+
+        self.con.init_session(nPrice=(nPrice), timestamp=(timestamp))
+
+    def _init_idy(self, nPrice: int) -> None:
+        self._init_array(nPrice=nPrice)
 
     def _save_footprint_headers(self, last_idx: int) -> None:
         if self.__save_fp_headers:

@@ -50,12 +50,11 @@ class Reader(Writer, ABC):
             )
 
     @override
-    def _init_session(self, nPrice: int, timestamp: int) -> None:
-        super()._init_session(nPrice, timestamp)
+    def _init_idx(self, nPrice: int, timestamp: int) -> None:
+        super()._init_idx(nPrice, timestamp)
 
-        if self._re_init_idx:
-            self.__footprint_state.fill(0)
-            self.last_idx = 0
+        self.__footprint_state.fill(0)
+        self.last_idx = 0
 
     def _analyze_footprint(self) -> None:
         idYmin, idXmin, idYmax, idXmax = self._bbox

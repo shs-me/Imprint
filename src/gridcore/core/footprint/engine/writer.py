@@ -56,11 +56,10 @@ class Writer(Base, ABC):
             self.__args[FU_qty_prec] = self.con.qty_prec
 
     @override
-    def _init_session(self, nPrice: int, timestamp: int) -> None:
-        super()._init_session(nPrice, timestamp)
+    def _init_idx(self, nPrice: int, timestamp: int) -> None:
+        super()._init_idx(nPrice, timestamp)
 
-        if self._re_init_idx:
-            self.__meta_data.fill(0)
+        self.__meta_data.fill(0)
 
     def _update_footprint(
         self, nPrice: int, nQty: int, timestamp: int, is_sell: int
