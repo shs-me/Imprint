@@ -12,7 +12,7 @@ class DebugEncoder(json.JSONEncoder):
     @override
     def default(self, o: Any):
         if isinstance(o, (set, range)):
-            return list(o)
+            return list(o)  # pyright: ignore[reportUnknownArgumentType]
         if isinstance(o, datetime):
             return o.isoformat()
         if hasattr(o, "__dict__"):
@@ -71,7 +71,7 @@ def process_value(val: Any, max_len: int = 100) -> Any:
         }
 
     if isinstance(val, (list, tuple, set)):
-        content = list(val)[:10]
+        content: list[Any] = list(val)[:10]
         suffix = "..." if len(val) > 10 else ""
         return f"{type(val).__name__}(len={len(val)}): {content}{suffix}"
 

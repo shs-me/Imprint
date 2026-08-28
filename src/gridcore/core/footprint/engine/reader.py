@@ -21,30 +21,41 @@ class Reader(Writer, ABC):
         )
 
         self.last_idx: int = 0
-        self.fp: FootprintLike = FootprintLike(
-            converter=self.con,
-            fp_state=self.__footprint_state,
-            fp_state_cache=self.__fp_state_cache,
-        )
 
     @override
-    def _init_array(self) -> None:
-        super()._init_array()
+    def _init_array(self, nPrice: int) -> None:
+        super()._init_array(nPrice)
 
-        cfgFP = self._manager.cfgFootprint
-        self.__footprint_state: NDArray[int32] = np.zeros(
-            shape=(cfgFP.fp_rows, cfgFP.fp_panel_cols), dtype=int32
-        )
-        self.__fp_state_cache: NDArray[int64] = np.zeros(
-            (c.CSD_ConstantCount,), dtype=int64
-        )
+        if not self._re_init_idy:
+            self.__footprint_state: NDArray[int32] = np.zeros(
+                shape=(self.con.fp_rows, self.con.fp_panel_cols), dtype=int32
+            )
+            self.__fp_state_cache: NDArray[int64] = np.zeros(
+                (c.CSD_ConstantCount,), dtype=int64
+            )
+            self.fp: FootprintLike = FootprintLike(
+                converter=self.con,
+                headers=self._headers,
+                fp=self._footprint,
+                fp_state=self.__footprint_state,
+                fp_state_cache=self.__fp_state_cache,
+            )
+        else:
+            need_rows: int = nPrice * 20 // 100 // self.con.scale
+            before, after = (
+                (need_rows, 0) if (nPrice > self.con.baseNprice) else (0, need_rows)
+            )
+            self.__footprint_state = np.pad(
+                array=self.__footprint_state, pad_width=((before, after), (0, 0))
+            )
 
     @override
     def _init_session(self, nPrice: int, timestamp: int) -> None:
         super()._init_session(nPrice, timestamp)
 
-        self.__footprint_state.fill(0)
-        self.last_idx = 0
+        if self._re_init_idx:
+            self.__footprint_state.fill(0)
+            self.last_idx = 0
 
     def _analyze_footprint(self) -> None:
         idYmin, idXmin, idYmax, idXmax = self._bbox

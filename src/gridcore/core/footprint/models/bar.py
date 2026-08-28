@@ -11,8 +11,16 @@ PARK_FACTOR: int = 1.0 / (4.0 * np.log(2.0))
 
 
 class BarLike:
-    def __init__(self, converter: Converter, fp_state: NDArray[int32]) -> None:
+    def __init__(
+        self,
+        converter: Converter,
+        headers: NDArray[int64],
+        fp: NDArray[int64],
+        fp_state: NDArray[int32],
+    ) -> None:
         self._con: Converter = converter
+        self._headers: NDArray[int64] = headers
+        self._fp: NDArray[int64] = fp
         self._fp_state: NDArray[int32] = fp_state
 
         self._vplike: VolumeProfileLike = VolumeProfileLike(bar=self)
@@ -40,22 +48,22 @@ class BarLike:
     def _get_header(self, header: int) -> int64:
         """Extracts header value for specified bar index and BarHeaders field."""
 
-        return self._con.headers[self._bar_id, header]
+        return self._headers[self._bar_id, header]
 
     @property
     def base(self) -> NDArray[int64]:
         idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        return self._con.footprint[idYmin : idYmax + 1, self._idXbid : self._idXbid + 2]
+        return self._fp[idYmin : idYmax + 1, self._idXbid : self._idXbid + 2]
 
     @property
     def bid(self) -> NDArray[int64]:
         idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        return self._con.footprint[idYmin : idYmax + 1, self._idXbid]
+        return self._fp[idYmin : idYmax + 1, self._idXbid]
 
     @property
     def ask(self) -> NDArray[int64]:
         idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        return self._con.footprint[idYmin : idYmax + 1, self._idXbid + 1]
+        return self._fp[idYmin : idYmax + 1, self._idXbid + 1]
 
     @property
     def state(self) -> NDArray[int32]:
@@ -213,11 +221,11 @@ class QtyLike:
 
     @property
     def bid(self) -> int64:
-        return self._bar._con.footprint[self._bar._plike.id, self._bar._idXbid]
+        return self._bar._fp[self._bar._plike.id, self._bar._idXbid]
 
     @property
     def ask(self) -> int64:
-        return self._bar._con.footprint[self._bar._plike.id, self._bar._idXbid + 1]
+        return self._bar._fp[self._bar._plike.id, self._bar._idXbid + 1]
 
 
 class VolumeLike:
@@ -231,7 +239,7 @@ class VolumeLike:
     @property
     def avg(self) -> int64:
         bar_min, bar_max = max(0, self._bar._bar_id - 20), self._bar._bar_id + 1
-        return int64(self._bar._con.headers[bar_min:bar_max, c.BH_Volume].mean())
+        return int64(self._bar._headers[bar_min:bar_max, c.BH_Volume].mean())
 
     @property
     def avg_trade_size(self) -> int64:
@@ -284,7 +292,7 @@ class TradeLike:
     @property
     def avg_count(self) -> int64:
         bar_min, bar_max = max(0, self._bar._bar_id - 20), self._bar._bar_id + 1
-        return self._bar._con.headers[bar_min:bar_max, c.BH_CountTrade].mean()
+        return self._bar._headers[bar_min:bar_max, c.BH_CountTrade].mean()
 
 
 class TimeLike:

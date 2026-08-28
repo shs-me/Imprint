@@ -16,7 +16,7 @@ from .matching_engine import MatchingEngine, matching, set_user_data
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
-class Base(am.Manager, MatchingEngine):
+class Base(am.Manager, MatchingEngine):  # pyright: ignore[reportUnsafeMultipleInheritance]
     def __init__(self, manager: NodeManager) -> None:
         am.Manager.__init__(self, manager)
         MatchingEngine.__init__(self, manager)

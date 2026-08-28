@@ -12,14 +12,23 @@ class FootprintLike:
     def __init__(
         self,
         converter: Converter,
+        headers: NDArray[int64],
+        fp: NDArray[int64],
         fp_state: NDArray[int32],
         fp_state_cache: NDArray[int64],
     ) -> None:
         self._con: Converter = converter
+        self._headers: NDArray[int64] = headers
+        self._fp: NDArray[int64] = fp
         self._fp_state: NDArray[int32] = fp_state
         self._fp_state_cache: NDArray[int64] = fp_state_cache
 
-        self._bar: BarLike = BarLike(converter=self._con, fp_state=self._fp_state)
+        self._bar: BarLike = BarLike(
+            converter=self._con,
+            headers=self._headers,
+            fp=self._fp,
+            fp_state=self._fp_state,
+        )
 
         self._vplike: VolumeProfileLike = VolumeProfileLike(fp=self)
         self._dplike: DeltaProfileLike = DeltaProfileLike(fp=self)
@@ -27,7 +36,7 @@ class FootprintLike:
 
     @property
     def base(self) -> NDArray[int64]:
-        return self._con.footprint
+        return self._fp
 
     @property
     def state(self) -> NDArray[int32]:

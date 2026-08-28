@@ -107,7 +107,6 @@ class Host(Base):
 
         if sc & scs.FP_IDY_FILLED:
             self.logger(scs.FP_IDY_FILLED.label, LogLevel.WARNING, p_name)
-            self.close_procs = True
             self.clear_proc_sc(scs.FP_IDY_FILLED, p_id)
 
         if sc & scs.FP_RE_INIT:

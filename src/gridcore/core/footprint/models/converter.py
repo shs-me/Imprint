@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from typing import overload
 
 from numpy import float64, int64
-from numpy.typing import NDArray
 
 from ... import configs as cfg
 
@@ -14,16 +13,18 @@ from ... import configs as cfg
 class Converter:
     """Converter mapping floating-point values to fixed-point integers and Footprint matrix coordinates."""
 
-    footprint: NDArray[int64]
-    headers: NDArray[int64]
     cfgCoin: cfg.Coin
     cfgFP: cfg.Footprint
+
+    _first_base_timestamp: int = 0
 
     tick_size: str = field(init=False)
     price_prec: int = field(init=False)
     price_mult: int = field(init=False)
     qty_prec: int = field(init=False)
     qty_mult: int = field(init=False)
+    timeframe: str = field(init=False)
+    chart_range: int = field(init=False)
     tims: int = field(init=False)
     step_tick: int = field(init=False)
     fp_rows: int = field(init=False)
@@ -44,14 +45,15 @@ class Converter:
         self.qty_prec = self.cfgCoin.qty_prec
         self.qty_mult = self.cfgCoin.qty_mult
 
+        self.timeframe = self.cfgFP.timeframe.name
         self.tims = self.cfgFP.timeframe
+        self.chart_range = self.cfgFP.chart_range
         self.step_tick = self.cfgFP.step_tick
-        self.fp_rows = self.cfgFP.fp_rows
         self.fp_cols = self.cfgFP.fp_cols
-        self.idxVP = self.cfgFP.colVP
-        self.idxDP = self.cfgFP.colDP
         self.fp_panel_cols = self.cfgFP.fp_panel_cols
         self.bar_count = self.cfgFP.bar_count
+        self.idxVP = self.cfgFP.colVP
+        self.idxDP = self.cfgFP.colDP
 
         self.scale = round((float(self.tick_size) * self.step_tick) * self.price_mult)
 
@@ -60,6 +62,9 @@ class Converter:
 
         self.baseNprice = (nPrice // self.scale) * self.scale
         self.baseTimestamp = timestamp - (timestamp % self.tims)
+        if not self._first_base_timestamp:
+            self._first_base_timestamp = self.baseTimestamp
+
         self.center = self.fp_rows // 2
 
     @overload
@@ -137,11 +142,6 @@ class Converter:
             self.to_price(self.to_nPrice(idy)),
             ndigits=self.price_prec,
         )
-
-    def get_qty(self, idy: int, idx: int) -> float:
-        """Returns float quantity stored in Footprint cell at coordinates (idy, idx)."""
-
-        return self.to_qty(self.footprint[idy, idx])
 
     @overload
     def get_time(self, idx: int64, strftime: bool = False) -> int64: ...

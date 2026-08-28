@@ -24,6 +24,11 @@ class SyncViaEvent(SyncWithExecution):
 
 
 class Live(Base):
+    nPrice: int
+    nQty: int
+    timestamp: int
+    is_sell: int
+
     def __init__(
         self, manager: NodeManager, engine: FootprintEngine, engine_event: Event
     ) -> None:
@@ -50,10 +55,10 @@ class Live(Base):
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
         trade = self.decoder.decode(raw_data[:])
-        self.nPrice[0] = round(trade.price() * self.engine.con.price_mult)
-        self.nQty[0] = round(trade.qty() * self.engine.con.qty_mult)
-        self.timestamp[0] = trade.timestamp()
-        self.is_sell[0] = trade.is_sell()
+        self.nPrice = round(trade.price() * self.engine.con.price_mult)
+        self.nQty = round(trade.qty() * self.engine.con.qty_mult)
+        self.timestamp = trade.timestamp()
+        self.is_sell = int(trade.is_sell())
 
     @override
     def post_update(self) -> None:

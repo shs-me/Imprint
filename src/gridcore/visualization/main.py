@@ -1,11 +1,13 @@
 import os
-from datetime import datetime
+from datetime import date, datetime
 
 import numpy as np
+from loguru import logger
 from numpy import int64
 from numpy.typing import NDArray
 
 from ..core import constant as c
+from ..core.settings import Timeframe
 from .analyze import Stats
 from .plot import render
 from .settings import OHLC
@@ -22,36 +24,40 @@ def get_ohlc(price_mult: int, headers: NDArray[int64]) -> OHLC:
     return ohlc
 
 
-def get_headers_paths(
-    footprint_headers_path: str, symbol: str, start_date: str, end_date: str
-) -> list[str]:
-    start_datetime: datetime = datetime.fromisoformat(start_date)
-    end_datetime: datetime = datetime.fromisoformat(end_date)
+def get_headers_path(
+    footprint_headers_path: str,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    timeframe: str,
+) -> str | None:
+    start_datetime: date = datetime.fromisoformat(start_date)
+    end_datetime: date = datetime.fromisoformat(end_date)
     base_headers_path: str = f"{footprint_headers_path}/{symbol}"
 
-    paths: list[str] = [p for p in os.listdir(base_headers_path) if p.endswith(".npy")]
-    dates: list[datetime] = sorted(
-        [datetime.fromisoformat(p.split("T")[0]) for p in paths]
-    )
-    needDates: list[datetime] = [
-        d for d in dates if (start_datetime <= d <= end_datetime)
+    paths: list[str] = [
+        p.split(".npy")[0] for p in os.listdir(base_headers_path) if p.endswith(".npy")
     ]
-    return [
-        f"{base_headers_path}/{datetime.strftime(d, '%Y-%m-%dT%H-%M-%S')}.npy"
-        for d in needDates
-    ]
+    if paths:
+        for p in paths:
+            file_timeframe, file_start_time, file_end_time = p.split("_")
+            if file_timeframe == timeframe:
+                file_start_date: datetime = datetime.fromisoformat(
+                    file_start_time.split("T")[0]
+                )
+                file_end_date: datetime = datetime.fromisoformat(
+                    file_end_time.split("T")[0]
+                )
+                if file_start_date <= start_datetime <= end_datetime <= file_end_date:
+                    return p
 
 
 def data_load(
-    equity_history_path: str, orders_history_path: str, headers_paths: list[str]
+    equity_history_path: str, orders_history_path: str, headers_path: str
 ) -> tuple[NDArray[int64], NDArray[int64], NDArray[int64]]:
     equity_history: NDArray[int64] = np.load(file=equity_history_path)
     orders_history: NDArray[int64] = np.load(file=orders_history_path)
-    headers: NDArray[int64] = np.load(f"{headers_paths.pop(0)}")
-    for p in headers_paths:
-        _headers: NDArray[np.int64] = np.load(p)
-        headers = np.append(headers, _headers, axis=0)
-
+    headers: NDArray[int64] = np.load(headers_path)
     return equity_history, orders_history, headers
 
 
@@ -67,18 +73,27 @@ def run(
     qty_mult: int,
     scale_mult: int,
     leverage: int,
-    timeframe: int,
+    timeframe: Timeframe,
 ) -> None:
-    headers_paths = get_headers_paths(
+    headers_path = get_headers_path(
         footprint_headers_path=footprint_headers_path,
         symbol=symbol,
         start_date=start_date,
         end_date=end_date,
+        timeframe=timeframe.name,
     )
+    if headers_path is None:
+        return logger.warning(
+            (
+                f"Not found headers with timeframe {timeframe.name}"
+                f"start date {start_date}, end date {end_date}"
+            )
+        )
+
     equity_history, orders_history, headers = data_load(
         equity_history_path=equity_history_path,
         orders_history_path=orders_history_path,
-        headers_paths=headers_paths,
+        headers_path=headers_path,
     )
     ohlc = get_ohlc(
         price_mult=price_mult,

@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import override
+from typing import cast, override
 
 import numpy as np
 from numba import njit
@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 
 from ... import constant as c
 from ...ipc import NodeManager
-from ...settings import StatusCodes as scs
 from .base import Base
 
 (
@@ -29,32 +28,39 @@ from .base import Base
 
 
 class Writer(Base, ABC):
+    _re_init_session: bool
+    _re_init_idx: bool
+    _re_init_idy: bool
+
     def __init__(self, manager: NodeManager) -> None:
         super().__init__(manager)
 
         self._counter_ticks: int = 0
 
-        self.__args[FU_idxVP] = self.con.idxVP
-        self.__args[FU_idxDP] = self.con.idxDP
-        self.__args[FU_price_mult] = self.con.price_mult
-        self.__args[FU_price_prec] = self.con.price_prec
-        self.__args[FU_qty_mult] = self.con.qty_mult
-        self.__args[FU_qty_prec] = self.con.qty_prec
-
     @override
-    def _init_array(self) -> None:
-        super()._init_array()
+    def _init_array(self, nPrice: int) -> None:
+        super()._init_array(nPrice)
 
-        self.__meta_data: NDArray[float64] = np.zeros(
-            shape=(2, BHM_ConstantCount), dtype=float64
-        )
-        self.__args: NDArray[int64] = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
+        if not self._re_init_idy:
+            self.__meta_data: NDArray[float64] = np.zeros(
+                shape=(2, BHM_ConstantCount), dtype=float64
+            )
+            self.__args: NDArray[int64] = np.zeros(
+                shape=(FU_ConstantCount,), dtype=int64
+            )
+            self.__args[FU_idxVP] = self.con.idxVP
+            self.__args[FU_idxDP] = self.con.idxDP
+            self.__args[FU_price_mult] = self.con.price_mult
+            self.__args[FU_price_prec] = self.con.price_prec
+            self.__args[FU_qty_mult] = self.con.qty_mult
+            self.__args[FU_qty_prec] = self.con.qty_prec
 
     @override
     def _init_session(self, nPrice: int, timestamp: int) -> None:
         super()._init_session(nPrice, timestamp)
 
-        self.__meta_data.fill(0)
+        if self._re_init_idx:
+            self.__meta_data.fill(0)
 
     def _update_footprint(
         self, nPrice: int, nQty: int, timestamp: int, is_sell: int
@@ -65,41 +71,42 @@ class Writer(Base, ABC):
         self.__update(nPrice, nQty, timestamp, is_sell)
 
     def __update(self, nPrice: int, nQty: int, timestamp: int, is_sell: int) -> None:
-        idy: int | None = self.con.to_idy(nPrice=nPrice)
         idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
-        if idx is not None:
-            if idy is not None:
-                self._counter_ticks += 1
-                _update(
-                    nPrice=nPrice,
-                    nQty=nQty,
-                    timestamp=timestamp,
-                    is_sell=is_sell,
-                    idy=idy,
-                    idx=idx,
-                    args=self.__args,
-                    footprint=self._footprint,
-                    headers=self._headers,
-                    bbox=self._bbox,
-                    meta_data=self.__meta_data,
-                )
-            else:
-                self._manager.set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=False)
-                if self.__bbox_is_read():
-                    self._init_session(nPrice, timestamp)
-                    self.__update(nPrice, nQty, timestamp, is_sell)
-                else:
-                    self._re_init_session: bool = True
-
-        else:
-            self._manager.set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=False)
-            if self.__bbox_is_read():
-                self._init_session(nPrice, timestamp)
-                self.__update(nPrice, nQty, timestamp, is_sell)
-            else:
+        idy: int | None = self.con.to_idy(nPrice=nPrice)
+        if idx is None:
+            self._re_init_idx = True
+            if not self._bbox_is_readed():
                 self._re_init_session = True
+                return None
+            else:
+                self._init_session(nPrice, timestamp)
+                idx = 0 if is_sell else 1
 
-    def __bbox_is_read(self) -> bool:
+        if idy is None:
+            self._re_init_idy = True
+            if not self._bbox_is_readed():
+                self._re_init_session = True
+                return None
+            else:
+                self._init_session(nPrice, timestamp)
+                idy = cast(int, self.con.to_idy(nPrice=nPrice))
+
+        self._counter_ticks += 1
+        _update(
+            nPrice=nPrice,
+            nQty=nQty,
+            timestamp=timestamp,
+            is_sell=is_sell,
+            idy=idy,
+            idx=idx,
+            args=self.__args,
+            footprint=self._footprint,
+            headers=self._headers,
+            bbox=self._bbox,
+            meta_data=self.__meta_data,
+        )
+
+    def _bbox_is_readed(self) -> bool:
         return bool(np.all(self._bbox == self._bbox_default_value))
 
 

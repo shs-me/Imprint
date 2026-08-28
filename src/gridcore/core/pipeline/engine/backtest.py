@@ -17,6 +17,11 @@ class SyncViaSpinLock(SyncWithExecution):
 
 
 class Backtest(Base):
+    nPrice: int
+    nQty: int
+    timestamp: int
+    is_sell: int
+
     def __init__(self, manager: NodeManager, engine: FootprintEngine) -> None:
         super().__init__(manager, engine)
 
@@ -27,7 +32,7 @@ class Backtest(Base):
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
         data: tuple[int, int, int, int] = struct.unpack("@qqqq", raw_data)
-        self.nPrice[0], self.nQty[0], self.timestamp[0], self.is_sell[0] = data
+        self.nPrice, self.nQty, self.timestamp, self.is_sell = data
 
     @override
     def post_update(self) -> None:
