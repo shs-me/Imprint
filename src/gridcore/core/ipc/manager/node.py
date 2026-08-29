@@ -93,9 +93,6 @@ class Node(Base):
                 gc.collect()
                 clear_task |= scs.GC_COLLECT
 
-            if task_sc & (scs.FP_RE_INIT):
-                clear_task |= scs.FP_RE_INIT
-
             if clear_task:
                 self.clear_task_sc(clear_task)
 

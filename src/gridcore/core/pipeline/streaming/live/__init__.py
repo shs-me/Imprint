@@ -1,3 +1,3 @@
-from .router import Router as LiveAgent
+from .controller import Controller as LiveAgent
 
 __all__ = ["LiveAgent"]

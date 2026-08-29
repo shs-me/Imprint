@@ -52,7 +52,7 @@ class Host(Base):
 
     def check_process_status_code(self) -> None:
         if self._main_status[ProcsIds.streaming]:
-            self.check_data_stream_proc()
+            self.check_data_streaming_proc()
             self._main_status[ProcsIds.streaming] -= 1
 
         if self._main_status[ProcsIds.engine]:
@@ -61,14 +61,14 @@ class Host(Base):
 
         if self.with_execution:
             if self._main_status[ProcsIds.executing]:
-                self.check_execution_proc()
+                self.check_executing_proc()
                 self._main_status[ProcsIds.executing] -= 1
 
         if self.close_procs:
             self.kill_procs()
             self.close_core = True
 
-    def check_data_stream_proc(self) -> None:
+    def check_data_streaming_proc(self) -> None:
         if not self.procs.get(ProcsIds.streaming):
             return
 
@@ -119,7 +119,7 @@ class Host(Base):
 
         self.proc_is_alive(p_id)
 
-    def check_execution_proc(self) -> None:
+    def check_executing_proc(self) -> None:
         if not self.procs.get(ProcsIds.executing):
             return
 
@@ -173,10 +173,10 @@ class Host(Base):
             self.clear_proc_sc(scs.RING_BUFFER_TEXT_STREAM_OVERFLOW, proc_id)
 
     def get_proc_data(self, proc: int) -> tuple[int, str, int, int]:
-        p_id = proc
-        p_name = self.procs[p_id]["proc_name"]
-        p_task_id = self.procs[p_id]["task_id"]
-        p_sc = self._procs_status[p_id]
+        p_id: int = proc
+        p_name: str = self.procs[p_id]["proc_name"]
+        p_task_id: int = self.procs[p_id]["task_id"]
+        p_sc: int = self._procs_status[p_id]
         return p_id, p_name, p_task_id, p_sc
 
     def set_task_sc_to_proc(self, code: scs, task_id: int | None = None):
@@ -234,8 +234,8 @@ class Host(Base):
             need_cell: int = (proc_id * self._ts_cell_amount) + cell
             lrd: int = self._ts_data_header[need_cell]
             start: int = need_cell * self._ts_data_size
-            t = self._ts_data[start : (start + 8)].cast("q")[0]
-            msg = bytes(self._ts_data[(start + 8) : (start + 8) + lrd]).decode()
+            t: int = self._ts_data[start : (start + 8)].cast("q")[0]
+            msg: str = bytes(self._ts_data[(start + 8) : (start + 8) + lrd]).decode()
             logs.append((t, msg))
             new_cell: int = cell + 1
             self._ts_rid[proc_id] = new_cell if new_cell < self._ts_cell_amount else 0
