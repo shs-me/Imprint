@@ -1,12 +1,14 @@
 import asyncio
-import importlib
+import struct
 from multiprocessing.synchronize import Semaphore
 from typing import override
 
+from msgspec.json import Encoder
 from websockets import ClientConnection
 
+from .... import constant as c
 from ....ipc import NodeManager
-from ...utils.base_adapters import OrderEncoder
+from ...utils.structs import create_order_struct
 from .base import Base
 
 
@@ -14,12 +16,15 @@ class Order(Base):
     def __init__(self, manager: NodeManager, wss_sem: Semaphore) -> None:
         self.wss_sem: Semaphore = wss_sem
 
-        m_name: str = manager.cfgSetup.order_encoder_module
-        c_name: str = manager.cfgSetup.order_encoder_class_name
-        encoder_type: type[OrderEncoder] = getattr(
-            importlib.import_module(m_name), c_name
-        )
-        self.order_encoder: OrderEncoder = encoder_type()
+        self.price_mult: int = manager.cfgCoin.price_mult
+        self.price_prec: int = manager.cfgCoin.price_prec
+        self.qty_prec: int = manager.cfgCoin.qty_mult
+        self.qty_mult: int = manager.cfgCoin.qty_prec
+
+        fields_names = manager.cfgSetup.order_encoder_struct_fields_names
+        self.order_param_type, self.order_type = create_order_struct(fields_names)
+        self.encoder: Encoder = Encoder()
+
         self.send_order_uri: str = manager.cfgConnector.set_user_data_uri_for_wss
 
         super().__init__(manager, self.send_order_uri)
@@ -47,11 +52,41 @@ class Order(Base):
         data_header: memoryview,
         data_size: int,
         cell_amount: int,
-    ) -> memoryview:
+    ) -> bytes:
         cell: int = reader_id[0]
-        lrd = data_header[cell]
+        lrd: int = data_header[cell]
         start: int = cell * data_size
-        raw_data: memoryview = data[start : start + lrd]
-        new_cell = cell + 1
+
+        raw_data: bytes = self.to_payload(data[start : start + lrd])
+
+        new_cell: int = cell + 1
         reader_id[0] = new_cell if new_cell < cell_amount else 0
+
         return raw_data
+
+    def to_payload(self, raw_data: memoryview) -> bytes:
+        timestamp, order_param, client_order_id, nPrice, nQty = struct.unpack(
+            "@qqqqq", raw_data
+        )
+
+        price: float = round(nPrice / self.price_mult, self.price_prec)
+        qty: float = round(nQty / self.qty_mult, self.qty_prec)
+
+        side: str = "LONG" if bool(order_param & c.OF_LONG) else "SHORT"
+        type: str = "BUY" if bool(order_param & c.OF_BUY) else "SELL"
+
+        return self.encoder.encode(
+            self.order_type(
+                order_id=client_order_id,
+                type_place="",
+                param=self.order_param_type(
+                    symbol=self.symbol,
+                    side=side,
+                    type=type,
+                    timeInForce="GTC",
+                    quantity=qty,
+                    price=price,
+                    timestamp=timestamp,
+                ),
+            )
+        )

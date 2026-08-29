@@ -18,7 +18,8 @@ class Base(GlobalBase, ABC):
     async def run(self) -> None:
         async for ws in connect(self.url):
             try:
-                await self.in_connection(ws)
+                while True:
+                    await self.in_connection(ws)
 
             except ws_exc.ConnectionClosed:
                 return

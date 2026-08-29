@@ -9,6 +9,8 @@ from ...settings import StatusCodes as scs
 class Base(ABC):
     manager: NodeManager
 
+    symbol: str = field(init=False)
+
     ds_safe_lag: int = field(init=False)
     ds_cell_amount: int = field(init=False)
     ds_data_size: int = field(init=False)
@@ -17,6 +19,7 @@ class Base(ABC):
     ds_data_header: memoryview = field(init=False)
     ds_wid: memoryview = field(init=False)
     ds_rid: memoryview = field(init=False)
+
     gus_safe_lag: int = field(init=False)
     gus_cell_amount: int = field(init=False)
     gus_data_size: int = field(init=False)
@@ -25,6 +28,7 @@ class Base(ABC):
     gus_data_header: memoryview = field(init=False)
     gus_wid: memoryview = field(init=False)
     gus_rid: memoryview = field(init=False)
+
     sus_safe_lag: int = field(init=False)
     sus_cell_amount: int = field(init=False)
     sus_data_size: int = field(init=False)
@@ -35,6 +39,8 @@ class Base(ABC):
     sus_wid: memoryview = field(init=False)
 
     def __post_init__(self) -> None:
+        self.symbol = self.manager.cfgCoin.symbol
+
         cfgDS = self.manager.cfgDataStream
         self.ds_safe_lag = cfgDS.safe_lag
         self.ds_cell_amount = cfgDS.cell_amount

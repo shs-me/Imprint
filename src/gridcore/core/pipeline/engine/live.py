@@ -1,13 +1,12 @@
-import importlib
 from multiprocessing.synchronize import Event
-from typing import override
+from typing import final, override
 
 from msgspec.json import Decoder
 
 from ...footprint.engine import FootprintEngine, SyncWithExecution
 from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
-from ..utils.base_adapters import AggTrades
+from ..utils.structs import create_aggtrades_struct
 from .base import Base
 
 
@@ -36,15 +35,9 @@ class Live(Base):
 
         self.engine_event: Event = engine_event
 
-        m_name = manager.cfgSetup.agg_trades_struct_module
-        c_name = manager.cfgSetup.agg_trades_struct_class_name
-        self.agg_trade: type[AggTrades] = getattr(
-            importlib.import_module(m_name), c_name
-        )
-        manager.set_text(
-            f"{self.agg_trade.__class__.__name__} used as {AggTrades.__name__}"
-        )
-        self.decoder: Decoder[AggTrades] = Decoder(type=self.agg_trade, strict=False)
+        fields_names = manager.cfgSetup.agg_trades_struct_fields_names
+        agg_trades_type = create_aggtrades_struct(fields_names)
+        self.decoder = Decoder(type=agg_trades_type, strict=False)
         self.pass_lag: int = 0
         self.pass_lag_limit: int = 2
 
@@ -55,10 +48,10 @@ class Live(Base):
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
         trade = self.decoder.decode(raw_data[:])
-        self.nPrice = round(trade.price() * self.engine.con.price_mult)
-        self.nQty = round(trade.qty() * self.engine.con.qty_mult)
-        self.timestamp = trade.timestamp()
-        self.is_sell = int(trade.is_sell())
+        self.nPrice = round(trade.price * self.engine.con.price_mult)
+        self.nQty = round(trade.qty * self.engine.con.qty_mult)
+        self.timestamp = trade.timestamp
+        self.is_sell = int(trade.is_sell)
 
     @override
     def post_update(self) -> None:

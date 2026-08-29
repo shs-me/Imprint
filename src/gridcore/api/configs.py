@@ -1,8 +1,10 @@
 from ._utils.configs import (
     Account,
+    AggTradesStructFieldsNames,
     Backtesting,
     Connector,
     Footprint,
+    OrderStructFieldsNames,
     Real,
     RiskManagment,
     SetupCore,
@@ -20,4 +22,6 @@ __all__ = [
     "Account",
     "Connector",
     "Footprint",
+    "OrderStructFieldsNames",
+    "AggTradesStructFieldsNames",
 ]
