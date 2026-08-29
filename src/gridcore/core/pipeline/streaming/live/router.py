@@ -2,22 +2,22 @@ import asyncio
 from multiprocessing.synchronize import Event, Semaphore
 
 from ....ipc.manager import NodeManager
-from .order import Order
+from .set_user_data import SetUserData
 
 
-class Router(Order):
+class Router(SetUserData):
     def __init__(
         self,
         manager: NodeManager,
         engine_event: Event,
-        wss_sem: Semaphore,
         execution_event: Event,
+        wss_sem: Semaphore,
     ) -> None:
-        super().__init__(manager, engine_event, wss_sem, execution_event)
+        super().__init__(manager, engine_event, execution_event, wss_sem)
 
     async def run_streams(self) -> None:
         asyncio.gather(
             self.run_market_data_stream(),
-            self.run_user_data_stream(),
-            self.run_order_stream(),
+            self.run_get_user_data_stream(),
+            self.run_set_user_data_stream(),
         )

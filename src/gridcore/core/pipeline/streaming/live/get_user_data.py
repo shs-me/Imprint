@@ -1,24 +1,23 @@
 import asyncio
 import importlib
-from multiprocessing.synchronize import Event, Semaphore
+from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
 
 from ....ipc import NodeManager
 from ...utils.base_adapters import UserStreamDecoder
 from ...utils.rest_agent import RestAgent
-from .user_data import UserData
+from .market_data import MarketData
 
 
-class Order(UserData):
+class GetUserData(MarketData):
     def __init__(
         self,
         manager: NodeManager,
         engine_event: Event,
-        wss_sem: Semaphore,
         execution_event: Event,
     ) -> None:
-        super().__init__(manager, engine_event, wss_sem)
+        super().__init__(manager, engine_event)
 
         self.execution_event: Event = execution_event
 
@@ -33,7 +32,7 @@ class Order(UserData):
         )
         self.user_data_uri: str = manager.cfgConnector.get_user_data_uri_for_wss
 
-    async def run_order_stream(self) -> None:
+    async def run_get_user_data_stream(self) -> None:
         # Local Links
         wid, rid = self.gus_wid, self.gus_rid
         data, data_size = self.gus_data, self.gus_data_size

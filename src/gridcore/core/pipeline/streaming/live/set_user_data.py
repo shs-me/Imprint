@@ -7,14 +7,18 @@ from websockets.asyncio.client import connect
 from ....ipc import NodeManager
 from ....settings import StatusCodes as scs
 from ...utils.base_adapters import OrderEncoder
-from .market_data import MarketData
+from .get_user_data import GetUserData
 
 
-class UserData(MarketData):
+class SetUserData(GetUserData):
     def __init__(
-        self, manager: NodeManager, engine_event: Event, wss_sem: Semaphore
+        self,
+        manager: NodeManager,
+        engine_event: Event,
+        execution_event: Event,
+        wss_sem: Semaphore,
     ) -> None:
-        super().__init__(manager, engine_event)
+        super().__init__(manager, engine_event, execution_event)
 
         self.wss_sem: Semaphore = wss_sem
         m_name: str = manager.cfgSetup.order_encoder_module
@@ -25,7 +29,7 @@ class UserData(MarketData):
         self.order_encoder: OrderEncoder = encoder_type()
         self.send_order_uri: str = manager.cfgConnector.set_user_data_uri_for_wss
 
-    async def run_user_data_stream(self) -> None:
+    async def run_set_user_data_stream(self) -> None:
         # Local Links
         wid, rid = self.sus_wid, self.sus_rid
         data, data_size = self.sus_data, self.sus_data_size
