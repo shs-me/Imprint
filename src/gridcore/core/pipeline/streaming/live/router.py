@@ -16,7 +16,7 @@ class Router(SetUserData):
         super().__init__(manager, engine_event, execution_event, wss_sem)
 
     async def run_streams(self) -> None:
-        asyncio.gather(
+        await asyncio.gather(
             self.run_market_data_stream(),
             self.run_get_user_data_stream(),
             self.run_set_user_data_stream(),
