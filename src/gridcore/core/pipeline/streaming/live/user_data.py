@@ -20,9 +20,6 @@ class UserData(Base):
             importlib.import_module(m_name), c_name
         )
         self.decoder: UserStreamDecoder = decoder_type()
-        self.rest: RestAgent = RestAgent(
-            symbol=self.manager.cfgCoin.symbol, connector=manager.cfgConnector
-        )
         self.user_data_uri: str = manager.cfgConnector.get_user_data_uri_for_wss
 
         super().__init__(manager, self.user_data_uri)

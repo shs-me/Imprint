@@ -15,7 +15,7 @@ from .settings import (
 # Production URL
 REST_API_PROD_URL = "https://fapi.binance.com"
 WS_API_PROD_URL = "wss://ws-fapi.binance.com/ws-fapi/v1"
-WS_STREAMS_PROD_URL = "wss://fstream.binance.com"
+WS_STREAMS_PROD_URL = "wss://fstream.binance.com/aggTrades@DASHUSDT"
 # Demo URL
 REST_API_DEMO_URL = "https://demo-fapi.binance.com"
 # Testnet URL

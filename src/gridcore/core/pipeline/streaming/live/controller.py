@@ -20,8 +20,8 @@ class Controller:
         self.manager: NodeManager = manager
 
         self.market_data_stream: MarketData = MarketData(manager, engine_event)
-        self.user_data_stream: UserData = UserData(manager, execution_event)
-        self.order_stream: Order = Order(manager, wss_sem)
+        # self.user_data_stream: UserData = UserData(manager, execution_event)
+        # self.order_stream: Order = Order(manager, wss_sem)
 
     async def run_supervisor(self, streams: list[Task[None]]) -> None:
         while True:
@@ -44,8 +44,8 @@ class Controller:
         async with asyncio.TaskGroup() as tg:
             streams: list[Task[None]] = [
                 tg.create_task(self.market_data_stream.run()),
-                tg.create_task(self.user_data_stream.run()),
-                tg.create_task(self.order_stream.run()),
+                # tg.create_task(self.user_data_stream.run()),
+                # tg.create_task(self.order_stream.run()),
             ]
             supervisor: Task[None] = tg.create_task(self.run_supervisor(streams))
             await supervisor

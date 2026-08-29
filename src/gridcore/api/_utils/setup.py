@@ -32,9 +32,9 @@ def run(setup: SetupCore) -> None:
             setup.symbol, startDate, endDate, setup.coin.price_mult, setup.coin.qty_mult
         )
     else:
-        rest = RestAgent(setup.symbol, setup.run_mode.connector)
-        setup.coin.tick_size = rest.get_tick_size()
-        setup.coin.lot_size = rest.get_lot_size()
+        # rest = RestAgent(setup.symbol, setup.run_mode.connector)
+        setup.coin.tick_size = "0.01"  # rest.get_tick_size()
+        setup.coin.lot_size = "0.001"  # rest.get_lot_size()
 
     kwargs: dict[str, Configuration] = {}
     for obj in setup.args:

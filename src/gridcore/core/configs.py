@@ -76,12 +76,14 @@ class Setup(Configuration):
     algorithm_class_name: str = ""
     execution_module: str = ""
     execution_class_name: str = ""
-    agg_trades_struct_fields_names: AggTradesStructFieldsNames = (
-        AggTradesStructFieldsNames()
+    agg_trades_struct_fields_names: AggTradesStructFieldsNames = field(
+        default_factory=lambda: AggTradesStructFieldsNames()
     )
     user_stream_decoder_module: str = ""
     user_stream_decoder_class_name: str = ""
-    order_encoder_struct_fields_names: OrderStructFieldsNames = OrderStructFieldsNames()
+    order_encoder_struct_fields_names: OrderStructFieldsNames = field(
+        default_factory=lambda: OrderStructFieldsNames()
+    )
 
 
 @dataclass
