@@ -1,5 +1,7 @@
 import struct
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
 
 from ...account import AccountConverter, AccountManager
 from ...ipc import NodeManager
@@ -7,80 +9,104 @@ from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 
 
+@dataclass
 class Base(ABC):
-    def __init__(self, manager: NodeManager) -> None:
-        self.manager: NodeManager = manager
+    _manager: NodeManager
 
-        cfgSN = manager.cfgSignal
-        self.sn_cell_amount: int = cfgSN.cell_amount
-        self.sn_data_size: int = cfgSN.data_size // 8
-        self.sn_data: memoryview = cfgSN.data.view.cast("q")
-        self.sn_wid: memoryview = cfgSN.writer_id.view.cast("q")
-        self.sn_rid: memoryview = cfgSN.reader_id.view.cast("q")
+    _sn_cell_amount: int = field(init=False)
+    _sn_data_size: int = field(init=False)
+    _sn_data: memoryview = field(init=False)
+    _sn_wid: memoryview = field(init=False)
+    _sn_rid: memoryview = field(init=False)
 
-        cfgGUS = manager.cfgGetUserStream
-        self.gus_cell_amount: int = cfgGUS.cell_amount
-        self.gus_data: memoryview = cfgGUS.data.view
-        self.gus_data_size: int = cfgGUS.data_size
-        self.gus_data_header: memoryview = cfgGUS.data_header.view
-        self.gus_wid: memoryview = cfgGUS.writer_id.view.cast("q")
-        self.gus_rid: memoryview = cfgGUS.reader_id.view.cast("q")
+    _gus_cell_amount: int = field(init=False)
+    _gus_data: memoryview = field(init=False)
+    _gus_data_size: int = field(init=False)
+    _gus_data_header: memoryview = field(init=False)
+    _gus_wid: memoryview = field(init=False)
+    _gus_rid: memoryview = field(init=False)
 
-        cfgSUS = manager.cfgSetUserStream
-        self.sus_cell_amount: int = cfgSUS.cell_amount
-        self.sus_data: memoryview = cfgSUS.data.view
-        self.sus_data_size: int = cfgSUS.data_size
-        self.sus_data_header: memoryview = cfgSUS.data_header.view
-        self.sus_wid: memoryview = cfgSUS.writer_id.view.cast("q")
-        self.sus_rid: memoryview = cfgSUS.reader_id.view.cast("q")
+    _sus_cell_amount: int = field(init=False)
+    _sus_data: memoryview = field(init=False)
+    _sus_data_size: int = field(init=False)
+    _sus_data_header: memoryview = field(init=False)
+    _sus_wid: memoryview = field(init=False)
+    _sus_rid: memoryview = field(init=False)
 
-        cfgMetrics = manager.cfgMetrics
-        self.trade_readed_time: memoryview = cfgMetrics.trade_readed_time.view.cast("q")
-        self.engine_complete: memoryview = cfgMetrics.engine_complete.view
+    _trade_readed_time: memoryview = field(init=False)
+    _engine_complete: memoryview = field(init=False)
 
-        self.symbol: str = manager.cfgCoin.symbol
-        self.con: AccountConverter = AccountConverter(
-            cfgAccount=manager.cfgAccount,
-            cfgStrategy=manager.cfgRiskManagment,
-            price_prec=manager.cfgCoin.price_prec,
-            qty_prec=manager.cfgCoin.qty_prec,
+    _readed_timestamp: int = field(default=0, init=False)
+
+    count_open_positions: int = field(default=0, init=False)
+    con: AccountConverter = field(init=False)
+    acm: Any = field(init=False)
+
+    def __post_init__(self) -> None:
+        cfgSN = self._manager.cfgSignal
+        self._sn_cell_amount = cfgSN.cell_amount
+        self._sn_data_size = cfgSN.data_size // 8
+        self._sn_data = cfgSN.data.view.cast("q")
+        self._sn_wid = cfgSN.writer_id.view.cast("q")
+        self._sn_rid = cfgSN.reader_id.view.cast("q")
+
+        cfgGUS = self._manager.cfgGetUserStream
+        self._gus_cell_amount = cfgGUS.cell_amount
+        self._gus_data = cfgGUS.data.view
+        self._gus_data_size = cfgGUS.data_size
+        self._gus_data_header = cfgGUS.data_header.view
+        self._gus_wid = cfgGUS.writer_id.view.cast("q")
+        self._gus_rid = cfgGUS.reader_id.view.cast("q")
+
+        cfgSUS = self._manager.cfgSetUserStream
+        self._sus_cell_amount = cfgSUS.cell_amount
+        self._sus_data = cfgSUS.data.view
+        self._sus_data_size = cfgSUS.data_size
+        self._sus_data_header = cfgSUS.data_header.view
+        self._sus_wid = cfgSUS.writer_id.view.cast("q")
+        self._sus_rid = cfgSUS.reader_id.view.cast("q")
+
+        cfgMetrics = self._manager.cfgMetrics
+        self._trade_readed_time = cfgMetrics.trade_readed_time.view.cast("q")
+        self._engine_complete = cfgMetrics.engine_complete.view
+
+        self.con = AccountConverter(
+            cfgAccount=self._manager.cfgAccount,
+            cfgStrategy=self._manager.cfgRiskManagment,
+            price_prec=self._manager.cfgCoin.price_prec,
+            qty_prec=self._manager.cfgCoin.qty_prec,
         )
-        self.acm = AccountManager(manager)
-        self.count_open_position: int = 0
-        self.readed_timestamp: int = 0
+        self.acm = AccountManager(self._manager)
 
     @error_handler(set_status_code=True)
     def _run_execution_engine(self) -> None:
-        # LocalLinks
-        WB_1, RB_1, WB_2, RB_2 = self.sn_wid, self.sn_rid, self.gus_wid, self.gus_rid
-        # - - -
         while True:
-            # - - -
-            while True:
-                if self.manager.have_status():
-                    task: int = self.manager.check_base_task()
-                    if task & scs.EXIT:
-                        return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
+            if self._manager.have_status():
+                task: int = self._manager.check_base_task()
+                if task & scs.EXIT:
+                    return self._manager.set_proc_sc(scs.EXIT, wait_main_task=False)
 
-                    if task & scs.COMPLETE:
-                        if self._complete():
-                            self._final_actions()
-                            return self.manager.set_proc_sc(
-                                scs.COMPLETE, wait_main_task=False
-                            )
+                if task & scs.COMPLETE:
+                    if self._complete():
+                        self._final_actions()
+                        return self._manager.set_proc_sc(
+                            scs.COMPLETE, wait_main_task=False
+                        )
 
-                if self.engine_complete[0] == 0:
-                    self._alarm_clock(WB_1, RB_1, WB_2, RB_2)
+            if self._engine_complete[0] == 0:
+                self._alarm_clock(
+                    self._sn_wid, self._sn_rid, self._gus_wid, self._gus_rid
+                )
 
-                if WB_1[0] != RB_1[0]:
-                    self._check_signal_buf()
-                elif WB_2[0] != RB_2[0]:
-                    self._check_user_data_buf()
+            if self._sn_wid[0] != self._sn_rid[0]:
+                self._check_signal_buf()
+            elif self._gus_wid[0] != self._gus_rid[0]:
+                self._check_user_data_buf()
 
     def _complete(self) -> bool:
-        return (self.engine_complete[0] == 1) and (
-            (self.sn_wid[0] == self.sn_rid[0]) and (self.gus_wid[0] == self.gus_rid[0])
-        )
+        signals_readed: bool = self._sn_wid[0] == self._sn_rid[0]
+        user_stream_readed: bool = self._gus_wid[0] == self._gus_rid[0]
+        return (self._engine_complete[0] == 1) and signals_readed and user_stream_readed
 
     @abstractmethod
     def _alarm_clock(
@@ -98,29 +124,29 @@ class Base(ABC):
         if self.con.lossNbalanceSafeLimit:
             if self.con.lockedNbalanceSafeLimit:
                 if (nominalNqty := self.con.nominalEntryNqtyWithLeverage) is not None:
-                    if (timestamp + self.con.timer) <= self.readed_timestamp:
+                    if (timestamp + self.con.timer) <= self._readed_timestamp:
                         return
 
                     nQty: int = self.con.entryNqtyWithLeverage(nPrice, nominalNqty)
                     self.action_for_getted_signal(timestamp, order_param, nPrice, nQty)
                 else:
-                    self.manager.set_proc_sc(
+                    self._manager.set_proc_sc(
                         code=scs.QTY_LESS_LIMIT, wait_main_task=True
                     )
             else:
                 pass
         else:
             self._post_final_action()
-            self.manager.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
+            self._manager.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
 
     def _get_signal_data(self) -> tuple[int, int, int]:
-        cell: int = self.sn_rid[0]
-        start: int = cell * self.sn_data_size
-        get_data: memoryview = self.sn_data[start : start + self.sn_data_size]
+        cell: int = self._sn_rid[0]
+        start: int = cell * self._sn_data_size
+        get_data: memoryview = self._sn_data[start : start + self._sn_data_size]
         # signal_id = get_data[0]
         nPrice, timestamp, order_param = get_data[1], get_data[2], get_data[3]
         new_cell: int = cell + 1
-        self.sn_rid[0] = new_cell if (new_cell < self.sn_cell_amount) else 0
+        self._sn_rid[0] = new_cell if (new_cell < self._sn_cell_amount) else 0
         return nPrice, timestamp, order_param
 
     @abstractmethod
@@ -134,17 +160,17 @@ class Base(ABC):
         pass
 
     def _check_user_data_buf(self) -> None:
-        while self.gus_wid[0] != self.gus_rid[0]:
+        while self._gus_wid[0] != self._gus_rid[0]:
             raw_buf = self._get_user_data()
             self._preppare_user_data(raw_buf)
 
     def _get_user_data(self) -> memoryview:
-        cell: int = self.gus_rid[0]
-        start: int = cell * self.gus_data_size
-        len_raw_data: int = self.gus_data_header[cell]
-        raw_data: memoryview = self.gus_data[start : start + len_raw_data]
+        cell: int = self._gus_rid[0]
+        start: int = cell * self._gus_data_size
+        len_raw_data: int = self._gus_data_header[cell]
+        raw_data: memoryview = self._gus_data[start : start + len_raw_data]
         new_cell: int = cell + 1
-        self.gus_rid[0] = new_cell if (new_cell < self.gus_cell_amount) else 0
+        self._gus_rid[0] = new_cell if (new_cell < self._gus_cell_amount) else 0
         return raw_data
 
     @abstractmethod
@@ -178,12 +204,12 @@ class Base(ABC):
         self.acm.update_local_lockedNbalance(nPrice, nQty, order_param)
 
     def _set_user_data(self, raw_data: bytes) -> None:
-        cell: int = self.sus_wid[0]
-        start: int = cell * self.sus_data_size
-        self.sus_data_header[cell] = len(raw_data)
-        self.sus_data[start : start + len(raw_data)] = raw_data
+        cell: int = self._sus_wid[0]
+        start: int = cell * self._sus_data_size
+        self._sus_data_header[cell] = len(raw_data)
+        self._sus_data[start : start + len(raw_data)] = raw_data
         new_cell: int = cell + 1
-        self.sus_wid[0] = new_cell if (new_cell < self.sus_cell_amount) else 0
+        self._sus_wid[0] = new_cell if (new_cell < self._sus_cell_amount) else 0
 
     def _final_actions(self) -> None:
         self._post_final_action()

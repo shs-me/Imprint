@@ -1,9 +1,11 @@
+import asyncio
 import importlib
 from multiprocessing.synchronize import Event, Semaphore
 
 from websockets.asyncio.client import connect
 
 from ....ipc import NodeManager
+from ....settings import StatusCodes as scs
 from ...utils.base_adapters import OrderEncoder
 from .market_data import MarketData
 
@@ -25,27 +27,33 @@ class UserData(MarketData):
 
     async def run_user_data_stream(self) -> None:
         # Local Links
-        wss_sem = self.wss_sem
         wid, rid = self.sus_wid, self.sus_rid
         data, data_size = self.sus_data, self.sus_data_size
         data_header = self.sus_data_header
         cell_amount = self.sus_cell_amount
-        get_raw_data = self.get_raw_data
         # - - -
+        loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         while True:
             # - - -
             async with connect(self.send_order_uri, ping_interval=20) as ws:
                 while True:
                     if self.manager.have_status():
                         task: int = self.manager.check_base_task()
-                        if isinstance(task, bool):
-                            if task:
-                                return
+                        if task & scs.EXIT:
+                            return self.manager.set_proc_sc(
+                                scs.EXIT, wait_main_task=False
+                            )
 
-                    wss_sem.acquire()
+                        if task & scs.COMPLETE:
+                            self.final_actions()
+                            return self.manager.set_proc_sc(
+                                scs.COMPLETE, wait_main_task=False
+                            )
+
+                    await loop.run_in_executor(None, self.wss_sem.acquire)
 
                     if wid[0] != rid[0]:
-                        if raw_data := get_raw_data(
+                        if raw_data := self.get_raw_data(
                             reader_id=rid,
                             data=data,
                             data_header=data_header,

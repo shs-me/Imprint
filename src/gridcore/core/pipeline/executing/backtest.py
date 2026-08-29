@@ -9,7 +9,7 @@ from .base import Base
 
 class Backtest(Base, ABC):
     def __init__(self, manager: NodeManager) -> None:
-        Base.__init__(self, manager=manager)
+        Base.__init__(self, manager)
 
         self.acm = ExchangeSim(manager)
         self.con.init_session(
@@ -31,12 +31,12 @@ class Backtest(Base, ABC):
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
         matching = False
-        if self.trade_readed_time[0] > self.acm.trade_readed_time[0]:
+        if self._trade_readed_time[0] > self.acm.trade_readed_time[0]:
             matching = True
         if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
             return
         if matching:
-            self.acm.start(self.trade_readed_time[0])
+            self.acm.start(self._trade_readed_time[0])
 
         time.sleep(0)
 
@@ -110,7 +110,7 @@ class Backtest(Base, ABC):
     def _post_final_action(self) -> None:
         self.con.final_action()
         self.acm.final_action()
-        self.manager.set_text(
+        self._manager.set_text(
             (
                 f"Balance: {self.con.nBalance / self.con.scale} \n"
                 f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
@@ -121,6 +121,6 @@ class Backtest(Base, ABC):
                 f"Short Open Qty: {self.con._shortNqty[0] / self.con.qtyMult} \n"
                 f"Count Orders in History: {self.con.ohWid[0]} \n"
                 f"Count Active Orders: {self.acm.obRow[0]} \n"
-                f"Count Open Positions: {self.count_open_position}"
+                f"Count Open Positions: {self.count_open_positions}"
             )
         )

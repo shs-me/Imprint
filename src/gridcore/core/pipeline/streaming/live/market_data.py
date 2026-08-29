@@ -1,3 +1,4 @@
+import asyncio
 from multiprocessing.synchronize import Event
 
 from websockets.asyncio.client import connect
@@ -17,12 +18,10 @@ class MarketData(Base):
 
     async def run_market_data_stream(self) -> None:
         # Local Links
-        engine_event = self.engine_event
         wid, rid = self.ds_wid, self.ds_rid
         data, data_size = self.ds_data, self.ds_data_size
         data_header = self.ds_data_header
         cell_amount, safe_lag = self.ds_cell_amount, self.ds_safe_lag
-        set_raw_data, alarm_clock = self.set_raw_data, self.alarm_clock
         # - - -
         while True:
             # - - -
@@ -41,9 +40,12 @@ class MarketData(Base):
                                 scs.COMPLETE, wait_main_task=False
                             )
 
-                    raw_data = await ws.recv(decode=False)
-                    alarm_clock(wid, rid, cell_amount, safe_lag)
-                    if set_raw_data(
+                    raw_data: bytes = await ws.recv(decode=False)
+
+                    while self.lag_not_is_safe(wid, rid, cell_amount, safe_lag):
+                        await asyncio.sleep(0)
+
+                    if self.set_raw_data(
                         raw_data=raw_data,
                         writer_id=wid,
                         data=data,
@@ -51,5 +53,5 @@ class MarketData(Base):
                         data_size=data_size,
                         cell_amount=cell_amount,
                     ):
-                        if engine_event.is_set() is False:
-                            engine_event.set()
+                        if self.engine_event.is_set() is False:
+                            self.engine_event.set()

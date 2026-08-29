@@ -47,52 +47,49 @@ class MarketDataStream(Base):
     @error_handler(set_status_code=True)
     def run_wss_engine(self) -> None:
         # Local Links
-        prepper = self.prepper
         wid, rid = self.ds_wid, self.ds_rid
         data, data_size = self.ds_data, self.ds_data_size
         data_header = self.ds_data_header
         cell_amount, safe_lag = self.ds_cell_amount, self.ds_safe_lag
-        set_raw_data, alarm_clock = self.set_raw_data, self.alarm_clock
         # - - -
         while True:
-            # - - -
-            while True:
-                if self.manager.have_status():
-                    task: int = self.manager.check_base_task()
-                    if task & scs.EXIT:
-                        return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
+            if self.manager.have_status():
+                task: int = self.manager.check_base_task()
+                if task & scs.EXIT:
+                    return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
 
-                    if task & scs.COMPLETE:
-                        if self.complete():
-                            self.final_actions()
-                            return self.manager.set_proc_sc(
-                                scs.COMPLETE, wait_main_task=False
-                            )
-
-                if prepper.error is None:
-                    if not prepper.queue:
-                        if prepper.complete:
-                            self.manager.set_proc_sc(
-                                code=scs.DATA_PREPPERED, wait_main_task=True
-                            )
-
-                        time.sleep(0)
-                        continue
-
-                    alarm_clock(wid, rid, cell_amount, safe_lag)
-
-                    if prepper.queue:
-                        raw_data: bytes = prepper.queue.popleft()
-                        set_raw_data(
-                            raw_data=raw_data,
-                            writer_id=wid,
-                            data=data,
-                            data_header=data_header,
-                            data_size=data_size,
-                            cell_amount=cell_amount,
+                if task & scs.COMPLETE:
+                    if self.complete():
+                        self.final_actions()
+                        return self.manager.set_proc_sc(
+                            scs.COMPLETE, wait_main_task=False
                         )
-                else:
-                    raise RuntimeError(prepper.error)
+
+            if self.prepper.error is None:
+                if not self.prepper.queue:
+                    if self.prepper.complete:
+                        self.manager.set_proc_sc(
+                            code=scs.DATA_PREPPERED, wait_main_task=True
+                        )
+
+                    time.sleep(0)
+                    continue
+
+                while self.lag_not_is_safe(wid, rid, cell_amount, safe_lag):
+                    time.sleep(0)
+
+                if self.prepper.queue:
+                    raw_data: bytes = self.prepper.queue.popleft()
+                    self.set_raw_data(
+                        raw_data=raw_data,
+                        writer_id=wid,
+                        data=data,
+                        data_header=data_header,
+                        data_size=data_size,
+                        cell_amount=cell_amount,
+                    )
+            else:
+                raise RuntimeError(self.prepper.error)
 
     def complete(self) -> bool:
         return self.prepper.complete and (not self.prepper.queue)

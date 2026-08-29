@@ -3,19 +3,14 @@ from multiprocessing.synchronize import Event
 from typing import override
 
 from ...ipc import NodeManager
-from ..utils.rest_agent import RestAgent
 from .base import Base
 
 
 class Live(Base, ABC):
     def __init__(self, manager: NodeManager, execution_event: Event) -> None:
-        Base.__init__(self, manager=manager)
+        Base.__init__(self, manager)
 
         self.execution_event: Event = execution_event
-
-        self.rest: RestAgent = RestAgent(
-            symbol=self.symbol, connector=manager.cfgConnector
-        )
 
     @abstractmethod
     @override

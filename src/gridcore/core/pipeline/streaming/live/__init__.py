@@ -1,3 +1,3 @@
-from .order import Order as LiveAgent
+from .router import Router as LiveAgent
 
 __all__ = ["LiveAgent"]

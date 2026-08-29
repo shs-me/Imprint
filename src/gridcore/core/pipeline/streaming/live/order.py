@@ -35,12 +35,10 @@ class Order(UserData):
 
     async def run_order_stream(self) -> None:
         # Local Links
-        execution_event = self.execution_event
         wid, rid = self.gus_wid, self.gus_rid
         data, data_size = self.gus_data, self.gus_data_size
         data_header = self.gus_data_header
         cell_amount, safe_lag = self.gus_cell_amount, self.gus_safe_lag
-        set_raw_data, alarm_clock = self.set_raw_data, self.alarm_clock
         # - - -
         while True:
             # - - -
@@ -52,9 +50,12 @@ class Order(UserData):
                             if task:
                                 return
 
-                    raw_data = await ws.recv(decode=False)
-                    alarm_clock(wid, rid, cell_amount, safe_lag)
-                    if set_raw_data(
+                    raw_data: bytes = await ws.recv(decode=False)
+
+                    while self.lag_not_is_safe(wid, rid, cell_amount, safe_lag):
+                        await asyncio.sleep(0)
+
+                    if self.set_raw_data(
                         raw_data=raw_data,
                         writer_id=wid,
                         data=data,
@@ -62,8 +63,8 @@ class Order(UserData):
                         data_size=data_size,
                         cell_amount=cell_amount,
                     ):
-                        if execution_event.is_set() is False:
-                            execution_event.set()
+                        if self.execution_event.is_set() is False:
+                            self.execution_event.set()
 
     async def _listen_key_keepalive_loop(self):
         while True:

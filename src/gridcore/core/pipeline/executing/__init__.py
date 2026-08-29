@@ -17,5 +17,5 @@ def run_executing(execution_event: Event, **kwargs: Any) -> None:
 
     execution: type[BaseExecution] = getattr(importlib.import_module(m_name), c_name)
     manager.set_text(f"{execution.__name__} used as BaseExecution")
-    agent = execution(manager, execution_event=execution_event)
+    agent = execution(manager, execution_event)
     agent._run_execution_engine()

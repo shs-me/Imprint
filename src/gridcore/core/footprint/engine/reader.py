@@ -48,6 +48,8 @@ class Reader(Writer, ABC):
             self.__footprint_state = np.pad(
                 array=self.__footprint_state, pad_width=((before, after), (0, 0))
             )
+            self.fp._fp = self._footprint
+            self.fp._fp_state = self.__footprint_state
 
     @override
     def _init_idx(self, nPrice: int, timestamp: int) -> None:

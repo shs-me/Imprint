@@ -202,17 +202,19 @@ class Converter:
 
         return self._shortUnrealizedNpnl[0]
 
-    def TPdevNprice(self, nPrice: int, is_long: bool) -> int:
-        """Calculates Take-Profit price for entry price and position side."""
-
-        tpTicks: int = nPrice * self._tpDev // 10_000
-        return nPrice + (tpTicks if is_long else -tpTicks)
-
-    def SLdevNprice(self, nPrice: int, is_long: bool) -> int:
-        """Calculates Stop-Loss price for entry price and position side."""
-
-        slTicks: int = nPrice * self._slDev // 10_000
-        return nPrice + (-slTicks if is_long else slTicks)
+    def tp_sl_param(self, nPrice: int, is_long: bool, is_tp: bool) -> tuple[int, int]:
+        ticks: int = nPrice * (self._tpDev if is_tp else self._slDev) // 10_000
+        ticks = (
+            (ticks if is_tp else -ticks) if is_long else (-ticks if is_tp else ticks)
+        )
+        nPrice_with_dev: int = nPrice + ticks
+        order_param: int = 0
+        order_param |= c.OF_LONG if is_long else c.OF_SHORT
+        order_param |= c.OF_SELL if is_long else c.OF_BUY
+        order_param |= (
+            (c.OF_LIMIT if is_tp else c.OF_MARKET_TRIGER) | c.OF_NEW | c.OF_OCO
+        )
+        return nPrice_with_dev, order_param
 
     @property
     def have_pending_orders(self) -> bool:

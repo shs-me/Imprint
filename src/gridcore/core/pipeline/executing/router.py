@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, override
+from multiprocessing.synchronize import Event
+from typing import override
 
 from ...ipc import NodeManager
 from .backtest import Backtest as BacktestAgent
@@ -9,12 +10,13 @@ from .live import Live as LiveAgent
 class Router(BacktestAgent, LiveAgent, ABC):  # pyright: ignore[reportUnsafeMultipleInheritance]
     _execution: type[BacktestAgent | LiveAgent]
 
-    def __init__(self, manager: NodeManager, **kwargs: Any):
-        if manager.cfgSetup.backtesting:
+    def __init__(self, manager: NodeManager, execution_event: Event):
+        self.is_backtesting: bool = manager.cfgSetup.backtesting
+        if self.is_backtesting:
             BacktestAgent.__init__(self, manager)
             self._execution = BacktestAgent
         else:
-            LiveAgent.__init__(self, manager, kwargs["execution_event"])
+            LiveAgent.__init__(self, manager, execution_event)
             self._execution = LiveAgent
 
     @override

@@ -26,4 +26,4 @@ def run_streaming(
         from .live import LiveAgent
 
         agent = LiveAgent(manager, engine_event, wss_sem, execution_event)
-        asyncio.run(agent.run_market_data_stream())
+        asyncio.run(agent.run_streams())
