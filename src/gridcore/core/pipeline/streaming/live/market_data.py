@@ -4,7 +4,6 @@ from multiprocessing.synchronize import Event
 from websockets.asyncio.client import connect
 
 from ....ipc import NodeManager
-from ....settings import StatusCodes as scs
 from ..base import Base
 
 
@@ -27,19 +26,6 @@ class MarketData(Base):
             # - - -
             async with connect(self.agg_trades_uri, ping_interval=20) as ws:
                 while True:
-                    if self.manager.have_status():
-                        task: int = self.manager.check_base_task()
-                        if task & scs.EXIT:
-                            return self.manager.set_proc_sc(
-                                scs.EXIT, wait_main_task=False
-                            )
-
-                        if task & scs.COMPLETE:
-                            self.final_actions()
-                            return self.manager.set_proc_sc(
-                                scs.COMPLETE, wait_main_task=False
-                            )
-
                     raw_data: bytes = await ws.recv(decode=False)
 
                     while self.lag_not_is_safe(wid, rid, cell_amount, safe_lag):

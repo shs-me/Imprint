@@ -5,7 +5,6 @@ from multiprocessing.synchronize import Event, Semaphore
 from websockets.asyncio.client import connect
 
 from ....ipc import NodeManager
-from ....settings import StatusCodes as scs
 from ...utils.base_adapters import OrderEncoder
 from .get_user_data import GetUserData
 
@@ -41,19 +40,6 @@ class SetUserData(GetUserData):
             # - - -
             async with connect(self.send_order_uri, ping_interval=20) as ws:
                 while True:
-                    if self.manager.have_status():
-                        task: int = self.manager.check_base_task()
-                        if task & scs.EXIT:
-                            return self.manager.set_proc_sc(
-                                scs.EXIT, wait_main_task=False
-                            )
-
-                        if task & scs.COMPLETE:
-                            self.final_actions()
-                            return self.manager.set_proc_sc(
-                                scs.COMPLETE, wait_main_task=False
-                            )
-
                     await loop.run_in_executor(None, self.wss_sem.acquire)
 
                     if wid[0] != rid[0]:
