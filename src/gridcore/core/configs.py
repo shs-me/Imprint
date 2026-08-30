@@ -19,14 +19,8 @@ FLOAT64: int = 8
 class Segment:
     size: int
 
-    offset: tuple[int, int] = field(init=False)
-    view: memoryview = field(init=False)
-
-    def __getitem__(self, data: tuple[int, int] | memoryview) -> None:
-        if isinstance(data, tuple):
-            self.offset = data
-        else:
-            self.view = data
+    offset: tuple[int, int] = field(default=None, init=False)  # pyright: ignore[reportAssignmentType]
+    view: memoryview = field(default=None, init=False)  # pyright: ignore[reportAssignmentType]
 
 
 @final
@@ -176,9 +170,13 @@ class SharedMemorySegments(Configuration, ABC):
     @final
     def __get_need_shm_size(self) -> int:
         offset: int = 0
-        for _attr_name, attr_obj in self.__dict__.items():
+        for attr_name in self.__slots__:
+            attr_obj = getattr(self, attr_name)
             if isinstance(attr_obj, Segment):
-                attr_obj[(offset, (offset := (offset + attr_obj.size)))]
+                attr_obj.offset = (
+                    offset,
+                    (offset := (offset + attr_obj.size)),
+                )
 
         return offset
 

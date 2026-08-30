@@ -19,7 +19,7 @@ class Reader(Writer, ABC):
 
     __footprint_state: NDArray[int32] = field(init=False)
     __fp_state_cache: NDArray[int64] = field(init=False)
-    fp: FootprintLike
+    fp: FootprintLike = field(init=False)
 
     @override
     def __post_init__(self) -> None:

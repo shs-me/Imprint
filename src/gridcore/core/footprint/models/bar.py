@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from numba.core.types import np
+import numpy as np
 from numpy import float64, int32, int64
 from numpy.typing import NDArray
 

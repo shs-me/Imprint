@@ -98,10 +98,10 @@ class Sync(ABC):
 @dataclass(slots=True)
 class Synced(Reader, ABC):
     _sync: Sync
-    _find_patterns_in_update_clusters: bool
-    _find_patterns_in_update_closed_bar: bool
-    _find_patterns_in_update_bar: bool
 
+    _find_patterns_in_update_clusters: bool = field(default=False, init=False)
+    _find_patterns_in_update_closed_bar: bool = field(default=False, init=False)
+    _find_patterns_in_update_bar: bool = field(default=False, init=False)
     _tick_by_tick_analyze: bool = field(init=False)
 
     @override

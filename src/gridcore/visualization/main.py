@@ -49,7 +49,7 @@ def get_headers_path(
                     file_end_time.split("T")[0]
                 )
                 if file_start_date <= start_datetime <= end_datetime <= file_end_date:
-                    return p
+                    return f"{base_headers_path}/{p}.npy"
 
 
 def data_load(

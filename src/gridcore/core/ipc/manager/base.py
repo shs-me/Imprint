@@ -62,31 +62,32 @@ class Base(ABC):
     @final
     def configs_init(self, configs: list[cfg.Configuration]) -> None:
         """Associates configuration class instances with manager attributes and shared memory segments."""
-
-        for attr_name, attr_type in self.__annotations__.items():
-            for obj in configs:
-                if isinstance(obj, attr_type):
+        for obj in configs:
+            cls = obj.__class__
+            for attr_name, attr_type in Base.__annotations__.items():
+                if attr_type is cls:
                     setattr(self, attr_name, obj)
-                    if issubclass(obj.__class__, cfg.SharedMemorySegments):
+                    if isinstance(obj, cfg.SharedMemorySegments):
                         self.bind_shm_segments(obj)
                     break
 
     @final
-    def bind_shm_segments(self, cfg: object) -> None:
+    def bind_shm_segments(self, cfg: cfg.SharedMemorySegments) -> None:
         """Binds tuple byte offsets to memoryview slices over active shared memory buffer."""
 
         buf: memoryview = self._shm_buf[self._segments[cfg.__class__.__name__]]
-        for attr_name in list(cfg.__dict__.keys()):
+        for attr_name in cfg.__slots__:
             attr_val = getattr(cfg, attr_name)
             if isinstance(attr_val, Segment):
-                attr_val[buf[slice(*attr_val.offset)]]
+                attr_val.view = buf[slice(*attr_val.offset)]
 
     @final
     def main_tools_init(self, tools: list[Event | Semaphore]) -> None:
         """Binds IPC events and semaphores to manager attributes."""
 
-        for attr_name, attr_type in self.__annotations__.items():
-            for obj in tools:
-                if isinstance(obj, attr_type):
+        for obj in tools:
+            cls = obj.__class__
+            for attr_name, attr_type in Base.__annotations__.items():
+                if attr_type is cls:
                     setattr(self, attr_name, obj)
                     break

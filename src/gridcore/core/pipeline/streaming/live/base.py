@@ -43,13 +43,10 @@ class Base(GlobalBase, ABC):
                     self.manager.set_text(
                         "WS Ping timeout (no heartbeat from server). Reconnecting..."
                     )
-                except (OSError, ws_exc.ProtocolError) as e:
-                    self.exc_counter[
-                        OSError.__name__ or ws_exc.ProtocolError.__name__
-                    ] += 1
-                    self.manager.set_text(
-                        f"WS Network/Protocol error: {e}. Reconnecting..."
-                    )
+                except ws_exc.ProtocolError as e:
+                    self.exc_counter[ws_exc.ProtocolError.__name__] += 1
+                    self.manager.set_text(f"WS Protocol error: {e}. Reconnecting...")
+
                 except ws_exc.PayloadTooBig as e:
                     self.exc_counter[ws_exc.PayloadTooBig.__name__] += 1
                     self.manager.set_text(f"WS Payload too big: {e}. Reconnecting...")
@@ -68,6 +65,10 @@ class Base(GlobalBase, ABC):
 
         except ws_exc.ConcurrencyError as e:
             self.manager.set_text(f"Fatal WS Concurrency error: {e}")
+            self.manager.set_proc_sc(code=scs.ERROR, wait_main_task=True)
+
+        except OSError as e:
+            self.manager.set_text(f"WS Network error: {e}.")
             self.manager.set_proc_sc(code=scs.ERROR, wait_main_task=True)
 
         except asyncio.CancelledError:
