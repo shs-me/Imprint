@@ -1,8 +1,9 @@
 import importlib
+from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from typing import final, override
 
-from ...footprint.engine import FootprintEngine, SyncWithExecution
+from ...footprint.engine import SyncWithExecution
 from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
 from ..utils.base_adapters import AggTradesDecoder
@@ -22,28 +23,26 @@ class SyncViaEvent(SyncWithExecution):
             self.execution_event.set()
 
 
+@dataclass(slots=True)
 class Live(Base):
-    at_wid: int
+    engine_event: Event
 
-    def __init__(
-        self, manager: NodeManager, engine: FootprintEngine, engine_event: Event
-    ) -> None:
-        super().__init__(manager, engine)
+    decoder: AggTradesDecoder = field(init=False)
+    pass_lag: int = field(default=0, init=False)
+    pass_lag_limit: int = field(default=2, init=False)
 
-        self.engine_event: Event = engine_event
+    def __post_init__(self) -> None:
+        Base.__post_init__(self)
 
-        m_name: str = manager.cfgSetup.agg_trades_decoder_module
-        c_name: str = manager.cfgSetup.agg_trades_decoder_class_name
+        m_name: str = self.manager.cfgSetup.agg_trades_decoder_module
+        c_name: str = self.manager.cfgSetup.agg_trades_decoder_class_name
         decoder_type: type[AggTradesDecoder] = getattr(
             importlib.import_module(m_name), c_name
         )
-        manager.set_text(
-            f"{decoder_type.__class__.__name__} used as {AggTradesDecoder.__name__}"
+        self.manager.set_text(
+            f"{decoder_type.__name__} used as {AggTradesDecoder.__name__}"
         )
-        self.decoder: AggTradesDecoder = decoder_type()
-
-        self.pass_lag: int = 0
-        self.pass_lag_limit: int = 2
+        self.decoder = decoder_type()
 
     @override
     def alarm_clock(self) -> None:
@@ -56,7 +55,9 @@ class Live(Base):
             self.agg_trades[self.at_wid, 1] = round(q * self.engine.con.qty_mult)
             self.agg_trades[self.at_wid, 2] = t
             self.agg_trades[self.at_wid, 3] = m
-            self.at_wid = self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0
+            self.at_wid: int = (
+                self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0
+            )
 
     @override
     def post_update(self) -> None:

@@ -13,7 +13,7 @@ from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 
 
-@dataclass
+@dataclass(slots=True)
 class Base(ABC):
     manager: NodeManager
     engine: FootprintEngine

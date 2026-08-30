@@ -2,35 +2,32 @@
 
 import gc
 import time
-from multiprocessing.synchronize import Event, Semaphore
+from dataclasses import dataclass, field
+from typing import override
 
-from ... import configs as cfg
 from ...settings import StatusCodes as scs
 from .base import Base
 
 
+@dataclass(slots=True)
 class Node(Base):
     """Manager instance dedicated to individual worker process status tracking and IPC signaling."""
 
-    def __init__(
-        self,
-        segments: dict[str, slice],
-        shm_buf: memoryview,
-        configs: list[cfg.Configuration],
-        main_tools: list[Event | Semaphore],
-        proc_id: int,
-        task_id: int,
-    ) -> None:
+    _proc_id: int
+    _task_id: int
+
+    _wait_main_task: bool = field(init=False)
+    proc_status: memoryview = field(init=False)
+    task_status: memoryview = field(init=False)
+
+    @override
+    def __post_init__(self) -> None:
         """Binds process task and status memory views matching worker ID."""
+        Base.__post_init__(self)
 
-        super().__init__(segments, shm_buf, configs, main_tools)
-
-        self._proc_id: int = proc_id
-        self._task_id: int = task_id
-
-        self._wait_main_task: bool = False
-        self.proc_status: memoryview = self._procs_status[proc_id : proc_id + 1]
-        self.task_status: memoryview = self._procs_status[task_id : task_id + 1]
+        self._wait_main_task = False
+        self.proc_status = self._procs_status[self._proc_id : self._proc_id + 1]
+        self.task_status = self._procs_status[self._task_id : self._task_id + 1]
 
     def set_text(self, text: str) -> None:
         """Writes formatted process status text message to shared memory text buffer."""
@@ -94,7 +91,7 @@ class Node(Base):
                 clear_task |= scs.GC_COLLECT
 
             if clear_task:
-                self.clear_task_sc(clear_task)
+                self._clear_task_sc(clear_task)
 
             return return_data
 
@@ -110,12 +107,12 @@ class Node(Base):
         if not self._wait_main_task:
             self._wait_main_task = wait_main_task
 
-    def set_task_sc(self, code: scs | int) -> None:
+    def _set_task_sc(self, code: scs | int) -> None:
         """Sets task status code bitmask for assigned task slot."""
 
         self.task_status[0] |= code
 
-    def clear_task_sc(self, code: scs | int) -> None:
+    def _clear_task_sc(self, code: scs | int) -> None:
         """Clears task status code bitmask flags."""
 
         self.task_status[0] &= ~(code)

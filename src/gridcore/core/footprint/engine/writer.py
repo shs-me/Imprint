@@ -1,4 +1,5 @@
 from abc import ABC
+from dataclasses import dataclass, field
 from typing import cast, final, override
 
 import numpy as np
@@ -7,7 +8,6 @@ from numpy import float64, int64
 from numpy.typing import NDArray
 
 from ... import constant as c
-from ...ipc import NodeManager
 from .base import Base
 
 (
@@ -27,27 +27,20 @@ from .base import Base
 ) = [v for v in range(7)]
 
 
+@dataclass(slots=True)
 class Writer(Base, ABC):
-    _re_init_session: bool
-    _re_init_idx: bool
-    _re_init_idy: bool
-
-    def __init__(self, manager: NodeManager) -> None:
-        super().__init__(manager)
-
-        self._counter_ticks: int = 0
+    _counter_ticks: int = field(default=0, init=False)
+    __meta_data: NDArray[float64] = field(init=False)
+    __args: NDArray[int64] = field(init=False)
 
     @override
     def _init_array(self, nPrice: int64) -> None:
         super()._init_array(nPrice)
 
         if not self._re_init_idy:
-            self.__meta_data: NDArray[float64] = np.zeros(
-                shape=(2, BHM_ConstantCount), dtype=float64
-            )
-            self.__args: NDArray[int64] = np.zeros(
-                shape=(FU_ConstantCount,), dtype=int64
-            )
+            self.__meta_data = np.zeros(shape=(2, BHM_ConstantCount), dtype=float64)
+            self.__args = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
+
             self.__args[FU_idxVP] = self.con.idxVP
             self.__args[FU_idxDP] = self.con.idxDP
             self.__args[FU_price_mult] = self.con.price_mult
@@ -77,16 +70,16 @@ class Writer(Base, ABC):
         idx: int64 | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         idy: int64 | None = self.con.to_idy(nPrice=nPrice)
         if idx is None:
-            self._re_init_idx = True
+            self._re_init_idx: bool = True
             if not self._bbox_is_readed():
-                self._re_init_session = True
+                self._re_init_session: bool = True
                 return None
             else:
                 self._init_session(nPrice, timestamp)
                 idx = int64((0 if is_sell else 1))
 
         if idy is None:
-            self._re_init_idy = True
+            self._re_init_idy: bool = True
             if not self._bbox_is_readed():
                 self._re_init_session = True
                 return None

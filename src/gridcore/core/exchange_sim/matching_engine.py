@@ -1,6 +1,7 @@
 import struct
 import time
-from typing import override
+from dataclasses import dataclass, field
+from typing import final, override
 
 import numpy as np
 from numba import njit
@@ -13,23 +14,27 @@ from ..pipeline.utils.base_data_prepper import BaseDataPrepper
 from ..settings import StatusCodes as scs
 
 
+@dataclass(slots=True)
 class DataPrepper(BaseDataPrepper):
-    def __init__(
-        self,
-        symbol: str,
-        start_date: str,
-        end_date: str,
-        price_mult: int,
-    ) -> None:
-        super().__init__(symbol, start_date, end_date)
+    price_mult: int
 
-        self.price_mult: int = price_mult
+    dfm: NDArray[int64] = field(init=False)
+    dfmWid: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    dfmRid: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    max_row: int = field(init=False)
+    safe_lag: int = field(init=False)
 
-        self.dfm: NDArray[int64] = np.ndarray((100_000, 2), dtype=int64)
-        self.dfmWid: memoryview = memoryview(bytearray(8)).cast("q")
-        self.dfmRid: memoryview = memoryview(bytearray(8)).cast("q")
-        self.max_row: int = self.dfm.shape[0]
-        self.safe_lag: int = round(self.max_row * 0.9)
+    @override
+    def __post_init__(self) -> None:
+        DataPrepper.__post_init__(self)
+
+        self.dfm = np.ndarray((100_000, 2), dtype=int64)
+        self.max_row = self.dfm.shape[0]
+        self.safe_lag = round(self.max_row * 0.9)
 
     @override
     def alarm_clock(self) -> None:
@@ -49,61 +54,91 @@ class DataPrepper(BaseDataPrepper):
         pass
 
 
+@dataclass
 class MatchingEngine:
-    """Backtest matching engine maintaining internal order book and user feedback arrays."""
+    manager: NodeManager
 
-    def __init__(self, manager: NodeManager) -> None:
+    slippage: int = field(init=False)
+    order_book_row: int = field(init=False)
 
-        self.manager: NodeManager = manager
+    gus_cell_amount: int = field(init=False)
+    gus_data: memoryview = field(init=False)
+    gus_data_size: int = field(init=False)
+    gus_data_header: memoryview = field(init=False)
+    gus_wid: memoryview = field(init=False)
+    gus_rid: memoryview = field(init=False)
 
-        cfgAC = manager.cfgAccount
-        self.slippage: int = cfgAC.slippage.int_
-        self.order_book_row: int = cfgAC.active_order_limit
+    sus_cell_amount: int = field(init=False)
+    sus_data: memoryview = field(init=False)
+    sus_data_size: int = field(init=False)
+    sus_data_header: memoryview = field(init=False)
+    sus_wid: memoryview = field(init=False)
+    sus_rid: memoryview = field(init=False)
 
-        cfgGUS = manager.cfgGetUserStream
-        self.gus_cell_amount: int = cfgGUS.cell_amount
-        self.gus_data: memoryview = cfgGUS.data.view
-        self.gus_data_size: int = cfgGUS.data_size
-        self.gus_data_header: memoryview = cfgGUS.data_header.view
-        self.gus_wid: memoryview = cfgGUS.writer_id.view.cast("q")
-        self.gus_rid: memoryview = cfgGUS.reader_id.view.cast("q")
+    trade_readed_time: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    order_id: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
-        cfgSUS = manager.cfgSetUserStream
-        self.sus_cell_amount: int = cfgSUS.cell_amount
-        self.sus_data: memoryview = cfgSUS.data.view
-        self.sus_data_size: int = cfgSUS.data_size
-        self.sus_data_header: memoryview = cfgSUS.data_header.view
-        self.sus_wid: memoryview = cfgSUS.writer_id.view.cast("q")
-        self.sus_rid: memoryview = cfgSUS.reader_id.view.cast("q")
+    data_buf: NDArray[uint8] = field(init=False)
+    data_example: NDArray[int64] = field(init=False)
+    deRow: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    order_book: NDArray[int64] = field(init=False)
+    obRow: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
-        self.trade_readed_time: memoryview = memoryview(bytearray(8)).cast("q")
-        self.order_id: memoryview = memoryview(bytearray(8)).cast("q")
+    prepper: DataPrepper = field(init=False)
+
+    def __post_init__(self) -> None:
+        cfgAC = self.manager.cfgAccount
+        self.slippage = cfgAC.slippage.int_
+        self.order_book_row = cfgAC.active_order_limit
+
+        cfgGUS = self.manager.cfgGetUserStream
+        self.gus_cell_amount = cfgGUS.cell_amount
+        self.gus_data = cfgGUS.data.view
+        self.gus_data_size = cfgGUS.data_size
+        self.gus_data_header = cfgGUS.data_header.view
+        self.gus_wid = cfgGUS.writer_id.view.cast("q")
+        self.gus_rid = cfgGUS.reader_id.view.cast("q")
+
+        cfgSUS = self.manager.cfgSetUserStream
+        self.sus_cell_amount = cfgSUS.cell_amount
+        self.sus_data = cfgSUS.data.view
+        self.sus_data_size = cfgSUS.data_size
+        self.sus_data_header = cfgSUS.data_header.view
+        self.sus_wid = cfgSUS.writer_id.view.cast("q")
+        self.sus_rid = cfgSUS.reader_id.view.cast("q")
+
+        self.trade_readed_time = memoryview(bytearray(8)).cast("q")
+        self.order_id = memoryview(bytearray(8)).cast("q")
 
         self._init_array()
 
-        self.prepper: DataPrepper = DataPrepper(
-            symbol=manager.cfgCoin.symbol,
-            start_date=manager.cfgSetup.backtest_start_date,
-            end_date=manager.cfgSetup.backtest_end_date,
-            price_mult=manager.cfgCoin.price_mult,
+        self.prepper = DataPrepper(
+            symbol=self.manager.cfgCoin.symbol,
+            start_date=self.manager.cfgSetup.backtest_start_date,
+            end_date=self.manager.cfgSetup.backtest_end_date,
+            price_mult=self.manager.cfgCoin.price_mult,
         )
         self.prepper.start()
 
     def _init_array(self) -> None:
         """Initializes NumPy wrappers over shared user stream buffer, order book, and event logs."""
 
-        self.data_buf: NDArray[uint8] = np.frombuffer(self.gus_data, uint8)
-        self.data_example: NDArray[int64] = np.ndarray(
-            (1000, c.TP_ConstantCount), dtype=int64
-        )
-        self.deRow: memoryview = memoryview(bytearray(8)).cast("q")
-
-        self.order_book: NDArray[int64] = np.ndarray(
+        self.data_buf = np.frombuffer(self.gus_data, uint8)
+        self.data_buf.fill(0)
+        self.data_example = np.zeros((1000, c.TP_ConstantCount), dtype=int64)
+        self.order_book = np.zeros(
             (self.order_book_row, c.OB_ConstantCount), dtype=int64
         )
-        self.order_book.fill(0)
-        self.obRow: memoryview = memoryview(bytearray(8)).cast("q")
 
+    @final
     def _update_order_book(self) -> None:
         """Appends pending order to simulated order book array."""
         raw_data = self._get_user_data()
@@ -135,6 +170,7 @@ class MatchingEngine:
         self.order_id[0] += 1
         self.deRow[0] += 1
 
+    @final
     def _get_user_data(self) -> memoryview:
         cell: int = self.sus_rid[0]
         start: int = cell * self.sus_data_size

@@ -1,6 +1,7 @@
 import time
 from abc import ABC, abstractmethod
-from typing import override
+from dataclasses import dataclass, field
+from typing import final, override
 
 from numpy import int64
 
@@ -9,34 +10,43 @@ from ...ipc import NodeManager
 from .reader import Reader
 
 
+@dataclass(slots=True)
 class Sync(ABC):
-    def __init__(self, manager: NodeManager) -> None:
-        self.manager: NodeManager = manager
+    manager: NodeManager
 
-        cfgMetrics = manager.cfgMetrics
-        self.time_start_reading: memoryview = cfgMetrics.time_start_reading.view.cast(
-            "q"
-        )
+    time_start_reading: memoryview = field(init=False)
+    safe_lag: int = field(init=False)
+    sn_cell_amount: int = field(init=False)
+    sn_safe_lag: int = field(init=False)
+    sn_data_size: int = field(init=False)
+    sn_data: memoryview = field(init=False)
+    sn_wid: memoryview = field(init=False)
+    sn_rid: memoryview = field(init=False)
 
-        cfgRM = manager.cfgRiskManagment
-        self.safe_lag: int = cfgRM.pass_signal_if_analysis_time_big
+    _signal_id: int = field(default=0, init=False)
+    _count_send_signal: int = field(default=0, init=False)
 
-        cfgSN = manager.cfgSignal
-        self.sn_cell_amount: int = cfgSN.cell_amount
-        self.sn_safe_lag: int = cfgSN.safe_lag
-        self.sn_data_size: int = cfgSN.data_size // 8
-        self.sn_data: memoryview = cfgSN.data.view.cast("q")
-        self.sn_wid: memoryview = cfgSN.writer_id.view.cast("q")
-        self.sn_rid: memoryview = cfgSN.reader_id.view.cast("q")
+    def __post_init__(self) -> None:
+        cfgMetrics = self.manager.cfgMetrics
+        self.time_start_reading = cfgMetrics.time_start_reading.view.cast("q")
 
-        self._signal_id: int = 0
-        self._count_send_signal: int = 0
+        cfgRM = self.manager.cfgRiskManagment
+        self.safe_lag = cfgRM.pass_signal_if_analysis_time_big
+
+        cfgSN = self.manager.cfgSignal
+        self.sn_cell_amount = cfgSN.cell_amount
+        self.sn_safe_lag = cfgSN.safe_lag
+        self.sn_data_size = cfgSN.data_size // 8
+        self.sn_data = cfgSN.data.view.cast("q")
+        self.sn_wid = cfgSN.writer_id.view.cast("q")
+        self.sn_rid = cfgSN.reader_id.view.cast("q")
 
     @property
     def signal_id(self) -> int:
         self._signal_id += 1
         return self._signal_id
 
+    @final
     def send_signal(
         self,
         nPrice: int,
@@ -79,51 +89,52 @@ class Sync(ABC):
     def sync_with_execution(self) -> None:
         pass
 
+    @final
     def lag_is_safe(self) -> bool:
         lag: int = (time.perf_counter_ns() - self.time_start_reading[0]) // 1_000
         return True if (lag < self.safe_lag) else False
 
 
+@dataclass(slots=True)
 class Synced(Reader, ABC):
-    def __init__(
-        self,
-        manager: NodeManager,
-        sync: Sync,
-        find_patterns_in_update_clusters: bool = False,
-        find_patterns_in_update_closed_bar: bool = False,
-        find_patterns_in_update_bar: bool = False,
-    ) -> None:
-        super().__init__(manager)
+    _sync: Sync
+    _find_patterns_in_update_clusters: bool
+    _find_patterns_in_update_closed_bar: bool
+    _find_patterns_in_update_bar: bool
 
-        self._sync: Sync = sync
-        self.__fpiu_clusters: bool = find_patterns_in_update_clusters
-        self.__fpiu_closed_bar: bool = find_patterns_in_update_closed_bar
-        self.__fpiu_bar: bool = find_patterns_in_update_bar
+    _tick_by_tick_analyze: bool = field(init=False)
 
-        self._tick_by_tick_analyze: bool = (
-            True if (self.__fpiu_bar or self.__fpiu_clusters) else False
+    @override
+    def __post_init__(self) -> None:
+        Reader.__post_init__(self)
+
+        self._tick_by_tick_analyze = (
+            self._find_patterns_in_update_bar or self._find_patterns_in_update_clusters
         )
 
+    @final
     @override
     def _update_clusters(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
     ) -> None:
         super()._update_clusters(idYmin, idYmax, idXmin, idXmax)
-        if self.__fpiu_clusters:
+        if self._find_patterns_in_update_clusters:
             self.find_patterns_in_update_clusters(idYmin, idYmax, idXmin, idXmax)
 
+    @final
     @override
     def _update_bar(
         self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
         super()._update_bar(idYmin, idYmax, idxBid, idxAsk)
-        if self.__fpiu_bar:
+        if self._find_patterns_in_update_bar:
             self.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
 
+    @final
     @override
     def _update_closed_bar_and_fp(self) -> None:
         super()._update_closed_bar_and_fp()
-        if self.__fpiu_closed_bar:
+        if self._find_patterns_in_update_closed_bar:
             self.find_patterns_in_update_closed_bar()
 
     @abstractmethod
@@ -142,6 +153,7 @@ class Synced(Reader, ABC):
     ) -> None:
         pass
 
+    @final
     def send_signal(
         self,
         is_market: bool,

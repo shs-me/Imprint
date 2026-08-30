@@ -6,7 +6,7 @@ from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
 
 
-@dataclass(slots=True, init=False)
+@dataclass(slots=True)
 class Base(ABC):
     manager: NodeManager
 
@@ -39,8 +39,7 @@ class Base(ABC):
     sus_rid: memoryview = field(init=False)
     sus_wid: memoryview = field(init=False)
 
-    def __init__(self, manager: NodeManager) -> None:
-        self.manager = manager
+    def __post_init__(self) -> None:
         self.symbol = self.manager.cfgCoin.symbol
 
         cfgDS = self.manager.cfgDataStream

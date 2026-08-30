@@ -1,17 +1,18 @@
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import override
 
 from ...exchange_sim import ExchangeSim
-from ...ipc import NodeManager
 from .base import Base
 
 
+@dataclass(slots=True)
 class Backtest(Base, ABC):
-    def __init__(self, manager: NodeManager) -> None:
-        Base.__init__(self, manager)
+    def __post_init__(self) -> None:
+        Base.__post_init__(self)
 
-        self.acm = ExchangeSim(manager)
+        self.acm = ExchangeSim(self._manager)
         self.con.init_session(
             nBalance=self.acm.nBalance,
             lockedNbalance=self.acm.lockedNbalance,
@@ -92,7 +93,7 @@ class Backtest(Base, ABC):
 
     @abstractmethod
     @override
-    def _final_actions(self) -> None:
+    def _post_final_action(self) -> None:
         max_timestamp = 9_999_999_999_999
         while self.acm.trade_readed_time[0] < max_timestamp:
             self.acm.start(max_timestamp)
@@ -103,11 +104,6 @@ class Backtest(Base, ABC):
             ):
                 break
 
-        self._post_final_action()
-
-    @abstractmethod
-    @override
-    def _post_final_action(self) -> None:
         self.con.final_action()
         self.acm.final_action()
         self._manager.set_text(

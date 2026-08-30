@@ -12,14 +12,10 @@ from typing import Any
 from .constant import DIRS_LIST
 from .ipc import HostManager, supervisor
 from .pipeline import run_engine, run_executing, run_streaming
-from .settings import (
-    LogLevel,
-    ProcsData,
-    ProcsIds,
-)
+from .settings import LogLevel, ProcsData, ProcsIds
 
 
-@dataclass
+@dataclass(slots=True)
 class MainAgent:
     """Process coordinator responsible for instantiating IPC tools and launching daemon processes."""
 

@@ -1,21 +1,15 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from multiprocessing.synchronize import Event
 from typing import override
 
 from websockets import ClientConnection
 
-from ....ipc import NodeManager
 from .base import Base
 
 
-@dataclass(slots=True, init=False)
+@dataclass(slots=True)
 class MarketData(Base):
     engine_event: Event
-
-    def __init__(self, manager: NodeManager, engine_event: Event) -> None:
-        self.engine_event = engine_event
-        uri = manager.cfgConnector.market_data_uri_for_wss
-        super().__init__(manager, uri)
 
     @override
     async def in_connection(self, ws: ClientConnection) -> None:

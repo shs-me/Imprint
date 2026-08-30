@@ -1,41 +1,42 @@
 """Main process manager tracking worker process health and orchestrating tasks."""
 
 import time
+from dataclasses import dataclass, field
 from datetime import date, datetime
-from multiprocessing.synchronize import Event, Semaphore
+from typing import override
 
 from loguru import logger
 
-from ... import configs as cfg
 from ...settings import LogLevel, ProcsData, ProcsIds
 from ...settings import StatusCodes as scs
 from .base import Base
 
 
+@dataclass(slots=True)
 class Host(Base):
     """Central status manager monitoring worker process health and handling process status codes."""
 
-    def __init__(
-        self,
-        segments: dict[str, slice],
-        shm_buf: memoryview,
-        configs: list[cfg.Configuration],
-        main_tools: list[Event | Semaphore],
-    ) -> None:
-        super().__init__(segments, shm_buf, configs, main_tools)
+    with_execution: bool = field(init=False)
+    startDate: date = field(init=False)
+    time_format: str = field(init=False)
+    close_procs: bool = field(default=False, init=False)
+    close_core: bool = field(default=False, init=False)
+    procs: dict[int, ProcsData] = field(init=False)
 
-        self.with_execution: bool = self.cfgSetup.execution
-        self.startDate: date = date.today()
-        self.time_format: str = (
+    @override
+    def __post_init__(self) -> None:
+        Base.__post_init__(self)
+
+        self.with_execution = self.cfgSetup.execution
+        self.startDate = date.today()
+        self.time_format = (
             "%H:%M:%S.%f" if self.cfgSetup.backtesting else "%Y:%m:%d-%H:%M:%S.%f"
         )
-        self.close_procs: bool = False
-        self.close_core: bool = False
 
     def run(self, procs: dict[int, ProcsData]) -> None:
         """Primary supervisor loop waiting on process semaphores and handling status code events."""
 
-        self.procs: dict[int, ProcsData] = procs
+        self.procs = procs
         # - - -
         while True:
             if bool(len(procs)):

@@ -22,9 +22,12 @@ class Controller:
     order_stream: Order = field(init=False)
 
     def __post_init__(self) -> None:
-        self.market_data_stream = MarketData(self.manager, self.engine_event)
-        self.user_data_stream = UserData(self.manager, self.execution_event)
-        self.order_stream = Order(self.manager, self.wss_sem)
+        uri = self.manager.cfgConnector.market_data_uri_for_wss
+        self.market_data_stream = MarketData(self.manager, uri, self.engine_event)
+        uri = self.manager.cfgConnector.get_user_data_uri_for_wss
+        self.user_data_stream = UserData(self.manager, uri, self.execution_event)
+        uri = self.manager.cfgConnector.set_user_data_uri_for_wss
+        self.order_stream = Order(self.manager, uri, self.wss_sem)
 
     async def run_supervisor(self, streams: list[Task[None]]) -> None:
         while True:

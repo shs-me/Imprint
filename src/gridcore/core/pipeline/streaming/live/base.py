@@ -9,22 +9,16 @@ from websockets import ClientConnection
 from websockets import exceptions as ws_exc
 from websockets.asyncio.client import connect
 
-from ....ipc.manager import NodeManager
 from ....settings import StatusCodes as scs
 from ....utils.tools import dump_exception
 from ..base import Base as GlobalBase
 
 
-@dataclass(slots=True, init=False)
+@dataclass(slots=True)
 class Base(GlobalBase, ABC):
     url: str
 
     exc_counter: Counter[str] = field(default_factory=Counter, init=False)
-
-    def __init__(self, manager: NodeManager, url: str) -> None:
-        super().__init__(manager)
-
-        self.url = url
 
     @final
     async def run(self) -> None:
@@ -32,8 +26,8 @@ class Base(GlobalBase, ABC):
             async for ws in connect(
                 self.url, ping_interval=20, ping_timeout=10, close_timeout=5
             ):
-                self.manager.set_text(f"WS Connected to {self.url}")
                 try:
+                    self.manager.set_text(f"WS Connected to {self.url}")
                     while True:
                         await self.in_connection(ws)
 

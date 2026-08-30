@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import override
+from typing import final, override
 
 from .settings import Timeframe
 
@@ -14,7 +14,8 @@ INT64: int = 8
 FLOAT64: int = 8
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Segment:
     size: int
 
@@ -28,7 +29,8 @@ class Segment:
             self.view = data
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Percent:
     str_: str
 
@@ -38,13 +40,15 @@ class Percent:
         self.int_ = round(float(self.str_.split("%")[0]) / 100 * PERCENT)
 
 
+@dataclass
 class Configuration(ABC):
     """Abstract base class for engine configuration objects."""
 
     pass
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Setup(Configuration):
     backtesting: bool = True
     execution: bool = True
@@ -62,7 +66,8 @@ class Setup(Configuration):
     order_encoder_class_name: str = ""
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Connector(Configuration):
     base_uri_for_rest: str = ""
     base_uri_for_ws: str = ""
@@ -72,7 +77,8 @@ class Connector(Configuration):
     set_user_data_uri_for_wss: str = ""
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Account(Configuration):
     leverage: int = 20
     balance: float = 100.0
@@ -91,7 +97,8 @@ class Account(Configuration):
         self.scale_mult = 10**self.scale_prec
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class RiskManagment(Configuration):
     max_lock_balance: Percent = field(default_factory=lambda: Percent("10%"))
     max_loss_balance: Percent = field(default_factory=lambda: Percent("10%"))
@@ -102,7 +109,8 @@ class RiskManagment(Configuration):
     pass_execute_signal_if_timer_ms_exepired: int = 1_000
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Coin(Configuration):
     symbol: str = "DASHUSDT"
     tick_size: str = "0.01"
@@ -125,7 +133,8 @@ class Coin(Configuration):
         return 10**self.qty_prec
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Footprint(Configuration):
     timeframe: Timeframe = Timeframe.H1
     chart_range: int = 1
@@ -152,24 +161,19 @@ class Footprint(Configuration):
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
 
-@dataclass
+@dataclass(slots=True)
 class SharedMemorySegments(Configuration, ABC):
-    """Abstract base class for shared memory offset calculation and segment management."""
-
     shm_size: int = 0
 
     def __post_init__(self) -> None:
-        """Triggers shared memory attribute initialization and page-aligned size calculation."""
-
         self._set_attr_use_shm()
         self.shm_size = ((self.__get_need_shm_size() // 4096) + 1) * 4096
 
     @abstractmethod
     def _set_attr_use_shm(self) -> None:
-        """Abstract method to specify attributes occupying shared memory space."""
-
         pass
 
+    @final
     def __get_need_shm_size(self) -> int:
         offset: int = 0
         for _attr_name, attr_obj in self.__dict__.items():
@@ -179,113 +183,84 @@ class SharedMemorySegments(Configuration, ABC):
         return offset
 
 
-@dataclass
+@final
+@dataclass(slots=True)
 class Metrics(SharedMemorySegments):
-    """Shared memory layout for inter-process synchronization metrics and status flags."""
-
     count_procs: int = 10
+
+    procs_status: Segment = field(init=False)
+    main_status: Segment = field(init=False)
+    time_start_reading: Segment = field(init=False)
+    trade_readed_time: Segment = field(init=False)
+    engine_complete: Segment = field(init=False)
 
     @override
     def _set_attr_use_shm(self) -> None:
-        """Allocates shared memory offsets for process status codes, timestamps, and text buffers."""
-
-        self.procs_status: Segment = Segment((self.count_procs * 2) * INT64)
-        self.main_status: Segment = Segment(self.count_procs * INT64)
-        self.time_start_reading: Segment = Segment(INT64)
-        self.trade_readed_time: Segment = Segment(INT64)
-        self.engine_complete: Segment = Segment(UBYTE)
+        self.procs_status = Segment((self.count_procs * 2) * INT64)
+        self.main_status = Segment(self.count_procs * INT64)
+        self.time_start_reading = Segment(INT64)
+        self.trade_readed_time = Segment(INT64)
+        self.engine_complete = Segment(UBYTE)
 
 
 @dataclass
 class BaseRingBuf(ABC):
-    """Base template for shared memory ring buffer memory layouts."""
-
     data_size: int = 1024
     data_header_size: int = 8
     cell_amount: int = 10_000
     count_writer: int = 1
     count_reader: int = 1
 
-    def _set_attr_use_shm(self) -> None:
-        """Allocates shared memory offsets for reader/writer head positions and data cell arrays."""
+    safe_lag: int = field(init=False)
 
-        self.reader_id: Segment = Segment(self.count_reader * INT64)
-        self.writer_id: Segment = Segment(self.count_writer * INT64)
-        self.data: Segment = Segment(
-            self.count_writer * (self.cell_amount * self.data_size)
-        )
-        self.data_header: Segment = Segment(
+    reader_id: Segment = field(init=False)
+    writer_id: Segment = field(init=False)
+    data: Segment = field(init=False)
+    data_header: Segment = field(init=False)
+
+    def _set_attr_use_shm(self) -> None:
+        self.safe_lag = int(self.cell_amount * 0.9)
+
+        self.reader_id = Segment(self.count_reader * INT64)
+        self.writer_id = Segment(self.count_writer * INT64)
+        self.data = Segment(self.count_writer * (self.cell_amount * self.data_size))
+        self.data_header = Segment(
             self.count_writer * (self.cell_amount * self.data_header_size)
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class TextStream(BaseRingBuf, SharedMemorySegments):
-    "Shared memory ring buffer for procs text stream"
-
     data_size: int = 1024
     data_header_size: int = 8
     cell_amount: int = 100
     count_reader: int = 10
     count_writer: int = 10
 
-    def __post_init__(self) -> None:
-        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
-        super().__post_init__()
-        self.safe_lag: int = int(self.cell_amount * 0.9)
 
-
-@dataclass
+@dataclass(slots=True)
 class Signal(BaseRingBuf, SharedMemorySegments):
-    """Shared memory ring buffer layout for strategy trade signals."""
-
     data_size: int = 32
     data_header_size: int = 1
     cell_amount: int = 1000
 
-    def __post_init__(self) -> None:
-        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
-        super().__post_init__()
-        self.safe_lag: int = int(self.cell_amount * 0.9)
 
-
-@dataclass
+@dataclass(slots=True)
 class GetUserStream(BaseRingBuf, SharedMemorySegments):
-    """Shared memory ring buffer layout for user execution events."""
-
     data_size: int = 128
     data_header_size: int = 1
     cell_amount: int = 1000
 
-    def __post_init__(self) -> None:
-        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
-        super().__post_init__()
-        self.safe_lag: int = int(self.cell_amount * 0.9)
 
-
-@dataclass
+@dataclass(slots=True)
 class SetUserStream(BaseRingBuf, SharedMemorySegments):
-    """Shared memory ring buffer layout for user execution events."""
-
     data_size: int = 128
     data_header_size: int = 1
     cell_amount: int = 1000
 
-    def __post_init__(self) -> None:
-        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
-        super().__post_init__()
-        self.safe_lag: int = int(self.cell_amount * 0.9)
 
-
-@dataclass
+@dataclass(slots=True)
 class DataStream(BaseRingBuf, SharedMemorySegments):
-    """Shared memory ring buffer layout for raw tick stream ingestion."""
-
     data_size: int = 256
     data_header_size: int = 1
     cell_amount: int = 10_000
-
-    def __post_init__(self) -> None:
-        """Initializes ring buffer parent structures and sets safe ring buffer capacity lag threshold."""
-        super().__post_init__()
-        self.safe_lag: int = int(self.cell_amount * 0.9)

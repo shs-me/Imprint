@@ -1,5 +1,6 @@
 from abc import ABC
-from typing import override
+from dataclasses import dataclass, field
+from typing import final, override
 
 import numpy as np
 from numba import njit
@@ -7,33 +8,38 @@ from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
 from ... import constant as c
-from ...ipc import NodeManager
 from ..models import FootprintLike
 from .writer import Writer
 
 
+@dataclass(slots=True)
 class Reader(Writer, ABC):
-    def __init__(self, manager: NodeManager) -> None:
-        super().__init__(manager)
+    __trade_readed_time: memoryview = field(init=False)
+    last_idx: int = field(default=0, init=False)
 
-        self.__trade_readed_time: memoryview = (
-            manager.cfgMetrics.trade_readed_time.view.cast("q")
+    __footprint_state: NDArray[int32] = field(init=False)
+    __fp_state_cache: NDArray[int64] = field(init=False)
+    fp: FootprintLike
+
+    @override
+    def __post_init__(self) -> None:
+        Writer.__post_init__(self)
+
+        self.__trade_readed_time = self._manager.cfgMetrics.trade_readed_time.view.cast(
+            "q"
         )
 
-        self.last_idx: int = 0
-
+    @final
     @override
     def _init_array(self, nPrice: int64) -> None:
         super()._init_array(nPrice)
 
         if not self._re_init_idy:
-            self.__footprint_state: NDArray[int32] = np.zeros(
+            self.__footprint_state = np.zeros(
                 shape=(self.con.fp_rows, self.con.fp_panel_cols), dtype=int32
             )
-            self.__fp_state_cache: NDArray[int64] = np.zeros(
-                (c.CSD_ConstantCount,), dtype=int64
-            )
-            self.fp: FootprintLike = FootprintLike(
+            self.__fp_state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
+            self.fp = FootprintLike(
                 converter=self.con,
                 headers=self._headers,
                 fp=self._footprint,
@@ -52,6 +58,7 @@ class Reader(Writer, ABC):
             self.fp._fp = self._footprint
             self.fp._fp_state = self.__footprint_state
 
+    @final
     @override
     def _init_idx(self, nPrice: int64, timestamp: int64) -> None:
         super()._init_idx(nPrice, timestamp)
@@ -59,6 +66,7 @@ class Reader(Writer, ABC):
         self.__footprint_state.fill(0)
         self.last_idx = 0
 
+    @final
     def _analyze_footprint(self) -> None:
         idYmin, idXmin, idYmax, idXmax = self._bbox
         self._update_clusters(idYmin, idYmax, idXmin, idXmax)

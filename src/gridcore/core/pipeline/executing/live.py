@@ -1,16 +1,14 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from multiprocessing.synchronize import Event
 from typing import override
 
-from ...ipc import NodeManager
 from .base import Base
 
 
+@dataclass(slots=True)
 class Live(Base, ABC):
-    def __init__(self, manager: NodeManager, execution_event: Event) -> None:
-        Base.__init__(self, manager)
-
-        self.execution_event: Event = execution_event
+    execution_event: Event
 
     @abstractmethod
     @override

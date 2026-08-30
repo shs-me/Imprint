@@ -1,4 +1,6 @@
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import final
 
 import numpy as np
 from numba import njit
@@ -12,59 +14,110 @@ from .converter import to_nMargin, to_nPnl
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
+@dataclass
 class Manager:
-    def __init__(self, manager: NodeManager) -> None:
-        cfgCoin = manager.cfgCoin
-        self.price_prec: int = cfgCoin.price_prec
-        self.qty_prec: int = cfgCoin.qty_prec
-        self.price_mult: int = cfgCoin.price_mult
-        self.qty_mult: int = cfgCoin.qty_mult
+    manager: NodeManager
 
-        cfgAC = manager.cfgAccount
-        self.scale_prec: int = cfgAC.scale_prec
-        self.scale_mult: int = cfgAC.scale_mult
-        self.latency: int = cfgAC.latency_ms
-        self.leverage: int = cfgAC.leverage
-        self.takerNcommission: int = cfgAC.taker_commission.int_
-        self.makerNcommission: int = cfgAC.maker_commission.int_
-        self.startNbalance: int = round(cfgAC.balance * self.scale_mult)
+    price_prec: int = field(init=False)
+    qty_prec: int = field(init=False)
+    price_mult: int = field(init=False)
+    qty_mult: int = field(init=False)
+    scale_prec: int = field(init=False)
+    scale_mult: int = field(init=False)
+    latency: int = field(init=False)
+    leverage: int = field(init=False)
+    takerNcommission: int = field(init=False)
+    makerNcommission: int = field(init=False)
+    startNbalance: int = field(init=False)
+    timeframe: int = field(init=False)
+    bar_count: int = field(init=False)
+    equity_history: NDArray[int64] = field(init=False)
+    base_timestamp: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
-        cfgFP = manager.cfgFootprint
-        self.timeframe: int = int(cfgFP.timeframe)
+    nBalance: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    lockedNbalance: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    availableNbalance: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    dynamicNbalance: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    longNqty: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    longEntryNprice: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    shortNqty: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    shortEntryNprice: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    unrealizedNpnl: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    longUnrealizedNpnl: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    shortUnrealizedNpnl: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    long_mae: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    long_mfe: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    short_mae: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    short_mfe: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+
+    def __post_init__(self) -> None:
+        cfgCoin = self.manager.cfgCoin
+        self.price_prec = cfgCoin.price_prec
+        self.qty_prec = cfgCoin.qty_prec
+        self.price_mult = cfgCoin.price_mult
+        self.qty_mult = cfgCoin.qty_mult
+
+        cfgAC = self.manager.cfgAccount
+        self.scale_prec = cfgAC.scale_prec
+        self.scale_mult = cfgAC.scale_mult
+        self.latency = cfgAC.latency_ms
+        self.leverage = cfgAC.leverage
+        self.takerNcommission = cfgAC.taker_commission.int_
+        self.makerNcommission = cfgAC.maker_commission.int_
+        self.startNbalance = round(cfgAC.balance * self.scale_mult)
+
+        cfgFP = self.manager.cfgFootprint
+        self.timeframe = int(cfgFP.timeframe)
+
         start_dt: datetime = datetime.fromisoformat(
-            manager.cfgSetup.backtest_start_date
+            self.manager.cfgSetup.backtest_start_date
         )
-        end_dt: datetime = datetime.fromisoformat(manager.cfgSetup.backtest_end_date)
+        end_dt: datetime = datetime.fromisoformat(
+            self.manager.cfgSetup.backtest_end_date
+        )
         total_days: int = max(1, (end_dt - start_dt).days + 1)
-        self.bar_count: int = (total_days * 24 * 60 * 60 * 1000) // self.timeframe
 
-        self.equity_history: NDArray[int64] = np.zeros(
-            (self.bar_count, EquityC + 1), dtype=int64
-        )
+        self.bar_count = (total_days * 24 * 60 * 60 * 1000) // self.timeframe
 
-        self.base_timestamp: memoryview = memoryview(bytearray(8)).cast("q")
-
-        self.nBalance: memoryview = memoryview(bytearray(8)).cast("q")
-        self.lockedNbalance: memoryview = memoryview(bytearray(8)).cast("q")
-        self.availableNbalance: memoryview = memoryview(bytearray(8)).cast("q")
-        self.dynamicNbalance: memoryview = memoryview(bytearray(8)).cast("q")
-        self.longNqty: memoryview = memoryview(bytearray(8)).cast("q")
-        self.longEntryNprice: memoryview = memoryview(bytearray(8)).cast("q")
-        self.shortNqty: memoryview = memoryview(bytearray(8)).cast("q")
-        self.shortEntryNprice: memoryview = memoryview(bytearray(8)).cast("q")
-
-        self.unrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
-        self.longUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
-        self.shortUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
-        self.long_mae: memoryview = memoryview(bytearray(8)).cast("q")
-        self.long_mfe: memoryview = memoryview(bytearray(8)).cast("q")
-        self.short_mae: memoryview = memoryview(bytearray(8)).cast("q")
-        self.short_mfe: memoryview = memoryview(bytearray(8)).cast("q")
+        self.equity_history = np.zeros((self.bar_count, EquityC + 1), dtype=int64)
 
         self.nBalance[0] = self.startNbalance
         self.availableNbalance[0] = self.startNbalance
         self.dynamicNbalance[0] = self.startNbalance
 
+    @final
     def update_local_lockedNbalance(
         self, nPrice: int, nQty: int, order_param: int
     ) -> None:
@@ -87,11 +140,13 @@ class Manager:
         pass
 
     # Agent Methods
+    @final
     def final_action(self) -> None:
         """Flushes non-zero equity history bars to disk."""
 
         self.dump_equity_history()
 
+    @final
     def dump_equity_history(self) -> None:
         """Saves active equity history array to disk."""
 

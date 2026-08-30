@@ -14,7 +14,7 @@ from ...settings import StatusCodes as scs
 from ..models.converter import Converter
 
 
-@dataclass
+@dataclass(slots=True)
 class Base(ABC):
     _manager: NodeManager
 

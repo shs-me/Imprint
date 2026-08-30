@@ -1,23 +1,21 @@
 import struct
 import time
 from collections import deque
+from dataclasses import dataclass, field
 from typing import override
 
 from numpy import int64
 from numpy.typing import NDArray
 
-from ....ipc import NodeManager
 from ....settings import StatusCodes as scs
 from ....utils.handlers import error_handler
 from ...utils.base_data_prepper import BaseDataPrepper
 from ..base import Base
 
 
+@dataclass(slots=True)
 class DataPrepper(BaseDataPrepper):
-    def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
-        super().__init__(symbol, start_date, end_date)
-
-        self.queue: deque[bytes] = deque(maxlen=10000)
+    queue: deque[bytes] = field(default_factory=lambda: deque(maxlen=10000), init=False)
 
     @override
     def alarm_clock(self) -> None:
@@ -33,14 +31,17 @@ class DataPrepper(BaseDataPrepper):
         pass
 
 
+@dataclass(slots=True)
 class MarketDataStream(Base):
-    def __init__(self, manager: NodeManager) -> None:
-        super().__init__(manager=manager)
+    prepper: DataPrepper = field(init=False)
 
-        self.prepper: DataPrepper = DataPrepper(
-            symbol=manager.cfgCoin.symbol,
-            start_date=manager.cfgSetup.backtest_start_date,
-            end_date=manager.cfgSetup.backtest_end_date,
+    def __post_init__(self) -> None:
+        Base.__post_init__(self)
+
+        self.prepper = DataPrepper(
+            symbol=self.manager.cfgCoin.symbol,
+            start_date=self.manager.cfgSetup.backtest_start_date,
+            end_date=self.manager.cfgSetup.backtest_end_date,
         )
         self.prepper.start()
 

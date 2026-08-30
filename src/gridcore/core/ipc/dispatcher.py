@@ -15,7 +15,7 @@ from ..utils.handlers import error_handler
 from .manager import HostManager, NodeManager
 
 
-@dataclass
+@dataclass(slots=True)
 class Dispatcher:
     """IPC resource allocator instantiating SharedMemory blocks and manager interfaces."""
 
@@ -83,18 +83,18 @@ class Dispatcher:
         configs = deepcopy(self.kwg[kk.Configs.name])
         if self.is_main:
             manager = HostManager(
-                segments=segments,
-                shm_buf=self.shm_buf,
-                configs=configs,
-                main_tools=self.kwg[kk.MainTools.name],
+                _segments=segments,
+                _shm_buf=self.shm_buf,
+                _configs=configs,
+                _main_tools=self.kwg[kk.MainTools.name],
             )
         else:
             manager = NodeManager(
-                proc_id=self.kwg["proc_id"],
-                task_id=self.kwg["task_id"],
-                segments=segments,
-                shm_buf=self.shm_buf,
-                configs=configs,
-                main_tools=self.kwg[kk.MainTools.name],
+                _proc_id=self.kwg["proc_id"],
+                _task_id=self.kwg["task_id"],
+                _segments=segments,
+                _shm_buf=self.shm_buf,
+                _configs=configs,
+                _main_tools=self.kwg[kk.MainTools.name],
             )
         return manager

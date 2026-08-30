@@ -1,10 +1,10 @@
-"""Abstract base class for asynchronous CSV tick data prefetching."""
-
 import os
 import traceback
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import date
 from threading import Thread
+from typing import final
 
 import numpy as np
 from numpy import int64
@@ -13,39 +13,31 @@ from numpy.typing import NDArray
 from ...constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
 
 
+@dataclass(slots=True)
 class BaseDataPrepper(ABC):
-    """Threaded worker for reading historical tick CSV data from disk.
+    symbol: str
+    start_date: str
+    end_date: str
 
-    Attributes:
-        symbol (str): Target trading symbol.
-        start_date (str): Backtest start date ISO string.
-        end_date (str): Backtest end date ISO string.
-        complete (bool): Execution completion indicator.
-        error (str | None): Captured exception message if pipeline fails.
-    """
+    datadir: str = field(init=False)
+    type_data: str = field(init=False)
+    base_path: str = field(init=False)
+    error: str | None = field(default=None, init=False)
+    complete: bool = field(default=False, init=False)
+    subP: Thread = field(init=False)
 
-    def __init__(self, symbol: str, start_date: str, end_date: str) -> None:
+    def __post_init__(self) -> None:
+        self.datadir = DATA_PATH
+        self.type_data = DATA_TYPE_AGGTRADES_PATH
+        self.base_path = f"{self.datadir}/{self.type_data}/{self.symbol}"
 
-        self.symbol: str = symbol.upper()
-        self.start_date: str = start_date
-        self.end_date: str = end_date
-
-        self.datadir: str = DATA_PATH
-        self.type_data: str = DATA_TYPE_AGGTRADES_PATH
-        self.base_path: str = f"{self.datadir}/{self.type_data}/{self.symbol}"
-
-        self.error: str | None = None
-        self.complete: bool = False
-
+    @final
     def start(self) -> None:
-        """Launches background prepper thread in daemon mode."""
-
-        self.subP: Thread = Thread(target=self.run_prepper_engine, daemon=True)
+        self.subP = Thread(target=self.run_prepper_engine, daemon=True)
         self.subP.start()
 
+    @final
     def run_prepper_engine(self) -> None:
-        """Main loop iterating through NPY files, parsing rows, and executing pipeline callbacks."""
-
         try:
             data_paths: list[str] = self.get_data_paths()
             for path in data_paths:
@@ -66,13 +58,8 @@ class BaseDataPrepper(ABC):
             self.error = f"Prepper Error: {e}\n{traceback.format_exc()}"
             self.complete = True
 
+    @final
     def get_data_paths(self, endwith: str = ".npy") -> list[str]:
-        """Filters and returns sorted list of NPY file paths matching target date scope.
-
-        Returns:
-            list[str]: Absolute file paths to target NPY files.
-        """
-
         paths: list[str] = [
             p for p in os.listdir(self.base_path) if p.endswith(endwith)
         ]
@@ -84,18 +71,12 @@ class BaseDataPrepper(ABC):
 
     @abstractmethod
     def alarm_clock(self) -> None:
-        """Abstract throttle hook invoked when output buffer reaches high-water threshold."""
-
         pass
 
     @abstractmethod
     def prepper_data(self, line: NDArray[int64]) -> None:
-        """Abstract row parser hook invoked for each NPY line."""
-
         pass
 
     @abstractmethod
     def post_prepper(self) -> None:
-        """Abstract post-processing teardown hook invoked upon completing file iteration."""
-
         pass

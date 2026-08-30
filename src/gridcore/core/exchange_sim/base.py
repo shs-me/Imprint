@@ -1,6 +1,7 @@
 """Simulated account equity tracking, margin maintenance, and position ledger."""
 
 import time
+from dataclasses import dataclass
 from typing import override
 
 from numba import njit
@@ -8,18 +9,19 @@ from numpy import int64, uint8
 from numpy.typing import NDArray
 
 from .. import constant as c
-from ..account import manager as am
+from ..account.manager import Manager, update_equity_ohlc, update_unrealized_nPnl
 from ..account.position import update_position
-from ..ipc import NodeManager
 from .matching_engine import MatchingEngine, matching, set_user_data
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
-class Base(am.Manager, MatchingEngine):  # pyright: ignore[reportUnsafeMultipleInheritance]
-    def __init__(self, manager: NodeManager) -> None:
-        am.Manager.__init__(self, manager)
-        MatchingEngine.__init__(self, manager)
+@dataclass(slots=True)
+class Base(Manager, MatchingEngine):
+    @override
+    def __post_init__(self) -> None:
+        Manager.__post_init__(self)
+        MatchingEngine.__post_init__(self)
 
     @override
     def post_update_lockedNbalance(self) -> None:
@@ -146,7 +148,7 @@ def _start(
 
         trade_nPrice: int = dfm[row, 0]
 
-        uNpnl = am.update_unrealized_nPnl(
+        uNpnl = update_unrealized_nPnl(
             trade_nPrice=trade_nPrice,
             unrealizedNpnl=unrealizedNpnl,
             longUnrealizedNpnl=longUnrealizedNpnl,
@@ -166,7 +168,7 @@ def _start(
         dynamicNbalance[0] = nBalance[0] + uNpnl
         availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
 
-        am.update_equity_ohlc(
+        update_equity_ohlc(
             trade_timestamp=trade_timestamp,
             current_equity=dynamicNbalance[0],
             equity_history=equity_history,
@@ -214,7 +216,7 @@ def _start(
                 short_mfe=short_mfe,
             )
 
-        uNpnl = am.update_unrealized_nPnl(
+        uNpnl = update_unrealized_nPnl(
             trade_nPrice=trade_nPrice,
             unrealizedNpnl=unrealizedNpnl,
             longUnrealizedNpnl=longUnrealizedNpnl,
@@ -234,7 +236,7 @@ def _start(
         dynamicNbalance[0] = nBalance[0] + uNpnl
         availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
 
-        am.update_equity_ohlc(
+        update_equity_ohlc(
             trade_timestamp=trade_timestamp,
             current_equity=dynamicNbalance[0],
             equity_history=equity_history,

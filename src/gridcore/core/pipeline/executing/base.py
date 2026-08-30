@@ -1,7 +1,7 @@
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, final
 
 from ...account import AccountConverter, AccountManager
 from ...ipc import NodeManager
@@ -9,7 +9,7 @@ from ...settings import StatusCodes as scs
 from ...utils.handlers import error_handler
 
 
-@dataclass
+@dataclass(slots=True)
 class Base(ABC):
     _manager: NodeManager
 
@@ -78,6 +78,7 @@ class Base(ABC):
         )
         self.acm = AccountManager(self._manager)
 
+    @final
     @error_handler(set_status_code=True)
     def _run_execution_engine(self) -> None:
         while True:
@@ -103,6 +104,7 @@ class Base(ABC):
             elif self._gus_wid[0] != self._gus_rid[0]:
                 self._check_user_data_buf()
 
+    @final
     def _complete(self) -> bool:
         signals_readed: bool = self._sn_wid[0] == self._sn_rid[0]
         user_stream_readed: bool = self._gus_wid[0] == self._gus_rid[0]
@@ -114,6 +116,7 @@ class Base(ABC):
     ) -> None:
         pass
 
+    @final
     def _check_signal_buf(
         self,
     ) -> None:
@@ -139,6 +142,7 @@ class Base(ABC):
             self._post_final_action()
             self._manager.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
 
+    @final
     def _get_signal_data(self) -> tuple[int, int, int]:
         cell: int = self._sn_rid[0]
         start: int = cell * self._sn_data_size
@@ -159,11 +163,13 @@ class Base(ABC):
     ) -> None:
         pass
 
+    @final
     def _check_user_data_buf(self) -> None:
         while self._gus_wid[0] != self._gus_rid[0]:
             raw_buf = self._get_user_data()
             self._preppare_user_data(raw_buf)
 
+    @final
     def _get_user_data(self) -> memoryview:
         cell: int = self._gus_rid[0]
         start: int = cell * self._gus_data_size
@@ -189,6 +195,7 @@ class Base(ABC):
     ) -> None:
         pass
 
+    @final
     def send_order(
         self,
         timestamp: int,
@@ -203,6 +210,7 @@ class Base(ABC):
         self._set_user_data(raw_data)
         self.acm.update_local_lockedNbalance(nPrice, nQty, order_param)
 
+    @final
     def _set_user_data(self, raw_data: bytes) -> None:
         cell: int = self._sus_wid[0]
         start: int = cell * self._sus_data_size
@@ -211,6 +219,7 @@ class Base(ABC):
         new_cell: int = cell + 1
         self._sus_wid[0] = new_cell if (new_cell < self._sus_cell_amount) else 0
 
+    @final
     def _final_actions(self) -> None:
         self._post_final_action()
 
