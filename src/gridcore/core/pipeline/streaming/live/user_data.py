@@ -19,7 +19,11 @@ class UserData(Base):
         decoder_type: type[UserStreamDecoder] = getattr(
             importlib.import_module(m_name), c_name
         )
-        self.decoder: UserStreamDecoder = decoder_type()
+        self.decoder: UserStreamDecoder = decoder_type(
+            price_mult=manager.cfgCoin.price_mult,
+            qty_mult=manager.cfgCoin.qty_mult,
+            scale_mult=manager.cfgAccount.scale_mult,
+        )
         self.user_data_uri: str = manager.cfgConnector.get_user_data_uri_for_wss
 
         super().__init__(manager, self.user_data_uri)

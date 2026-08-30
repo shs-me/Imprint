@@ -1,15 +1,15 @@
+import importlib
 from multiprocessing.synchronize import Event
 from typing import final, override
-
-from msgspec.json import Decoder
 
 from ...footprint.engine import FootprintEngine, SyncWithExecution
 from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
-from ..utils.structs import create_aggtrades_struct
+from ..utils.base_adapters import AggTradesDecoder
 from .base import Base
 
 
+@final
 class SyncViaEvent(SyncWithExecution):
     def __init__(self, manager: NodeManager, execution_event: Event) -> None:
         super().__init__(manager)
@@ -23,10 +23,7 @@ class SyncViaEvent(SyncWithExecution):
 
 
 class Live(Base):
-    nPrice: int
-    nQty: int
-    timestamp: int
-    is_sell: int
+    at_wid: int
 
     def __init__(
         self, manager: NodeManager, engine: FootprintEngine, engine_event: Event
@@ -35,9 +32,16 @@ class Live(Base):
 
         self.engine_event: Event = engine_event
 
-        fields_names = manager.cfgSetup.agg_trades_struct_fields_names
-        agg_trades_type = create_aggtrades_struct(fields_names)
-        self.decoder = Decoder(type=agg_trades_type, strict=False)
+        m_name: str = manager.cfgSetup.agg_trades_struct_module
+        c_name: str = manager.cfgSetup.agg_trades_struct_class_name
+        decoder_type: type[AggTradesDecoder] = getattr(
+            importlib.import_module(m_name), c_name
+        )
+        manager.set_text(
+            f"{decoder_type.__class__.__name__} used as {AggTradesDecoder.__name__}"
+        )
+        self.decoder: AggTradesDecoder = decoder_type()
+
         self.pass_lag: int = 0
         self.pass_lag_limit: int = 2
 
@@ -47,11 +51,12 @@ class Live(Base):
 
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
-        trade = self.decoder.decode(raw_data[:])
-        self.nPrice = round(trade.price * self.engine.con.price_mult)
-        self.nQty = round(trade.qty * self.engine.con.qty_mult)
-        self.timestamp = trade.timestamp
-        self.is_sell = int(trade.is_sell)
+        for p, q, t, m in self.decoder.decode(raw_data[:]):
+            self.agg_trades[self.at_wid, 0] = round(p * self.engine.con.price_mult)
+            self.agg_trades[self.at_wid, 1] = round(q * self.engine.con.qty_mult)
+            self.agg_trades[self.at_wid, 2] = t
+            self.agg_trades[self.at_wid, 3] = m
+            self.at_wid = self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0
 
     @override
     def post_update(self) -> None:

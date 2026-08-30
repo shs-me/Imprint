@@ -16,8 +16,6 @@ class Converter:
     cfgCoin: cfg.Coin
     cfgFP: cfg.Footprint
 
-    _first_base_timestamp: int = 0
-
     tick_size: str = field(init=False)
     price_prec: int = field(init=False)
     price_mult: int = field(init=False)
@@ -27,16 +25,18 @@ class Converter:
     chart_range: int = field(init=False)
     tims: int = field(init=False)
     step_tick: int = field(init=False)
-    fp_rows: int = field(init=False)
+    fp_rows: int64 = field(init=False)
     fp_cols: int = field(init=False)
     idxVP: int = field(init=False)
     idxDP: int = field(init=False)
     fp_panel_cols: int = field(init=False)
     bar_count: int = field(init=False)
     scale: int = field(init=False)
-    center: int = field(init=False)
-    baseNprice: int = field(init=False)
-    baseTimestamp: int = field(init=False)
+    center: int64 = field(init=False)
+    baseNprice: int64 = field(init=False)
+    baseTimestamp: int64 = field(init=False)
+
+    _first_base_timestamp: int64 = field(default=int64(0), init=False)
 
     def __post_init__(self) -> None:
         self.tick_size = self.cfgCoin.tick_size
@@ -57,7 +57,7 @@ class Converter:
 
         self.scale = round((float(self.tick_size) * self.step_tick) * self.price_mult)
 
-    def init_session(self, nPrice: int, timestamp: int):
+    def init_session(self, nPrice: int64, timestamp: int64):
         """Calibrates converter base price, base timestamp, and grid center origin offset."""
 
         self.baseNprice = (nPrice // self.scale) * self.scale
@@ -67,31 +67,27 @@ class Converter:
 
         self.center = self.fp_rows // 2
 
-    @overload
-    def to_idy(self, nPrice: int) -> int | None: ...
-    @overload
-    def to_idy(self, nPrice: int64) -> int64: ...
-    def to_idy(self, nPrice: int64 | int):
+    def to_idy(self, nPrice: int64) -> int64 | None:
         """Maps fixed-point price to Footprint grid Y-axis row index.
 
         Returns:
-            int | int64 | None: Grid row index or None if out of bounds.
+            int64 | None: Grid row index or None if out of bounds.
         """
 
-        idy: int | int64 = (self.baseNprice - nPrice) // self.scale + self.center
+        idy: int64 = (self.baseNprice - nPrice) // self.scale + self.center
         if 0 <= idy < self.fp_rows:
             return idy
         else:
             return None
 
-    def to_idx(self, timestamp: int, is_sell: int) -> int | None:
+    def to_idx(self, timestamp: int64, is_sell: int64) -> int64 | None:
         """Maps timestamp and trade side to Footprint grid X-axis column index.
 
         Returns:
-            int | None: Grid column index or None if out of bounds.
+            int64 | None: Grid column index or None if out of bounds.
         """
 
-        idx: int = (timestamp - self.baseTimestamp) // self.tims * 2 + (
+        idx: int64 = (timestamp - self.baseTimestamp) // self.tims * 2 + (
             0 if is_sell else 1
         )
         if 0 <= idx < self.fp_cols:

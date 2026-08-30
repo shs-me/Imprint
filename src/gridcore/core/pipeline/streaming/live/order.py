@@ -1,14 +1,14 @@
 import asyncio
+import importlib
 import struct
 from multiprocessing.synchronize import Semaphore
 from typing import override
 
-from msgspec.json import Encoder
 from websockets import ClientConnection
 
 from .... import constant as c
 from ....ipc import NodeManager
-from ...utils.structs import create_order_struct
+from ...utils.base_adapters import OrderEncoder
 from .base import Base
 
 
@@ -21,9 +21,12 @@ class Order(Base):
         self.qty_prec: int = manager.cfgCoin.qty_mult
         self.qty_mult: int = manager.cfgCoin.qty_prec
 
-        fields_names = manager.cfgSetup.order_encoder_struct_fields_names
-        self.order_param_type, self.order_type = create_order_struct(fields_names)
-        self.encoder: Encoder = Encoder()
+        m_name: str = manager.cfgSetup.order_encoder_module
+        c_name: str = manager.cfgSetup.order_encoder_class_name
+        encoder_type: type[OrderEncoder] = getattr(
+            importlib.import_module(m_name), c_name
+        )
+        self.order_encoder: OrderEncoder = encoder_type()
 
         self.send_order_uri: str = manager.cfgConnector.set_user_data_uri_for_wss
 
@@ -72,21 +75,22 @@ class Order(Base):
         price: float = round(nPrice / self.price_mult, self.price_prec)
         qty: float = round(nQty / self.qty_mult, self.qty_prec)
 
-        side: str = "LONG" if bool(order_param & c.OF_LONG) else "SHORT"
-        type: str = "BUY" if bool(order_param & c.OF_BUY) else "SELL"
+        is_buy: bool = bool(order_param & c.OF_BUY)
+        is_long: bool = bool(order_param & c.OF_LONG)
+        is_market: bool = bool(order_param & c.OF_MARKET)
 
-        return self.encoder.encode(
-            self.order_type(
-                order_id=client_order_id,
-                type_place="",
-                param=self.order_param_type(
-                    symbol=self.symbol,
-                    side=side,
-                    type=type,
-                    timeInForce="GTC",
-                    quantity=qty,
-                    price=price,
-                    timestamp=timestamp,
-                ),
+        if bool(order_param & c.OF_CANCELED):
+            return self.order_encoder.encode_cancel_order(
+                symbol=self.symbol, client_order_id=client_order_id
             )
-        )
+        else:
+            return self.order_encoder.encode_new_order(
+                timestamp=timestamp,
+                client_order_id=client_order_id,
+                symbol=self.symbol,
+                is_buy=is_buy,
+                is_long=is_long,
+                is_market=is_market,
+                price=price,
+                qty=qty,
+            )

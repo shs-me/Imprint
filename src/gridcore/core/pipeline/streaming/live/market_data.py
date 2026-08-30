@@ -11,12 +11,12 @@ class MarketData(Base):
     def __init__(self, manager: NodeManager, engine_event: Event) -> None:
         self.engine_event: Event = engine_event
         self.agg_trades_uri: str = manager.cfgConnector.market_data_uri_for_wss
-        super().__init__(manager, "wss://fstream.binance.com/ws/dashusdt@aggTrades")
+        super().__init__(manager, self.agg_trades_uri)
 
     @override
     async def in_connection(self, ws: ClientConnection) -> None:
         raw_data: bytes = await ws.recv(decode=False)
-        self.manager.set_text(raw_data.decode())
+        print(raw_data)
         await self.alarm_clock(
             self.ds_wid, self.ds_rid, self.ds_cell_amount, self.ds_safe_lag
         )

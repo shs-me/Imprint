@@ -2,18 +2,20 @@ from dataclasses import dataclass, field
 
 from ...core.configs import (
     Account,
-    AggTradesStructFieldsNames,
     Coin,
     Configuration,
     Connector,
     Footprint,
-    OrderStructFieldsNames,
     RiskManagment,
     Setup,
 )
 from ...core.footprint import FootprintEngine
 from ...core.pipeline.executing import BaseExecution
-from ...core.pipeline.utils.base_adapters import UserStreamDecoder
+from ...core.pipeline.utils.base_adapters import (
+    AggTradesDecoder,
+    OrderEncoder,
+    UserStreamDecoder,
+)
 
 __all__ = [
     "Visualization",
@@ -23,8 +25,6 @@ __all__ = [
     "Connector",
     "Footprint",
     "RiskManagment",
-    "AggTradesStructFieldsNames",
-    "OrderStructFieldsNames",
     "Strategy",
 ]
 
@@ -47,9 +47,9 @@ class Backtesting:
 @dataclass
 class Real:
     connector: Connector
-    agg_trade_struct_fields_names: AggTradesStructFieldsNames
-    order_encoder_struct_fields_names: OrderStructFieldsNames
+    agg_trades_decoder: type[AggTradesDecoder]
     user_stream_decoder: type[UserStreamDecoder]
+    order_encoder: type[OrderEncoder]
 
 
 @dataclass
@@ -93,8 +93,11 @@ class SetupCore:
             args.append(self.run_mode.account)
 
         else:
-            self.setup.agg_trades_struct_fields_names = (
-                self.run_mode.agg_trade_struct_fields_names
+            self.setup.agg_trades_decoder_module = (
+                self.run_mode.agg_trades_decoder.__module__
+            )
+            self.setup.agg_trades_decoder_class_name = (
+                self.run_mode.agg_trades_decoder.__name__
             )
             self.setup.user_stream_decoder_module = (
                 self.run_mode.user_stream_decoder.__module__
@@ -102,9 +105,9 @@ class SetupCore:
             self.setup.user_stream_decoder_class_name = (
                 self.run_mode.user_stream_decoder.__name__
             )
-            self.setup.order_encoder_struct_fields_names = (
-                self.run_mode.order_encoder_struct_fields_names
-            )
+            self.setup.order_encoder_module = self.run_mode.order_encoder.__module__
+            self.setup.order_encoder_class_name = self.run_mode.order_encoder.__name__
+
             self.setup.backtesting = False
 
             args.append(self.coin)

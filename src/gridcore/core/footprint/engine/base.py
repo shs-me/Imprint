@@ -2,6 +2,7 @@ import os
 from abc import ABC
 from dataclasses import dataclass, field
 from datetime import date
+from typing import final
 
 import numpy as np
 from numpy import int64
@@ -46,7 +47,7 @@ class Base(ABC):
         self._re_init_idx = True
         self._re_init_idy = False
 
-    def _init_array(self, nPrice: int) -> None:
+    def _init_array(self, nPrice: int64) -> None:
         if not self._re_init_idy:
             self.con.fp_rows = 2 * (nPrice * 20 // 100 // self.con.scale)
             self._footprint = np.zeros(
@@ -61,17 +62,17 @@ class Base(ABC):
                 [self.con.fp_rows, self.con.fp_cols, 0, 0], dtype=int64
             )
         else:
-            need_rows: int = nPrice * 20 // 100 // self.con.scale
+            need_rows: int64 = nPrice * 20 // 100 // self.con.scale
             self.con.fp_rows = self.con.fp_rows + need_rows
             self.con.center = self.con.fp_rows // 2
             before, after = (
                 (need_rows, 0) if (nPrice > self.con.baseNprice) else (0, need_rows)
             )
             self._footprint = np.pad(
-                array=self._footprint, pad_width=((before, after), (0, 0))
+                array=self._footprint, pad_width=((int(before), int(after)), (0, 0))
             )
 
-    def _init_session(self, nPrice: int, timestamp: int) -> None:
+    def _init_session(self, nPrice: int64, timestamp: int64) -> None:
         if self.__init_arrays:
             self._init_array(nPrice=nPrice)
             self.__init_arrays = False
@@ -88,16 +89,17 @@ class Base(ABC):
         self._re_init_session = False
         self._manager.set_proc_sc(scs.FP_RE_INIT, wait_main_task=False)
 
-    def _init_idx(self, nPrice: int, timestamp: int) -> None:
+    def _init_idx(self, nPrice: int64, timestamp: int64) -> None:
         self._footprint.fill(0)
         self._headers.fill(0)
         self._bbox[:] = self._bbox_default_value
 
-        self.con.init_session(nPrice=(nPrice), timestamp=(timestamp))
+        self.con.init_session(nPrice=nPrice, timestamp=timestamp)
 
-    def _init_idy(self, nPrice: int) -> None:
+    def _init_idy(self, nPrice: int64) -> None:
         self._init_array(nPrice=nPrice)
 
+    @final
     def _save_footprint_headers(self, last_idx: int) -> None:
         if self.__save_fp_headers:
             os.makedirs(self.__base_fp_dump_path, exist_ok=True)

@@ -15,28 +15,6 @@ FLOAT64: int = 8
 
 
 @dataclass
-class AggTradesStructFieldsNames:
-    price: str = ""
-    qty: str = ""
-    timestamp: str = ""
-    is_sell: str = ""
-
-
-@dataclass
-class OrderStructFieldsNames:
-    order_id: str = ""
-    type_place: str = ""
-    param: str = ""
-    symbol: str = ""
-    side: str = ""
-    type: str = ""
-    timeInForce: str = ""
-    quantity: str = ""
-    timestamp: str = ""
-    price: str = ""
-
-
-@dataclass
 class Segment:
     size: int
 
@@ -76,14 +54,12 @@ class Setup(Configuration):
     algorithm_class_name: str = ""
     execution_module: str = ""
     execution_class_name: str = ""
-    agg_trades_struct_fields_names: AggTradesStructFieldsNames = field(
-        default_factory=lambda: AggTradesStructFieldsNames()
-    )
+    agg_trades_decoder_module: str = ""
+    agg_trades_decoder_class_name: str = ""
     user_stream_decoder_module: str = ""
     user_stream_decoder_class_name: str = ""
-    order_encoder_struct_fields_names: OrderStructFieldsNames = field(
-        default_factory=lambda: OrderStructFieldsNames()
-    )
+    order_encoder_module: str = ""
+    order_encoder_class_name: str = ""
 
 
 @dataclass

@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import cast, override
+from typing import cast, final, override
 
 import numpy as np
 from numba import njit
@@ -38,7 +38,7 @@ class Writer(Base, ABC):
         self._counter_ticks: int = 0
 
     @override
-    def _init_array(self, nPrice: int) -> None:
+    def _init_array(self, nPrice: int64) -> None:
         super()._init_array(nPrice)
 
         if not self._re_init_idy:
@@ -56,22 +56,26 @@ class Writer(Base, ABC):
             self.__args[FU_qty_prec] = self.con.qty_prec
 
     @override
-    def _init_idx(self, nPrice: int, timestamp: int) -> None:
+    def _init_idx(self, nPrice: int64, timestamp: int64) -> None:
         super()._init_idx(nPrice, timestamp)
 
         self.__meta_data.fill(0)
 
+    @final
     def _update_footprint(
-        self, nPrice: int, nQty: int, timestamp: int, is_sell: int
+        self, nPrice: int64, nQty: int64, timestamp: int64, is_sell: int64
     ) -> None:
         if self._re_init_session:
             self._init_session(nPrice, timestamp)
 
         self.__update(nPrice, nQty, timestamp, is_sell)
 
-    def __update(self, nPrice: int, nQty: int, timestamp: int, is_sell: int) -> None:
-        idx: int | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
-        idy: int | None = self.con.to_idy(nPrice=nPrice)
+    @final
+    def __update(
+        self, nPrice: int64, nQty: int64, timestamp: int64, is_sell: int64
+    ) -> None:
+        idx: int64 | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
+        idy: int64 | None = self.con.to_idy(nPrice=nPrice)
         if idx is None:
             self._re_init_idx = True
             if not self._bbox_is_readed():
@@ -79,7 +83,7 @@ class Writer(Base, ABC):
                 return None
             else:
                 self._init_session(nPrice, timestamp)
-                idx = 0 if is_sell else 1
+                idx = int64((0 if is_sell else 1))
 
         if idy is None:
             self._re_init_idy = True
@@ -88,7 +92,7 @@ class Writer(Base, ABC):
                 return None
             else:
                 self._init_session(nPrice, timestamp)
-                idy = cast(int, self.con.to_idy(nPrice=nPrice))
+                idy = cast(int64, self.con.to_idy(nPrice=nPrice))
 
         self._counter_ticks += 1
         _update(
@@ -105,18 +109,19 @@ class Writer(Base, ABC):
             meta_data=self.__meta_data,
         )
 
+    @final
     def _bbox_is_readed(self) -> bool:
         return bool(np.all(self._bbox == self._bbox_default_value))
 
 
 @njit(cache=True)
 def _update(
-    nPrice: int,
-    nQty: int,
-    timestamp: int,
-    is_sell: int,
-    idy: int,
-    idx: int,
+    nPrice: int64,
+    nQty: int64,
+    timestamp: int64,
+    is_sell: int64,
+    idy: int64,
+    idx: int64,
     args: NDArray[int64],
     footprint: NDArray[int64],
     headers: NDArray[int64],
@@ -134,7 +139,7 @@ def _update(
     footprint[idy, idxDP] += -nQty if is_sell else nQty
 
     # Update Headers
-    bar: int = (idx & ~1) // 2
+    bar: int64 = (idx & ~1) // 2
     if headers[bar, c.BH_CountTrade] == 0:
         headers[bar, c.BH_Open : c.BH_Close + 1] = nPrice
         headers[bar, c.BH_Time] = timestamp
@@ -151,7 +156,7 @@ def _update(
     headers[bar, c.BH_Volume] += nQty
     headers[bar, c.BH_Delta] += -nQty if is_sell else nQty
     if bar > 0:
-        oldBar: int = bar - 1
+        oldBar: int64 = bar - 1
         headers[bar, c.BH_CVD] = headers[bar, c.BH_Delta] + headers[oldBar, c.BH_CVD]
     else:
         headers[bar, c.BH_CVD] = headers[bar, c.BH_Delta]

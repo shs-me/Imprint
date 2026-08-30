@@ -23,7 +23,7 @@ class Reader(Writer, ABC):
         self.last_idx: int = 0
 
     @override
-    def _init_array(self, nPrice: int) -> None:
+    def _init_array(self, nPrice: int64) -> None:
         super()._init_array(nPrice)
 
         if not self._re_init_idy:
@@ -41,18 +41,19 @@ class Reader(Writer, ABC):
                 fp_state_cache=self.__fp_state_cache,
             )
         else:
-            need_rows: int = nPrice * 20 // 100 // self.con.scale
+            need_rows: int64 = nPrice * 20 // 100 // self.con.scale
             before, after = (
                 (need_rows, 0) if (nPrice > self.con.baseNprice) else (0, need_rows)
             )
             self.__footprint_state = np.pad(
-                array=self.__footprint_state, pad_width=((before, after), (0, 0))
+                array=self.__footprint_state,
+                pad_width=((int(before), int(after)), (0, 0)),
             )
             self.fp._fp = self._footprint
             self.fp._fp_state = self.__footprint_state
 
     @override
-    def _init_idx(self, nPrice: int, timestamp: int) -> None:
+    def _init_idx(self, nPrice: int64, timestamp: int64) -> None:
         super()._init_idx(nPrice, timestamp)
 
         self.__footprint_state.fill(0)
@@ -152,8 +153,8 @@ def _update_closed_bar_and_fp_states(
     fp: NDArray[int64],
     fp_state: NDArray[int32],
     fp_state_cache: NDArray[int64],
-    baseNprice: int,
-    center: int,
+    baseNprice: int64,
+    center: int64,
     scale: int,
 ) -> None:
     """Numba JIT kernel calculating ATR, VWAP, Bollinger Bands, POC, and Value Area on bar closure."""
@@ -242,8 +243,8 @@ def _update_bar_states(
     hr: NDArray[int64],
     fp: NDArray[int64],
     fp_state: NDArray[int32],
-    baseNprice: int,
-    center: int,
+    baseNprice: int64,
+    center: int64,
     scale: int,
 ) -> None:
     """Numba JIT kernel calculating active bar OHLC, Zero-Print, Delta Domination, and Imbalances."""

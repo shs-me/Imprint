@@ -25,5 +25,5 @@ def run_streaming(
 
         from .live import LiveAgent
 
-        agent = LiveAgent(manager, engine_event, wss_sem, execution_event)
+        agent = LiveAgent(manager, engine_event, execution_event, wss_sem)
         asyncio.run(agent.run_streams())
