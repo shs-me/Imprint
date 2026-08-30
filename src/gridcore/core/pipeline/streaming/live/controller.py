@@ -1,5 +1,6 @@
 import asyncio
 from asyncio import Task
+from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event, Semaphore
 
 from ....ipc.manager import NodeManager
@@ -9,19 +10,21 @@ from .order import Order
 from .user_data import UserData
 
 
+@dataclass(slots=True)
 class Controller:
-    def __init__(
-        self,
-        manager: NodeManager,
-        engine_event: Event,
-        execution_event: Event,
-        wss_sem: Semaphore,
-    ) -> None:
-        self.manager: NodeManager = manager
+    manager: NodeManager
+    engine_event: Event
+    execution_event: Event
+    wss_sem: Semaphore
 
-        self.market_data_stream: MarketData = MarketData(manager, engine_event)
-        # self.user_data_stream: UserData = UserData(manager, execution_event)
-        # self.order_stream: Order = Order(manager, wss_sem)
+    market_data_stream: MarketData = field(init=False)
+    user_data_stream: UserData = field(init=False)
+    order_stream: Order = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.market_data_stream = MarketData(self.manager, self.engine_event)
+        self.user_data_stream = UserData(self.manager, self.execution_event)
+        self.order_stream = Order(self.manager, self.wss_sem)
 
     async def run_supervisor(self, streams: list[Task[None]]) -> None:
         while True:

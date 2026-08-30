@@ -1,11 +1,12 @@
 from abc import ABC
 from dataclasses import dataclass, field
+from typing import final
 
 from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
 
 
-@dataclass
+@dataclass(slots=True, init=False)
 class Base(ABC):
     manager: NodeManager
 
@@ -38,7 +39,8 @@ class Base(ABC):
     sus_rid: memoryview = field(init=False)
     sus_wid: memoryview = field(init=False)
 
-    def __post_init__(self) -> None:
+    def __init__(self, manager: NodeManager) -> None:
+        self.manager = manager
         self.symbol = self.manager.cfgCoin.symbol
 
         cfgDS = self.manager.cfgDataStream
@@ -71,11 +73,13 @@ class Base(ABC):
         self.sus_wid = cfgSUS.writer_id.view.cast("q")
         self.sus_rid = cfgSUS.reader_id.view.cast("q")
 
+    @final
     def lag_not_is_safe(
         self, wid: memoryview, rid: memoryview, cell_amount: int, safe_lag: int
     ) -> bool:
         return ((wid[0] - rid[0] + cell_amount) % cell_amount) > safe_lag
 
+    @final
     def set_raw_data(
         self,
         raw_data: bytes,
@@ -97,5 +101,6 @@ class Base(ABC):
             self.manager.set_proc_sc(code=scs.BIG_RAW_DATA, wait_main_task=True)
             return False
 
+    @final
     def final_actions(self) -> None:
         self.manager.set_text(" ")

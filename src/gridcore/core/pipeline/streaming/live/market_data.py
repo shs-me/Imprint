@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from typing import override
 
@@ -7,16 +8,19 @@ from ....ipc import NodeManager
 from .base import Base
 
 
+@dataclass(slots=True, init=False)
 class MarketData(Base):
+    engine_event: Event
+
     def __init__(self, manager: NodeManager, engine_event: Event) -> None:
-        self.engine_event: Event = engine_event
-        self.agg_trades_uri: str = manager.cfgConnector.market_data_uri_for_wss
-        super().__init__(manager, self.agg_trades_uri)
+        self.engine_event = engine_event
+        uri = manager.cfgConnector.market_data_uri_for_wss
+        super().__init__(manager, uri)
 
     @override
     async def in_connection(self, ws: ClientConnection) -> None:
         raw_data: bytes = await ws.recv(decode=False)
-        print(raw_data)
+
         await self.alarm_clock(
             self.ds_wid, self.ds_rid, self.ds_cell_amount, self.ds_safe_lag
         )

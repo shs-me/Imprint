@@ -32,8 +32,8 @@ class Live(Base):
 
         self.engine_event: Event = engine_event
 
-        m_name: str = manager.cfgSetup.agg_trades_struct_module
-        c_name: str = manager.cfgSetup.agg_trades_struct_class_name
+        m_name: str = manager.cfgSetup.agg_trades_decoder_module
+        c_name: str = manager.cfgSetup.agg_trades_decoder_class_name
         decoder_type: type[AggTradesDecoder] = getattr(
             importlib.import_module(m_name), c_name
         )
