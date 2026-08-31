@@ -3,8 +3,8 @@ from numba import njit
 from numpy import int64
 from numpy.typing import NDArray
 
-from .. import configs as cfg
-from .. import constant as c
+from ... import configs as cfg
+from ... import constant as c
 
 
 class Converter:
@@ -258,17 +258,28 @@ def to_nMargin(
 
 
 @njit(cache=True)
-def to_nPnl(
+def to_long_nPnl(
     closeNprice: int | int64,
+    entryNprice: int,
     nQty: int | int64,
-    is_long: bool,
-    longEntryNprice: int,
-    shortEntryNprice: int,
     price_mult: int,
     qty_mult: int,
     scale_mult: int,
 ) -> int:
-    entryNprice: int | int64 = longEntryNprice if is_long else shortEntryNprice
-    diffNprice: int | int64 = (closeNprice - entryNprice) * (1 if is_long else -1)
+    diffNprice: int | int64 = (closeNprice - entryNprice) * 1
+    pnl: float = (diffNprice / price_mult) * (nQty / qty_mult)
+    return round(pnl * scale_mult)
+
+
+@njit(cache=True)
+def to_short_nPnl(
+    closeNprice: int | int64,
+    entryNprice: int,
+    nQty: int | int64,
+    price_mult: int,
+    qty_mult: int,
+    scale_mult: int,
+) -> int:
+    diffNprice: int | int64 = (closeNprice - entryNprice) * -1
     pnl: float = (diffNprice / price_mult) * (nQty / qty_mult)
     return round(pnl * scale_mult)

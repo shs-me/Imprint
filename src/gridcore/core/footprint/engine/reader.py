@@ -1,6 +1,5 @@
-from abc import ABC
 from dataclasses import dataclass, field
-from typing import final, override
+from typing import Protocol, final, override
 
 import numpy as np
 from numba import njit
@@ -8,44 +7,51 @@ from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
 from ... import constant as c
-from ..models import FootprintLike
 from .writer import Writer
 
 
+class AlgorithmProtocol(Protocol):
+    tick_by_tick_analyze: bool
+
+    def find_patterns_in_update_clusters(
+        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
+    ) -> None: ...
+
+    def find_patterns_in_update_closed_bar(self) -> None: ...
+
+    def find_patterns_in_update_bar(
+        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
+    ) -> None: ...
+
+
 @dataclass(slots=True)
-class Reader(Writer, ABC):
-    __trade_readed_time: memoryview = field(init=False)
-    last_idx: int = field(default=0, init=False)
+class Reader(Writer):
+    algorithm: AlgorithmProtocol
+
+    last_idx: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
     __footprint_state: NDArray[int32] = field(init=False)
     __fp_state_cache: NDArray[int64] = field(init=False)
-    fp: FootprintLike = field(init=False)
-
-    @override
-    def __post_init__(self) -> None:
-        Writer.__post_init__(self)
-
-        self.__trade_readed_time = self._manager.cfgMetrics.trade_readed_time.view.cast(
-            "q"
-        )
+    __trade_readed_time: memoryview = field(init=False)
 
     @final
     @override
-    def _init_array(self, nPrice: int64) -> None:
-        super()._init_array(nPrice)
+    def child_init_array(self, nPrice: int64) -> None:
+        Writer.child_init_array(self, nPrice)
 
-        if not self._re_init_idy:
+        if not self.re_init_idy:
             self.__footprint_state = np.zeros(
                 shape=(self.con.fp_rows, self.con.fp_panel_cols), dtype=int32
             )
             self.__fp_state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
-            self.fp = FootprintLike(
-                converter=self.con,
-                headers=self._headers,
-                fp=self._footprint,
-                fp_state=self.__footprint_state,
-                fp_state_cache=self.__fp_state_cache,
+            self.__trade_readed_time = (
+                self.manager.cfgMetrics.trade_readed_time.view.cast("q")
             )
+            self.fp._fp_state = self.__footprint_state
+            self.fp._bar._fp_state = self.__footprint_state
+            self.fp._fp_state_cache = self.__fp_state_cache
         else:
             need_rows: int64 = nPrice * 20 // 100 // self.con.scale
             before, after = (
@@ -55,36 +61,37 @@ class Reader(Writer, ABC):
                 array=self.__footprint_state,
                 pad_width=((int(before), int(after)), (0, 0)),
             )
-            self.fp._fp = self._footprint
             self.fp._fp_state = self.__footprint_state
+            self.fp._bar._fp_state = self.__footprint_state
 
     @final
     @override
-    def _init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        super()._init_idx(nPrice, timestamp)
+    def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
+        Writer.child_init_idx(self, nPrice, timestamp)
 
         self.__footprint_state.fill(0)
-        self.last_idx = 0
+        self.last_idx[0] = 0
 
     @final
-    def _analyze_footprint(self) -> None:
-        idYmin, idXmin, idYmax, idXmax = self._bbox
-        self._update_clusters(idYmin, idYmax, idXmin, idXmax)
+    def analyze_footprint(self) -> None:
+        idYmin, idXmin, idYmax, idXmax = self.bbox
+        self.__update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
             if self.fp.bar[idx].ind.volume.n > 0:
-                if idx > self.last_idx:
-                    self._update_closed_bar_and_fp()
-                    self.__trade_readed_time[0] = int(
-                        self.fp.bar[self.last_idx].ind.time.last_trade
+                if idx > self.last_idx[0]:
+                    self.__update_closed_bar_and_fp()
+                    self.trade_readed_time[0] = int(
+                        self.fp.bar[self.last_idx[0]].ind.time.last_trade
                     )
-                    self.last_idx = idx
+                    self.last_idx[0] = idx
 
-                self._update_bar(idYmin, idYmax, idxBid, idxAsk)
+                self.__update_bar(idYmin, idYmax, idxBid, idxAsk)
 
-        self._bbox[:] = self._bbox_default_value
+        self.bbox[:] = self.bbox_default_value
 
-    def _update_clusters(
+    @final
+    def __update_clusters(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
     ) -> None:
         _update_clusters_states(
@@ -94,24 +101,28 @@ class Reader(Writer, ABC):
             idXmax=idXmax,
             idxVP=self.con.idxVP,
             idxDP=self.con.idxDP,
-            fp=self._footprint,
+            fp=self.footprint,
             fp_state=self.__footprint_state,
         )
+        self.algorithm.find_patterns_in_update_clusters(idYmin, idYmax, idXmin, idXmax)
 
-    def _update_closed_bar_and_fp(self) -> None:
+    @final
+    def __update_closed_bar_and_fp(self) -> None:
         _update_closed_bar_and_fp_states(
-            lidx=self.last_idx,
+            lidx=self.last_idx[0],
             idxVP=self.con.idxVP,
-            hr=self._headers,
-            fp=self._footprint,
+            hr=self.headers,
+            fp=self.footprint,
             fp_state=self.__footprint_state,
             fp_state_cache=self.__fp_state_cache,
             baseNprice=self.con.baseNprice,
             center=self.con.center,
             scale=self.con.scale,
         )
+        self.algorithm.find_patterns_in_update_closed_bar()
 
-    def _update_bar(
+    @final
+    def __update_bar(
         self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
         _update_bar_states(
@@ -119,13 +130,14 @@ class Reader(Writer, ABC):
             idYmax=idYmax,
             idxBid=idxBid,
             idxAsk=idxAsk,
-            hr=self._headers,
-            fp=self._footprint,
+            hr=self.headers,
+            fp=self.footprint,
             fp_state=self.__footprint_state,
             baseNprice=self.con.baseNprice,
             center=self.con.center,
             scale=self.con.scale,
         )
+        self.algorithm.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
 
 
 @njit(cache=True)

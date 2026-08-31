@@ -40,4 +40,4 @@ def run_engine(engine_event: Event, execution_event: Event, **kwargs: Any) -> No
 
         agent = LiveAgent(manager, engine, engine_event)
 
-    agent.run_engine()
+    agent.run()

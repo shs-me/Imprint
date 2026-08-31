@@ -1,18 +1,17 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from multiprocessing.synchronize import Event
 from typing import override
 
+from ...exchange.account import Account
 from .base import Base
 
 
 @dataclass(slots=True)
-class Live(Base, ABC):
+class Live(Base[Account]):
     execution_event: Event
 
-    @abstractmethod
     @override
-    def _alarm_clock(
+    def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
         """Blocks process on execution_event when ring buffers are drained."""
@@ -22,21 +21,12 @@ class Live(Base, ABC):
             if (WB_1[0] == RB_1[0]) and (WB_2[0] == RB_2[0]):
                 self.execution_event.wait(timeout=0.1)
 
-    @abstractmethod
     @override
-    def _pre_execute_signal_action(self, time_get_signal: int) -> None:
+    def pre_execute_signal_action(self, time_get_signal: int) -> None:
         pass
 
-    @abstractmethod
     @override
-    def action_for_getted_signal(
-        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
-    ) -> None:
-        pass
-
-    @abstractmethod
-    @override
-    def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
 
         data = user_data_raw_buf.cast("q")
         event_type = data[1]
@@ -49,7 +39,7 @@ class Live(Base, ABC):
             nQty: int = data[5]
             nCommission: int = data[6]
 
-            self.action_for_getted_executed_order(
+            self.executor.action_for_getted_executed_order(
                 timestamp, order_param, order_id, nPrice, nQty, nCommission
             )
             self.con.update_orders_history(
@@ -59,20 +49,6 @@ class Live(Base, ABC):
         elif event_type == 2:
             pass
 
-    @abstractmethod
     @override
-    def action_for_getted_executed_order(
-        self,
-        timestamp: int,
-        order_param: int,
-        order_id: int,
-        nPrice: int,
-        nQty: int,
-        nCommission: int,
-    ) -> None:
-        pass
-
-    @abstractmethod
-    @override
-    def _post_final_action(self) -> None:
+    def post_final_action(self) -> None:
         pass

@@ -3,6 +3,7 @@
 from abc import ABC
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event, Semaphore
+from types import GenericAlias
 from typing import final
 
 from ... import configs as cfg
@@ -45,8 +46,7 @@ class Base(ABC):
     _ts_wid: memoryview = field(init=False)
 
     def __post_init__(self) -> None:
-        self.configs_init(self._configs)
-        self.main_tools_init(self._main_tools)
+        self.__init_attributes(self._configs, self._main_tools)
 
         self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
         self._main_status = self.cfgMetrics.main_status.view.cast("q")
@@ -60,34 +60,25 @@ class Base(ABC):
         self._ts_wid = self._text_stream.writer_id.view.cast("q")
 
     @final
-    def configs_init(self, configs: list[cfg.Configuration]) -> None:
-        """Associates configuration class instances with manager attributes and shared memory segments."""
-        for obj in configs:
-            cls = obj.__class__
+    def __init_attributes(
+        self, configs: list[cfg.Configuration], main_tools: list[Event | Semaphore]
+    ) -> None:
+        objs: list[cfg.Configuration | Event | Semaphore] = configs + main_tools
+        for obj in objs:
             for attr_name, attr_type in Base.__annotations__.items():
-                if attr_type is cls:
+                if issubclass(attr_type.__class__, GenericAlias):
+                    continue
+
+                if isinstance(obj, attr_type):
                     setattr(self, attr_name, obj)
                     if isinstance(obj, cfg.SharedMemorySegments):
-                        self.bind_shm_segments(obj)
+                        self.__bind_shm_segments(obj)
                     break
 
     @final
-    def bind_shm_segments(self, cfg: cfg.SharedMemorySegments) -> None:
-        """Binds tuple byte offsets to memoryview slices over active shared memory buffer."""
-
+    def __bind_shm_segments(self, cfg: cfg.SharedMemorySegments) -> None:
         buf: memoryview = self._shm_buf[self._segments[cfg.__class__.__name__]]
         for attr_name in cfg.__slots__:
             attr_val = getattr(cfg, attr_name)
             if isinstance(attr_val, Segment):
                 attr_val.view = buf[slice(*attr_val.offset)]
-
-    @final
-    def main_tools_init(self, tools: list[Event | Semaphore]) -> None:
-        """Binds IPC events and semaphores to manager attributes."""
-
-        for obj in tools:
-            cls = obj.__class__
-            for attr_name, attr_type in Base.__annotations__.items():
-                if attr_type is cls:
-                    setattr(self, attr_name, obj)
-                    break

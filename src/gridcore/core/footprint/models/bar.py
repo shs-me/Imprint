@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 from numpy import float64, int32, int64
 from numpy.typing import NDArray
@@ -10,6 +12,7 @@ from .converter import Converter
 PARK_FACTOR: int = 1.0 / (4.0 * np.log(2.0))
 
 
+@dataclass
 class BarLike:
     def __init__(
         self,

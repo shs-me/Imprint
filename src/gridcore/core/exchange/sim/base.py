@@ -1,32 +1,25 @@
-"""Simulated account equity tracking, margin maintenance, and position ledger."""
-
 import time
 from dataclasses import dataclass
-from typing import override
 
 from numba import njit
 from numpy import int64, uint8
 from numpy.typing import NDArray
 
-from .. import constant as c
-from ..account.manager import Manager, update_equity_ohlc, update_unrealized_nPnl
-from ..account.position import update_position
-from .matching_engine import MatchingEngine, matching, set_user_data
+from ... import constant as c
+from ..account.manager import update_equity_ohlc
+from ..account.position import (
+    update_mae_and_mfe,
+    update_position,
+    update_unrealized_nPnl,
+)
+from .matching_engine import MatchingEngine, matching
+from .user_data_stream import set_user_data
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
 @dataclass(slots=True)
-class Base(Manager, MatchingEngine):
-    @override
-    def __post_init__(self) -> None:
-        Manager.__post_init__(self)
-        MatchingEngine.__post_init__(self)
-
-    @override
-    def post_update_lockedNbalance(self) -> None:
-        self._update_order_book()
-
+class Base(MatchingEngine):
     def start(self, timestamp: int) -> None:
         while True:
             if _start(
@@ -38,9 +31,11 @@ class Base(Manager, MatchingEngine):
                 order_book=self.order_book,
                 obRow=self.obRow,
                 order_id_buf=self.order_id,
-                data_buf=self.data_buf,
-                data_buf_size=self.gus_data_size,
-                data_header=self.gus_data_header,
+                gus_data_buf=self.gus_data_buf,
+                gus_data_buf_size=self.gus_data_size,
+                gus_data_header=self.gus_data_header,
+                gus_wid=self.gus_wid,
+                gus_cell_amount=self.gus_cell_amount,
                 data_example=self.data_example,
                 deRow=self.deRow,
                 slippage=self.slippage,
@@ -61,8 +56,6 @@ class Base(Manager, MatchingEngine):
                 price_mult=self.price_mult,
                 qty_mult=self.qty_mult,
                 scale_mult=self.scale_mult,
-                writer_id=self.gus_wid,
-                cell_amount=self.gus_cell_amount,
                 timeframe=self.timeframe,
                 equity_history=self.equity_history,
                 base_timestamp=self.base_timestamp,
@@ -93,9 +86,11 @@ def _start(
     order_book: NDArray[int64],
     obRow: memoryview,
     order_id_buf: memoryview,
-    data_buf: NDArray[uint8],
-    data_buf_size: int,
-    data_header: memoryview,
+    gus_data_buf: NDArray[uint8],
+    gus_data_buf_size: int,
+    gus_data_header: memoryview,
+    gus_wid: memoryview,
+    gus_cell_amount: int,
     data_example: NDArray[int64],
     deRow: memoryview,
     slippage: int,
@@ -116,8 +111,6 @@ def _start(
     price_mult: int,
     qty_mult: int,
     scale_mult: int,
-    writer_id: memoryview,
-    cell_amount: int,
     timeframe: int,
     equity_history: NDArray[int64],
     base_timestamp: memoryview,
@@ -126,8 +119,6 @@ def _start(
     short_mae: memoryview,
     short_mfe: memoryview,
 ) -> bool:
-    """Numba JIT kernel iterating tick data, calculating PnL, updating equity OHLC, and matching orders."""
-
     max_row: int = dfm.shape[0]
     while trade_readed_time[0] < timestamp:
         row: int = dfmRid[0]
@@ -149,7 +140,7 @@ def _start(
         trade_nPrice: int = dfm[row, 0]
 
         uNpnl = update_unrealized_nPnl(
-            trade_nPrice=trade_nPrice,
+            nPrice=trade_nPrice,
             unrealizedNpnl=unrealizedNpnl,
             longUnrealizedNpnl=longUnrealizedNpnl,
             shortUnrealizedNpnl=shortUnrealizedNpnl,
@@ -160,14 +151,17 @@ def _start(
             price_mult=price_mult,
             qty_mult=qty_mult,
             scale_mult=scale_mult,
+        )
+        dynamicNbalance[0] = nBalance[0] + uNpnl
+        availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
+        update_mae_and_mfe(
+            longUnrealizedNpnl=longUnrealizedNpnl,
+            shortUnrealizedNpnl=shortUnrealizedNpnl,
             long_mae=long_mae,
             long_mfe=long_mfe,
             short_mae=short_mae,
             short_mfe=short_mfe,
         )
-        dynamicNbalance[0] = nBalance[0] + uNpnl
-        availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
-
         update_equity_ohlc(
             trade_timestamp=trade_timestamp,
             current_equity=dynamicNbalance[0],
@@ -190,12 +184,12 @@ def _start(
             slippage=slippage,
         )
         if executed:
-            _update_positions(
-                data_buf=data_buf,
-                data_buf_size=data_buf_size,
-                data_header=data_header,
-                writer_id=writer_id,
-                cell_amount=cell_amount,
+            _processing_executed_orders(
+                gus_data_buf=gus_data_buf,
+                gus_data_buf_size=gus_data_buf_size,
+                gus_data_header=gus_data_header,
+                gus_wid=gus_wid,
+                gus_cell_amount=gus_cell_amount,
                 data_example=data_example,
                 deRow=deRow,
                 makerNcommission=makerNcommission,
@@ -217,7 +211,7 @@ def _start(
             )
 
         uNpnl = update_unrealized_nPnl(
-            trade_nPrice=trade_nPrice,
+            nPrice=trade_nPrice,
             unrealizedNpnl=unrealizedNpnl,
             longUnrealizedNpnl=longUnrealizedNpnl,
             shortUnrealizedNpnl=shortUnrealizedNpnl,
@@ -228,14 +222,17 @@ def _start(
             price_mult=price_mult,
             qty_mult=qty_mult,
             scale_mult=scale_mult,
+        )
+        dynamicNbalance[0] = nBalance[0] + uNpnl
+        availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
+        update_mae_and_mfe(
+            longUnrealizedNpnl=longUnrealizedNpnl,
+            shortUnrealizedNpnl=shortUnrealizedNpnl,
             long_mae=long_mae,
             long_mfe=long_mfe,
             short_mae=short_mae,
             short_mfe=short_mfe,
         )
-        dynamicNbalance[0] = nBalance[0] + uNpnl
-        availableNbalance[0] = dynamicNbalance[0] - lockedNbalance[0]
-
         update_equity_ohlc(
             trade_timestamp=trade_timestamp,
             current_equity=dynamicNbalance[0],
@@ -251,12 +248,12 @@ def _start(
 
 
 @njit(cache=True)
-def _update_positions(
-    data_buf: NDArray[uint8],
-    data_buf_size: int,
-    data_header: memoryview,
-    writer_id: memoryview,
-    cell_amount: int,
+def _processing_executed_orders(
+    gus_data_buf: NDArray[uint8],
+    gus_data_buf_size: int,
+    gus_data_header: memoryview,
+    gus_wid: memoryview,
+    gus_cell_amount: int,
     data_example: NDArray[int64],
     deRow: memoryview,
     makerNcommission: int,
@@ -276,8 +273,6 @@ def _update_positions(
     short_mae: memoryview,
     short_mfe: memoryview,
 ) -> None:
-    """Numba JIT kernel updating open positions, deducting commissions, and generating execution events."""
-
     max_de_row: int = deRow[0]
     for de_row in range(max_de_row):
         deRow[0] -= 1
@@ -345,9 +340,9 @@ def _update_positions(
 
         set_user_data(
             data=data_example[de_row, :].view(uint8),
-            data_buf=data_buf,
-            data_buf_size=data_buf_size,
-            data_header=data_header,
-            writer_id=writer_id,
-            cell_amount=cell_amount,
+            gus_data_buf=gus_data_buf,
+            gus_data_buf_size=gus_data_buf_size,
+            gus_data_header=gus_data_header,
+            gus_wid=gus_wid,
+            gus_cell_amount=gus_cell_amount,
         )

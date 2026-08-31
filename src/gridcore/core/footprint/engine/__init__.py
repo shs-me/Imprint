@@ -1,5 +1,5 @@
-from .synced import Sync as SyncWithExecution
-from .synced import Synced as FootprintEngine
+from .router import Router as FootprintEngine
+from .router import SyncWithExecution
 
 __all__ = [
     "FootprintEngine",

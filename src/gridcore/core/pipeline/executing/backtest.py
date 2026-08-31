@@ -1,66 +1,56 @@
 import time
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import override
 
-from ...exchange_sim import ExchangeSim
+from ...exchange.sim import ExchangeSim
 from .base import Base
 
 
 @dataclass(slots=True)
-class Backtest(Base, ABC):
+class Backtest(Base[ExchangeSim]):
+    @override
     def __post_init__(self) -> None:
-        Base.__post_init__(self)
+        Base.__post_init__(self)  # pyright: ignore[reportUnknownMemberType]
 
-        self.acm = ExchangeSim(self._manager)
+        self.account: ExchangeSim = ExchangeSim(self.manager)
         self.con.init_session(
-            nBalance=self.acm.nBalance,
-            lockedNbalance=self.acm.lockedNbalance,
-            availableNbalance=self.acm.availableNbalance,
-            longNqty=self.acm.longNqty,
-            longEntryNprice=self.acm.longEntryNprice,
-            shortNqty=self.acm.shortNqty,
-            shortEntryNprice=self.acm.shortEntryNprice,
-            unrealizedNpnl=self.acm.unrealizedNpnl,
-            longUnrealizedNpnl=self.acm.longUnrealizedNpnl,
-            shortUnrealizedNpnl=self.acm.shortUnrealizedNpnl,
+            nBalance=self.account.nBalance,
+            lockedNbalance=self.account.lockedNbalance,
+            availableNbalance=self.account.availableNbalance,
+            longNqty=self.account.longNqty,
+            longEntryNprice=self.account.longEntryNprice,
+            shortNqty=self.account.shortNqty,
+            shortEntryNprice=self.account.shortEntryNprice,
+            unrealizedNpnl=self.account.unrealizedNpnl,
+            longUnrealizedNpnl=self.account.longUnrealizedNpnl,
+            shortUnrealizedNpnl=self.account.shortUnrealizedNpnl,
         )
 
-    @abstractmethod
     @override
-    def _alarm_clock(
+    def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:
         matching = False
-        if self._trade_readed_time[0] > self.acm.trade_readed_time[0]:
+        if self.trade_readed_time[0] > self.account.trade_readed_time[0]:
             matching = True
         if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
             return
         if matching:
-            self.acm.start(self._trade_readed_time[0])
+            self.account.start(self.trade_readed_time[0])
 
         time.sleep(0)
 
-    @abstractmethod
     @override
-    def _pre_execute_signal_action(self, time_get_signal: int) -> None:
+    def pre_execute_signal_action(self, time_get_signal: int) -> None:
         timestamp = time_get_signal + self.con.latency
-        while timestamp > self.acm.trade_readed_time[0]:
-            self.acm.start(timestamp)
+        while timestamp > self.account.trade_readed_time[0]:
+            self.account.start(timestamp)
             self._check_user_data_buf()
 
-        self.readed_timestamp: int = self.acm.trade_readed_time[0]
+        self.readed_timestamp: int = self.account.trade_readed_time[0]
 
-    @abstractmethod
     @override
-    def action_for_getted_signal(
-        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
-    ) -> None:
-        pass
-
-    @abstractmethod
-    @override
-    def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
         get_data: memoryview = user_data_raw_buf.cast("q")
         timestamp: int = get_data[0]
         order_param: int = get_data[1]
@@ -71,42 +61,28 @@ class Backtest(Base, ABC):
         nMAE: int = get_data[6]
         nMFE: int = get_data[7]
 
-        self.action_for_getted_executed_order(
+        self.executor.action_for_getted_executed_order(
             timestamp, order_param, order_id, nPrice, nQty, nCommission
         )
         self.con.update_orders_history(
             timestamp, order_param, order_id, nPrice, nQty, nCommission, nMAE, nMFE
         )
 
-    @abstractmethod
     @override
-    def action_for_getted_executed_order(
-        self,
-        timestamp: int,
-        order_param: int,
-        order_id: int,
-        nPrice: int,
-        nQty: int,
-        nCommission: int,
-    ) -> None:
-        pass
-
-    @abstractmethod
-    @override
-    def _post_final_action(self) -> None:
+    def post_final_action(self) -> None:
         max_timestamp = 9_999_999_999_999
-        while self.acm.trade_readed_time[0] < max_timestamp:
-            self.acm.start(max_timestamp)
+        while self.account.trade_readed_time[0] < max_timestamp:
+            self.account.start(max_timestamp)
             self._check_user_data_buf()
             if (
-                self.acm.prepper.complete
-                and self.acm.prepper.dfmRid[0] == self.acm.prepper.dfmWid[0]
+                self.account.prepper.complete
+                and self.account.prepper.dfmRid[0] == self.account.prepper.dfmWid[0]
             ):
                 break
 
         self.con.final_action()
-        self.acm.final_action()
-        self._manager.set_text(
+        self.account.final_action()
+        self.manager.set_text(
             (
                 f"Balance: {self.con.nBalance / self.con.scale} \n"
                 f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
@@ -116,7 +92,7 @@ class Backtest(Base, ABC):
                 f"Long Open Qty: {self.con._longNqty[0] / self.con.qtyMult} \n"
                 f"Short Open Qty: {self.con._shortNqty[0] / self.con.qtyMult} \n"
                 f"Count Orders in History: {self.con.ohWid[0]} \n"
-                f"Count Active Orders: {self.acm.obRow[0]} \n"
-                f"Count Open Positions: {self.count_open_positions}"
+                f"Count Active Orders: {self.account.obRow[0]} \n"
+                f"Count Open Positions: {self.count_open_positions[0]}"
             )
         )

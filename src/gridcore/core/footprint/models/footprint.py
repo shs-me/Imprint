@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
+import numpy as np
 from numpy import int32, int64
 from numpy.typing import NDArray
 
@@ -8,31 +11,39 @@ from .bar import BarLike
 from .converter import Converter
 
 
+@dataclass
 class FootprintLike:
-    def __init__(
-        self,
-        converter: Converter,
-        headers: NDArray[int64],
-        fp: NDArray[int64],
-        fp_state: NDArray[int32],
-        fp_state_cache: NDArray[int64],
-    ) -> None:
-        self._con: Converter = converter
-        self._headers: NDArray[int64] = headers
-        self._fp: NDArray[int64] = fp
-        self._fp_state: NDArray[int32] = fp_state
-        self._fp_state_cache: NDArray[int64] = fp_state_cache
+    _con: Converter
 
-        self._bar: BarLike = BarLike(
+    _headers: NDArray[int64] = field(
+        default_factory=lambda: np.array([0], dtype=int64), init=False
+    )
+    _fp: NDArray[int64] = field(
+        default_factory=lambda: np.array([0], dtype=int64), init=False
+    )
+    _fp_state: NDArray[int32] = field(
+        default_factory=lambda: np.array([0], dtype=int32), init=False
+    )
+    _fp_state_cache: NDArray[int64] = field(
+        default_factory=lambda: np.array([0], dtype=int64), init=False
+    )
+
+    _bar: BarLike = field(init=False)
+    _vplike: VolumeProfileLike = field(init=False)
+    _dplike: DeltaProfileLike = field(init=False)
+    _plike: PriceLike = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._bar = BarLike(
             converter=self._con,
             headers=self._headers,
             fp=self._fp,
             fp_state=self._fp_state,
         )
 
-        self._vplike: VolumeProfileLike = VolumeProfileLike(fp=self)
-        self._dplike: DeltaProfileLike = DeltaProfileLike(fp=self)
-        self._plike: PriceLike = PriceLike(fp=self)
+        self._vplike = VolumeProfileLike(fp=self)
+        self._dplike = DeltaProfileLike(fp=self)
+        self._plike = PriceLike(fp=self)
 
     @property
     def base(self) -> NDArray[int64]:

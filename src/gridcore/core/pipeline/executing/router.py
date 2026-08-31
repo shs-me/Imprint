@@ -1,42 +1,38 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import final, override
+from multiprocessing.synchronize import Event
+from typing import override
 
+from gridcore.core.ipc import NodeManager
+
+from ...exchange.account import AccountConverter
 from .backtest import Backtest as BacktestAgent
+from .base import ExecutionProtocol, SendOrderMethodSignature
 from .live import Live as LiveAgent
 
 
-@dataclass(slots=True)
-class Router(BacktestAgent, LiveAgent, ABC):
-    is_backtesting: bool = field(init=False)
-    _execution_type: type[BacktestAgent | LiveAgent] = field(init=False)
+@dataclass
+class Router(ExecutionProtocol, ABC):
+    _manager: NodeManager
+    _execution_event: Event
 
-    @abstractmethod
+    _executer: BacktestAgent | LiveAgent = field(init=False)
+
+    is_backtesting: bool = field(init=False)
+    count_open_positions: memoryview = field(init=False)
+    con: AccountConverter = field(init=False)
+    send_order: SendOrderMethodSignature = field(init=False)
+
     def __post_init__(self):
         self.is_backtesting = self._manager.cfgSetup.backtesting
         if self.is_backtesting:
-            BacktestAgent.__post_init__(self)
-            self._execution_type = BacktestAgent
+            self._executer = BacktestAgent(self._manager, self)
         else:
-            LiveAgent.__post_init__(self)
-            self._execution_type = LiveAgent
+            self._executer = LiveAgent(self._manager, self, self._execution_event)
 
-    @final
-    @override
-    def _alarm_clock(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
-    ) -> None:
-        self._execution_type._alarm_clock(self, WB_1, RB_1, WB_2, RB_2)
-
-    @final
-    @override
-    def _pre_execute_signal_action(self, time_get_signal: int) -> None:
-        self._execution_type._pre_execute_signal_action(self, time_get_signal)
-
-    @final
-    @override
-    def _preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-        self._execution_type._preppare_user_data(self, user_data_raw_buf)
+        self.count_open_positions = self._executer.count_open_positions
+        self.send_order = self._executer.send_order
+        self.con = self._executer.con
 
     @abstractmethod
     @override
@@ -57,8 +53,3 @@ class Router(BacktestAgent, LiveAgent, ABC):
         nCommission: int,
     ) -> None:
         pass
-
-    @final
-    @override
-    def _post_final_action(self) -> None:
-        self._execution_type._post_final_action(self)

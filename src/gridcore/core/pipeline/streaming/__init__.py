@@ -19,7 +19,7 @@ def run_streaming(
         from .backtest import BacktestAgent
 
         agent = BacktestAgent(manager=manager)
-        agent.run_wss_engine()
+        agent.run()
     else:
         import asyncio
 

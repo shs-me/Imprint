@@ -7,11 +7,13 @@ from numpy import int64
 
 from ... import constant as c
 from ...ipc import NodeManager
-from .reader import Reader
+from ..models import Converter, FootprintLike
+from .reader import AlgorithmProtocol
+from .reader import Reader as FootprintEngine
 
 
 @dataclass(slots=True)
-class Sync(ABC):
+class SyncWithExecution(ABC):
     manager: NodeManager
 
     time_start_reading: memoryview = field(init=False)
@@ -95,63 +97,40 @@ class Sync(ABC):
         return True if (lag < self.safe_lag) else False
 
 
-@dataclass(slots=True)
-class Synced(Reader, ABC):
-    _sync: Sync
+@dataclass
+class Router(AlgorithmProtocol, ABC):
+    _manager: NodeManager
+    _sync: SyncWithExecution
 
-    _find_patterns_in_update_clusters: bool = field(default=False, init=False)
-    _find_patterns_in_update_closed_bar: bool = field(default=False, init=False)
-    _find_patterns_in_update_bar: bool = field(default=False, init=False)
-    _tick_by_tick_analyze: bool = field(init=False)
+    tick_by_tick_analyze: bool = field(default=True, init=False)
 
-    @override
+    last_idx: memoryview = field(init=False)
+    fp: FootprintLike = field(init=False)
+    con: Converter = field(init=False)
+
+    _engine: FootprintEngine = field(init=False)
+
     def __post_init__(self) -> None:
-        Reader.__post_init__(self)
-
-        self._tick_by_tick_analyze = (
-            self._find_patterns_in_update_bar or self._find_patterns_in_update_clusters
-        )
-
-    @final
-    @override
-    def _update_clusters(
-        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
-    ) -> None:
-        super()._update_clusters(idYmin, idYmax, idXmin, idXmax)
-        if self._find_patterns_in_update_clusters:
-            self.find_patterns_in_update_clusters(idYmin, idYmax, idXmin, idXmax)
-
-    @final
-    @override
-    def _update_bar(
-        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
-    ) -> None:
-        super()._update_bar(idYmin, idYmax, idxBid, idxAsk)
-        if self._find_patterns_in_update_bar:
-            self.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
-
-    @final
-    @override
-    def _update_closed_bar_and_fp(self) -> None:
-        super()._update_closed_bar_and_fp()
-        if self._find_patterns_in_update_closed_bar:
-            self.find_patterns_in_update_closed_bar()
+        self._engine = FootprintEngine(self._manager, self)
+        self.last_idx = self._engine.last_idx.toreadonly()
+        self.fp = self._engine.fp
+        self.con = self._engine.con
 
     @abstractmethod
+    @override
     def find_patterns_in_update_clusters(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
-    ) -> None:
-        pass
+    ) -> None: ...
 
     @abstractmethod
-    def find_patterns_in_update_closed_bar(self) -> None:
-        pass
+    @override
+    def find_patterns_in_update_closed_bar(self) -> None: ...
 
     @abstractmethod
+    @override
     def find_patterns_in_update_bar(
         self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
-    ) -> None:
-        pass
+    ) -> None: ...
 
     @final
     def send_signal(
@@ -164,7 +143,7 @@ class Synced(Reader, ABC):
         pass_lag: bool = True,
     ) -> int | None:
         nPrice = int(self.con.to_nPrice(idy))
-        idx = idx if (idx is not None) else self.last_idx
+        idx = idx if (idx is not None) else self.last_idx[0]
         timestamp = int(self.fp.bar[idx].ind.time.last_trade)
         return self._sync.send_signal(
             nPrice=nPrice,

@@ -1,21 +1,17 @@
 import importlib
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
-from typing import final, override
+from typing import override
 
 from ...footprint.engine import SyncWithExecution
-from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
 from ..utils.base_adapters import AggTradesDecoder
 from .base import Base
 
 
-@final
+@dataclass(slots=True)
 class SyncViaEvent(SyncWithExecution):
-    def __init__(self, manager: NodeManager, execution_event: Event) -> None:
-        super().__init__(manager)
-
-        self.execution_event: Event = execution_event
+    execution_event: Event
 
     @override
     def sync_with_execution(self) -> None:
@@ -51,8 +47,8 @@ class Live(Base):
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
         for p, q, t, m in self.decoder.decode(raw_data[:]):
-            self.agg_trades[self.at_wid, 0] = round(p * self.engine.con.price_mult)
-            self.agg_trades[self.at_wid, 1] = round(q * self.engine.con.qty_mult)
+            self.agg_trades[self.at_wid, 0] = round(p * self.algorithm.con.price_mult)
+            self.agg_trades[self.at_wid, 1] = round(q * self.algorithm.con.qty_mult)
             self.agg_trades[self.at_wid, 2] = t
             self.agg_trades[self.at_wid, 3] = m
             self.at_wid: int = (
@@ -61,17 +57,16 @@ class Live(Base):
 
     @override
     def post_update(self) -> None:
-        if self.engine._sync.lag_is_safe() is False:
+        if self.algorithm._sync.lag_is_safe() is False:
             self.pass_lag += 1
             if self.pass_lag >= self.pass_lag_limit:
                 self.manager.set_proc_sc(
                     scs.ANALYSIS_LAG_MORE_SAFE_LAG, wait_main_task=False
                 )
 
-        if self.ds_wid[0] == self.ds_rid[0]:
-            if self.engine_event.is_set():
-                self.engine_event.clear()
+        if self.engine_event.is_set():
+            self.engine_event.clear()
 
     @override
     def post_final_action(self) -> None:
-        self.engine._sync.sync_with_execution()
+        self.algorithm._sync.sync_with_execution()

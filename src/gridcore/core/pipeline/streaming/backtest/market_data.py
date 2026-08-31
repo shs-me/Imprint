@@ -46,7 +46,7 @@ class MarketDataStream(Base):
         self.prepper.start()
 
     @error_handler(set_status_code=True)
-    def run_wss_engine(self) -> None:
+    def run(self) -> None:
         # Local Links
         wid, rid = self.ds_wid, self.ds_rid
         data, data_size = self.ds_data, self.ds_data_size

@@ -3,15 +3,12 @@ import time
 from dataclasses import dataclass
 from typing import override
 
-from ...footprint.engine import SyncWithExecution
-from ...ipc import NodeManager
+from ...footprint import SyncWithExecution
 from .base import Base
 
 
+@dataclass(slots=True)
 class SyncViaSpinLock(SyncWithExecution):
-    def __init__(self, manager: NodeManager) -> None:
-        super().__init__(manager)
-
     @override
     def sync_with_execution(self) -> None:
         pass
@@ -30,7 +27,7 @@ class Backtest(Base):
 
     @override
     def post_update(self) -> None:
-        return super().post_update()
+        pass
 
     @override
     def post_final_action(self) -> None:
