@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 from numpy import float64, int32, int64
@@ -203,7 +204,7 @@ class PriceLike:
 
     @property
     def id(self) -> int64:
-        return self._bar._con.to_idy(self._nPrice)
+        return cast(int64, self._bar._con.to_idy(self._nPrice))
 
     @property
     def qty(self):

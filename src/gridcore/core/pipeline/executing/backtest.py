@@ -9,9 +9,7 @@ from .base import Base
 @dataclass(slots=True)
 class Backtest(Base[ExchangeSim]):
     @override
-    def __post_init__(self) -> None:
-        Base.__post_init__(self)  # pyright: ignore[reportUnknownMemberType]
-
+    def init_session(self) -> None:
         self.account: ExchangeSim = ExchangeSim(self.manager)
         self.con.init_session(
             nBalance=self.account.nBalance,

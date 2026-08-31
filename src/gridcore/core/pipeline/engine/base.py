@@ -75,7 +75,7 @@ class Base(ABC):
                 self.alarm_clock()
 
             if self.__ds_wid[0] != self.__ds_rid[0]:
-                self.__get_trade_data()
+                self.__get_trades_data()
                 while self.at_rid != self.at_wid:
                     nPrice, nQty, timestamp, is_sell = self.agg_trades[self.at_rid, :]
 
@@ -83,7 +83,7 @@ class Base(ABC):
                         self.manager.set_proc_sc(
                             code=scs.UNVALID_DATA, wait_main_task=True
                         )
-                        continue
+                        break
 
                     new_rid = self.at_rid + 1
                     self.at_rid = new_rid if new_rid < self.at_max_row else 0
@@ -92,8 +92,8 @@ class Base(ABC):
                         nPrice, nQty, timestamp, is_sell
                     )
 
-                    if self.__ds_wid[0] != self.__ds_rid[0]:
-                        if not self.algorithm.tick_by_tick_analyze:
+                    if not self.algorithm.tick_by_tick_analyze:
+                        if self.__ds_wid[0] != self.__ds_rid[0]:
                             if not self.algorithm._engine.re_init_session:
                                 continue
 
@@ -136,7 +136,7 @@ class Base(ABC):
         pass
 
     @final
-    def __get_trade_data(self) -> None:
+    def __get_trades_data(self) -> None:
         cell: int = self.__ds_rid[0]
         lrd: int = self.__ds_data_header[cell]
         start: int = cell * self.__ds_data_size

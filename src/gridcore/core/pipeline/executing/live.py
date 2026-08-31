@@ -11,6 +11,9 @@ class Live(Base[Account]):
     execution_event: Event
 
     @override
+    def init_session(self) -> None: ...
+
+    @override
     def alarm_clock(
         self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
     ) -> None:

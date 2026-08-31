@@ -105,6 +105,10 @@ class Base[T: Account](ABC):
             price_prec=self.manager.cfgCoin.price_prec,
             qty_prec=self.manager.cfgCoin.qty_prec,
         )
+        self.init_session()
+
+    @abstractmethod
+    def init_session(self) -> None: ...
 
     @final
     @error_handler(set_status_code=True)

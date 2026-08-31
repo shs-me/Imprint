@@ -98,7 +98,7 @@ class Base(ABC):
                 [self.con.fp_rows, self.con.fp_cols, 0, 0], dtype=int64
             )
             self.fp._headers = self.headers
-            self.fp._bar._headers = self.footprint
+            self.fp._bar._headers = self.headers
             self.fp._fp = self.footprint
             self.fp._bar._fp = self.footprint
         else:

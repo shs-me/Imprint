@@ -11,7 +11,7 @@ from .bar import BarLike
 from .converter import Converter
 
 
-@dataclass
+@dataclass(slots=True)
 class FootprintLike:
     _con: Converter
 
