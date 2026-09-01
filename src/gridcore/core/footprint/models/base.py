@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, SupportsIndex, TypeAlias, cast, overload
+from typing import Literal, SupportsIndex, cast, overload
 
 import numpy as np
 from numpy import int64
@@ -10,31 +10,35 @@ from numpy.typing import NDArray
 from ... import constant as c
 from .converter import Converter
 
-T_SLICE: TypeAlias = slice[int | int64]
+T_SLICE = slice[SupportsIndex | None]
+T_INDEX = SupportsIndex
 
-T_1D: TypeAlias = T_SLICE | SupportsIndex
-T_IDY: TypeAlias = T_1D
-T_IDX: TypeAlias = T_1D
-T_2D: TypeAlias = tuple[T_IDY, T_IDX]
+T_1D = T_SLICE | T_INDEX
 
-T_FP_MODE: TypeAlias = Literal["base", "state"]
-T_VA: TypeAlias = Literal["poc", "vah", "val"]
-T_PRICE: TypeAlias = Literal["idy", "n"]
-T_QTY: TypeAlias = tuple[Literal["bid", "ask", "sum", "delta"], Literal["fp", "bar"]]
-T_VP: TypeAlias = tuple[T_1D, T_FP_MODE] | T_VA
+T_IDY = T_1D
+T_IDX = T_1D
+
+T_FP_MODE = Literal["base", "state"]
+
+T_FP = T_FP_MODE | tuple[T_FP_MODE, T_IDY] | tuple[T_FP_MODE, T_IDY, T_IDX]
+T_VP = T_FP_MODE | tuple[T_FP_MODE, T_IDY]
+T_VA = Literal["poc", "vah", "val"]
+
+T_PRICE = Literal["idy", "n"]
+T_QTY = tuple[Literal["bid", "ask", "sum", "delta"], Literal["fp", "bar"]]
 
 
 @dataclass(slots=True)
 class Footprint:
     con: Converter
 
-    base: NDArray[int64] = field(
+    __fp: NDArray[int64] = field(
         default_factory=lambda: np.array([0], dtype=int64), init=False
     )
-    state: NDArray[int64] = field(
+    __fp_state: NDArray[int64] = field(
         default_factory=lambda: np.array([0], dtype=int64), init=False
     )
-    state_cache: NDArray[int64] = field(
+    __fp_state_cache: NDArray[int64] = field(
         default_factory=lambda: np.array([0], dtype=int64), init=False
     )
 
@@ -50,6 +54,35 @@ class Footprint:
             shape=(self.con.chart_range * self.con.bar_count, c.BH_ConstantCount),
             dtype=int64,
         )
+
+    @overload
+    def __getitem__(self, i: tuple[T_FP_MODE, T_INDEX, T_INDEX], /) -> int64: ...  # pyright: ignore[reportOverlappingOverload]
+    @overload
+    def __getitem__(self, i: T_FP, /) -> NDArray[int64]: ...
+
+    def __getitem__(self, i: T_FP, /):
+        if isinstance(i, tuple):
+            if len(i) == 3:
+                if isinstance(i[1], SupportsIndex) and isinstance(i[2], SupportsIndex):
+                    if i[0] == "base":
+                        return self.__fp[i[1], i[2]]
+                    else:
+                        return self.__fp_state[i[1], i[2]]
+                else:
+                    if i[0] == "base":
+                        return self.__fp[i[1], i[2]]
+                    else:
+                        return self.__fp_state[i[1], i[2]]
+            else:
+                return self.__fp[i[1]] if (i[0] == "base") else self.__fp_state[i[1]]
+        else:
+            return self.__fp if (i == "base") else self.__fp_state
+
+    def __setitem__(self, i: tuple[T_FP_MODE, NDArray[int64]]) -> None:
+        if i[0] == "base":
+            self.__fp = i[1]
+        else:
+            self.__fp_state = i[1]
 
 
 @dataclass
@@ -69,21 +102,30 @@ class VolumeProfile:
         self.__plike = PriceLike(self._fp.con)
 
     @overload
-    def __getitem__(self, item: tuple[T_1D, T_FP_MODE], /) -> NDArray[int64]: ...
+    def __getitem__(
+        self, i: T_FP_MODE | tuple[T_FP_MODE, T_SLICE], /
+    ) -> NDArray[int64]: ...
     @overload
-    def __getitem__(self, item: T_VA, /) -> PriceLike: ...
+    def __getitem__(self, i: tuple[T_FP_MODE, T_INDEX], /) -> int64: ...
+    @overload
+    def __getitem__(self, i: T_VA, /) -> PriceLike: ...
 
-    def __getitem__(self, item: T_VP, /):
-        if isinstance(item, tuple):
-            if item[1] == "base":
-                return self._fp.base[item[0], self.__idx]
+    def __getitem__(self, i: T_VP | T_VA, /):
+        if isinstance(i, tuple):
+            if isinstance(i[1], slice):
+                return self._fp[i[0], i[1], self.__idx]
             else:
-                return self._fp.state[item[0], self.__idx]
+                return self._fp[i[0], i[1], self.__idx]
 
-        elif item == "poc":
+        elif i == "base" or i == "state":
+            return self._fp[i, :, self.__idx]
+
+        elif i == "poc":
             return self.__plike
-        elif item == "vah":
+
+        elif i == "vah":
             return self.__plike
+
         else:
             return self.__plike
 
@@ -134,7 +176,7 @@ class QtyLike:
             return self.__bids(bid_lvl) - self.__asks(ask_lvl)
 
     def __bids(self, key: slice | int64) -> int64:
-        return int64(self._fp.base[self.__idy, key].sum())
+        return self._fp.vp["base", self.__idy]
 
     def __asks(self, key: slice | int64) -> int64:
-        return int64(self._fp.base[self.__idy, key].sum())
+        return self._fp.vp["base", self.__idy]

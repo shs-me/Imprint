@@ -263,7 +263,7 @@ def _update_short_unrealized_nPnl(
     scale_mult: int,
 ) -> None:
     if shortNqty[0]:
-        shortUnrealizedNpnl[0] = to_long_nPnl(
+        shortUnrealizedNpnl[0] = to_short_nPnl(
             closeNprice=nPrice,
             entryNprice=shortEntryNprice[0],
             nQty=shortNqty[0],

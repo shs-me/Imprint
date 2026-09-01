@@ -104,10 +104,13 @@ class Base(ABC):
         else:
             need_rows: int64 = nPrice * 20 // 100 // self.con.scale
             self.con.fp_rows = self.con.fp_rows + need_rows
-            self.con.center = self.con.fp_rows // 2
-            before, after = (
-                (need_rows, 0) if (nPrice > self.con.baseNprice) else (0, need_rows)
-            )
+
+            if nPrice > self.con.baseNprice:
+                before, after = need_rows, 0
+                self.con.center = self.con.center + need_rows
+            else:
+                before, after = 0, need_rows
+
             self.footprint = np.pad(
                 array=self.footprint, pad_width=((int(before), int(after)), (0, 0))
             )
