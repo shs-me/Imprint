@@ -4,8 +4,8 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from ...core import constant as c
-from ...core.account.converter import to_nPnl
-from ...core.account.position import update_position
+from ...core.exchange.account.converter import to_long_nPnl, to_short_nPnl
+from ...core.exchange.account.position import update_position
 from ..settings import CloseTrades, OpenTrades
 
 
@@ -90,19 +90,26 @@ def analyze_orders_history(
                     }
                 )
             else:
-                pnl: float = (
-                    to_nPnl(
+                if is_long:
+                    nPnl = to_long_nPnl(
                         closeNprice=nPrice,
+                        entryNprice=longEntryNprice[0],
                         nQty=nQty,
-                        is_long=is_long,
-                        longEntryNprice=longEntryNprice[0],
-                        shortEntryNprice=shortEntryNprice[0],
                         price_mult=price_mult,
                         qty_mult=qty_mult,
                         scale_mult=scale_mult,
                     )
-                    / scale_mult
-                )
+                else:
+                    nPnl = to_short_nPnl(
+                        closeNprice=nPrice,
+                        entryNprice=shortEntryNprice[0],
+                        nQty=nQty,
+                        price_mult=price_mult,
+                        qty_mult=qty_mult,
+                        scale_mult=scale_mult,
+                    )
+
+                pnl: float = nPnl / scale_mult
 
                 entry_p = (
                     longEntryNprice[0] if is_long else shortEntryNprice[0]

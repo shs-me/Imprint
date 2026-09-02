@@ -71,6 +71,7 @@ def run(setup: SetupCore) -> None:
                 scale_mult=setup.run_mode.account.scale_mult,
                 leverage=setup.run_mode.account.leverage,
                 timeframe=setup.strategy.footprint.timeframe,
+                render_to_html=setup.run_mode.with_visualization.render_to_html,
             )
 
         else:

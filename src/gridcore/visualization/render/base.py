@@ -5,13 +5,15 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from ..analyze import Stats
-from .chart import plot_chart_with_markers
-from .curve_balance import plot_curve_balance
-from .dashboard import plot_info_dashboard
-from .trade_distribution import plot_trade_distribution
+from ..plot import (
+    plot_chart_with_markers,
+    plot_curve_balance,
+    plot_info_dashboard,
+    plot_trade_distribution,
+)
 
 
-def render(stats: Stats) -> None:
+def run(stats: Stats) -> None:
     plt.style.use("dark_background")
     fig: Figure = plt.figure(figsize=(16, 9), facecolor="#121212")  # pyright: ignore[reportUnknownMemberType]
     gs = gridspec.GridSpec(

@@ -24,7 +24,7 @@ from .metrics import (
 from .orders_history import analyze_orders_history
 
 
-@dataclass
+@dataclass(slots=True)
 class Stats:
     symbol: str
     start_date: str

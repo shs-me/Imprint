@@ -9,7 +9,8 @@ from numpy.typing import NDArray
 from ..core import constant as c
 from ..core.settings import Timeframe
 from .analyze import Stats
-from .plot import render
+from .render import io_render as io
+from .render import render_to_html as to_html
 from .settings import OHLC
 
 
@@ -74,6 +75,7 @@ def run(
     scale_mult: int,
     leverage: int,
     timeframe: Timeframe,
+    render_to_html: bool = False,
 ) -> None:
     headers_path = get_headers_path(
         footprint_headers_path=footprint_headers_path,
@@ -113,4 +115,7 @@ def run(
         orders=orders_history,
         ohlc=ohlc,
     )
-    render(stats)
+    if render_to_html:
+        to_html(stats)
+    else:
+        io(stats)

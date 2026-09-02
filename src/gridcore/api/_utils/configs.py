@@ -32,6 +32,7 @@ __all__ = [
 @dataclass
 class Visualization:
     only_visualization: bool = False
+    render_to_html: bool = False
 
 
 @dataclass
