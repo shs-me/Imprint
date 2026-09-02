@@ -2,13 +2,14 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import overload
+from typing import final, overload
 
 from numpy import float64, int64
 
 from ... import configs as cfg
 
 
+@final
 @dataclass(slots=True)
 class Converter:
     """Converter mapping floating-point values to fixed-point integers and Footprint matrix coordinates."""

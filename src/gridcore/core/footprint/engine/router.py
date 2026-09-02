@@ -7,7 +7,7 @@ from numpy import int64
 
 from ... import constant as c
 from ...ipc import NodeManager
-from ..models import Converter, FootprintLike
+from ..models import Footprint
 from .reader import AlgorithmProtocol
 from .reader import Reader as FootprintEngine
 
@@ -105,8 +105,7 @@ class Router(AlgorithmProtocol, ABC):
     tick_by_tick_analyze: bool = field(default=True, init=False)
 
     last_idx: memoryview = field(init=False)
-    fp: FootprintLike = field(init=False)
-    con: Converter = field(init=False)
+    fp: Footprint = field(init=False)
 
     _engine: FootprintEngine = field(init=False)
 
@@ -114,7 +113,6 @@ class Router(AlgorithmProtocol, ABC):
         self._engine = FootprintEngine(self._manager, self)
         self.last_idx = self._engine.last_idx.toreadonly()
         self.fp = self._engine.fp
-        self.con = self._engine.con
 
     @abstractmethod
     @override
@@ -142,9 +140,9 @@ class Router(AlgorithmProtocol, ABC):
         idx: int | None = None,
         pass_lag: bool = True,
     ) -> int | None:
-        nPrice = int(self.con.to_nPrice(idy))
+        nPrice = int(self.fp.con.to_nPrice(idy))
         idx = idx if (idx is not None) else self.last_idx[0]
-        timestamp = int(self.fp.bar[idx].ind.time.last_trade)
+        timestamp = int(self.fp.bar[idx].ind.last_trade_time)
         return self._sync.send_signal(
             nPrice=nPrice,
             timestamp=timestamp,

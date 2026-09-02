@@ -32,8 +32,6 @@ class Reader(Writer):
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
 
-    __footprint_state: NDArray[int32] = field(init=False)
-    __fp_state_cache: NDArray[int64] = field(init=False)
     __trade_readed_time: memoryview = field(init=False)
 
     @final
@@ -42,34 +40,15 @@ class Reader(Writer):
         Writer.child_init_array(self, nPrice)
 
         if not self.re_init_idy:
-            self.__footprint_state = np.zeros(
-                shape=(self.con.fp_rows, self.con.fp_panel_cols), dtype=int32
-            )
-            self.__fp_state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
             self.__trade_readed_time = (
                 self.manager.cfgMetrics.trade_readed_time.view.cast("q")
             )
-            self.fp._fp_state = self.__footprint_state
-            self.fp._bar._fp_state = self.__footprint_state
-            self.fp._fp_state_cache = self.__fp_state_cache
-        else:
-            need_rows: int64 = nPrice * 20 // 100 // self.con.scale
-            before, after = (
-                (need_rows, 0) if (nPrice > self.con.baseNprice) else (0, need_rows)
-            )
-            self.__footprint_state = np.pad(
-                array=self.__footprint_state,
-                pad_width=((int(before), int(after)), (0, 0)),
-            )
-            self.fp._fp_state = self.__footprint_state
-            self.fp._bar._fp_state = self.__footprint_state
 
     @final
     @override
     def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
         Writer.child_init_idx(self, nPrice, timestamp)
 
-        self.__footprint_state.fill(0)
         self.last_idx[0] = 0
 
     @final
@@ -78,11 +57,11 @@ class Reader(Writer):
         self.__update_clusters(idYmin, idYmax, idXmin, idXmax)
         for idx in range((idXmin & ~1), idXmax, 2):
             idxBid, idxAsk = idx, idx + 1
-            if self.fp.bar[idx].ind.volume.n > 0:
+            if self.fp.bar[idx].ind.volume > 0:
                 if idx > self.last_idx[0]:
                     self.__update_closed_bar_and_fp()
                     self.trade_readed_time[0] = int(
-                        self.fp.bar[self.last_idx[0]].ind.time.last_trade
+                        self.fp.bar[self.last_idx[0]].ind.last_trade_time
                     )
                     self.last_idx[0] = idx
 
@@ -99,10 +78,10 @@ class Reader(Writer):
             idYmax=idYmax,
             idXmin=idXmin,
             idXmax=idXmax,
-            idxVP=self.con.idxVP,
-            idxDP=self.con.idxDP,
-            fp=self.footprint,
-            fp_state=self.__footprint_state,
+            idxVP=self.fp.con.idxVP,
+            idxDP=self.fp.con.idxDP,
+            fp=self.fp.base,
+            fp_state=self.fp.state,
         )
         self.algorithm.find_patterns_in_update_clusters(idYmin, idYmax, idXmin, idXmax)
 
@@ -110,14 +89,14 @@ class Reader(Writer):
     def __update_closed_bar_and_fp(self) -> None:
         _update_closed_bar_and_fp_states(
             lidx=self.last_idx[0],
-            idxVP=self.con.idxVP,
-            hr=self.headers,
-            fp=self.footprint,
-            fp_state=self.__footprint_state,
-            fp_state_cache=self.__fp_state_cache,
-            baseNprice=self.con.baseNprice,
-            center=self.con.center,
-            scale=self.con.scale,
+            idxVP=self.fp.con.idxVP,
+            hr=self.fp.headers,
+            fp=self.fp.base,
+            fp_state=self.fp.state,
+            fp_state_cache=self.fp.state_cache,
+            baseNprice=self.fp.con.baseNprice,
+            center=self.fp.con.center,
+            scale=self.fp.con.scale,
         )
         self.algorithm.find_patterns_in_update_closed_bar()
 
@@ -130,12 +109,12 @@ class Reader(Writer):
             idYmax=idYmax,
             idxBid=idxBid,
             idxAsk=idxAsk,
-            hr=self.headers,
-            fp=self.footprint,
-            fp_state=self.__footprint_state,
-            baseNprice=self.con.baseNprice,
-            center=self.con.center,
-            scale=self.con.scale,
+            hr=self.fp.headers,
+            fp=self.fp.base,
+            fp_state=self.fp.state,
+            baseNprice=self.fp.con.baseNprice,
+            center=self.fp.con.center,
+            scale=self.fp.con.scale,
         )
         self.algorithm.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
 

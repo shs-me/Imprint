@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast, overload, override
+from typing import TYPE_CHECKING, Any, cast, final, overload, override
 
 import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from gridcore.core.footprint.models import Converter
-
 from ... import constant as c
+from .converter import Converter
 
 if TYPE_CHECKING:
     from .typing import T_FP, T_INDEX, T_SLICE, T_VP
 
 
+@final
 class FPArray(np.ndarray):
-    def __new__(cls, rows: int, cols: int) -> FPArray:
+    def __new__(cls, rows: int | int64, cols: int | int64) -> FPArray:
         obj = super().__new__(cls, shape=(rows, cols), dtype=int64)
         obj.fill(0)
         return obj
@@ -36,7 +36,7 @@ class FPArray(np.ndarray):
         return super().__getitem__(key)
 
     def pading(self, before: int, after: int) -> FPArray:
-        return np.pad(self, pad_width=((before, after), (0, 0))).view(self)  # pyright: ignore[reportReturnType]
+        return np.pad(self, pad_width=((before, after), (0, 0))).view(FPArray)
 
 
 @dataclass(slots=True)
@@ -58,27 +58,28 @@ class Chart(ABC):
 
 
 @dataclass(slots=True)
-class ProfileLike(ABC):
+class ProfileLike[T](ABC):
     _idx: int
 
-    __arr: FPArray = field(init=False)
+    _arr: FPArray = field(init=False)
 
     @overload
     def __getitem__(self, key: T_INDEX, /) -> int64: ...
     @overload
-    def __getitem__(self, key: T_SLICE, /) -> NDArray[int64]: ...
+    def __getitem__(self, key: T_SLICE, /) -> FPArray: ...
     def __getitem__(self, key: T_VP, /):  # pyright: ignore[reportInconsistentOverload]
-        return self.__arr[key, self._idx]
+        return self._arr[key, self._idx]
 
 
+@final
 @dataclass(slots=True)
-class PriceLike:
+class PriceLike[T]:
     _con: Converter
-    _qlike: QtyLike
+    _qlike: QtyLike[T]
 
     n: int64 = field(default=int64(0), init=False)
 
-    def __getitem__(self, nPrice: int64) -> PriceLike:
+    def __getitem__(self, nPrice: int64) -> PriceLike[T]:
         self.n = nPrice
         return self
 
@@ -87,13 +88,13 @@ class PriceLike:
         return cast(int64, self._con.to_idy(self.n))
 
     @property
-    def qty(self) -> QtyLike:
+    def qty(self) -> QtyLike[T]:
         return self._qlike[self.id]
 
 
 @dataclass(slots=True)
-class QtyLike(ABC):
-    __idy: int64 = field(default=int64(0), init=False)
+class QtyLike[T](ABC):
+    _idy: int64 = field(default=int64(0), init=False)
 
     @abstractmethod
-    def __getitem__(self, idy: int64) -> QtyLike: ...
+    def __getitem__(self, idy: int64) -> QtyLike[T]: ...

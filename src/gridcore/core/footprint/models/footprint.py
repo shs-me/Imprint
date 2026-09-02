@@ -1,139 +1,129 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import final, override
 
 import numpy as np
-from numpy import int32, int64
+from numpy import int64
 from numpy.typing import NDArray
 
 from ... import constant as c
-from .bar import BarLike
+from .bar import Bar
+from .base import Chart, FPArray, PriceLike, ProfileLike, QtyLike
 from .converter import Converter
 
 
+@final
 @dataclass(slots=True)
-class FootprintLike:
-    _con: Converter
+class Footprint(Chart):
+    con: Converter
 
-    _headers: NDArray[int64] = field(
-        default_factory=lambda: np.array([0], dtype=int64), init=False
-    )
-    _fp: NDArray[int64] = field(
-        default_factory=lambda: np.array([0], dtype=int64), init=False
-    )
-    _fp_state: NDArray[int32] = field(
-        default_factory=lambda: np.array([0], dtype=int32), init=False
-    )
-    _fp_state_cache: NDArray[int64] = field(
-        default_factory=lambda: np.array([0], dtype=int64), init=False
-    )
+    base: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
+    state: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
 
-    _bar: BarLike = field(init=False)
-    _vplike: VolumeProfileLike = field(init=False)
-    _dplike: DeltaProfileLike = field(init=False)
-    _plike: PriceLike = field(init=False)
+    state_cache: NDArray[int64] = field(init=False)
+    headers: NDArray[int64] = field(init=False)
+    bar: Bar = field(init=False)
+    vp: VolumeProfile[Footprint] = field(init=False)
+    dp: DeltaProfile[Footprint] = field(init=False)
+
+    __plike: PriceLike[Footprint] = field(init=False)
 
     def __post_init__(self) -> None:
-        self._bar = BarLike(
-            converter=self._con,
-            headers=self._headers,
-            fp=self._fp,
-            fp_state=self._fp_state,
+        self.state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
+        self.headers = np.zeros(
+            shape=(self.con.chart_range * self.con.bar_count, c.BH_ConstantCount),
+            dtype=int64,
         )
-
-        self._vplike = VolumeProfileLike(fp=self)
-        self._dplike = DeltaProfileLike(fp=self)
-        self._plike = PriceLike(fp=self)
-
-    @property
-    def base(self) -> NDArray[int64]:
-        return self._fp
+        self.bar = Bar(self)
+        self.vp = VolumeProfile(self.con.idxVP, self)
+        self.dp = DeltaProfile(self.con.idxDP, self)
+        self.__plike = PriceLike(self.con, Qty(self))
 
     @property
-    def state(self) -> NDArray[int32]:
-        return self._fp_state
+    def vwap(self) -> PriceLike[Footprint]:
+        return self.__plike[self.state_cache[c.CSD_VWAP]]
 
     @property
-    def bar(self) -> BarLike:
-        return self._bar
+    def vwap_up_band(self) -> PriceLike[Footprint]:
+        return self.__plike[self.state_cache[c.CSD_UPPER_BB]]
 
     @property
-    def vp(self) -> VolumeProfileLike:
-        return self._vplike
+    def vwap_low_band(self) -> PriceLike[Footprint]:
+        return self.__plike[self.state_cache[c.CSD_LOWER_BB]]
+
+
+@final
+@dataclass(slots=True)
+class VolumeProfile[T](ProfileLike[T]):
+    _fp: Footprint
+
+    __plike: PriceLike[T] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.__plike = PriceLike(self._fp.con, Qty(self._fp))
 
     @property
-    def dp(self) -> DeltaProfileLike:
-        return self._dplike
+    def base(self) -> VolumeProfile[T]:
+        self._arr = self._fp.base
+        return self
 
     @property
-    def vwap(self) -> PriceLike:
-        self._plike._idy = self._fp_state_cache[c.CSD_VWAP]
-        return self._plike
+    def state(self) -> VolumeProfile[T]:
+        self._arr = self._fp.state
+        return self
 
     @property
-    def vwap_band_lower(self) -> PriceLike:
-        self._plike._idy = self._fp_state_cache[c.CSD_LOWER_BB]
-        return self._plike
+    def poc(self) -> PriceLike[T]:
+        return self.__plike[self._fp.state_cache[c.CSD_POC_FP]]
 
     @property
-    def vwap_band_upper(self) -> PriceLike:
-        self._plike._idy = self._fp_state_cache[c.CSD_UPPER_BB]
-        return self._plike
-
-
-class VolumeProfileLike:
-    def __init__(self, fp: FootprintLike) -> None:
-        self._fp: FootprintLike = fp
-        self._idx: int = self._fp._con.idxVP
+    def vah(self) -> PriceLike[T]:
+        return self.__plike[self._fp.state_cache[c.CSD_VAH_FP]]
 
     @property
-    def base(self) -> NDArray[int64]:
-        return self._fp.base[:, self._idx]
+    def val(self) -> PriceLike[T]:
+        return self.__plike[self._fp.state_cache[c.CSD_VAL_FP]]
+
+
+@final
+@dataclass(slots=True)
+class DeltaProfile[T](ProfileLike[T]):
+    _fp: Footprint
 
     @property
-    def state(self) -> NDArray[int32]:
-        return self._fp.state[:, self._idx]
+    def base(self) -> DeltaProfile[T]:
+        self._arr = self._fp.base
+        return self
 
     @property
-    def poc(self) -> PriceLike:
-        self._fp._plike._idy = self._fp._fp_state_cache[c.CSD_POC_FP]
-        return self._fp._plike
+    def state(self) -> DeltaProfile[T]:
+        self._arr = self._fp.state
+        return self
+
+
+@final
+@dataclass(slots=True)
+class Qty[T](QtyLike[T]):
+    _fp: Footprint
+
+    @override
+    def __getitem__(self, idy: int64) -> Qty[T]:
+        self._idy = idy
+        return self
 
     @property
-    def vah(self) -> PriceLike:
-        self._fp._plike._idy = self._fp._fp_state_cache[c.CSD_VAH_FP]
-        return self._fp._plike
+    def delta(self) -> int64:
+        return self._fp.dp.base[self._idy]
 
     @property
-    def val(self) -> PriceLike:
-        self._fp._plike._idy = self._fp._fp_state_cache[c.CSD_VAL_FP]
-        return self._fp._plike
-
-
-class DeltaProfileLike:
-    def __init__(self, fp: FootprintLike) -> None:
-        self._fp: FootprintLike = fp
-        self._idx: int = self._fp._con.idxVP
+    def sum(self) -> int64:
+        return self._fp.vp.base[self._idy]
 
     @property
-    def base(self) -> NDArray[int64]:
-        return self._fp.base[:, self._idx]
+    def bid(self) -> int64:
+        return (self.sum + self.delta) // 2
 
     @property
-    def state(self) -> NDArray[int32]:
-        return self._fp.state[:, self._idx]
-
-
-class PriceLike:
-    def __init__(self, fp: FootprintLike) -> None:
-        self._fp: FootprintLike = fp
-
-        self._idy: int64 = int64(0)
-
-    @property
-    def n(self) -> int | int64:
-        return self._fp._con.to_nPrice(self._idy)
-
-    @property
-    def id(self) -> int64:
-        return self._idy
+    def ask(self) -> int64:
+        return (self.sum - self.delta) // 2

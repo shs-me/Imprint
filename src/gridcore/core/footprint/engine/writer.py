@@ -30,6 +30,7 @@ from .base import Base
 @dataclass(slots=True)
 class Writer(Base, ABC):
     counter_ticks: int = field(default=0, init=False)
+
     __meta_data: NDArray[float64] = field(init=False)
     __args: NDArray[int64] = field(init=False)
 
@@ -39,12 +40,12 @@ class Writer(Base, ABC):
             self.__meta_data = np.zeros(shape=(2, BHM_ConstantCount), dtype=float64)
             self.__args = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
 
-            self.__args[FU_idxVP] = self.con.idxVP
-            self.__args[FU_idxDP] = self.con.idxDP
-            self.__args[FU_price_mult] = self.con.price_mult
-            self.__args[FU_price_prec] = self.con.price_prec
-            self.__args[FU_qty_mult] = self.con.qty_mult
-            self.__args[FU_qty_prec] = self.con.qty_prec
+            self.__args[FU_idxVP] = self.fp.con.idxVP
+            self.__args[FU_idxDP] = self.fp.con.idxDP
+            self.__args[FU_price_mult] = self.fp.con.price_mult
+            self.__args[FU_price_prec] = self.fp.con.price_prec
+            self.__args[FU_qty_mult] = self.fp.con.qty_mult
+            self.__args[FU_qty_prec] = self.fp.con.qty_prec
 
     @override
     def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
@@ -63,8 +64,8 @@ class Writer(Base, ABC):
     def __update(
         self, nPrice: int64, nQty: int64, timestamp: int64, is_sell: int64
     ) -> None:
-        idx: int64 | None = self.con.to_idx(timestamp=timestamp, is_sell=is_sell)
-        idy: int64 | None = self.con.to_idy(nPrice=nPrice)
+        idx: int64 | None = self.fp.con.to_idx(timestamp=timestamp, is_sell=is_sell)
+        idy: int64 | None = self.fp.con.to_idy(nPrice=nPrice)
         if idx is None:
             self.re_init_idx: bool = True
             if not self._bbox_is_readed():
@@ -81,7 +82,7 @@ class Writer(Base, ABC):
                 return None
             else:
                 self.init_session(nPrice, timestamp)
-                idy = cast(int64, self.con.to_idy(nPrice=nPrice))
+                idy = cast(int64, self.fp.con.to_idy(nPrice=nPrice))
 
         self.counter_ticks += 1
         _update(
@@ -92,8 +93,8 @@ class Writer(Base, ABC):
             idy=idy,
             idx=idx,
             args=self.__args,
-            footprint=self.footprint,
-            headers=self.headers,
+            footprint=self.fp.base,
+            headers=self.fp.headers,
             bbox=self.bbox,
             meta_data=self.__meta_data,
         )

@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from ... import constant as c
 from ...ipc import NodeManager
 from ...settings import StatusCodes as scs
-from ..models import Converter, FootprintLike
+from ..models import Converter, Footprint, FPArray
 
 
 @dataclass(slots=True)
@@ -26,12 +26,9 @@ class Base(ABC):
     __save_fp_headers: bool = field(init=False)
     __base_fp_dump_path: str = field(init=False)
     trade_readed_time: memoryview = field(init=False)
-    footprint: NDArray[int64] = field(init=False)
-    headers: NDArray[int64] = field(init=False)
-    bbox: NDArray[int64] = field(init=False)
     bbox_default_value: NDArray[int64] = field(init=False)
-    con: Converter = field(init=False)
-    fp: FootprintLike = field(init=False)
+    bbox: NDArray[int64] = field(init=False)
+    fp: Footprint = field(init=False)
 
     def __post_init__(self) -> None:
         cfgFP = self.manager.cfgFootprint
@@ -45,8 +42,7 @@ class Base(ABC):
         cfgMetrics = self.manager.cfgMetrics
         self.trade_readed_time = cfgMetrics.trade_readed_time.view.cast("q")
 
-        self.con = Converter(cfgCoin=cfgCoin, cfgFP=cfgFP)
-        self.fp = FootprintLike(self.con)
+        self.fp = Footprint(Converter(cfgCoin=cfgCoin, cfgFP=cfgFP))
 
     @final
     def init_session(self, nPrice: int64, timestamp: int64) -> None:
@@ -68,11 +64,12 @@ class Base(ABC):
 
     @final
     def __init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        self.footprint.fill(0)
-        self.headers.fill(0)
+        self.fp.base.fill(0)
+        self.fp.state.fill(0)
+        self.fp.headers.fill(0)
         self.bbox[:] = self.bbox_default_value
 
-        self.con.init_session(nPrice=nPrice, timestamp=timestamp)
+        self.fp.con.init_session(nPrice=nPrice, timestamp=timestamp)
         self.child_init_idx(nPrice, timestamp)
 
     @abstractmethod
@@ -85,37 +82,25 @@ class Base(ABC):
     @final
     def __init_array(self, nPrice: int64) -> None:
         if not self.re_init_idy:
-            self.con.fp_rows = 2 * (nPrice * 20 // 100 // self.con.scale)
-            self.footprint = np.zeros(
-                shape=(self.con.fp_rows, self.con.fp_panel_cols), dtype=int64
-            )
-            self.headers = np.zeros(
-                shape=(self.con.chart_range * self.con.bar_count, c.BH_ConstantCount),
-                dtype=int64,
-            )
+            self.fp.con.fp_rows = 2 * (nPrice * 20 // 100 // self.fp.con.scale)
+            self.fp.base = FPArray(self.fp.con.fp_rows, self.fp.con.fp_panel_cols)
+            self.fp.state = FPArray(self.fp.con.fp_rows, self.fp.con.fp_panel_cols)
             self.bbox = np.zeros((4,), dtype=int64)
             self.bbox_default_value = np.array(
-                [self.con.fp_rows, self.con.fp_cols, 0, 0], dtype=int64
+                [self.fp.con.fp_rows, self.fp.con.fp_cols, 0, 0], dtype=int64
             )
-            self.fp._headers = self.headers
-            self.fp._bar._headers = self.headers
-            self.fp._fp = self.footprint
-            self.fp._bar._fp = self.footprint
         else:
-            need_rows: int64 = nPrice * 20 // 100 // self.con.scale
-            self.con.fp_rows = self.con.fp_rows + need_rows
+            need_rows: int64 = nPrice * 20 // 100 // self.fp.con.scale
+            self.fp.con.fp_rows = self.fp.con.fp_rows + need_rows
 
-            if nPrice > self.con.baseNprice:
+            if nPrice > self.fp.con.baseNprice:
                 before, after = need_rows, 0
-                self.con.center = self.con.center + need_rows
+                self.fp.con.center = self.fp.con.center + need_rows
             else:
                 before, after = 0, need_rows
 
-            self.footprint = np.pad(
-                array=self.footprint, pad_width=((int(before), int(after)), (0, 0))
-            )
-            self.fp._fp = self.footprint
-            self.fp._bar._fp = self.footprint
+            self.fp.base = self.fp.base.pading(int(before), int(after))
+            self.fp.state = self.fp.state.pading(int(before), int(after))
 
         self.child_init_array(nPrice)
 
@@ -127,8 +112,8 @@ class Base(ABC):
         if self.__save_fp_headers:
             os.makedirs(self.__base_fp_dump_path, exist_ok=True)
 
-            start_time: str = self.con.to_strftime(self.con._first_base_timestamp)
-            end_time: str = self.con.get_time(idx=last_idx, strftime=True)
+            start_time: str = self.fp.con.to_strftime(self.fp.con._first_base_timestamp)
+            end_time: str = self.fp.con.get_time(idx=last_idx, strftime=True)
 
             start_date: date = date.fromisoformat(start_time.split("T")[0])
             end_date: date = date.fromisoformat(end_time.split("T")[0])
@@ -141,7 +126,7 @@ class Base(ABC):
             if paths:
                 for p in paths:
                     file_timeframe, file_start_time, file_end_time = p.split("_")
-                    if file_timeframe == self.con.timeframe:
+                    if file_timeframe == self.fp.con.timeframe:
                         file_start_date: date = date.fromisoformat(
                             file_start_time.split("T")[0]
                         )
@@ -153,7 +138,7 @@ class Base(ABC):
 
             headers_save_path: str = (
                 f"{self.__base_fp_dump_path}/"
-                f"{self.con.timeframe}"
+                f"{self.fp.con.timeframe}"
                 f"_{start_time}_{end_time}.npy"
             )
-            np.save(headers_save_path, self.headers)
+            np.save(headers_save_path, self.fp.headers)

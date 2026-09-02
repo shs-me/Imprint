@@ -1,9 +1,9 @@
-from .bar import BarLike
+from .base import FPArray
 from .converter import Converter
-from .footprint import FootprintLike
+from .footprint import Footprint
 
 __all__ = [
+    "FPArray",
     "Converter",
-    "BarLike",
-    "FootprintLike",
+    "Footprint",
 ]
