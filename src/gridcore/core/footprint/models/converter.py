@@ -9,7 +9,7 @@ from numpy import float64, int64
 from ... import configs as cfg
 
 
-@dataclass
+@dataclass(slots=True)
 class Converter:
     """Converter mapping floating-point values to fixed-point integers and Footprint matrix coordinates."""
 

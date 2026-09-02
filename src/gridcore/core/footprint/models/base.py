@@ -1,182 +1,99 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Literal, SupportsIndex, cast, overload
+from typing import TYPE_CHECKING, Any, cast, overload, override
 
 import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
+from gridcore.core.footprint.models import Converter
+
 from ... import constant as c
-from .converter import Converter
 
-T_SLICE = slice[SupportsIndex | None]
-T_INDEX = SupportsIndex
+if TYPE_CHECKING:
+    from .typing import T_FP, T_INDEX, T_SLICE, T_VP
 
-T_1D = T_SLICE | T_INDEX
 
-T_IDY = T_1D
-T_IDX = T_1D
+class FPArray(np.ndarray):
+    def __new__(cls, rows: int, cols: int) -> FPArray:
+        obj = super().__new__(cls, shape=(rows, cols), dtype=int64)
+        obj.fill(0)
+        return obj
 
-T_FP_MODE = Literal["base", "state"]
+    @override
+    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
+        if obj is None:
+            return
 
-T_FP = T_FP_MODE | tuple[T_FP_MODE, T_IDY] | tuple[T_FP_MODE, T_IDY, T_IDX]
-T_VP = T_FP_MODE | tuple[T_FP_MODE, T_IDY]
-T_VA = Literal["poc", "vah", "val"]
+    @overload
+    def __getitem__(self, key: tuple[T_INDEX, T_INDEX], /) -> int64: ...  # pyright: ignore[reportOverlappingOverload]
+    @overload
+    def __getitem__(self, key: T_FP, /) -> FPArray: ...
+    @override
+    def __getitem__(self, key: T_FP, /):  # pyright: ignore[reportInconsistentOverload,reportIncompatibleMethodOverride]
+        return super().__getitem__(key)
 
-T_PRICE = Literal["idy", "n"]
-T_QTY = tuple[Literal["bid", "ask", "sum", "delta"], Literal["fp", "bar"]]
+    def pading(self, before: int, after: int) -> FPArray:
+        return np.pad(self, pad_width=((before, after), (0, 0))).view(self)  # pyright: ignore[reportReturnType]
 
 
 @dataclass(slots=True)
-class Footprint:
+class Chart(ABC):
     con: Converter
 
-    __fp: NDArray[int64] = field(
-        default_factory=lambda: np.array([0], dtype=int64), init=False
-    )
-    __fp_state: NDArray[int64] = field(
-        default_factory=lambda: np.array([0], dtype=int64), init=False
-    )
-    __fp_state_cache: NDArray[int64] = field(
-        default_factory=lambda: np.array([0], dtype=int64), init=False
-    )
+    base: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
+    state: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
 
+    state_cache: NDArray[int64] = field(init=False)
     headers: NDArray[int64] = field(init=False)
-    bar: Bar = field(init=False)
-    vp: VolumeProfile = field(init=False)
 
     def __post_init__(self) -> None:
-        self.bar = Bar(self)
-        self.vp = VolumeProfile(self)
-
+        self.state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
         self.headers = np.zeros(
             shape=(self.con.chart_range * self.con.bar_count, c.BH_ConstantCount),
             dtype=int64,
         )
 
-    @overload
-    def __getitem__(self, i: tuple[T_FP_MODE, T_INDEX, T_INDEX], /) -> int64: ...  # pyright: ignore[reportOverlappingOverload]
-    @overload
-    def __getitem__(self, i: T_FP, /) -> NDArray[int64]: ...
-
-    def __getitem__(self, i: T_FP, /):
-        if isinstance(i, tuple):
-            if len(i) == 3:
-                if isinstance(i[1], SupportsIndex) and isinstance(i[2], SupportsIndex):
-                    if i[0] == "base":
-                        return self.__fp[i[1], i[2]]
-                    else:
-                        return self.__fp_state[i[1], i[2]]
-                else:
-                    if i[0] == "base":
-                        return self.__fp[i[1], i[2]]
-                    else:
-                        return self.__fp_state[i[1], i[2]]
-            else:
-                return self.__fp[i[1]] if (i[0] == "base") else self.__fp_state[i[1]]
-        else:
-            return self.__fp if (i == "base") else self.__fp_state
-
-    def __setitem__(self, i: tuple[T_FP_MODE, NDArray[int64]]) -> None:
-        if i[0] == "base":
-            self.__fp = i[1]
-        else:
-            self.__fp_state = i[1]
-
-
-@dataclass
-class Bar:
-    _fp: Footprint
-
 
 @dataclass(slots=True)
-class VolumeProfile:
-    _fp: Footprint
+class ProfileLike(ABC):
+    _idx: int
 
-    __idx: int = field(init=False)
-    __plike: PriceLike = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.__idx = self._fp.con.idxVP
-        self.__plike = PriceLike(self._fp.con)
+    __arr: FPArray = field(init=False)
 
     @overload
-    def __getitem__(
-        self, i: T_FP_MODE | tuple[T_FP_MODE, T_SLICE], /
-    ) -> NDArray[int64]: ...
+    def __getitem__(self, key: T_INDEX, /) -> int64: ...
     @overload
-    def __getitem__(self, i: tuple[T_FP_MODE, T_INDEX], /) -> int64: ...
-    @overload
-    def __getitem__(self, i: T_VA, /) -> PriceLike: ...
-
-    def __getitem__(self, i: T_VP | T_VA, /):
-        if isinstance(i, tuple):
-            if isinstance(i[1], slice):
-                return self._fp[i[0], i[1], self.__idx]
-            else:
-                return self._fp[i[0], i[1], self.__idx]
-
-        elif i == "base" or i == "state":
-            return self._fp[i, :, self.__idx]
-
-        elif i == "poc":
-            return self.__plike
-
-        elif i == "vah":
-            return self.__plike
-
-        else:
-            return self.__plike
+    def __getitem__(self, key: T_SLICE, /) -> NDArray[int64]: ...
+    def __getitem__(self, key: T_VP, /):  # pyright: ignore[reportInconsistentOverload]
+        return self.__arr[key, self._idx]
 
 
 @dataclass(slots=True)
 class PriceLike:
     _con: Converter
+    _qlike: QtyLike
 
-    __nPrice: int64 = field(default=int64(0), init=False)
+    n: int64 = field(default=int64(0), init=False)
 
-    def __setitem__(self, nPrice: int64) -> None:
-        self.__nPrice = nPrice
+    def __getitem__(self, nPrice: int64) -> PriceLike:
+        self.n = nPrice
+        return self
 
-    @overload
-    def __getitem__(self, item: Literal["n"], /) -> int64: ...
-    @overload
-    def __getitem__(self, item: Literal["idy"], /) -> int64: ...
-    def __getitem__(self, item: T_PRICE, /):
-        if item == "n":
-            return self.__nPrice
-        else:
-            return cast(int64, self._con.to_idy(self.__nPrice))
+    @property
+    def id(self) -> int64:
+        return cast(int64, self._con.to_idy(self.n))
+
+    @property
+    def qty(self) -> QtyLike:
+        return self._qlike[self.id]
 
 
 @dataclass(slots=True)
-class QtyLike:
-    _fp: Footprint
-
+class QtyLike(ABC):
     __idy: int64 = field(default=int64(0), init=False)
-    __idx: int64 = field(default=int64(0), init=False)
-    __bids_slice: slice = field(default=slice(None, None, 2), init=False)
-    __asks_slice: slice = field(default=slice(1, None, 2), init=False)
 
-    def __setitem__(self, idy: int64, idx: int64) -> None:
-        self.__idy, self.__idx = idy, idx
-
-    def __getitem__(self, item: T_QTY, /) -> int64:
-        ask_lvl = self.__asks_slice if item[1] == "fp" else self.__idx
-        bid_lvl = self.__bids_slice if item[1] == "fp" else self.__idx
-
-        if item[0] == "bid":
-            return self.__bids(bid_lvl)
-        elif item[0] == "ask":
-            return self.__asks(ask_lvl)
-        elif item[0] == "sum":
-            return self.__bids(bid_lvl) + self.__asks(ask_lvl)
-        else:
-            return self.__bids(bid_lvl) - self.__asks(ask_lvl)
-
-    def __bids(self, key: slice | int64) -> int64:
-        return self._fp.vp["base", self.__idy]
-
-    def __asks(self, key: slice | int64) -> int64:
-        return self._fp.vp["base", self.__idy]
+    @abstractmethod
+    def __getitem__(self, idy: int64) -> QtyLike: ...
