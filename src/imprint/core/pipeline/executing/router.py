@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from typing import override
 
-from gridcore.core.ipc import NodeManager
+from imprint.core.ipc import NodeManager
 
 from ...exchange.account import AccountConverter
 from .backtest import Backtest as BacktestAgent

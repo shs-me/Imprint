@@ -56,7 +56,7 @@ class RestAgent:
         else:
             query = urlencode(params) if params else ""
 
-        headers = {"User-Agent": "GridCore/1.0"}
+        headers = {"User-Agent": "imprint/1.0"}
         if self.api_key:
             headers["X-MBX-APIKEY"] = self.api_key
 

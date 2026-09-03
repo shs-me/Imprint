@@ -63,7 +63,7 @@ def run(
     stats: Stats,
     output_path: str = "dump/report.html",
     template_name: str = "template.html",
-    path_to_template: str = "gridcore.visualization.render",
+    path_to_template: str = "imprint.visualization.render",
     auto_open: bool = True,
 ) -> str:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)

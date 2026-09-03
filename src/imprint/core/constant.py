@@ -37,7 +37,7 @@ DATA_TYPE_AGGTRADES_PATH = "aggTrades"
 # Dump
 DUMP_PATH = "dump"
 EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
-# src/gridcore/_core/constant.py
+# src/imprint/_core/constant.py
 EQUITY_HISTORY_DUMP_PATH = f"{DUMP_PATH}/equity_history.npy"
 ORDERS_HISTORY_DUMP_PATH = f"{DUMP_PATH}/order_history.npy"
 BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
