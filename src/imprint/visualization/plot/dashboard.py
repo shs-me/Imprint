@@ -1,7 +1,7 @@
 from matplotlib.axes import Axes
 
-from ..analyze import Stats
-from .utils import get_usd, not_data_for_plot
+from imprint.visualization.analyze import Stats
+from imprint.visualization.plot.utils import get_usd, not_data_for_plot
 
 
 def plot_info_dashboard(ax: Axes, stats: Stats) -> None:

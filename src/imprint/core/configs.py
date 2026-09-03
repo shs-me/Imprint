@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final, override
 
-from .settings import Timeframe
+from imprint.core.settings import Timeframe
 
 PERCENT: int = 10_000
 
@@ -112,11 +112,17 @@ class Coin(Configuration):
 
     @property
     def price_prec(self) -> int:
-        return len(self.tick_size.split(sep=".")[-1]) if "." in self.tick_size else 0
+        return (
+            len(self.tick_size.split(sep=".")[-1])
+            if "." in self.tick_size
+            else 0
+        )
 
     @property
     def qty_prec(self) -> int:
-        return len(self.lot_size.split(sep=".")[-1]) if "." in self.lot_size else 0
+        return (
+            len(self.lot_size.split(sep=".")[-1]) if "." in self.lot_size else 0
+        )
 
     @property
     def price_mult(self) -> int:
@@ -221,7 +227,9 @@ class BaseRingBuf(ABC):
 
         self.reader_id = Segment(self.count_reader * INT64)
         self.writer_id = Segment(self.count_writer * INT64)
-        self.data = Segment(self.count_writer * (self.cell_amount * self.data_size))
+        self.data = Segment(
+            self.count_writer * (self.cell_amount * self.data_size)
+        )
         self.data_header = Segment(
             self.count_writer * (self.cell_amount * self.data_header_size)
         )

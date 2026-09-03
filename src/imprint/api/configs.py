@@ -1,4 +1,4 @@
-from ._utils.configs import (
+from imprint.api._utils.configs import (
     Account,
     Backtesting,
     Connector,

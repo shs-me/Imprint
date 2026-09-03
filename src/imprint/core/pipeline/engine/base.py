@@ -7,10 +7,10 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from ...footprint.engine import FootprintEngine
-from ...ipc import NodeManager
-from ...settings import StatusCodes as scs
-from ...utils.handlers import error_handler
+from imprint.core.footprint.engine import FootprintEngine
+from imprint.core.ipc import NodeManager
+from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils.handlers import error_handler
 
 
 @dataclass(slots=True)
@@ -62,7 +62,9 @@ class Base(ABC):
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
                 if task & scs.EXIT:
-                    return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
+                    return self.manager.set_proc_sc(
+                        scs.EXIT, wait_main_task=False
+                    )
 
                 if task & scs.COMPLETE:
                     if self.__complete():
@@ -77,7 +79,9 @@ class Base(ABC):
             if self.__ds_wid[0] != self.__ds_rid[0]:
                 self.__get_trades_data()
                 while self.at_rid != self.at_wid:
-                    nPrice, nQty, timestamp, is_sell = self.agg_trades[self.at_rid, :]
+                    nPrice, nQty, timestamp, is_sell = self.agg_trades[
+                        self.at_rid, :
+                    ]
 
                     if (nPrice < 0) or (nQty < 0) or (timestamp < 0):
                         self.manager.set_proc_sc(
@@ -120,7 +124,9 @@ class Base(ABC):
         self.engine_complete[0] = 1
         if self.manager.cfgSetup.backtesting:
             self.algorithm._engine.final_analyze()
-            self.algorithm._engine.save_footprint_headers(self.algorithm.last_idx[0])
+            self.algorithm._engine.save_footprint_headers(
+                self.algorithm.last_idx[0]
+            )
 
         self.post_final_action()
         self.manager.set_text(

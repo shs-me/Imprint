@@ -5,8 +5,8 @@ from typing import override
 
 from websockets import ClientConnection
 
-from ...utils.base_adapters import UserStreamDecoder
-from .base import Base
+from imprint.core.pipeline.streaming.live.base import Base
+from imprint.core.pipeline.utils.base_adapters import UserStreamDecoder
 
 
 @dataclass(slots=True)

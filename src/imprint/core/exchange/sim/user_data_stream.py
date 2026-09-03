@@ -7,7 +7,7 @@ from numba import njit
 from numpy import uint8
 from numpy.typing import NDArray
 
-from .order_stream import Order
+from imprint.core.exchange.sim.order_stream import Order
 
 
 @dataclass(slots=True)

@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 from typing import final
 
-from ... import constant as c
-from ...ipc import NodeManager
-from .converter import to_nMargin
+from imprint.core import constant as c
+from imprint.core.exchange.account.converter import to_nMargin
+from imprint.core.ipc import NodeManager
 
 
 @dataclass(slots=True)

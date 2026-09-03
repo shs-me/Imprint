@@ -3,9 +3,8 @@ from dataclasses import dataclass, field
 from numpy import datetime64, float64, int64
 from numpy.typing import NDArray
 
-from ..settings import OHLC, CloseTrades, OpenTrades
-from .equity_history import analyze_equity_history
-from .metrics import (
+from imprint.visualization.analyze.equity_history import analyze_equity_history
+from imprint.visualization.analyze.metrics import (
     calculate_avg_hold_time_positions,
     calculate_avg_loss,
     calculate_avg_mae_pct,
@@ -21,7 +20,8 @@ from .metrics import (
     calculate_tp_sl_info,
     calculate_win_rate,
 )
-from .orders_history import analyze_orders_history
+from imprint.visualization.analyze.orders_history import analyze_orders_history
+from imprint.visualization.settings import OHLC, CloseTrades, OpenTrades
 
 
 @dataclass(slots=True)
@@ -94,7 +94,9 @@ class Stats:
         self.end_balance = result[3] / self.scale_mult
         self.sum_commission = result[4]
 
-        result = calculate_sharpe_and_sortino_ratio(self.eq_close, self.timeframe)
+        result = calculate_sharpe_and_sortino_ratio(
+            self.eq_close, self.timeframe
+        )
         self.sharpe_ratio = result[0]
         self.sortino_ratio = result[1]
 
@@ -105,7 +107,9 @@ class Stats:
         self.max_dyn_dd_pct = result[1]
         self.dynamic_drawdowns = result[2]
 
-        result = calculate_static_drawdown(self.start_balance, self.trades_close)
+        result = calculate_static_drawdown(
+            self.start_balance, self.trades_close
+        )
         self.max_dd_val = result[0]
         self.max_dd_pct = result[1]
         self.static_drawdowns = result[2]
@@ -127,7 +131,9 @@ class Stats:
             self.avg_win,
             self.avg_loss,
         )
-        self.net_profit = calculate_net_profit(self.start_balance, self.end_balance)
+        self.net_profit = calculate_net_profit(
+            self.start_balance, self.end_balance
+        )
         self.recovery_factor = calculate_recovery_factor(
             self.max_dyn_dd_val, self.max_dd_val, self.net_profit
         )

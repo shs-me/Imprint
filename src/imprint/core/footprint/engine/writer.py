@@ -7,8 +7,8 @@ from numba import njit
 from numpy import float64, int64
 from numpy.typing import NDArray
 
-from ... import constant as c
-from .base import Base
+from imprint.core import constant as c
+from imprint.core.footprint.engine.base import Base
 
 (
     BHM_VWAP_W,
@@ -37,7 +37,9 @@ class Writer(Base, ABC):
     @override
     def child_init_array(self, nPrice: int64) -> None:
         if not self.re_init_idy:
-            self.__meta_data = np.zeros(shape=(2, BHM_ConstantCount), dtype=float64)
+            self.__meta_data = np.zeros(
+                shape=(2, BHM_ConstantCount), dtype=float64
+            )
             self.__args = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
 
             self.__args[FU_idxVP] = self.fp.con.idxVP
@@ -64,7 +66,9 @@ class Writer(Base, ABC):
     def __update(
         self, nPrice: int64, nQty: int64, timestamp: int64, is_sell: int64
     ) -> None:
-        idx: int64 | None = self.fp.con.to_idx(timestamp=timestamp, is_sell=is_sell)
+        idx: int64 | None = self.fp.con.to_idx(
+            timestamp=timestamp, is_sell=is_sell
+        )
         idy: int64 | None = self.fp.con.to_idy(nPrice=nPrice)
         if (idx is None) or (idy is None):
             self.re_init_session: bool = True
@@ -140,7 +144,9 @@ def _update(
     headers[bwo, c.BH_Volume] += nQty
     headers[bwo, c.BH_Delta] += -nQty if is_sell else nQty
     if bar > 0:
-        headers[bwo, c.BH_CVD] = headers[bwo, c.BH_Delta] + headers[bwo - 1, c.BH_CVD]
+        headers[bwo, c.BH_CVD] = (
+            headers[bwo, c.BH_Delta] + headers[bwo - 1, c.BH_CVD]
+        )
     else:
         headers[bwo, c.BH_CVD] = headers[bwo, c.BH_Delta]
 
@@ -152,7 +158,8 @@ def _update(
     meta_data[0, BHM_VWAP_P2W] += (price**2) * qty
     vwap: float64 = meta_data[0, BHM_VWAP_PW] / meta_data[0, BHM_VWAP_W]
     variance = max(
-        0.0, ((meta_data[0, BHM_VWAP_P2W] / meta_data[0, BHM_VWAP_W]) - (vwap**2))
+        0.0,
+        ((meta_data[0, BHM_VWAP_P2W] / meta_data[0, BHM_VWAP_W]) - (vwap**2)),
     )
     vwsd = np.sqrt(variance)
     upper_band, lower_band = vwap + (2.0 * vwsd), vwap - (2.0 * vwsd)

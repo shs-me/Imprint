@@ -8,8 +8,8 @@ from numba import njit
 from numpy import int64
 from numpy.typing import NDArray
 
-from ... import constant as c
-from .position import Position
+from imprint.core import constant as c
+from imprint.core.exchange.account.position import Position
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -45,7 +45,9 @@ class Manager(Position, ABC):
 
         self.bar_count = (total_days * 24 * 60 * 60 * 1000) // self.timeframe
 
-        self.equity_history = np.zeros((self.bar_count, EquityC + 1), dtype=int64)
+        self.equity_history = np.zeros(
+            (self.bar_count, EquityC + 1), dtype=int64
+        )
 
     @final
     def final_action(self) -> None:
@@ -93,7 +95,9 @@ def update_equity_ohlc(
                     break
 
             while 0 <= prev_bar < bar:
-                eh[prev_bar, EquityT] = base_timestamp[0] + (prev_bar * timeframe)
+                eh[prev_bar, EquityT] = base_timestamp[0] + (
+                    prev_bar * timeframe
+                )
                 eh[prev_bar, EquityO:] = prev_eq, prev_eq, prev_eq, prev_eq
                 prev_bar += 1
         else:

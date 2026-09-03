@@ -4,3 +4,6 @@
 .ropeproject
 .pytest_cache
 __pycache__/
+data
+dump
+logs

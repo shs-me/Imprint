@@ -6,7 +6,7 @@ from typing import final, overload
 
 from numpy import float64, int64
 
-from ... import configs as cfg
+from imprint.core import configs as cfg
 
 
 @final
@@ -58,7 +58,9 @@ class Converter:
         self.idxVP = self.cfgFP.colVP
         self.idxDP = self.cfgFP.colDP
 
-        self.scale = round((float(self.tick_size) * self.step_tick) * self.price_mult)
+        self.scale = round(
+            (float(self.tick_size) * self.step_tick) * self.price_mult
+        )
 
         if self.total_backtest_days:
             self.total_bar_count = (
@@ -137,9 +139,9 @@ class Converter:
     def to_strftime(self, timestamp_ms: int | int64) -> str:
         """Formats millisecond timestamp as ISO-8601 UTC string."""
 
-        return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
-            "%Y-%m-%d"
-        )
+        return datetime.fromtimestamp(
+            timestamp_ms / 1000, tz=timezone.utc
+        ).strftime("%Y-%m-%d")
 
     def get_price(self, idy: int | int64) -> float:
         """Returns rounded float price for specified Footprint row index Y."""
@@ -157,6 +159,8 @@ class Converter:
         """Returns timestamp or formatted string corresponding to bar column index X."""
 
         if strftime:
-            return self.to_strftime((idx & ~1) // 2 * self.tims + self.baseTimestamp)
+            return self.to_strftime(
+                (idx & ~1) // 2 * self.tims + self.baseTimestamp
+            )
         else:
             return (idx & ~1) // 2 * self.tims + self.baseTimestamp

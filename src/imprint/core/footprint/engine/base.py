@@ -8,10 +8,10 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from ... import constant as c
-from ...ipc import NodeManager
-from ...settings import StatusCodes as scs
-from ..models import Converter, Footprint, FPArray
+from imprint.core import constant as c
+from imprint.core.footprint.models import Converter, Footprint, FPArray
+from imprint.core.ipc import NodeManager
+from imprint.core.settings import StatusCodes as scs
 
 
 @dataclass(slots=True)
@@ -48,7 +48,9 @@ class Base(ABC):
             end_dt: date = date.fromisoformat(cfgSetup.backtest_end_date)
             total_days: int = max(1, (end_dt - start_dt).days + 1)
             self.fp = Footprint(
-                Converter(cfgCoin=cfgCoin, cfgFP=cfgFP, total_backtest_days=total_days)
+                Converter(
+                    cfgCoin=cfgCoin, cfgFP=cfgFP, total_backtest_days=total_days
+                )
             )
         else:
             self.fp = Footprint(Converter(cfgCoin=cfgCoin, cfgFP=cfgFP))
@@ -60,11 +62,15 @@ class Base(ABC):
             self.__init_arrays = False
 
         if self.re_init_idx:
-            self.manager.set_proc_sc(code=scs.FP_IDX_FILLED, wait_main_task=False)
+            self.manager.set_proc_sc(
+                code=scs.FP_IDX_FILLED, wait_main_task=False
+            )
             self.__init_idx(nPrice, timestamp)
             self.re_init_idx = False
         else:
-            self.manager.set_proc_sc(code=scs.FP_IDY_FILLED, wait_main_task=False)
+            self.manager.set_proc_sc(
+                code=scs.FP_IDY_FILLED, wait_main_task=False
+            )
             self.__init_idy(nPrice)
             self.re_init_idy = False
 
@@ -100,8 +106,12 @@ class Base(ABC):
     def __init_array(self, nPrice: int64) -> None:
         if not self.re_init_idy:
             self.fp.con.fp_rows = 2 * (nPrice * 20 // 100 // self.fp.con.scale)
-            self.fp.base = FPArray(self.fp.con.fp_rows, self.fp.con.fp_panel_cols)
-            self.fp.state = FPArray(self.fp.con.fp_rows, self.fp.con.fp_panel_cols)
+            self.fp.base = FPArray(
+                self.fp.con.fp_rows, self.fp.con.fp_panel_cols
+            )
+            self.fp.state = FPArray(
+                self.fp.con.fp_rows, self.fp.con.fp_panel_cols
+            )
             self.bbox = np.zeros((4,), dtype=int64)
             self.bbox_default_value = np.array(
                 [self.fp.con.fp_rows, self.fp.con.fp_cols, 0, 0], dtype=int64
@@ -129,7 +139,9 @@ class Base(ABC):
         if self.__save_fp_headers:
             os.makedirs(self.__base_fp_dump_path, exist_ok=True)
 
-            start_time: str = self.fp.con.to_strftime(self.fp.con._first_base_timestamp)
+            start_time: str = self.fp.con.to_strftime(
+                self.fp.con._first_base_timestamp
+            )
             end_time: str = self.fp.con.get_time(idx=last_idx, strftime=True)
 
             start_date: date = date.fromisoformat(start_time)
@@ -142,11 +154,20 @@ class Base(ABC):
             ]
             if paths:
                 for p in paths:
-                    file_timeframe, file_start_time, file_end_time = p.split("_")
+                    file_timeframe, file_start_time, file_end_time = p.split(
+                        "_"
+                    )
                     if file_timeframe == self.fp.con.timeframe:
-                        file_start_date: date = date.fromisoformat(file_start_time)
+                        file_start_date: date = date.fromisoformat(
+                            file_start_time
+                        )
                         file_end_date: date = date.fromisoformat(file_end_time)
-                        if file_start_date <= start_date <= end_date <= file_end_date:
+                        if (
+                            file_start_date
+                            <= start_date
+                            <= end_date
+                            <= file_end_date
+                        ):
                             return
                         else:
                             os.remove(f"{p}.npy")

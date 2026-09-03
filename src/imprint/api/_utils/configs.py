@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from ...core.configs import (
+from imprint.core.configs import (
     Account,
     Coin,
     Configuration,
@@ -9,9 +9,9 @@ from ...core.configs import (
     RiskManagment,
     Setup,
 )
-from ...core.footprint import FootprintEngine
-from ...core.pipeline.executing import BaseExecution
-from ...core.pipeline.utils.base_adapters import (
+from imprint.core.footprint import FootprintEngine
+from imprint.core.pipeline.executing import BaseExecution
+from imprint.core.pipeline.utils.base_adapters import (
     AggTradesDecoder,
     OrderEncoder,
     UserStreamDecoder,
@@ -106,8 +106,12 @@ class SetupCore:
             self.setup.user_stream_decoder_class_name = (
                 self.run_mode.user_stream_decoder.__name__
             )
-            self.setup.order_encoder_module = self.run_mode.order_encoder.__module__
-            self.setup.order_encoder_class_name = self.run_mode.order_encoder.__name__
+            self.setup.order_encoder_module = (
+                self.run_mode.order_encoder.__module__
+            )
+            self.setup.order_encoder_class_name = (
+                self.run_mode.order_encoder.__name__
+            )
 
             self.setup.backtesting = False
 

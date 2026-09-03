@@ -8,10 +8,15 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from .converter import Converter
+from imprint.core.footprint.models.converter import Converter
 
 if TYPE_CHECKING:
-    from .typing import T_FP, T_INDEX, T_SLICE, T_VP
+    from imprint.core.footprint.models.typing import (
+        T_FP,
+        T_INDEX,
+        T_SLICE,
+        T_VP,
+    )
 
 
 @final

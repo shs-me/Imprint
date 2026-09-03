@@ -3,8 +3,8 @@ import time
 from dataclasses import dataclass
 from typing import override
 
-from ...footprint import SyncWithExecution
-from .base import Base
+from imprint.core.footprint import SyncWithExecution
+from imprint.core.pipeline.engine.base import Base
 
 
 @dataclass(slots=True)
@@ -23,7 +23,9 @@ class Backtest(Base):
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
         self.agg_trades[self.at_wid, :] = struct.unpack("@qqqq", raw_data)
-        self.at_wid: int = self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0
+        self.at_wid: int = (
+            self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0
+        )
 
     @override
     def post_update(self) -> None:

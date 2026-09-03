@@ -1,8 +1,8 @@
 from functools import wraps
 from typing import Callable, ParamSpec, TypeVar
 
-from ..settings import StatusCodes as scs
-from .tools import dump_exception
+from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils.tools import dump_exception
 
 P = ParamSpec("P")
 R = TypeVar("R")

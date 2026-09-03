@@ -4,8 +4,8 @@ from matplotlib.axes import Axes
 from numpy import float64
 from numpy.typing import NDArray
 
-from ..analyze import Stats
-from .utils import (
+from imprint.visualization.analyze import Stats
+from imprint.visualization.plot.utils import (
     not_data_for_plot,
     run_base_action,
     set_base_legend,

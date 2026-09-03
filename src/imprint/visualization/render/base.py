@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from ..analyze import Stats
-from ..plot import (
+from imprint.visualization.analyze import Stats
+from imprint.visualization.plot import (
     plot_chart_with_markers,
     plot_curve_balance,
     plot_info_dashboard,
@@ -23,7 +23,9 @@ def run(stats: Stats) -> None:
     )
 
     ax_equity: Axes = fig.add_subplot(gs[0, 0], facecolor="#181818")
-    ax_chart: Axes = fig.add_subplot(gs[1, 0], facecolor="#181818", sharex=ax_equity)
+    ax_chart: Axes = fig.add_subplot(
+        gs[1, 0], facecolor="#181818", sharex=ax_equity
+    )
     ax_dashboard: Axes = fig.add_subplot(gs[0, 1], facecolor="#121212")
     ax_dist: Axes = fig.add_subplot(gs[1, 1], facecolor="#181818")
 

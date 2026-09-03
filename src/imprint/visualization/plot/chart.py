@@ -3,8 +3,8 @@ from datetime import datetime
 from matplotlib.axes import Axes
 from numpy import float64
 
-from ..analyze import Stats
-from .utils import (
+from imprint.visualization.analyze import Stats
+from imprint.visualization.plot.utils import (
     not_data_for_plot,
     run_base_action,
     set_ax_pct,
@@ -62,8 +62,12 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
     )
 
     # Markers Long / Short / Close
-    buy_x: list[datetime] = [to["time"] for to in stats.trades_open if to["is_long"]]
-    buy_y: list[float] = [to["price"] for to in stats.trades_open if to["is_long"]]
+    buy_x: list[datetime] = [
+        to["time"] for to in stats.trades_open if to["is_long"]
+    ]
+    buy_y: list[float] = [
+        to["price"] for to in stats.trades_open if to["is_long"]
+    ]
     ax.scatter(  # pyright: ignore[reportUnknownMemberType])
         buy_x,  # pyright: ignore[reportArgumentType])
         buy_y,
@@ -79,7 +83,9 @@ def plot_chart_with_markers(ax: Axes, stats: Stats) -> None:
     sell_x: list[datetime] = [
         to["time"] for to in stats.trades_open if not to["is_long"]
     ]
-    sell_y: list[float] = [to["price"] for to in stats.trades_open if not to["is_long"]]
+    sell_y: list[float] = [
+        to["price"] for to in stats.trades_open if not to["is_long"]
+    ]
     ax.scatter(  # pyright: ignore[reportUnknownMemberType])
         sell_x,  # pyright: ignore[reportArgumentType])
         sell_y,

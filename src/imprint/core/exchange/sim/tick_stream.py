@@ -6,7 +6,7 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from ...pipeline.utils.base_data_prepper import BaseDataPrepper
+from imprint.core.pipeline.utils.base_data_prepper import BaseDataPrepper
 
 
 @dataclass(slots=True)

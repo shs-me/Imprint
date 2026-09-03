@@ -7,9 +7,9 @@ from typing import override
 
 from loguru import logger
 
-from ...settings import LogLevel, ProcsData, ProcsIds
-from ...settings import StatusCodes as scs
-from .base import Base
+from imprint.core.ipc.manager.base import Base
+from imprint.core.settings import LogLevel, ProcsData, ProcsIds
+from imprint.core.settings import StatusCodes as scs
 
 
 @dataclass(slots=True)
@@ -30,7 +30,9 @@ class Host(Base):
         self.with_execution = self.cfgSetup.execution
         self.startDate = date.today()
         self.time_format = (
-            "%H:%M:%S.%f" if self.cfgSetup.backtesting else "%Y:%m:%d-%H:%M:%S.%f"
+            "%H:%M:%S.%f"
+            if self.cfgSetup.backtesting
+            else "%Y:%m:%d-%H:%M:%S.%f"
         )
 
     def run(self, procs: dict[int, ProcsData]) -> None:
@@ -115,7 +117,9 @@ class Host(Base):
             self.clear_proc_sc(scs.FP_RE_INIT, p_id)
 
         if sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:
-            self.logger(scs.ANALYSIS_LAG_MORE_SAFE_LAG.label, LogLevel.WARNING, p_name)
+            self.logger(
+                scs.ANALYSIS_LAG_MORE_SAFE_LAG.label, LogLevel.WARNING, p_name
+            )
             self.clear_proc_sc(scs.ANALYSIS_LAG_MORE_SAFE_LAG, p_id)
 
         self.proc_is_alive(p_id)
@@ -169,7 +173,9 @@ class Host(Base):
 
         if sc & scs.RING_BUFFER_TEXT_STREAM_OVERFLOW:
             self.logger(
-                scs.RING_BUFFER_TEXT_STREAM_OVERFLOW.label, LogLevel.WARNING, proc_name
+                scs.RING_BUFFER_TEXT_STREAM_OVERFLOW.label,
+                LogLevel.WARNING,
+                proc_name,
             )
             self.clear_proc_sc(scs.RING_BUFFER_TEXT_STREAM_OVERFLOW, proc_id)
 
@@ -236,10 +242,14 @@ class Host(Base):
             lrd: int = self._ts_data_header[need_cell]
             start: int = need_cell * self._ts_data_size
             t: int = self._ts_data[start : (start + 8)].cast("q")[0]
-            msg: str = bytes(self._ts_data[(start + 8) : (start + 8) + lrd]).decode()
+            msg: str = bytes(
+                self._ts_data[(start + 8) : (start + 8) + lrd]
+            ).decode()
             logs.append((t, msg))
             new_cell: int = cell + 1
-            self._ts_rid[proc_id] = new_cell if new_cell < self._ts_cell_amount else 0
+            self._ts_rid[proc_id] = (
+                new_cell if new_cell < self._ts_cell_amount else 0
+            )
 
         return logs
 

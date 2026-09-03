@@ -7,9 +7,9 @@ from typing import override
 
 from websockets import ClientConnection
 
-from .... import constant as c
-from ...utils.base_adapters import OrderEncoder
-from .base import Base
+from imprint.core import constant as c
+from imprint.core.pipeline.streaming.live.base import Base
+from imprint.core.pipeline.utils.base_adapters import OrderEncoder
 
 
 @dataclass(slots=True)

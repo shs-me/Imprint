@@ -8,11 +8,11 @@ from multiprocessing.shared_memory import SharedMemory
 from types import FunctionType
 from typing import Any
 
-from .. import configs
-from ..configs import Configuration, SharedMemorySegments
-from ..settings import KwgsKeys as kk
-from ..utils.handlers import error_handler
-from .manager import HostManager, NodeManager
+from imprint.core import configs
+from imprint.core.configs import Configuration, SharedMemorySegments
+from imprint.core.ipc.manager import HostManager, NodeManager
+from imprint.core.settings import KwgsKeys as kk
+from imprint.core.utils.handlers import error_handler
 
 
 @dataclass(slots=True)
@@ -47,7 +47,9 @@ class Dispatcher:
                 and (obj is not Configuration)
                 and (obj is not SharedMemorySegments)
             ):
-                c_obj: Configuration = self.kwg.pop(name) if name in self.kwg else obj()
+                c_obj: Configuration = (
+                    self.kwg.pop(name) if name in self.kwg else obj()
+                )
                 self.kwg[kk.Configs.name].append(c_obj)
                 if isinstance(c_obj, SharedMemorySegments):
                     self.kwg[kk.Segments.name][name] = slice(
@@ -63,7 +65,8 @@ class Dispatcher:
 
         if self.is_main:
             self.shm = SharedMemory(
-                size=self.kwg[kk.Segments.name].pop(kk.ShmSize.name), create=True
+                size=self.kwg[kk.Segments.name].pop(kk.ShmSize.name),
+                create=True,
             )
             if self.shm.buf is not None:
                 self.shm_buf = self.shm.buf

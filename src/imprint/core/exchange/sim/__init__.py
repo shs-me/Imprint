@@ -1,3 +1,3 @@
-from .base import Base as ExchangeSim
+from imprint.core.exchange.sim.base import Base as ExchangeSim
 
 __all__ = ["ExchangeSim"]

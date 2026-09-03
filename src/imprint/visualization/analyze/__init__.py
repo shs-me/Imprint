@@ -1,3 +1,3 @@
-from .base import Stats
+from imprint.visualization.analyze.base import Stats
 
 __all__ = ["Stats"]

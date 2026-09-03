@@ -3,8 +3,12 @@ from dataclasses import dataclass, field
 
 from numba import njit
 
-from .base import Base
-from .converter import to_long_nPnl, to_nMargin, to_short_nPnl
+from imprint.core.exchange.account.base import Base
+from imprint.core.exchange.account.converter import (
+    to_long_nPnl,
+    to_nMargin,
+    to_short_nPnl,
+)
 
 
 @dataclass
@@ -177,7 +181,12 @@ def _update_short_position(
         shortNqty[0] += nQty
     else:
         lockedNbalance[0] -= to_nMargin(
-            shortEntryNprice[0], nQty, leverage, price_mult, qty_mult, scale_mult
+            shortEntryNprice[0],
+            nQty,
+            leverage,
+            price_mult,
+            qty_mult,
+            scale_mult,
         )
         nBalance[0] += to_short_nPnl(
             closeNprice=nPrice,

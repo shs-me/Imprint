@@ -6,8 +6,8 @@ from numba import njit
 from numpy import bool_, int32, int64, intp
 from numpy.typing import NDArray
 
-from ... import constant as c
-from .writer import Writer
+from imprint.core import constant as c
+from imprint.core.footprint.engine.writer import Writer
 
 
 class AlgorithmProtocol(Protocol):
@@ -86,7 +86,9 @@ class Reader(Writer):
             fp=self.fp.base,
             fp_state=self.fp.state,
         )
-        self.algorithm.find_patterns_in_update_clusters(idYmin, idYmax, idXmin, idXmax)
+        self.algorithm.find_patterns_in_update_clusters(
+            idYmin, idYmax, idXmin, idXmax
+        )
 
     @final
     def __update_closed_bar_and_fp(self) -> None:
@@ -124,7 +126,9 @@ class Reader(Writer):
             center=self.fp.con.center,
             scale=self.fp.con.scale,
         )
-        self.algorithm.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
+        self.algorithm.find_patterns_in_update_bar(
+            idYmin, idYmax, idxBid, idxAsk
+        )
 
     @final
     def final_analyze(self) -> None:
@@ -185,9 +189,13 @@ def _update_closed_bar_and_fp_states(
     if bar > 0:
         pre_c, pre_atr = headers[oldBwo, c.BH_Close], headers[oldBwo, c.BH_ATR]
         tr: int64 = max(
-            highNprice - lowNprice, abs(highNprice - pre_c), abs(lowNprice - pre_c)
+            highNprice - lowNprice,
+            abs(highNprice - pre_c),
+            abs(lowNprice - pre_c),
         )
-        headers[bwo, c.BH_ATR] = ((pre_atr * (c.ATR_PERIOD - 1)) + tr) // c.ATR_PERIOD
+        headers[bwo, c.BH_ATR] = (
+            (pre_atr * (c.ATR_PERIOD - 1)) + tr
+        ) // c.ATR_PERIOD
     else:
         headers[bwo, c.BH_ATR] = highNprice - lowNprice
 
@@ -204,14 +212,20 @@ def _update_closed_bar_and_fp_states(
 
     # Clear Footprint Static State's
     state_2 = c.SF_POC_FP | c.SF_VAH_FP | c.SF_VAL_FP
-    fp_state[fp_state_cache[c.CSD_POC_FP : c.CSD_VAL_FP + 1], idxVP] &= ~(state_2)
+    fp_state[fp_state_cache[c.CSD_POC_FP : c.CSD_VAL_FP + 1], idxVP] &= ~(
+        state_2
+    )
     state_3 = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
     fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
 
     # Update VWAP+BB
     vwap = (baseNprice - headers[bwo, c.BH_VWAP]) // scale + center
-    vwap_bb_lower = (baseNprice - headers[bwo, c.BH_VWAP_LOWER_BAND]) // scale + center
-    vwap_bb_upper = (baseNprice - headers[bwo, c.BH_VWAP_UPPER_BAND]) // scale + center
+    vwap_bb_lower = (
+        baseNprice - headers[bwo, c.BH_VWAP_LOWER_BAND]
+    ) // scale + center
+    vwap_bb_upper = (
+        baseNprice - headers[bwo, c.BH_VWAP_UPPER_BAND]
+    ) // scale + center
 
     if 0 <= vwap < fp_state.shape[0]:
         fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP_FP)
@@ -240,9 +254,16 @@ def _update_closed_bar_and_fp_states(
     headers[bwo, c.BH_VAL_FP] = (center - val) * scale + baseNprice
 
     # Update Auction
-    high_finished, low_finished = fp[high_idy, lidx + 1] == 0, fp[low_idy, lidx] == 0
-    highAuction = c.SF_FINISHED_AUCTION if high_finished else c.SF_UNFINISHED_AUCTION
-    lowAuction = c.SF_FINISHED_AUCTION if low_finished else c.SF_UNFINISHED_AUCTION
+    high_finished, low_finished = (
+        fp[high_idy, lidx + 1] == 0,
+        fp[low_idy, lidx] == 0,
+    )
+    highAuction = (
+        c.SF_FINISHED_AUCTION if high_finished else c.SF_UNFINISHED_AUCTION
+    )
+    lowAuction = (
+        c.SF_FINISHED_AUCTION if low_finished else c.SF_UNFINISHED_AUCTION
+    )
     fp_state[high_idy, idxVP] |= highAuction
     fp_state[low_idy, idxVP] |= lowAuction
 
@@ -326,7 +347,9 @@ def _update_bar_states(
 
 
 @njit(cache=True)
-def calc_value_area(vp_slice: NDArray[int64], center_idx: intp) -> tuple[intp, intp]:
+def calc_value_area(
+    vp_slice: NDArray[int64], center_idx: intp
+) -> tuple[intp, intp]:
     """Numba JIT kernel computing Value Area High (VAH) and Low (VAL) covering 70% of volume profile."""
 
     target_vol: float = np.sum(vp_slice) * 0.70

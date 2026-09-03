@@ -7,15 +7,17 @@ from typing import override
 from numpy import int64
 from numpy.typing import NDArray
 
-from ....settings import StatusCodes as scs
-from ....utils.handlers import error_handler
-from ...utils.base_data_prepper import BaseDataPrepper
-from ..base import Base
+from imprint.core.pipeline.streaming.base import Base
+from imprint.core.pipeline.utils.base_data_prepper import BaseDataPrepper
+from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils.handlers import error_handler
 
 
 @dataclass(slots=True)
 class DataPrepper(BaseDataPrepper):
-    queue: deque[bytes] = field(default_factory=lambda: deque(maxlen=10000), init=False)
+    queue: deque[bytes] = field(
+        default_factory=lambda: deque(maxlen=10000), init=False
+    )
 
     @override
     def alarm_clock(self) -> None:
@@ -24,7 +26,9 @@ class DataPrepper(BaseDataPrepper):
 
     @override
     def prepper_data(self, line: NDArray[int64]) -> None:
-        self.queue.append(struct.pack("@qqqq", line[0], line[1], line[2], line[3]))
+        self.queue.append(
+            struct.pack("@qqqq", line[0], line[1], line[2], line[3])
+        )
 
     @override
     def post_prepper(self) -> None:
@@ -57,7 +61,9 @@ class MarketDataStream(Base):
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
                 if task & scs.EXIT:
-                    return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
+                    return self.manager.set_proc_sc(
+                        scs.EXIT, wait_main_task=False
+                    )
 
                 if task & scs.COMPLETE:
                     if self.complete():

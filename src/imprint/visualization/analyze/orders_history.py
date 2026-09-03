@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 from numpy import int64
 from numpy.typing import NDArray
 
-from ...core import constant as c
-from ...core.exchange.account.converter import to_long_nPnl, to_short_nPnl
-from ...core.exchange.account.position import update_position
-from ..settings import CloseTrades, OpenTrades
+from imprint.core import constant as c
+from imprint.core.exchange.account.converter import to_long_nPnl, to_short_nPnl
+from imprint.core.exchange.account.position import update_position
+from imprint.visualization.settings import CloseTrades, OpenTrades
 
 
 def analyze_orders_history(
@@ -54,7 +54,9 @@ def analyze_orders_history(
 
         if is_filled:
             sum_commission += nCommission / scale_mult
-            dt: datetime = datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc)
+            dt: datetime = datetime.fromtimestamp(
+                timestamp / 1000, tz=timezone.utc
+            )
             price: float = nPrice / price_mult
             qty: float = nQty / qty_mult
             if is_open:

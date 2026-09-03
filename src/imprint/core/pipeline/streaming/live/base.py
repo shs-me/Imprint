@@ -9,9 +9,9 @@ from websockets import ClientConnection
 from websockets import exceptions as ws_exc
 from websockets.asyncio.client import connect
 
-from ....settings import StatusCodes as scs
-from ....utils.tools import dump_exception
-from ..base import Base as GlobalBase
+from imprint.core.pipeline.streaming.base import Base as GlobalBase
+from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils.tools import dump_exception
 
 
 @dataclass(slots=True)
@@ -34,7 +34,9 @@ class Base(GlobalBase, ABC):
                 except MsgspecError:
                     await ws.close()
                     dump_exception()
-                    return self.manager.set_proc_sc(scs.ERROR, wait_main_task=True)
+                    return self.manager.set_proc_sc(
+                        scs.ERROR, wait_main_task=True
+                    )
 
                 except (TimeoutError, asyncio.TimeoutError):
                     self.exc_counter[
@@ -45,15 +47,21 @@ class Base(GlobalBase, ABC):
                     )
                 except ws_exc.ProtocolError as e:
                     self.exc_counter[ws_exc.ProtocolError.__name__] += 1
-                    self.manager.set_text(f"WS Protocol error: {e}. Reconnecting...")
+                    self.manager.set_text(
+                        f"WS Protocol error: {e}. Reconnecting..."
+                    )
 
                 except ws_exc.PayloadTooBig as e:
                     self.exc_counter[ws_exc.PayloadTooBig.__name__] += 1
-                    self.manager.set_text(f"WS Payload too big: {e}. Reconnecting...")
+                    self.manager.set_text(
+                        f"WS Payload too big: {e}. Reconnecting..."
+                    )
 
                 except ws_exc.InvalidState as e:
                     self.exc_counter[ws_exc.InvalidState.__name__] += 1
-                    self.manager.set_text(f"WS Invalid state: {e}. Reconnecting...")
+                    self.manager.set_text(
+                        f"WS Invalid state: {e}. Reconnecting..."
+                    )
 
         except (ws_exc.InvalidURI, ws_exc.InvalidProxy) as e:
             self.manager.set_text(f"Fatal WS Config Error: {e}")

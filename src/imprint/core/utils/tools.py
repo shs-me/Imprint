@@ -3,7 +3,7 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Any, override
 
-from .. import constant as c
+from imprint.core import constant as c
 
 
 class DebugEncoder(json.JSONEncoder):
@@ -50,7 +50,9 @@ def dump_exception() -> None:
 
     try:
         with open(file=c.EXC_DUMP_PATH, mode="a", encoding="utf-8") as f:
-            json.dump(obj=data, fp=f, ensure_ascii=False, indent=4, cls=DebugEncoder)
+            json.dump(
+                obj=data, fp=f, ensure_ascii=False, indent=4, cls=DebugEncoder
+            )
             f.write("\n" + "=" * 50 + "\n")
 
     except Exception as final_err:
@@ -76,7 +78,10 @@ def process_value(val: Any, max_len: int = 100) -> Any:
         return f"{type(val).__name__}(len={len(val)}): {content}{suffix}"
 
     if isinstance(val, dict):
-        return {"__info__": f"dict(len={len(val)})", "keys": list(val.keys())[:20]}
+        return {
+            "__info__": f"dict(len={len(val)})",
+            "keys": list(val.keys())[:20],
+        }
 
     if isinstance(val, (str, bytes)):
         if len(val) > max_len:
@@ -107,7 +112,11 @@ def to_date(iso_f_dates: list[str]):
 
 
 def download_agg_trades_history(
-    symbol: str, start_date: date, end_date: date, price_mult: int, qty_mult: int
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    price_mult: int,
+    qty_mult: int,
 ) -> bool:
     import zipfile
 
@@ -134,7 +143,9 @@ def download_agg_trades_history(
 
     cur_date: date = start_date
     while cur_date <= end_date:
-        file_name_for_download: str = f"{symbol}-aggTrades-{cur_date.isoformat()}"
+        file_name_for_download: str = (
+            f"{symbol}-aggTrades-{cur_date.isoformat()}"
+        )
         path_for_downloaded_file: str = f"{dir}/{file_name_for_download}.zip"
 
         base_file_path: str = f"{dir}/{cur_date.isoformat()}"

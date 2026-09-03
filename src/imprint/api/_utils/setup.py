@@ -1,17 +1,17 @@
 from loguru import logger
 
-from ...core.configs import Configuration
-from ...core.constant import (
+from imprint.api.configs import Backtesting, SetupCore
+from imprint.core.configs import Configuration
+from imprint.core.constant import (
     BASE_FOOTPRINT_DUMP_PATH,
     CORE_LOG_PATH,
     EQUITY_HISTORY_DUMP_PATH,
     ORDERS_HISTORY_DUMP_PATH,
 )
-from ...core.main import run_core
-from ...core.pipeline.utils.rest_agent import RestAgent
-from ...core.utils.handlers import error_handler
-from ...core.utils.tools import download_agg_trades_history, to_date
-from .configs import Backtesting, SetupCore
+from imprint.core.main import run_core
+from imprint.core.pipeline.utils.rest_agent import RestAgent
+from imprint.core.utils.handlers import error_handler
+from imprint.core.utils.tools import download_agg_trades_history, to_date
 
 __all__ = ["run"]
 
@@ -29,7 +29,11 @@ def run(setup: SetupCore) -> None:
             return logger.error(f"Run Core Failed | {e}")
 
         download_agg_trades_history(
-            setup.symbol, startDate, endDate, setup.coin.price_mult, setup.coin.qty_mult
+            setup.symbol,
+            startDate,
+            endDate,
+            setup.coin.price_mult,
+            setup.coin.qty_mult,
         )
     else:
         # rest = RestAgent(setup.symbol, setup.run_mode.connector)
@@ -56,7 +60,7 @@ def run(setup: SetupCore) -> None:
             if not setup.run_mode.with_visualization.only_visualization:
                 run_core(**kwargs)
 
-            from ...visualization import run as run_vis
+            from imprint.visualization import run as run_vis
 
             logger.remove()
             logger.add(CORE_LOG_PATH, format="{time} | {level} | {message}")

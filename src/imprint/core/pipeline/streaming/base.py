@@ -2,8 +2,8 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import final
 
-from ...ipc import NodeManager
-from ...settings import StatusCodes as scs
+from imprint.core.ipc import NodeManager
+from imprint.core.settings import StatusCodes as scs
 
 
 @dataclass(slots=True)

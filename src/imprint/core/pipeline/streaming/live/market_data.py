@@ -4,7 +4,7 @@ from typing import override
 
 from websockets import ClientConnection
 
-from .base import Base
+from imprint.core.pipeline.streaming.live.base import Base
 
 
 @dataclass(slots=True)

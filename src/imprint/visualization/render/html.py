@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from ..analyze import Stats
-from ..plot import (
+from imprint.visualization.analyze import Stats
+from imprint.visualization.plot import (
     plot_chart_with_markers,
     plot_curve_balance,
     plot_info_dashboard,
@@ -68,14 +68,18 @@ def run(
 ) -> str:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    img_equity: str = _render_to_base64(plot_curve_balance, stats, figsize=(15, 7.5))
+    img_equity: str = _render_to_base64(
+        plot_curve_balance, stats, figsize=(15, 7.5)
+    )
     img_chart: str = _render_to_base64(
         plot_chart_with_markers, stats, figsize=(15, 7.5)
     )
     img_dashboard: str = _render_to_base64(
         plot_info_dashboard, stats, figsize=(10, 7.5), is_dashboard=True
     )
-    img_dist: str = _render_to_base64(plot_trade_distribution, stats, figsize=(12, 7.5))
+    img_dist: str = _render_to_base64(
+        plot_trade_distribution, stats, figsize=(12, 7.5)
+    )
 
     with resources.open_text(path_to_template, template_name) as f:
         html: str = f.read().format(

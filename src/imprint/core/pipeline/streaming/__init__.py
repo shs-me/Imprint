@@ -1,7 +1,7 @@
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
-from ...ipc import NodeManager, supervisor
+from imprint.core.ipc import NodeManager, supervisor
 
 __all__ = ["run_streaming"]
 
@@ -16,14 +16,14 @@ def run_streaming(
     manager: NodeManager = kwargs["manager"]
 
     if manager.cfgSetup.backtesting:
-        from .backtest import BacktestAgent
+        from imprint.core.pipeline.streaming.backtest import BacktestAgent
 
         agent = BacktestAgent(manager=manager)
         agent.run()
     else:
         import asyncio
 
-        from .live import LiveAgent
+        from imprint.core.pipeline.streaming.live import LiveAgent
 
         agent = LiveAgent(manager, engine_event, execution_event, wss_sem)
         asyncio.run(agent.run_streams())

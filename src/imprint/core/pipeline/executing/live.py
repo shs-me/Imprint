@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from multiprocessing.synchronize import Event
 from typing import override
 
-from ...exchange.account import Account
-from .base import Base
+from imprint.core.exchange.account import Account
+from imprint.core.pipeline.executing.base import Base
 
 
 @dataclass(slots=True)
@@ -15,7 +15,11 @@ class Live(Base[Account]):
 
     @override
     def alarm_clock(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
+        self,
+        WB_1: memoryview,
+        RB_1: memoryview,
+        WB_2: memoryview,
+        RB_2: memoryview,
     ) -> None:
         """Blocks process on execution_event when ring buffers are drained."""
 
@@ -46,7 +50,14 @@ class Live(Base[Account]):
                 timestamp, order_param, order_id, nPrice, nQty, nCommission
             )
             self.con.update_orders_history(
-                timestamp, order_param, order_id, nPrice, nQty, nCommission, 0, 0
+                timestamp,
+                order_param,
+                order_id,
+                nPrice,
+                nQty,
+                nCommission,
+                0,
+                0,
             )
 
         elif event_type == 2:

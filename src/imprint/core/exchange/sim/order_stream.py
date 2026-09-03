@@ -8,9 +8,9 @@ from numba import njit
 from numpy import int64
 from numpy.typing import NDArray
 
-from ... import constant as c
-from ...settings import StatusCodes as scs
-from ..account import AccountManager
+from imprint.core import constant as c
+from imprint.core.exchange.account import AccountManager
+from imprint.core.settings import StatusCodes as scs
 
 
 @dataclass(slots=True)
@@ -99,12 +99,16 @@ class Order(AccountManager, ABC):
         lrd = self.__sus_data_header[cell]
         raw_data = self.__sus_data[start : start + lrd]
         new_cell: int = cell + 1
-        self.__sus_rid[0] = new_cell if (new_cell < self.__sus_cell_amount) else 0
+        self.__sus_rid[0] = (
+            new_cell if (new_cell < self.__sus_cell_amount) else 0
+        )
         return raw_data
 
 
 @njit(cache=True)
-def compact_order_book(order_row: int, obRow: memoryview, ob: NDArray[int64]) -> None:
+def compact_order_book(
+    order_row: int, obRow: memoryview, ob: NDArray[int64]
+) -> None:
     if (obRow[0] - 1) > order_row:
         ob[order_row : obRow[0] - 1, :] = ob[order_row + 1 : obRow[0], :]
         ob[obRow[0] - 1, :] = 0

@@ -3,8 +3,8 @@ from datetime import datetime
 import matplotlib.ticker as mticker
 from matplotlib.axes import Axes
 
-from ..analyze import Stats
-from .utils import (
+from imprint.visualization.analyze import Stats
+from imprint.visualization.plot.utils import (
     not_data_for_plot,
     run_base_action,
     set_ax_pct,

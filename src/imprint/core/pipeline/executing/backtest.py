@@ -2,8 +2,8 @@ import time
 from dataclasses import dataclass
 from typing import override
 
-from ...exchange.sim import ExchangeSim
-from .base import Base
+from imprint.core.exchange.sim import ExchangeSim
+from imprint.core.pipeline.executing.base import Base
 
 
 @dataclass(slots=True)
@@ -26,7 +26,11 @@ class Backtest(Base[ExchangeSim]):
 
     @override
     def alarm_clock(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
+        self,
+        WB_1: memoryview,
+        RB_1: memoryview,
+        WB_2: memoryview,
+        RB_2: memoryview,
     ) -> None:
         matching = False
         if self.trade_readed_time[0] > self.account.trade_readed_time[0]:
@@ -63,7 +67,14 @@ class Backtest(Base[ExchangeSim]):
             timestamp, order_param, order_id, nPrice, nQty, nCommission
         )
         self.con.update_orders_history(
-            timestamp, order_param, order_id, nPrice, nQty, nCommission, nMAE, nMFE
+            timestamp,
+            order_param,
+            order_id,
+            nPrice,
+            nQty,
+            nCommission,
+            nMAE,
+            nMFE,
         )
 
     @override
@@ -74,7 +85,8 @@ class Backtest(Base[ExchangeSim]):
             self._check_user_data_buf()
             if (
                 self.account.prepper.complete
-                and self.account.prepper.dfmRid[0] == self.account.prepper.dfmWid[0]
+                and self.account.prepper.dfmRid[0]
+                == self.account.prepper.dfmWid[0]
             ):
                 break
 

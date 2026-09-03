@@ -3,8 +3,8 @@ import time
 from dataclasses import dataclass, field
 from typing import override
 
-from ...settings import StatusCodes as scs
-from .base import Base
+from imprint.core.ipc.manager.base import Base
+from imprint.core.settings import StatusCodes as scs
 
 
 @dataclass(slots=True)
@@ -23,8 +23,12 @@ class Node(Base):
         """Binds process task and status memory views matching worker ID."""
         Base.__post_init__(self)
 
-        self.__proc_status = self._procs_status[self._proc_id : self._proc_id + 1]
-        self.__task_status = self._procs_status[self._task_id : self._task_id + 1]
+        self.__proc_status = self._procs_status[
+            self._proc_id : self._proc_id + 1
+        ]
+        self.__task_status = self._procs_status[
+            self._task_id : self._task_id + 1
+        ]
 
     def set_text(self, text: str) -> None:
         """Writes formatted process status text message to shared memory text buffer."""
@@ -47,10 +51,14 @@ class Node(Base):
         need_cell: int = (self._proc_id * self._ts_cell_amount) + cell
         self._ts_data_header[need_cell] = len(b_text)
         start: int = need_cell * self._ts_data_size
-        self._ts_data[start : (start + 8)].cast("q")[0] = round(time.time() * 1000)
+        self._ts_data[start : (start + 8)].cast("q")[0] = round(
+            time.time() * 1000
+        )
         self._ts_data[(start + 8) : (start + 8) + len(b_text)] = b_text
         new_cell: int = cell + 1
-        self._ts_wid[self._proc_id] = new_cell if new_cell < self._ts_cell_amount else 0
+        self._ts_wid[self._proc_id] = (
+            new_cell if new_cell < self._ts_cell_amount else 0
+        )
 
         self.set_proc_sc(scs.HAVE_TEXT, wait_main_task=False)
 

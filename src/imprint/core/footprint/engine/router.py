@@ -5,11 +5,11 @@ from typing import final, override
 
 from numpy import int64
 
-from ... import constant as c
-from ...ipc import NodeManager
-from ..models import Footprint
-from .reader import AlgorithmProtocol
-from .reader import Reader as FootprintEngine
+from imprint.core import constant as c
+from imprint.core.footprint.engine.reader import AlgorithmProtocol
+from imprint.core.footprint.engine.reader import Reader as FootprintEngine
+from imprint.core.footprint.models import Footprint
+from imprint.core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -93,7 +93,9 @@ class SyncWithExecution(ABC):
 
     @final
     def lag_is_safe(self) -> bool:
-        lag: int = (time.perf_counter_ns() - self.time_start_reading[0]) // 1_000
+        lag: int = (
+            time.perf_counter_ns() - self.time_start_reading[0]
+        ) // 1_000
         return True if (lag < self.safe_lag) else False
 
 

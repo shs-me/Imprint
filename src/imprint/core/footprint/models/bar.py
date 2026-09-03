@@ -6,11 +6,24 @@ from typing import TYPE_CHECKING, final, overload, override
 import numpy as np
 from numpy import float64, int64
 
-from ... import constant as c
-from .base import Chart, FPArray, PriceLike, ProfileLike, QtyLike
+from imprint.core import constant as c
+from imprint.core.footprint.models.base import (
+    Chart,
+    FPArray,
+    PriceLike,
+    ProfileLike,
+    QtyLike,
+)
 
 if TYPE_CHECKING:
-    from .typing import T_ASK, T_BAR, T_BID, T_IDY, T_INDEX, T_SLICE
+    from imprint.core.footprint.models.typing import (
+        T_ASK,
+        T_BAR,
+        T_BID,
+        T_IDY,
+        T_INDEX,
+        T_SLICE,
+    )
 
 PARK_FACTOR: int = 1.0 / (4.0 * np.log(2.0))
 
@@ -210,7 +223,9 @@ class Indicators[T]:
 
     @property
     def parkinson_percent(self) -> float64:
-        return np.sqrt((self._bar._get_header(c.BH_PARK) / c.VAR_SCALE) * PARK_FACTOR)
+        return np.sqrt(
+            (self._bar._get_header(c.BH_PARK) / c.VAR_SCALE) * PARK_FACTOR
+        )
 
     @property
     def fp_vwap(self) -> PriceLike[T]:

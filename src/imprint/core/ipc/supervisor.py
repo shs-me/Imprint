@@ -16,7 +16,7 @@ def supervisor(is_main: bool = False):
     def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
         @wraps(wrapped=func)
         def wrapper(*_args: P.args, **kwargs: P.kwargs) -> R | None:
-            from .dispatcher import Dispatcher
+            from imprint.core.ipc.dispatcher import Dispatcher
 
             dp: Dispatcher = Dispatcher(is_main=is_main, kwg=kwargs)
             try:

@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Protocol, final
 
-from ...exchange.account import Account, AccountConverter
-from ...ipc import NodeManager
-from ...settings import StatusCodes as scs
-from ...utils.handlers import error_handler
+from imprint.core.exchange.account import Account, AccountConverter
+from imprint.core.ipc import NodeManager
+from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils.handlers import error_handler
 
 
 class ExecutionProtocol(Protocol):
@@ -117,7 +117,9 @@ class Base[T: Account](ABC):
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
                 if task & scs.EXIT:
-                    return self.manager.set_proc_sc(scs.EXIT, wait_main_task=False)
+                    return self.manager.set_proc_sc(
+                        scs.EXIT, wait_main_task=False
+                    )
 
                 if task & scs.COMPLETE:
                     if self.__complete():
@@ -141,7 +143,9 @@ class Base[T: Account](ABC):
         signals_readed: bool = self.__sn_wid[0] == self.__sn_rid[0]
         user_stream_readed: bool = self.__gus_wid[0] == self.__gus_rid[0]
         return (
-            (self.__engine_complete[0] == 1) and signals_readed and user_stream_readed
+            (self.__engine_complete[0] == 1)
+            and signals_readed
+            and user_stream_readed
         )
 
     @final
@@ -153,7 +157,11 @@ class Base[T: Account](ABC):
 
     @abstractmethod
     def alarm_clock(
-        self, WB_1: memoryview, RB_1: memoryview, WB_2: memoryview, RB_2: memoryview
+        self,
+        WB_1: memoryview,
+        RB_1: memoryview,
+        WB_2: memoryview,
+        RB_2: memoryview,
     ) -> None: ...
 
     @final
@@ -166,11 +174,15 @@ class Base[T: Account](ABC):
         self._check_user_data_buf()
         if self.con.lossNbalanceSafeLimit:
             if self.con.lockedNbalanceSafeLimit:
-                if (nominalNqty := self.con.nominalEntryNqtyWithLeverage) is not None:
+                if (
+                    nominalNqty := self.con.nominalEntryNqtyWithLeverage
+                ) is not None:
                     if (timestamp + self.con.timer) <= self.readed_timestamp:
                         return
 
-                    nQty: int = self.con.entryNqtyWithLeverage(nPrice, nominalNqty)
+                    nQty: int = self.con.entryNqtyWithLeverage(
+                        nPrice, nominalNqty
+                    )
                     self.executor.action_for_getted_signal(
                         timestamp, order_param, nPrice, nQty
                     )
@@ -182,13 +194,17 @@ class Base[T: Account](ABC):
                 pass
         else:
             self.post_final_action()
-            self.manager.set_proc_sc(code=scs.LOSS_MORE_LIMIT, wait_main_task=True)
+            self.manager.set_proc_sc(
+                code=scs.LOSS_MORE_LIMIT, wait_main_task=True
+            )
 
     @final
     def __get_signal_data(self) -> tuple[int, int, int]:
         cell: int = self.__sn_rid[0]
         start: int = cell * self.__sn_data_size
-        get_data: memoryview = self.__sn_data[start : start + self.__sn_data_size]
+        get_data: memoryview = self.__sn_data[
+            start : start + self.__sn_data_size
+        ]
         # signal_id = get_data[0]
         nPrice, timestamp, order_param = get_data[1], get_data[2], get_data[3]
         new_cell: int = cell + 1
@@ -211,7 +227,9 @@ class Base[T: Account](ABC):
         len_raw_data: int = self.__gus_data_header[cell]
         raw_data: memoryview = self.__gus_data[start : start + len_raw_data]
         new_cell: int = cell + 1
-        self.__gus_rid[0] = new_cell if (new_cell < self.__gus_cell_amount) else 0
+        self.__gus_rid[0] = (
+            new_cell if (new_cell < self.__gus_cell_amount) else 0
+        )
         return raw_data
 
     @abstractmethod
@@ -239,4 +257,6 @@ class Base[T: Account](ABC):
         self.__sus_data_header[cell] = len(raw_data)
         self.__sus_data[start : start + len(raw_data)] = raw_data
         new_cell: int = cell + 1
-        self.__sus_wid[0] = new_cell if (new_cell < self.__sus_cell_amount) else 0
+        self.__sus_wid[0] = (
+            new_cell if (new_cell < self.__sus_cell_amount) else 0
+        )

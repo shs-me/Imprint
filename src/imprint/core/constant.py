@@ -1,6 +1,6 @@
 """System-wide file paths, endpoints, and aliased bitmask constants."""
 
-from .settings import (
+from imprint.core.settings import (
     BarHeaders,
     CachedStatesData,
     EquityHeaders,

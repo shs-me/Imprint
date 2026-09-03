@@ -6,8 +6,8 @@ from multiprocessing.synchronize import Event, Semaphore
 from types import GenericAlias
 from typing import final
 
-from ... import configs as cfg
-from ...configs import Segment
+from imprint.core import configs as cfg
+from imprint.core.configs import Segment
 
 
 @dataclass(slots=True)
@@ -61,7 +61,9 @@ class Base(ABC):
 
     @final
     def __init_attributes(
-        self, configs: list[cfg.Configuration], main_tools: list[Event | Semaphore]
+        self,
+        configs: list[cfg.Configuration],
+        main_tools: list[Event | Semaphore],
     ) -> None:
         objs: list[cfg.Configuration | Event | Semaphore] = configs + main_tools
         for obj in objs:

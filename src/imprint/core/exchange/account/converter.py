@@ -3,8 +3,8 @@ from numba import njit
 from numpy import int64
 from numpy.typing import NDArray
 
-from ... import configs as cfg
-from ... import constant as c
+from imprint.core import configs as cfg
+from imprint.core import constant as c
 
 
 class Converter:
@@ -47,8 +47,12 @@ class Converter:
         self._shortEntryNprice: memoryview = memoryview(bytearray(8)).cast("q")
 
         self._unrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
-        self._longUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
-        self._shortUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast("q")
+        self._longUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast(
+            "q"
+        )
+        self._shortUnrealizedNpnl: memoryview = memoryview(bytearray(8)).cast(
+            "q"
+        )
 
         self._nBalance[0] = self.startNbalance
 
@@ -149,14 +153,17 @@ class Converter:
         """Evaluates whether current balance remains above max tolerable loss threshold."""
 
         return self.nBalance > (
-            self.startNbalance - (self.startNbalance * self._max_loss_balance // 10_000)
+            self.startNbalance
+            - (self.startNbalance * self._max_loss_balance // 10_000)
         )
 
     @property
     def lockedNbalanceSafeLimit(self) -> bool:
         """Evaluates whether locked margin remains below max margin lock threshold."""
 
-        return self.lockedNbalance < (self.nBalance * self._max_lock_balance // 10_000)
+        return self.lockedNbalance < (
+            self.nBalance * self._max_lock_balance // 10_000
+        )
 
     @property
     def nominalEntryNqty(self) -> int:
@@ -168,7 +175,9 @@ class Converter:
     def nominalEntryNqtyWithLeverage(self) -> int | None:
         """Calculates leveraged entry size if above minimum order threshold."""
 
-        if (qty := (self.leverage * self.nominalEntryNqty)) > self.minOrderNsize:
+        if (
+            qty := (self.leverage * self.nominalEntryNqty)
+        ) > self.minOrderNsize:
             return qty
 
     def entryNqtyWithLeverage(self, nPrice: int, nominalNqty: int) -> int:
@@ -202,10 +211,14 @@ class Converter:
 
         return self._shortUnrealizedNpnl[0]
 
-    def tp_sl_param(self, nPrice: int, is_long: bool, is_tp: bool) -> tuple[int, int]:
+    def tp_sl_param(
+        self, nPrice: int, is_long: bool, is_tp: bool
+    ) -> tuple[int, int]:
         ticks: int = nPrice * (self._tpDev if is_tp else self._slDev) // 10_000
         ticks = (
-            (ticks if is_tp else -ticks) if is_long else (-ticks if is_tp else ticks)
+            (ticks if is_tp else -ticks)
+            if is_long
+            else (-ticks if is_tp else ticks)
         )
         nPrice_with_dev: int = nPrice + ticks
         order_param: int = 0
@@ -231,9 +244,17 @@ class Converter:
         is_buy = bool(order_param & c.OF_BUY)
 
         if is_buy and is_long:
-            return True if (self._longNqty[0] or self.have_pending_orders) else False
+            return (
+                True
+                if (self._longNqty[0] or self.have_pending_orders)
+                else False
+            )
         elif not is_buy and not is_long:
-            return True if (self._shortNqty[0] or self.have_pending_orders) else False
+            return (
+                True
+                if (self._shortNqty[0] or self.have_pending_orders)
+                else False
+            )
         else:
             return False
 
@@ -241,7 +262,10 @@ class Converter:
         """Flushes non-zero order history logs to disk."""
 
         if self.cfgAC.save_orders_history:
-            np.save(c.ORDERS_HISTORY_DUMP_PATH, self.orders_history[: self.ohWid[0], :])
+            np.save(
+                c.ORDERS_HISTORY_DUMP_PATH,
+                self.orders_history[: self.ohWid[0], :],
+            )
 
 
 @njit(cache=True)

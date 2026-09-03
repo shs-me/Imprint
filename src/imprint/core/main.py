@@ -9,10 +9,10 @@ from multiprocessing.synchronize import Semaphore as SemT
 from types import FunctionType
 from typing import Any
 
-from .constant import DIRS_LIST
-from .ipc import HostManager, supervisor
-from .pipeline import run_engine, run_executing, run_streaming
-from .settings import LogLevel, ProcsData, ProcsIds
+from imprint.core.constant import DIRS_LIST
+from imprint.core.ipc import HostManager, supervisor
+from imprint.core.pipeline import run_engine, run_executing, run_streaming
+from imprint.core.settings import LogLevel, ProcsData, ProcsIds
 
 
 @dataclass(slots=True)
@@ -69,7 +69,9 @@ class MainAgent:
 
         self.manager.general_event(False, task_ids)
 
-        for proc_func, proc_id, task_id in zip(procs_funcs, procs_ids, task_ids):
+        for proc_func, proc_id, task_id in zip(
+            procs_funcs, procs_ids, task_ids
+        ):
             if (
                 kwargs := self.get_kwargs_for_func(proc_func, proc_id, task_id)
             ) is None:
@@ -105,7 +107,8 @@ class MainAgent:
 
             else:
                 return self.manager.logger(
-                    f"Missing arg: [{param_name}] for [{proc_name}]", LogLevel.ERROR
+                    f"Missing arg: [{param_name}] for [{proc_name}]",
+                    LogLevel.ERROR,
                 )
 
         kwargs = self.base_kwargs | kwargs

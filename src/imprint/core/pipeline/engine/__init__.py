@@ -2,14 +2,16 @@ import importlib
 from multiprocessing.synchronize import Event
 from typing import Any
 
-from ...footprint import FootprintEngine
-from ...ipc import NodeManager, supervisor
+from imprint.core.footprint import FootprintEngine
+from imprint.core.ipc import NodeManager, supervisor
 
 __all__ = ["run_engine"]
 
 
 @supervisor()
-def run_engine(engine_event: Event, execution_event: Event, **kwargs: Any) -> None:
+def run_engine(
+    engine_event: Event, execution_event: Event, **kwargs: Any
+) -> None:
     manager: NodeManager = kwargs["manager"]
 
     m_name: str = manager.cfgSetup.algorithm_module
@@ -20,11 +22,11 @@ def run_engine(engine_event: Event, execution_event: Event, **kwargs: Any) -> No
     )
 
     if manager.cfgSetup.backtesting:
-        from .backtest import SyncViaSpinLock
+        from imprint.core.pipeline.engine.backtest import SyncViaSpinLock
 
         sync = SyncViaSpinLock(manager)
     else:
-        from .live import SyncViaEvent
+        from imprint.core.pipeline.engine.live import SyncViaEvent
 
         sync = SyncViaEvent(manager, execution_event)
 
@@ -32,11 +34,13 @@ def run_engine(engine_event: Event, execution_event: Event, **kwargs: Any) -> No
     manager.set_text(f"{engine.__class__.__name__} used as FootprintEngine")
 
     if manager.cfgSetup.backtesting:
-        from .backtest import Backtest as BacktestAgent
+        from imprint.core.pipeline.engine.backtest import (
+            Backtest as BacktestAgent,
+        )
 
         agent = BacktestAgent(manager, engine)
     else:
-        from .live import Live as LiveAgent
+        from imprint.core.pipeline.engine.live import Live as LiveAgent
 
         agent = LiveAgent(manager, engine, engine_event)
 

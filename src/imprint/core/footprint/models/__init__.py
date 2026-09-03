@@ -1,6 +1,6 @@
-from .base import FPArray
-from .converter import Converter
-from .footprint import Footprint
+from imprint.core.footprint.models.base import FPArray
+from imprint.core.footprint.models.converter import Converter
+from imprint.core.footprint.models.footprint import Footprint
 
 __all__ = [
     "FPArray",

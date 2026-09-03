@@ -1,3 +1,5 @@
-from .controller import Controller as LiveAgent
+from imprint.core.pipeline.streaming.live.controller import (
+    Controller as LiveAgent,
+)
 
 __all__ = ["LiveAgent"]

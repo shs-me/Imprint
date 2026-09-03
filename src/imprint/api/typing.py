@@ -1,7 +1,7 @@
 """Type alias declarations and exported interfaces for external strategy development."""
 
-from ..core.footprint import SyncWithExecution
-from ..core.ipc import NodeManager
+from imprint.core.footprint import SyncWithExecution
+from imprint.core.ipc import NodeManager
 
 __all__ = [
     "SyncWithExecution",

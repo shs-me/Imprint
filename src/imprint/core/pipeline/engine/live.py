@@ -3,10 +3,10 @@ from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from typing import override
 
-from ...footprint.engine import SyncWithExecution
-from ...settings import StatusCodes as scs
-from ..utils.base_adapters import AggTradesDecoder
-from .base import Base
+from imprint.core.footprint import SyncWithExecution
+from imprint.core.pipeline.engine.base import Base
+from imprint.core.pipeline.utils.base_adapters import AggTradesDecoder
+from imprint.core.settings import StatusCodes as scs
 
 
 @dataclass(slots=True)
@@ -47,8 +47,12 @@ class Live(Base):
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
         for p, q, t, m in self.decoder.decode(raw_data[:]):
-            self.agg_trades[self.at_wid, 0] = round(p * self.algorithm.con.price_mult)
-            self.agg_trades[self.at_wid, 1] = round(q * self.algorithm.con.qty_mult)
+            self.agg_trades[self.at_wid, 0] = round(
+                p * self.algorithm.con.price_mult
+            )
+            self.agg_trades[self.at_wid, 1] = round(
+                q * self.algorithm.con.qty_mult
+            )
             self.agg_trades[self.at_wid, 2] = t
             self.agg_trades[self.at_wid, 3] = m
             self.at_wid: int = (

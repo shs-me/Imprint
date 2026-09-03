@@ -7,10 +7,16 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from ... import constant as c
-from .bar import Bar
-from .base import Chart, FPArray, PriceLike, ProfileLike, QtyLike
-from .converter import Converter
+from imprint.core import constant as c
+from imprint.core.footprint.models.bar import Bar
+from imprint.core.footprint.models.base import (
+    Chart,
+    FPArray,
+    PriceLike,
+    ProfileLike,
+    QtyLike,
+)
+from imprint.core.footprint.models.converter import Converter
 
 
 @final

@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 import msgspec
 from loguru import logger
 
-from ...configs import Connector
+from imprint.core.configs import Connector
 
 
 class RestAgent:
@@ -68,14 +68,18 @@ class RestAgent:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
             req_data = query.encode("utf-8")
 
-        req = Request(url=url, data=req_data, headers=headers, method=method.upper())
+        req = Request(
+            url=url, data=req_data, headers=headers, method=method.upper()
+        )
 
         try:
             with urlopen(req, timeout=10) as resp:
                 raw_body = resp.read()
                 return msgspec.json.decode(raw_body)
         except Exception as e:
-            raise RuntimeError(f"RestAgent Request Error [{method} {endpoint}]: {e}")
+            raise RuntimeError(
+                f"RestAgent Request Error [{method} {endpoint}]: {e}"
+            )
 
     def get_exchange_info(self) -> dict[str, Any]:
         """Fetches and caches symbol metadata from /fapi/v1/exchangeInfo."""
@@ -86,7 +90,9 @@ class RestAgent:
                     self._symbol_info = sym
                     break
             if self._symbol_info is None:
-                raise ValueError(f"Symbol {self.symbol} not found in exchangeInfo")
+                raise ValueError(
+                    f"Symbol {self.symbol} not found in exchangeInfo"
+                )
 
         return self._symbol_info
 
@@ -98,7 +104,9 @@ class RestAgent:
                 if f.get("filterType") == "PRICE_FILTER":
                     return f.get("tickSize", "0.01")
         except Exception as e:
-            logger.warning(f"Failed to fetch tick_size via REST: {e}. Fallback to 0.01")
+            logger.warning(
+                f"Failed to fetch tick_size via REST: {e}. Fallback to 0.01"
+            )
         return "0.01"
 
     def get_lot_size(self) -> str:
@@ -109,7 +117,9 @@ class RestAgent:
                 if f.get("filterType") == "LOT_SIZE":
                     return f.get("stepSize", "0.001")
         except Exception as e:
-            logger.warning(f"Failed to fetch lot_size via REST: {e}. Fallback to 0.001")
+            logger.warning(
+                f"Failed to fetch lot_size via REST: {e}. Fallback to 0.001"
+            )
         return "0.001"
 
     def get_min_order_size_usdt(self) -> float:
@@ -132,10 +142,14 @@ class RestAgent:
             for asset in account.get("assets", []):
                 if asset.get("asset") == "USDT":
                     return float(
-                        asset.get("availableBalance" if free else "marginBalance", 0.0)
+                        asset.get(
+                            "availableBalance" if free else "marginBalance", 0.0
+                        )
                     )
         except Exception as e:
-            logger.warning(f"Failed to fetch balance via REST: {e}. Fallback to 1000.0")
+            logger.warning(
+                f"Failed to fetch balance via REST: {e}. Fallback to 1000.0"
+            )
         return 1000.0
 
     def get_commission(self, is_maker: bool = True) -> float:
@@ -164,7 +178,9 @@ class RestAgent:
         if client_order_id is not None:
             params["origClientOrderId"] = client_order_id
 
-        return self._request("DELETE", "/fapi/v1/order", params=params, signed=True)
+        return self._request(
+            "DELETE", "/fapi/v1/order", params=params, signed=True
+        )
 
     def close_all_positions(self) -> None:
         pass

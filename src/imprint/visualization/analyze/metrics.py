@@ -4,7 +4,7 @@ import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
 
-from ..settings import CloseTrades, OpenTrades
+from imprint.visualization.settings import CloseTrades, OpenTrades
 
 
 def calculate_net_profit(start_balance: float, end_balance: float) -> float:
@@ -18,7 +18,9 @@ def calculate_recovery_factor(
     return (net_profit / denom_dd) if (denom_dd > 0) else 0.0
 
 
-def calculate_tp_sl_info(all_pnls: list[float]) -> tuple[int, float, int, float]:
+def calculate_tp_sl_info(
+    all_pnls: list[float],
+) -> tuple[int, float, int, float]:
     sum_tp_count: int = 0
     sum_tp_pnl: float = 0.0
     sum_sl_count: int = 0
@@ -123,7 +125,9 @@ def calculate_sharpe_and_sortino_ratio(
             if len(downside_returns) > 0:
                 downside_std = np.sqrt(np.mean(downside_returns**2))
                 sortino_ratio = (
-                    (mean_ret / downside_std) * ann_factor if downside_std > 0 else 0.0
+                    (mean_ret / downside_std) * ann_factor
+                    if downside_std > 0
+                    else 0.0
                 )
             else:
                 sortino_ratio = sharpe_ratio
@@ -134,7 +138,9 @@ def calculate_sharpe_and_sortino_ratio(
 def calculate_static_drawdown(
     start_balance: float, trades_close: list[CloseTrades]
 ) -> tuple[float, float, list[float]]:
-    balances: list[float] = [start_balance] + [tc["balance"] for tc in trades_close]
+    balances: list[float] = [start_balance] + [
+        tc["balance"] for tc in trades_close
+    ]
 
     peak: float = start_balance
     max_dd_val: float = 0.0
@@ -172,7 +178,9 @@ def calculate_dynamic_drawdown(
             peak = high
 
         dd_val: float64 = peak - low
-        dd_pct: float64 = (dd_val / peak) * 100.0 if (peak > 0) else float64(0.0)
+        dd_pct: float64 = (
+            (dd_val / peak) * 100.0 if (peak > 0) else float64(0.0)
+        )
 
         if dd_pct > max_dyn_dd_pct:
             max_dyn_dd_pct = dd_pct

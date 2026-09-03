@@ -1,4 +1,4 @@
-from .engine import FootprintEngine, SyncWithExecution
+from imprint.core.footprint.engine import FootprintEngine, SyncWithExecution
 
 __all__ = [
     "FootprintEngine",
