@@ -131,27 +131,27 @@ def _update(
     footprint[idy, idxDP] += -nQty if is_sell else nQty
 
     # Update Headers
-    bar: int64 = headers_offset[0] + ((idx & ~1) // 2)
-    if headers[bar, c.BH_CountTrade] == 0:
-        headers[bar, c.BH_Open : c.BH_Close + 1] = nPrice
-        headers[bar, c.BH_Time] = timestamp
+    bar: int64 = (idx & ~1) // 2
+    bwo: int64 = headers_offset[0] + bar
+    if headers[bwo, c.BH_CountTrade] == 0:
+        headers[bwo, c.BH_Open : c.BH_Close + 1] = nPrice
+        headers[bwo, c.BH_Time] = timestamp
 
-    if nPrice > headers[bar, c.BH_High]:
-        headers[bar, c.BH_High] = nPrice
-    if nPrice < headers[bar, c.BH_Low]:
-        headers[bar, c.BH_Low] = nPrice
+    if nPrice > headers[bwo, c.BH_High]:
+        headers[bwo, c.BH_High] = nPrice
+    if nPrice < headers[bwo, c.BH_Low]:
+        headers[bwo, c.BH_Low] = nPrice
 
-    headers[bar, c.BH_Close] = nPrice
-    headers[bar, c.BH_LastTradeTime] = timestamp
+    headers[bwo, c.BH_Close] = nPrice
+    headers[bwo, c.BH_LastTradeTime] = timestamp
 
-    headers[bar, c.BH_CountTrade] += 1
-    headers[bar, c.BH_Volume] += nQty
-    headers[bar, c.BH_Delta] += -nQty if is_sell else nQty
+    headers[bwo, c.BH_CountTrade] += 1
+    headers[bwo, c.BH_Volume] += nQty
+    headers[bwo, c.BH_Delta] += -nQty if is_sell else nQty
     if bar > 0:
-        oldBar: int64 = bar - 1
-        headers[bar, c.BH_CVD] = headers[bar, c.BH_Delta] + headers[oldBar, c.BH_CVD]
+        headers[bwo, c.BH_CVD] = headers[bwo, c.BH_Delta] + headers[bwo - 1, c.BH_CVD]
     else:
-        headers[bar, c.BH_CVD] = headers[bar, c.BH_Delta]
+        headers[bwo, c.BH_CVD] = headers[bwo, c.BH_Delta]
 
     price = round(nPrice / price_mult, price_prec)
     qty = round(nQty / qty_mult, qty_prec)
@@ -165,9 +165,9 @@ def _update(
     )
     vwsd = np.sqrt(variance)
     upper_band, lower_band = vwap + (2.0 * vwsd), vwap - (2.0 * vwsd)
-    headers[bar, c.BH_VWAP] = round(vwap * price_mult)
-    headers[bar, c.BH_VWAP_LOWER_BAND] = round(lower_band * price_mult)
-    headers[bar, c.BH_VWAP_UPPER_BAND] = round(upper_band * price_mult)
+    headers[bwo, c.BH_VWAP] = round(vwap * price_mult)
+    headers[bwo, c.BH_VWAP_LOWER_BAND] = round(lower_band * price_mult)
+    headers[bwo, c.BH_VWAP_UPPER_BAND] = round(upper_band * price_mult)
 
     # Update BBOX
     idYmin, idXmin, idYmax, idXmax = bbox[:]
