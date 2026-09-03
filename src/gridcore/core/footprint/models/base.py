@@ -48,6 +48,9 @@ class Chart(ABC):
 
     state_cache: NDArray[int64] = field(init=False)
     headers: NDArray[int64] = field(init=False)
+    headers_offset: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
     def __post_init__(self) -> None:
         self.state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)

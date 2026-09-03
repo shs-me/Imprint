@@ -39,7 +39,7 @@ class Bar:
     def __getitem__(self, idx: int | int64) -> Bar:
         self.idx = idx
         self.idXbid = self.idx & ~1
-        self.bar_id = self.idXbid // 2
+        self.bar_id = self._fp.headers_offset[0] + (self.idXbid // 2)
         self.bar_side = 1 if self.idx != self.idXbid else 0
         return self
 

@@ -66,7 +66,7 @@ class Base(ABC):
     def __init_idx(self, nPrice: int64, timestamp: int64) -> None:
         self.fp.base.fill(0)
         self.fp.state.fill(0)
-        self.fp.headers.fill(0)
+        self.fp.headers_offset[0] += self.fp.con.bar_count
         self.bbox[:] = self.bbox_default_value
 
         self.fp.con.init_session(nPrice=nPrice, timestamp=timestamp)
@@ -135,10 +135,13 @@ class Base(ABC):
                         )
                         if file_start_date <= start_date <= end_date <= file_end_date:
                             return
+                        else:
+                            os.remove(f"{p}.npy")
 
             headers_save_path: str = (
                 f"{self.__base_fp_dump_path}/"
                 f"{self.fp.con.timeframe}"
                 f"_{start_time}_{end_time}.npy"
             )
+            print(self.fp.headers[0, c.BH_Time], self.fp.headers[-1, c.BH_Time])
             np.save(headers_save_path, self.fp.headers)

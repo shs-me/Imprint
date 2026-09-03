@@ -90,7 +90,8 @@ class Reader(Writer):
         _update_closed_bar_and_fp_states(
             lidx=self.last_idx[0],
             idxVP=self.fp.con.idxVP,
-            hr=self.fp.headers,
+            headers=self.fp.headers,
+            headers_offset=self.fp.headers_offset,
             fp=self.fp.base,
             fp_state=self.fp.state,
             fp_state_cache=self.fp.state_cache,
@@ -109,7 +110,8 @@ class Reader(Writer):
             idYmax=idYmax,
             idxBid=idxBid,
             idxAsk=idxAsk,
-            hr=self.fp.headers,
+            headers=self.fp.headers,
+            headers_offset=self.fp.headers_offset,
             fp=self.fp.base,
             fp_state=self.fp.state,
             baseNprice=self.fp.con.baseNprice,
@@ -148,7 +150,8 @@ def _update_clusters_states(
 def _update_closed_bar_and_fp_states(
     lidx: int,
     idxVP: int,
-    hr: NDArray[int64],
+    headers: NDArray[int64],
+    headers_offset: memoryview,
     fp: NDArray[int64],
     fp_state: NDArray[int32],
     fp_state_cache: NDArray[int64],
@@ -158,35 +161,35 @@ def _update_closed_bar_and_fp_states(
 ) -> None:
     """Numba JIT kernel calculating ATR, VWAP, Bollinger Bands, POC, and Value Area on bar closure."""
 
-    bar: int = (lidx & ~1) // 2
+    bar: int = headers_offset[0] + ((lidx & ~1) // 2)
     oldBar: int = bar - 1
 
-    highNprice: int64 = hr[bar, c.BH_High]
-    lowNprice: int64 = hr[bar, c.BH_Low]
+    highNprice: int64 = headers[bar, c.BH_High]
+    lowNprice: int64 = headers[bar, c.BH_Low]
 
     high_idy: int64 = (baseNprice - highNprice) // scale + center
     low_idy: int64 = (baseNprice - lowNprice) // scale + center
 
     # ATR
     if bar > 0:
-        pre_c, pre_atr = hr[oldBar, c.BH_Close], hr[oldBar, c.BH_ATR]
+        pre_c, pre_atr = headers[oldBar, c.BH_Close], headers[oldBar, c.BH_ATR]
         tr: int64 = max(
             highNprice - lowNprice, abs(highNprice - pre_c), abs(lowNprice - pre_c)
         )
-        hr[bar, c.BH_ATR] = ((pre_atr * (c.ATR_PERIOD - 1)) + tr) // c.ATR_PERIOD
+        headers[bar, c.BH_ATR] = ((pre_atr * (c.ATR_PERIOD - 1)) + tr) // c.ATR_PERIOD
     else:
-        hr[bar, c.BH_ATR] = highNprice - lowNprice
+        headers[bar, c.BH_ATR] = highNprice - lowNprice
 
     # PARK
     log_ratio = np.log(highNprice / lowNprice)
     cur_var: int = round((log_ratio * log_ratio) * c.VAR_SCALE)
     if bar > 0:
-        pre_var: int64 = hr[oldBar, c.BH_PARK]
-        hr[bar, c.BH_PARK] = (
+        pre_var: int64 = headers[oldBar, c.BH_PARK]
+        headers[bar, c.BH_PARK] = (
             (pre_var * (c.PARK_PERIOD - 1)) + cur_var
         ) // c.PARK_PERIOD
     else:
-        hr[bar, c.BH_PARK] = cur_var
+        headers[bar, c.BH_PARK] = cur_var
 
     # Clear Footprint Static State's
     state_2 = c.SF_POC_FP | c.SF_VAH_FP | c.SF_VAL_FP
@@ -195,9 +198,9 @@ def _update_closed_bar_and_fp_states(
     fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
 
     # Update VWAP+BB
-    vwap = (baseNprice - hr[bar, c.BH_VWAP]) // scale + center
-    vwap_bb_lower = (baseNprice - hr[bar, c.BH_VWAP_LOWER_BAND]) // scale + center
-    vwap_bb_upper = (baseNprice - hr[bar, c.BH_VWAP_UPPER_BAND]) // scale + center
+    vwap = (baseNprice - headers[bar, c.BH_VWAP]) // scale + center
+    vwap_bb_lower = (baseNprice - headers[bar, c.BH_VWAP_LOWER_BAND]) // scale + center
+    vwap_bb_upper = (baseNprice - headers[bar, c.BH_VWAP_UPPER_BAND]) // scale + center
 
     if 0 <= vwap < fp_state.shape[0]:
         fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP_FP)
@@ -217,13 +220,13 @@ def _update_closed_bar_and_fp_states(
     vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
     fp_state[poc, idxVP] |= c.SF_POC_FP
     fp_state_cache[c.CSD_POC_FP] = poc
-    hr[bar, c.BH_POC_FP] = (center - poc) * scale + baseNprice
+    headers[bar, c.BH_POC_FP] = (center - poc) * scale + baseNprice
     fp_state[vah, idxVP] |= c.SF_VAH_FP
     fp_state_cache[c.CSD_VAH_FP] = vah
-    hr[bar, c.BH_VAH_FP] = (center - vah) * scale + baseNprice
+    headers[bar, c.BH_VAH_FP] = (center - vah) * scale + baseNprice
     fp_state[val, idxVP] |= c.SF_VAL_FP
     fp_state_cache[c.CSD_VAL_FP] = val
-    hr[bar, c.BH_VAL_FP] = (center - val) * scale + baseNprice
+    headers[bar, c.BH_VAL_FP] = (center - val) * scale + baseNprice
 
     # Update Auction
     high_finished, low_finished = fp[high_idy, lidx + 1] == 0, fp[low_idy, lidx] == 0
@@ -239,7 +242,8 @@ def _update_bar_states(
     idYmax: int64,
     idxBid: int,
     idxAsk: int,
-    hr: NDArray[int64],
+    headers: NDArray[int64],
+    headers_offset: memoryview,
     fp: NDArray[int64],
     fp_state: NDArray[int32],
     baseNprice: int64,
@@ -248,12 +252,12 @@ def _update_bar_states(
 ) -> None:
     """Numba JIT kernel calculating active bar OHLC, Zero-Print, Delta Domination, and Imbalances."""
 
-    bar = (idxBid & ~1) // 2
+    bar = headers_offset[0] + ((idxBid & ~1) // 2)
 
-    openNprice: int64 = hr[bar, c.BH_Open]
-    highNprice: int64 = hr[bar, c.BH_High]
-    lowNprice: int64 = hr[bar, c.BH_Low]
-    closeNprice: int64 = hr[bar, c.BH_Close]
+    openNprice: int64 = headers[bar, c.BH_Open]
+    highNprice: int64 = headers[bar, c.BH_High]
+    lowNprice: int64 = headers[bar, c.BH_Low]
+    closeNprice: int64 = headers[bar, c.BH_Close]
 
     open_idy: int64 = (baseNprice - openNprice) // scale + center
     high_idy: int64 = (baseNprice - highNprice) // scale + center
@@ -301,9 +305,9 @@ def _update_bar_states(
     )
     poc: intp = np.argmax(vp_bar)
     vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-    hr[bar, c.BH_POC] = (center - (high_idy + poc)) * scale + baseNprice
-    hr[bar, c.BH_VAH] = (center - (high_idy + vah)) * scale + baseNprice
-    hr[bar, c.BH_VAL] = (center - (high_idy + val)) * scale + baseNprice
+    headers[bar, c.BH_POC] = (center - (high_idy + poc)) * scale + baseNprice
+    headers[bar, c.BH_VAH] = (center - (high_idy + vah)) * scale + baseNprice
+    headers[bar, c.BH_VAL] = (center - (high_idy + val)) * scale + baseNprice
     fp_state[(high_idy + poc), idxBid] |= c.SF_POC_BAR
     fp_state[(high_idy + vah), idxBid] |= c.SF_VAH_BAR
     fp_state[(high_idy + val), idxBid] |= c.SF_VAL_BAR

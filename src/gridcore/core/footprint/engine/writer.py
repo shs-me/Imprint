@@ -95,6 +95,7 @@ class Writer(Base, ABC):
             args=self.__args,
             footprint=self.fp.base,
             headers=self.fp.headers,
+            headers_offset=self.fp.headers_offset,
             bbox=self.bbox,
             meta_data=self.__meta_data,
         )
@@ -115,6 +116,7 @@ def _update(
     args: NDArray[int64],
     footprint: NDArray[int64],
     headers: NDArray[int64],
+    headers_offset: memoryview,
     bbox: NDArray[int64],
     meta_data: NDArray[float64],
 ) -> None:
@@ -129,7 +131,7 @@ def _update(
     footprint[idy, idxDP] += -nQty if is_sell else nQty
 
     # Update Headers
-    bar: int64 = (idx & ~1) // 2
+    bar: int64 = headers_offset[0] + ((idx & ~1) // 2)
     if headers[bar, c.BH_CountTrade] == 0:
         headers[bar, c.BH_Open : c.BH_Close + 1] = nPrice
         headers[bar, c.BH_Time] = timestamp

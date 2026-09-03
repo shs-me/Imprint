@@ -54,11 +54,25 @@ def get_headers_path(
 
 
 def data_load(
-    equity_history_path: str, orders_history_path: str, headers_path: str
+    equity_history_path: str,
+    orders_history_path: str,
+    headers_path: str,
+    start_date: str,
+    end_date: str,
 ) -> tuple[NDArray[int64], NDArray[int64], NDArray[int64]]:
     equity_history: NDArray[int64] = np.load(file=equity_history_path)
     orders_history: NDArray[int64] = np.load(file=orders_history_path)
     headers: NDArray[int64] = np.load(headers_path)
+
+    start_ts: int = round(datetime.fromisoformat(start_date).timestamp() * 1000)
+    end_ts: int = round(datetime.fromisoformat(end_date).timestamp() * 1000)
+
+    times: NDArray[int64] = headers[:, c.BH_Time]
+    idx_start: np.intp = np.searchsorted(times, start_ts, side="left")
+    idx_end: np.intp = np.searchsorted(times, end_ts, side="right")
+    print(idx_start,idx_end, start_ts,end_ts,times[0],times[-1],start_date,end_date,headers_path)
+    headers = headers[idx_start:idx_end, :]
+
     return equity_history, orders_history, headers
 
 
@@ -96,6 +110,8 @@ def run(
         equity_history_path=equity_history_path,
         orders_history_path=orders_history_path,
         headers_path=headers_path,
+        start_date=start_date,
+        end_date=end_date,
     )
     ohlc = get_ohlc(
         price_mult=price_mult,
