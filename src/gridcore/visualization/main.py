@@ -1,5 +1,5 @@
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 from loguru import logger
@@ -28,12 +28,12 @@ def get_ohlc(price_mult: int, headers: NDArray[int64]) -> OHLC:
 def get_headers_path(
     footprint_headers_path: str,
     symbol: str,
-    start_date: str,
-    end_date: str,
+    start_date_str: str,
+    end_date_str: str,
     timeframe: str,
 ) -> str | None:
-    start_datetime: date = datetime.fromisoformat(start_date)
-    end_datetime: date = datetime.fromisoformat(end_date)
+    start_date: date = date.fromisoformat(start_date_str)
+    end_date: date = date.fromisoformat(end_date_str)
     base_headers_path: str = f"{footprint_headers_path}/{symbol}"
 
     paths: list[str] = [
@@ -43,13 +43,9 @@ def get_headers_path(
         for p in paths:
             file_timeframe, file_start_time, file_end_time = p.split("_")
             if file_timeframe == timeframe:
-                file_start_date: datetime = datetime.fromisoformat(
-                    file_start_time.split("T")[0]
-                )
-                file_end_date: datetime = datetime.fromisoformat(
-                    file_end_time.split("T")[0]
-                )
-                if file_start_date <= start_datetime <= end_datetime <= file_end_date:
+                file_start_date: date = date.fromisoformat(file_start_time)
+                file_end_date: date = date.fromisoformat(file_end_time)
+                if file_start_date <= start_date <= end_date <= file_end_date:
                     return f"{base_headers_path}/{p}.npy"
 
 
@@ -64,13 +60,15 @@ def data_load(
     orders_history: NDArray[int64] = np.load(file=orders_history_path)
     headers: NDArray[int64] = np.load(headers_path)
 
-    start_ts: int = round(datetime.fromisoformat(start_date).timestamp() * 1000)
-    end_ts: int = round(datetime.fromisoformat(end_date).timestamp() * 1000)
+    start_dt: datetime = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
+    start_ts: int = round(start_dt.timestamp() * 1000)
+    end_dt: datetime = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
+    end_ts: int = round((end_dt + timedelta(days=1)).timestamp() * 1000)
 
     times: NDArray[int64] = headers[:, c.BH_Time]
     idx_start: np.intp = np.searchsorted(times, start_ts, side="left")
     idx_end: np.intp = np.searchsorted(times, end_ts, side="right")
-    print(idx_start,idx_end, start_ts,end_ts,times[0],times[-1],start_date,end_date,headers_path)
+
     headers = headers[idx_start:idx_end, :]
 
     return equity_history, orders_history, headers
@@ -94,16 +92,13 @@ def run(
     headers_path = get_headers_path(
         footprint_headers_path=footprint_headers_path,
         symbol=symbol,
-        start_date=start_date,
-        end_date=end_date,
+        start_date_str=start_date,
+        end_date_str=end_date,
         timeframe=timeframe.name,
     )
     if headers_path is None:
         return logger.warning(
-            (
-                f"Not found headers with timeframe {timeframe.name}"
-                f"start date {start_date}, end date {end_date}"
-            )
+            f"Not found headers with setup: {timeframe.name} | {start_date} | {end_date}"
         )
 
     equity_history, orders_history, headers = data_load(

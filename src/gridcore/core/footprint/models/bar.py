@@ -33,8 +33,8 @@ class Bar:
 
     def __post_init__(self) -> None:
         self.ind = Indicators(self)
-        self.vp = VolumeProfile(self._fp.con.idxVP, self)
-        self.dp = DeltaProfile(self._fp.con.idxDP, self)
+        self.vp = VolumeProfile(None, self)
+        self.dp = DeltaProfile(None, self)
 
     def __getitem__(self, idx: int | int64) -> Bar:
         self.idx = idx
@@ -197,8 +197,7 @@ class Indicators[T]:
 
     @property
     def change_percent(self) -> float64:
-        open, close = self.open.n, self.close.n
-        return (close / open - 1) if (close >= open) else -abs(open / close - 1)
+        return self.close.n / self.open.n - 1
 
     @property
     def atr(self) -> int64:
@@ -206,8 +205,8 @@ class Indicators[T]:
 
     @property
     def atr_percent(self) -> float64:
-        close, atr = self.close.n, self.atr
-        return ((atr + close) / close) - 1
+        close = self.close.n
+        return ((self.atr + close) / close) - 1
 
     @property
     def parkinson_percent(self) -> float64:

@@ -16,6 +16,8 @@ class Converter:
 
     cfgCoin: cfg.Coin
     cfgFP: cfg.Footprint
+    total_backtest_days: int = 0
+    total_bar_count: int = field(init=False)
 
     tick_size: str = field(init=False)
     price_prec: int = field(init=False)
@@ -57,6 +59,13 @@ class Converter:
         self.idxDP = self.cfgFP.colDP
 
         self.scale = round((float(self.tick_size) * self.step_tick) * self.price_mult)
+
+        if self.total_backtest_days:
+            self.total_bar_count = (
+                self.total_backtest_days * 24 * 60 * 60 * 1000
+            ) // self.tims
+        else:
+            self.total_bar_count = self.bar_count
 
     def init_session(self, nPrice: int64, timestamp: int64):
         """Calibrates converter base price, base timestamp, and grid center origin offset."""
@@ -129,7 +138,7 @@ class Converter:
         """Formats millisecond timestamp as ISO-8601 UTC string."""
 
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime(
-            "%Y-%m-%dT%H-%M-%S"
+            "%Y-%m-%d"
         )
 
     def get_price(self, idy: int | int64) -> float:

@@ -32,9 +32,10 @@ class Footprint(Chart):
     def __post_init__(self) -> None:
         self.state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
         self.headers = np.zeros(
-            shape=(self.con.chart_range * self.con.bar_count, c.BH_ConstantCount),
-            dtype=int64,
+            shape=(self.con.total_bar_count, c.BH_ConstantCount), dtype=int64
         )
+        self.headers_offset = memoryview(bytearray(8)).cast("q")
+
         self.bar = Bar(self)
         self.vp = VolumeProfile(self.con.idxVP, self)
         self.dp = DeltaProfile(self.con.idxDP, self)

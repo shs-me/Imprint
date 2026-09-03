@@ -1,6 +1,6 @@
 from abc import ABC
 from dataclasses import dataclass, field
-from typing import cast, final, override
+from typing import final, override
 
 import numpy as np
 from numba import njit
@@ -66,23 +66,14 @@ class Writer(Base, ABC):
     ) -> None:
         idx: int64 | None = self.fp.con.to_idx(timestamp=timestamp, is_sell=is_sell)
         idy: int64 | None = self.fp.con.to_idy(nPrice=nPrice)
-        if idx is None:
-            self.re_init_idx: bool = True
-            if not self._bbox_is_readed():
-                self.re_init_session: bool = True
-                return None
+        if (idx is None) or (idy is None):
+            self.re_init_session: bool = True
+            if idx is None:
+                self.re_init_idx: bool = True
             else:
-                self.init_session(nPrice, timestamp)
-                idx = int64((0 if is_sell else 1))
+                self.re_init_idy: bool = True
 
-        if idy is None:
-            self.re_init_idy: bool = True
-            if not self._bbox_is_readed():
-                self.re_init_session = True
-                return None
-            else:
-                self.init_session(nPrice, timestamp)
-                idy = cast(int64, self.fp.con.to_idy(nPrice=nPrice))
+            return None
 
         self.counter_ticks += 1
         _update(

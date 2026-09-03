@@ -42,7 +42,16 @@ class Base(ABC):
         cfgMetrics = self.manager.cfgMetrics
         self.trade_readed_time = cfgMetrics.trade_readed_time.view.cast("q")
 
-        self.fp = Footprint(Converter(cfgCoin=cfgCoin, cfgFP=cfgFP))
+        cfgSetup = self.manager.cfgSetup
+        if cfgSetup.backtesting:
+            start_dt: date = date.fromisoformat(cfgSetup.backtest_start_date)
+            end_dt: date = date.fromisoformat(cfgSetup.backtest_end_date)
+            total_days: int = max(1, (end_dt - start_dt).days + 1)
+            self.fp = Footprint(
+                Converter(cfgCoin=cfgCoin, cfgFP=cfgFP, total_backtest_days=total_days)
+            )
+        else:
+            self.fp = Footprint(Converter(cfgCoin=cfgCoin, cfgFP=cfgFP))
 
     @final
     def init_session(self, nPrice: int64, timestamp: int64) -> None:
@@ -66,7 +75,15 @@ class Base(ABC):
     def __init_idx(self, nPrice: int64, timestamp: int64) -> None:
         self.fp.base.fill(0)
         self.fp.state.fill(0)
-        self.fp.headers_offset[0] += self.fp.con.bar_count
+
+        if self.fp.con._first_base_timestamp:
+            new_offset = self.fp.headers_offset[0] + (self.fp.con.bar_count)
+            if self.fp.headers.shape[0] <= new_offset:
+                self.fp.headers_offset[0] = 0
+                self.fp.headers.fill(0)
+            else:
+                self.fp.headers_offset[0] = new_offset
+
         self.bbox[:] = self.bbox_default_value
 
         self.fp.con.init_session(nPrice=nPrice, timestamp=timestamp)
@@ -115,8 +132,8 @@ class Base(ABC):
             start_time: str = self.fp.con.to_strftime(self.fp.con._first_base_timestamp)
             end_time: str = self.fp.con.get_time(idx=last_idx, strftime=True)
 
-            start_date: date = date.fromisoformat(start_time.split("T")[0])
-            end_date: date = date.fromisoformat(end_time.split("T")[0])
+            start_date: date = date.fromisoformat(start_time)
+            end_date: date = date.fromisoformat(end_time)
 
             paths: list[str] = [
                 p.split(".npy")[0]
@@ -127,12 +144,8 @@ class Base(ABC):
                 for p in paths:
                     file_timeframe, file_start_time, file_end_time = p.split("_")
                     if file_timeframe == self.fp.con.timeframe:
-                        file_start_date: date = date.fromisoformat(
-                            file_start_time.split("T")[0]
-                        )
-                        file_end_date: date = date.fromisoformat(
-                            file_end_time.split("T")[0]
-                        )
+                        file_start_date: date = date.fromisoformat(file_start_time)
+                        file_end_date: date = date.fromisoformat(file_end_time)
                         if file_start_date <= start_date <= end_date <= file_end_date:
                             return
                         else:
@@ -143,5 +156,4 @@ class Base(ABC):
                 f"{self.fp.con.timeframe}"
                 f"_{start_time}_{end_time}.npy"
             )
-            print(self.fp.headers[0, c.BH_Time], self.fp.headers[-1, c.BH_Time])
             np.save(headers_save_path, self.fp.headers)

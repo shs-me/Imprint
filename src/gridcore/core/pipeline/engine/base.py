@@ -118,7 +118,10 @@ class Base(ABC):
     @final
     def __final_actions(self) -> None:
         self.engine_complete[0] = 1
-        self.algorithm._engine.save_footprint_headers(self.algorithm.last_idx[0])
+        if self.manager.cfgSetup.backtesting:
+            self.algorithm._engine.final_analyze()
+            self.algorithm._engine.save_footprint_headers(self.algorithm.last_idx[0])
+
         self.post_final_action()
         self.manager.set_text(
             (

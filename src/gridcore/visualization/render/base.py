@@ -1,3 +1,5 @@
+from datetime import timezone
+
 import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -30,8 +32,10 @@ def run(stats: Stats) -> None:
     plot_info_dashboard(ax_dashboard, stats)
     plot_trade_distribution(ax_dist, stats)
 
-    ax_chart.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
-    ax_chart.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax_chart.xaxis.set_major_formatter(
+        mdates.DateFormatter("%m-%d %H:%M", tz=timezone.utc)
+    )
+    ax_chart.xaxis.set_major_locator(mdates.AutoDateLocator(tz=timezone.utc))
     plt.setp(ax_equity.get_xticklabels(), visible=False)  # pyright: ignore[reportUnknownMemberType]
     fig.subplots_adjust(
         left=0.05, bottom=0.06, right=0.96, top=0.94, wspace=0.15, hspace=0.16

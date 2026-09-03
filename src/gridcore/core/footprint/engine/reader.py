@@ -53,21 +53,24 @@ class Reader(Writer):
 
     @final
     def analyze_footprint(self) -> None:
-        idYmin, idXmin, idYmax, idXmax = self.bbox
-        self.__update_clusters(idYmin, idYmax, idXmin, idXmax)
-        for idx in range((idXmin & ~1), idXmax, 2):
-            idxBid, idxAsk = idx, idx + 1
-            if self.fp.bar[idx].ind.volume > 0:
-                if idx > self.last_idx[0]:
-                    self.__update_closed_bar_and_fp()
-                    self.trade_readed_time[0] = int(
-                        self.fp.bar[self.last_idx[0]].ind.last_trade_time
-                    )
-                    self.last_idx[0] = idx
+        if self._bbox_is_readed():
+            if self.re_init_idx:
+                self.__update_closed_bar_and_fp()
+        else:
+            idYmin, idXmin, idYmax, idXmax = self.bbox
+            self.__update_clusters(idYmin, idYmax, idXmin, idXmax)
+            for idx in range((idXmin & ~1), idXmax, 2):
+                idxBid, idxAsk = idx, idx + 1
+                if self.fp.bar[idx].ind.volume > 0:
+                    if (idx > self.last_idx[0]) or (
+                        self.re_init_idx and idx == self.fp.con.fp_cols - 2
+                    ):
+                        self.__update_closed_bar_and_fp()
+                        self.last_idx[0] = idx
 
-                self.__update_bar(idYmin, idYmax, idxBid, idxAsk)
+                    self.__update_bar(idYmin, idYmax, idxBid, idxAsk)
 
-        self.bbox[:] = self.bbox_default_value
+            self.bbox[:] = self.bbox_default_value
 
     @final
     def __update_clusters(
@@ -100,6 +103,9 @@ class Reader(Writer):
             scale=self.fp.con.scale,
         )
         self.algorithm.find_patterns_in_update_closed_bar()
+        self.trade_readed_time[0] = int(
+            self.fp.bar[self.last_idx[0]].ind.last_trade_time
+        )
 
     @final
     def __update_bar(
@@ -119,6 +125,10 @@ class Reader(Writer):
             scale=self.fp.con.scale,
         )
         self.algorithm.find_patterns_in_update_bar(idYmin, idYmax, idxBid, idxAsk)
+
+    @final
+    def final_analyze(self) -> None:
+        self.__update_closed_bar_and_fp()
 
 
 @njit(cache=True)

@@ -58,6 +58,8 @@ def run(setup: SetupCore) -> None:
 
             from ...visualization import run as run_vis
 
+            logger.remove()
+            logger.add(CORE_LOG_PATH, format="{time} | {level} | {message}")
             run_vis(
                 footprint_headers_path=BASE_FOOTPRINT_DUMP_PATH,
                 symbol=setup.coin.symbol,

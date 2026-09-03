@@ -8,7 +8,6 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from ... import constant as c
 from .converter import Converter
 
 if TYPE_CHECKING:
@@ -48,21 +47,12 @@ class Chart(ABC):
 
     state_cache: NDArray[int64] = field(init=False)
     headers: NDArray[int64] = field(init=False)
-    headers_offset: memoryview = field(
-        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
-    )
-
-    def __post_init__(self) -> None:
-        self.state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
-        self.headers = np.zeros(
-            shape=(self.con.chart_range * self.con.bar_count, c.BH_ConstantCount),
-            dtype=int64,
-        )
+    headers_offset: memoryview = field(init=False)
 
 
 @dataclass(slots=True)
 class ProfileLike[T](ABC):
-    _idx: int
+    _idx: int | None
 
     _arr: FPArray = field(init=False)
 
@@ -71,7 +61,7 @@ class ProfileLike[T](ABC):
     @overload
     def __getitem__(self, key: T_SLICE, /) -> FPArray: ...
     def __getitem__(self, key: T_VP, /):  # pyright: ignore[reportInconsistentOverload]
-        return self._arr[key, self._idx]
+        return self._arr[key, self._idx] if self._idx else self._arr[key]
 
 
 @final

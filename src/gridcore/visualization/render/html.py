@@ -2,6 +2,7 @@ import base64
 import io
 import os
 import webbrowser
+from datetime import timezone
 from importlib import resources
 from types import FunctionType
 
@@ -39,8 +40,10 @@ def _render_to_base64(
     plot_fn(ax, stats)
 
     if not is_dashboard and plot_fn == plot_chart_with_markers:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
-        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(
+            mdates.DateFormatter("%m-%d %H:%M", tz=timezone.utc)
+        )
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator(tz=timezone.utc))
 
     fig.tight_layout()
 
