@@ -1,0 +1,390 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 625" width="100%" height="100%" style="background-color: #0b0e14; font-family: 'JetBrains Mono', Consolas, Menlo, monospace;">
+  <defs>
+    <style>
+      .grid-border { stroke: #1e2638; stroke-width: 1; fill: none; }
+      .col-header-bg { fill: #121824; stroke: #1e2638; stroke-width: 1; }
+      .row-even { fill: #0f141f; }
+      .row-odd { fill: #0b0e17; }
+      .center-row-bg { fill: #162032; }
+      .bid-ask-divider { stroke: rgba(255, 255, 255, 0.05); stroke-width: 1; }
+      .major-col-divider { stroke: #1e2638; stroke-width: 1.5; }
+      
+      .text-meta { fill: #64748b; font-size: 11px; font-weight: 500; }
+      .text-header { fill: #94a3b8; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+      .text-idx { fill: #38bdf8; font-size: 10px; font-weight: 600; }
+      .text-price { fill: #f8fafc; font-size: 11.5px; font-weight: 700; }
+      .text-idy { fill: #f59e0b; font-size: 11px; font-weight: 600; }
+      .val-none { fill: #1e293b; font-size: 12px; }
+
+      /* Стили бейджей флагов (StateFlags) */
+      .badge-txt { font-size: 8.5px; font-weight: 700; font-family: monospace; text-anchor: middle; }
+      
+      /* OHLC: Slate */
+      .bg-ohlc { fill: #1e293b; stroke: #475569; stroke-width: 0.8; rx: 2.5; }
+      .txt-ohlc { fill: #f1f5f9; }
+
+      /* Bar VA / POC: Amber */
+      .bg-poc-bar { fill: #451a03; stroke: #f59e0b; stroke-width: 1; rx: 2.5; }
+      .txt-poc-bar { fill: #fef08a; }
+      .bg-va-bar { fill: #291804; stroke: #d97706; stroke-width: 0.8; rx: 2.5; }
+      .txt-va-bar { fill: #fde68a; }
+
+      /* Flow / Imbalance: Emerald / Rose */
+      .bg-imb-ask { fill: #064e3b; stroke: #10b981; stroke-width: 0.8; rx: 2.5; }
+      .txt-imb-ask { fill: #a7f3d0; }
+      .bg-imb-bid { fill: #4c0519; stroke: #f43f5e; stroke-width: 0.8; rx: 2.5; }
+      .txt-imb-bid { fill: #fecdd3; }
+      .bg-zero { fill: #500724; stroke: #fb7185; stroke-width: 0.8; rx: 2.5; }
+      .txt-zero { fill: #ffe4e6; }
+      .bg-dd { fill: #1e1b4b; stroke: #6366f1; stroke-width: 0.8; rx: 2.5; }
+      .txt-dd { fill: #c7d2fe; }
+
+      /* Session / VWAP / Profile: Cyan / Purple */
+      .bg-vwap { fill: #083344; stroke: #06b6d4; stroke-width: 0.8; rx: 2.5; }
+      .txt-vwap { fill: #cffafe; }
+      .bg-poc-fp { fill: #581c87; stroke: #c084fc; stroke-width: 1; rx: 2.5; }
+      .txt-poc-fp { fill: #f3e8ff; }
+      .bg-va-fp { fill: #3b0764; stroke: #a855f7; stroke-width: 0.8; rx: 2.5; }
+      .txt-va-fp { fill: #e9d5ff; }
+      .bg-auct { fill: #1e293b; stroke: #94a3b8; stroke-width: 0.8; rx: 2.5; }
+      .txt-auct { fill: #e2e8f0; }
+    </style>
+  </defs>
+
+  <!-- Заголовок -->
+  <g transform="translate(20, 15)">
+    <rect width="1020" height="40" rx="4" fill="#121722" stroke="#1e2638" stroke-width="1"/>
+    <circle cx="20" cy="20" r="4.5" fill="#f59e0b"/>
+    <text x="34" y="24" fill="#f8fafc" font-size="12.5px" font-weight="700">IMPRINT // FPArray state (StateFlags Bitmask Matrix)</text>
+    <text x="470" y="24" class="text-meta">TYPE: NDArray[int32/int64] | BITWISE OPERATORS: fp.state[idy, idx] &amp; c.SF_*</text>
+  </g>
+
+  <!-- Шапка колонок (X-AXIS) -->
+  <rect x="20" y="62" width="130" height="40" class="col-header-bg"/>
+  <text x="85" y="78" class="text-header" text-anchor="middle">Y-AXIS</text>
+  <text x="85" y="93" class="text-meta" text-anchor="middle">idy / Price</text>
+
+  <rect x="150" y="62" width="230" height="40" class="col-header-bg"/>
+  <text x="265" y="78" class="text-header" text-anchor="middle">BAR 0 STATE</text>
+  <line x1="265" y1="83" x2="265" y2="102" class="bid-ask-divider"/>
+  <text x="207" y="94" class="text-idx" text-anchor="middle">idx 0 [Bid / Bar]</text>
+  <text x="322" y="94" class="text-idx" text-anchor="middle">idx 1 [Ask / Cluster]</text>
+
+  <rect x="380" y="62" width="230" height="40" class="col-header-bg"/>
+  <text x="495" y="78" class="text-header" text-anchor="middle">BAR 1 STATE</text>
+  <line x1="495" y1="83" x2="495" y2="102" class="bid-ask-divider"/>
+  <text x="437" y="94" class="text-idx" text-anchor="middle">idx 2 [Bid / Bar]</text>
+  <text x="552" y="94" class="text-idx" text-anchor="middle">idx 3 [Ask / Cluster]</text>
+
+  <rect x="610" y="62" width="215" height="40" class="col-header-bg"/>
+  <text x="717" y="78" class="text-header" text-anchor="middle">PROFILE STATE</text>
+  <text x="717" y="94" fill="#eab308" font-size="10px" font-weight="600" text-anchor="middle">idxVP = -2 (Indicators &amp; Context)</text>
+
+  <rect x="825" y="62" width="215" height="40" class="col-header-bg"/>
+  <text x="932" y="78" class="text-header" text-anchor="middle">DELTA CONTEXT</text>
+  <text x="932" y="94" fill="#a855f7" font-size="10px" font-weight="600" text-anchor="middle">idxDP = -1 (Domination Cache)</text>
+
+  <!-- 11 СТРОК МАТРИЦЫ (Высота строки: 38px, y = 102 + i * 38) -->
+
+  <!-- РЯД 0: idy=0 | 50.25 -->
+  <g transform="translate(0, 102)">
+    <rect x="20" y="0" width="1020" height="38" class="row-even"/>
+    <text x="35" y="24" class="text-idy">0</text><text x="70" y="24" class="text-price">$50.25</text><text x="115" y="24" class="text-meta">5025</text>
+    
+    <!-- Bar 0: empty -->
+    <text x="207" y="24" class="val-none" text-anchor="middle">—</text><line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/><text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1: HIGH bar state -->
+    <g transform="translate(182, 10)">
+      <rect x="235" y="0" width="40" height="18" class="bg-ohlc"/><text x="255" y="12" class="badge-txt txt-ohlc">HIGH</text>
+    </g>
+    <line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/>
+    <g transform="translate(525, 10)">
+      <rect x="0" y="0" width="55" height="18" class="bg-dd"/><text x="27" y="12" class="badge-txt txt-dd">DELTA_DOM</text>
+    </g>
+
+    <!-- idxVP: FINISHED AUCTION (Ask=0) -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="60" height="18" class="bg-auct"/><text x="30" y="12" class="badge-txt txt-auct">FIN_AUCT</text>
+      <rect x="66" y="0" width="65" height="18" class="bg-dd"/><text x="98" y="12" class="badge-txt txt-dd">ASK_DOM_FP</text>
+    </g>
+    
+    <!-- idxDP -->
+    <text x="932" y="24" fill="#4ade80" font-size="10.5px" font-weight="600" text-anchor="middle">ASK DOMINANT</text>
+  </g>
+
+  <!-- РЯД 1: idy=1 | 50.20 -->
+  <g transform="translate(0, 140)">
+    <rect x="20" y="0" width="1020" height="38" class="row-odd"/>
+    <text x="35" y="24" class="text-idy">1</text><text x="70" y="24" class="text-price">$50.20</text><text x="115" y="24" class="text-meta">5020</text>
+    
+    <!-- Bar 0 -->
+    <text x="207" y="24" class="val-none" text-anchor="middle">—</text><line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/><text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1: CLOSE & VAH_BAR on idxBid -->
+    <g transform="translate(390, 10)">
+      <rect x="0" y="0" width="42" height="18" class="bg-ohlc"/><text x="21" y="12" class="badge-txt txt-ohlc">CLOSE</text>
+      <rect x="46" y="0" width="46" height="18" class="bg-va-bar"/><text x="69" y="12" class="badge-txt txt-va-bar">VAH_BAR</text>
+    </g>
+    <line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/>
+    <!-- Bar 1: IMBALANCE on idxAsk -->
+    <g transform="translate(515, 10)">
+      <rect x="0" y="0" width="75" height="18" class="bg-imb-ask"/><text x="37" y="12" class="badge-txt txt-imb-ask">IMBALANCE</text>
+    </g>
+
+    <!-- idxVP -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="65" height="18" class="bg-dd"/><text x="32" y="12" class="badge-txt txt-dd">ASK_DOM_FP</text>
+    </g>
+    <text x="932" y="24" fill="#4ade80" font-size="10.5px" font-weight="600" text-anchor="middle">ASK DOMINANT</text>
+  </g>
+
+  <!-- РЯД 2: idy=2 | 50.15 -->
+  <g transform="translate(0, 178)">
+    <rect x="20" y="0" width="1020" height="38" class="row-even"/>
+    <text x="35" y="24" class="text-idy">2</text><text x="70" y="24" class="text-price">$50.15</text><text x="115" y="24" class="text-meta">5015</text>
+    
+    <!-- Bar 0: HIGH -->
+    <g transform="translate(187, 10)">
+      <rect x="0" y="0" width="40" height="18" class="bg-ohlc"/><text x="20" y="12" class="badge-txt txt-ohlc">HIGH</text>
+    </g>
+    <line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/>
+    <text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1: IMBALANCE on Ask -->
+    <text x="437" y="24" class="val-none" text-anchor="middle">—</text>
+    <line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/>
+    <g transform="translate(515, 10)">
+      <rect x="0" y="0" width="75" height="18" class="bg-imb-ask"/><text x="37" y="12" class="badge-txt txt-imb-ask">IMBALANCE</text>
+    </g>
+
+    <!-- idxVP: UPPER_BAND_FP & VAH_FP -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="85" height="18" class="bg-vwap"/><text x="42" y="12" class="badge-txt txt-vwap">UPPER_BAND_FP</text>
+      <rect x="90" y="0" width="55" height="18" class="bg-va-fp"/><text x="117" y="12" class="badge-txt txt-va-fp">VAH_FP</text>
+    </g>
+    <text x="932" y="24" fill="#4ade80" font-size="10.5px" font-weight="600" text-anchor="middle">ASK DOMINANT</text>
+  </g>
+
+  <!-- РЯД 3: idy=3 | 50.10 -->
+  <g transform="translate(0, 216)">
+    <rect x="20" y="0" width="1020" height="38" class="row-odd"/>
+    <text x="35" y="24" class="text-idy">3</text><text x="70" y="24" class="text-price">$50.10</text><text x="115" y="24" class="text-meta">5010</text>
+    
+    <!-- Bar 0: OPEN & VAH_BAR -->
+    <g transform="translate(160, 10)">
+      <rect x="0" y="0" width="42" height="18" class="bg-ohlc"/><text x="21" y="12" class="badge-txt txt-ohlc">OPEN</text>
+      <rect x="46" y="0" width="46" height="18" class="bg-va-bar"/><text x="69" y="12" class="badge-txt txt-va-bar">VAH_BAR</text>
+    </g>
+    <line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/>
+    <text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1 -->
+    <text x="437" y="24" class="val-none" text-anchor="middle">—</text><line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/><text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+
+    <!-- idxVP -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="65" height="18" class="bg-dd"/><text x="32" y="12" class="badge-txt txt-dd">BID_DOM_FP</text>
+    </g>
+    <text x="932" y="24" fill="#f87171" font-size="10.5px" font-weight="600" text-anchor="middle">BID DOMINANT</text>
+  </g>
+
+  <!-- РЯД 4: idy=4 | 50.05 (POC РЯД) -->
+  <g transform="translate(0, 254)">
+    <rect x="20" y="0" width="1020" height="38" fill="#1e1b10"/>
+    <text x="35" y="24" class="text-idy">4</text><text x="70" y="24" class="text-price" fill="#facc15">$50.05</text><text x="115" y="24" class="text-meta">5005</text>
+    
+    <!-- Bar 0: POC_BAR -->
+    <g transform="translate(180, 10)">
+      <rect x="0" y="0" width="55" height="18" class="bg-poc-bar"/><text x="27" y="12" class="badge-txt txt-poc-bar">POC_BAR</text>
+    </g>
+    <line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/>
+    <text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1: POC_BAR -->
+    <g transform="translate(410, 10)">
+      <rect x="0" y="0" width="55" height="18" class="bg-poc-bar"/><text x="27" y="12" class="badge-txt txt-poc-bar">POC_BAR</text>
+    </g>
+    <line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/>
+    <text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+
+    <!-- idxVP: POC_FP (COMPOSITE POC) -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="60" height="18" class="bg-poc-fp"/><text x="30" y="12" class="badge-txt txt-poc-fp">POC_FP</text>
+      <rect x="66" y="0" width="65" height="18" class="bg-dd"/><text x="98" y="12" class="badge-txt txt-dd">BID_DOM_FP</text>
+    </g>
+    <text x="932" y="24" fill="#f87171" font-size="10.5px" font-weight="600" text-anchor="middle">BID DOMINANT</text>
+  </g>
+
+  <!-- РЯД 5: idy=5 | 50.00 (CENTER / VWAP) -->
+  <g transform="translate(0, 292)">
+    <rect x="20" y="0" width="1020" height="38" class="center-row-bg"/>
+    <text x="35" y="24" class="text-idy" fill="#38bdf8">5</text><text x="70" y="24" class="text-price" fill="#38bdf8">$50.00</text><text x="115" y="24" fill="#38bdf8" font-size="11px">5000</text>
+    
+    <!-- Bar 0 -->
+    <text x="207" y="24" class="val-none" text-anchor="middle">—</text><line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/><text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1: VAL_BAR -->
+    <g transform="translate(412, 10)">
+      <rect x="0" y="0" width="50" height="18" class="bg-va-bar"/><text x="25" y="12" class="badge-txt txt-va-bar">VAL_BAR</text>
+    </g>
+    <line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/>
+    <text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+
+    <!-- idxVP: VWAP_FP -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="55" height="18" class="bg-vwap"/><text x="27" y="12" class="badge-txt txt-vwap">VWAP_FP</text>
+      <rect x="62" y="0" width="65" height="18" class="bg-dd"/><text x="94" y="12" class="badge-txt txt-dd">BID_DOM_FP</text>
+    </g>
+    <text x="932" y="24" fill="#f87171" font-size="10.5px" font-weight="600" text-anchor="middle">BID DOMINANT</text>
+  </g>
+
+  <!-- РЯД 6: idy=6 | 49.95 -->
+  <g transform="translate(0, 330)">
+    <rect x="20" y="0" width="1020" height="38" class="row-even"/>
+    <text x="35" y="24" class="text-idy">6</text><text x="70" y="24" class="text-price">$49.95</text><text x="115" y="24" class="text-meta">4995</text>
+    
+    <!-- Bar 0: IMBALANCE on Bid -->
+    <g transform="translate(170, 10)">
+      <rect x="0" y="0" width="75" height="18" class="bg-imb-bid"/><text x="37" y="12" class="badge-txt txt-imb-bid">IMBALANCE</text>
+    </g>
+    <line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/>
+    <text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1 -->
+    <text x="437" y="24" class="val-none" text-anchor="middle">—</text><line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/><text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+
+    <!-- idxVP -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="65" height="18" class="bg-dd"/><text x="32" y="12" class="badge-txt txt-dd">BID_DOM_FP</text>
+    </g>
+    <text x="932" y="24" fill="#f87171" font-size="10.5px" font-weight="600" text-anchor="middle">BID DOMINANT</text>
+  </g>
+
+  <!-- РЯД 7: idy=7 | 49.90 -->
+  <g transform="translate(0, 368)">
+    <rect x="20" y="0" width="1020" height="38" class="row-odd"/>
+    <text x="35" y="24" class="text-idy">7</text><text x="70" y="24" class="text-price">$49.90</text><text x="115" y="24" class="text-meta">4990</text>
+    
+    <!-- Bar 0: VAL_BAR -->
+    <g transform="translate(182, 10)">
+      <rect x="0" y="0" width="50" height="18" class="bg-va-bar"/><text x="25" y="12" class="badge-txt txt-va-bar">VAL_BAR</text>
+    </g>
+    <line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/>
+    <text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1 -->
+    <text x="437" y="24" class="val-none" text-anchor="middle">—</text><line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/><text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+
+    <!-- idxVP: VAL_FP -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="55" height="18" class="bg-va-fp"/><text x="27" y="12" class="badge-txt txt-va-fp">VAL_FP</text>
+      <rect x="62" y="0" width="65" height="18" class="bg-dd"/><text x="94" y="12" class="badge-txt txt-dd">BID_DOM_FP</text>
+    </g>
+    <text x="932" y="24" fill="#f87171" font-size="10.5px" font-weight="600" text-anchor="middle">BID DOMINANT</text>
+  </g>
+
+  <!-- РЯД 8: idy=8 | 49.85 -->
+  <g transform="translate(0, 406)">
+    <rect x="20" y="0" width="1020" height="38" class="row-even"/>
+    <text x="35" y="24" class="text-idy">8</text><text x="70" y="24" class="text-price">$49.85</text><text x="115" y="24" class="text-meta">4985</text>
+    
+    <!-- Bar 0: CLOSE & IMBALANCE -->
+    <g transform="translate(155, 10)">
+      <rect x="0" y="0" width="42" height="18" class="bg-ohlc"/><text x="21" y="12" class="badge-txt txt-ohlc">CLOSE</text>
+      <rect x="46" y="0" width="50" height="18" class="bg-imb-bid"/><text x="71" y="12" class="badge-txt txt-imb-bid">IMB</text>
+    </g>
+    <line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/>
+    <text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    
+    <!-- Bar 1: OPEN & LOW on idxBid -->
+    <g transform="translate(390, 10)">
+      <rect x="0" y="0" width="40" height="18" class="bg-ohlc"/><text x="20" y="12" class="badge-txt txt-ohlc">OPEN</text>
+      <rect x="44" y="0" width="36" height="18" class="bg-ohlc"/><text x="62" y="12" class="badge-txt txt-ohlc">LOW</text>
+    </g>
+    <line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/>
+    <text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+
+    <!-- idxVP: LOWER_BAND_FP -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="85" height="18" class="bg-vwap"/><text x="42" y="12" class="badge-txt txt-vwap">LOWER_BAND_FP</text>
+    </g>
+    <text x="932" y="24" fill="#f87171" font-size="10.5px" font-weight="600" text-anchor="middle">BID DOMINANT</text>
+  </g>
+
+  <!-- РЯД 9: idy=9 | 49.80 -->
+  <g transform="translate(0, 444)">
+    <rect x="20" y="0" width="1020" height="38" class="row-odd"/>
+    <text x="35" y="24" class="text-idy">9</text><text x="70" y="24" class="text-price">$49.80</text><text x="115" y="24" class="text-meta">4980</text>
+    
+    <!-- Bar 0: LOW on Bid, ZERO_PRINT on Ask -->
+    <g transform="translate(187, 10)">
+      <rect x="0" y="0" width="40" height="18" class="bg-ohlc"/><text x="20" y="12" class="badge-txt txt-ohlc">LOW</text>
+    </g>
+    <line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/>
+    <g transform="translate(285, 10)">
+      <rect x="0" y="0" width="75" height="18" class="bg-zero"/><text x="37" y="12" class="badge-txt txt-zero">ZERO_PRINT</text>
+    </g>
+    
+    <!-- Bar 1 -->
+    <text x="437" y="24" class="val-none" text-anchor="middle">—</text><line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/><text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+
+    <!-- idxVP: FINISHED_AUCTION -->
+    <g transform="translate(625, 10)">
+      <rect x="0" y="0" width="60" height="18" class="bg-auct"/><text x="30" y="12" class="badge-txt txt-auct">FIN_AUCT</text>
+    </g>
+    <text x="932" y="24" class="val-none" text-anchor="middle">—</text>
+  </g>
+
+  <!-- РЯД 10: idy=10 | 49.75 -->
+  <g transform="translate(0, 482)">
+    <rect x="20" y="0" width="1020" height="38" class="row-even"/>
+    <text x="35" y="24" class="text-idy">10</text><text x="70" y="24" class="text-price">$49.75</text><text x="115" y="24" class="text-meta">4975</text>
+    
+    <text x="207" y="24" class="val-none" text-anchor="middle">—</text><line x1="265" y1="0" x2="265" y2="38" class="bid-ask-divider"/><text x="322" y="24" class="val-none" text-anchor="middle">—</text>
+    <text x="437" y="24" class="val-none" text-anchor="middle">—</text><line x1="495" y1="0" x2="495" y2="38" class="bid-ask-divider"/><text x="552" y="24" class="val-none" text-anchor="middle">—</text>
+    <text x="717" y="24" class="val-none" text-anchor="middle">—</text>
+    <text x="932" y="24" class="val-none" text-anchor="middle">—</text>
+  </g>
+
+  <!-- Сетка и границы -->
+  <line x1="150" y1="62" x2="150" y2="520" class="major-col-divider"/>
+  <line x1="380" y1="62" x2="380" y2="520" class="major-col-divider"/>
+  <line x1="610" y1="62" x2="610" y2="520" class="major-col-divider"/>
+  <line x1="825" y1="62" x2="825" y2="520" class="major-col-divider"/>
+  <rect x="20" y="62" width="1020" height="458" class="grid-border"/>
+
+  <!-- ================= ЛЕГЕНДА БИТОВЫХ МАСОК И API ================= -->
+  <g transform="translate(20, 530)">
+    <rect width="1020" height="80" rx="4" fill="#0f1420" stroke="#1e2638" stroke-width="1"/>
+    
+    <!-- Строка 1: Легенда типов флагов -->
+    <text x="15" y="22" fill="#64748b" font-size="10px" font-weight="700">FLAGS CATEGORIES:</text>
+    
+    <rect x="135" y="11" width="40" height="15" class="bg-ohlc"/><text x="155" y="22" class="badge-txt txt-ohlc">OHLC</text>
+    <text x="180" y="22" class="text-meta">OPEN, HIGH, LOW, CLOSE</text>
+
+    <rect x="335" y="11" width="55" height="15" class="bg-poc-bar"/><text x="362" y="22" class="badge-txt txt-poc-bar">POC/VA</text>
+    <text x="395" y="22" class="text-meta">POC_BAR, VAH_BAR, VAL_BAR</text>
+
+    <rect x="575" y="11" width="60" height="15" class="bg-imb-ask"/><text x="605" y="22" class="badge-txt txt-imb-ask">IMBALANCE</text>
+    <rect x="640" y="11" width="45" height="15" class="bg-zero"/><text x="662" y="22" class="badge-txt txt-zero">ZERO</text>
+    <text x="690" y="22" class="text-meta">ORDER FLOW FLAGS</text>
+
+    <rect x="825" y="11" width="45" height="15" class="bg-vwap"/><text x="847" y="22" class="badge-txt txt-vwap">VWAP</text>
+    <rect x="875" y="11" width="50" height="15" class="bg-poc-fp"/><text x="900" y="22" class="badge-txt txt-poc-fp">POC_FP</text>
+    <text x="930" y="22" class="text-meta">COMPOSITE</text>
+
+    <!-- Строка 2: Примеры проверки в пользовательской стратегии -->
+    <line x1="15" y1="36" x2="1005" y2="36" stroke="#1e2638" stroke-width="1"/>
+    <text x="15" y="58" fill="#64748b" font-size="10px" font-weight="700">BITMASK CHECK IN ALGORITHM:</text>
+    
+    <text x="210" y="58" fill="#e2e8f0" font-size="10.5px">
+      <tspan fill="#f59e0b">if</tspan> self.fp.state[idy, idxBid] &amp; c.<tspan fill="#38bdf8">SF_IMBALANCE</tspan>:
+    </text>
+    <text x="560" y="58" fill="#e2e8f0" font-size="10.5px">
+      <tspan fill="#f59e0b">if</tspan> self.fp.state[idy, self.fp.con.idxVP] &amp; c.<tspan fill="#38bdf8">SF_POC_FP</tspan>:
+    </text>
+    <text x="890" y="58" fill="#34d399" font-size="10.5px">⚡ Allocation-free</text>
+  </g>
+</svg>
