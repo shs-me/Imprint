@@ -1,0 +1,11 @@
+*.env
+*.egg-info
+.venv
+.ropeproject
+.pytest_cache
+.ruff_cache
+.coverage
+__pycache__/
+data
+dump
+logs

@@ -1,0 +1,65 @@
+<svg width="680" height="300" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Imprint process architecture</title>
+<desc>MainAgent supervises three OS processes — Streaming, Engine, Executing — connected via shared-memory ring buffers.</desc>
+<style>
+  .bg { fill: #ffffff; }
+  .box, .sup { fill: #f1efe8; stroke: #5f5e5a; stroke-width: 1; }
+  .stream { fill: #e1f5ee; stroke: #0f6e56; stroke-width: 1; }
+  .engine { fill: #e6f1fb; stroke: #185fa5; stroke-width: 1; }
+  .exec { fill: #faece7; stroke: #993c1d; stroke-width: 1; }
+  .shm { fill: none; stroke: #5f5e5a; stroke-width: 1; stroke-dasharray: 5 4; }
+  .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; font-weight: 600; fill: #2c2c2a; }
+  .sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; fill: #444441; }
+  .arr { stroke: #5f5e5a; stroke-width: 1.5; fill: none; }
+
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1e1e1c; }
+    .box, .sup { fill: #2c2c2a; stroke: #b4b2a9; }
+    .stream { fill: #085041; stroke: #9fe1cb; }
+    .engine { fill: #0c447c; stroke: #85b7eb; }
+    .exec { fill: #712b13; stroke: #f0997b; }
+    .shm { stroke: #b4b2a9; }
+    .title { fill: #f1efe8; }
+    .sub { fill: #d3d1c7; }
+    .arr { stroke: #b4b2a9; }
+  }
+</style>
+
+<rect class="bg" x="0" y="0" width="680" height="300"/>
+
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+
+<rect class="sup" x="200" y="20" width="280" height="44" rx="8"/>
+<text class="title" x="340" y="47" text-anchor="middle">MainAgent / HostManager</text>
+
+<line class="arr" x1="260" y1="64" x2="140" y2="110" marker-end="url(#arrow)"/>
+<line class="arr" x1="340" y1="64" x2="340" y2="110" marker-end="url(#arrow)"/>
+<line class="arr" x1="420" y1="64" x2="540" y2="110" marker-end="url(#arrow)"/>
+
+<rect class="stream" x="40" y="110" width="200" height="56" rx="8"/>
+<text class="title" x="140" y="133" text-anchor="middle">Streaming</text>
+<text class="sub" x="140" y="152" text-anchor="middle">backtest / live agg trades</text>
+
+<rect class="engine" x="240" y="110" width="200" height="56" rx="8"/>
+<text class="title" x="340" y="133" text-anchor="middle">Engine</text>
+<text class="sub" x="340" y="152" text-anchor="middle">footprint + strategy logic</text>
+
+<rect class="exec" x="440" y="110" width="200" height="56" rx="8"/>
+<text class="title" x="540" y="133" text-anchor="middle">Executing</text>
+<text class="sub" x="540" y="152" text-anchor="middle">sim or live orders</text>
+
+<text class="sub" x="240" y="185" text-anchor="middle">trades</text>
+<text class="sub" x="440" y="185" text-anchor="middle">signals</text>
+
+<rect class="shm" x="40" y="220" width="600" height="56" rx="10"/>
+<text class="title" x="340" y="243" text-anchor="middle">Shared memory</text>
+<text class="sub" x="340" y="262" text-anchor="middle">Log · MarketData · UserData · Signal · Order ring buffers</text>
+
+<line x1="140" y1="166" x2="140" y2="220" stroke="#888780" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="340" y1="166" x2="340" y2="220" stroke="#888780" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="540" y1="166" x2="540" y2="220" stroke="#888780" stroke-width="1" stroke-dasharray="3 3"/>
+</svg>

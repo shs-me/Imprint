@@ -1,0 +1,216 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 680" width="100%" height="100%" style="background-color: #0b0e14; font-family: 'JetBrains Mono', Consolas, monospace;">
+  <defs>
+    <style>
+      .card { fill: #111622; stroke: #1e2638; stroke-width: 1; rx: 5; }
+      .row-header { fill: #172033; }
+      .text-title { fill: #f8fafc; font-size: 13px; font-weight: 700; }
+      .text-sec { fill: #64748b; font-size: 11px; }
+      .col-idx { fill: #38bdf8; font-size: 10px; font-weight: 700; }
+      .col-name { fill: #cbd5e1; font-size: 10.5px; font-weight: 600; }
+      .val-int { fill: #f8fafc; font-size: 11px; font-weight: 700; }
+      .val-dec { fill: #94a3b8; font-size: 9.5px; }
+      .chip-writer { fill: #0369a1; }
+      .chip-reader { fill: #7e22ce; }
+    </style>
+  </defs>
+
+  <!-- Заголовок спецификации -->
+  <g transform="translate(20, 15)">
+    <rect width="1100" height="45" rx="5" fill="#121824" stroke="#1e2638" stroke-width="1"/>
+    <circle cx="20" cy="22" r="5" fill="#a855f7"/>
+    <text x="36" y="26" class="text-title">IMPRINT ENGINE // fp.headers : NDArray[int64] (shape: [bar_count, 21])</text>
+    <text x="610" y="26" class="text-sec">MEMORY BUFFER: 21x INT64 SLOTS PER BAR | OFFSET: headers_offset[0] + bar</text>
+  </g>
+
+  <!-- БЛОК 1: ПОЛЯ WRITER (Колонки 0 - 12: Real-Time Tick Update) -->
+  <g transform="translate(20, 70)">
+    <rect width="1100" height="260" class="card"/>
+    <rect width="1100" height="28" rx="4" fill="#0f172a"/>
+    <rect x="10" y="6" width="135" height="16" rx="3" class="chip-writer"/>
+    <text x="77" y="18" fill="#e0f2fe" font-size="9px" font-weight="700" text-anchor="middle">WRITER PIPELINE (TICK)</text>
+    <text x="160" y="18" fill="#94a3b8" font-size="10.5px">Обновляется на каждом входящем тике в `_update()`</text>
+
+    <!-- Сетка колонок 0 - 12 -->
+    <!-- Шапка колонок -->
+    <g transform="translate(10, 35)">
+      <!-- 0..3: OHLC -->
+      <rect x="0" y="0" width="200" height="30" fill="#1e293b" rx="3"/>
+      <text x="10" y="20" fill="#38bdf8" font-size="11px" font-weight="700">[0..3] OHLC PRICES</text>
+      
+      <!-- 4..6, 12: VOL & FLOW -->
+      <rect x="210" y="0" width="280" height="30" fill="#1e293b" rx="3"/>
+      <text x="220" y="20" fill="#38bdf8" font-size="11px" font-weight="700">[4..6, 12] VOLUME, DELTA &amp; CVD</text>
+
+      <!-- 7..9: VWAP BANDS -->
+      <rect x="500" y="0" width="310" height="30" fill="#1e293b" rx="3"/>
+      <text x="510" y="20" fill="#38bdf8" font-size="11px" font-weight="700">[7..9] VWAP &amp; BANDS (±2σ)</text>
+
+      <!-- 10..11: TIMESTAMPS -->
+      <rect x="820" y="0" width="260" height="30" fill="#1e293b" rx="3"/>
+      <text x="830" y="20" fill="#38bdf8" font-size="11px" font-weight="700">[10..11] OPEN &amp; TRADE TIME</text>
+    </g>
+
+    <!-- Строка Bar 0 (09:55:00) -->
+    <g transform="translate(10, 75)">
+      <rect width="1080" height="75" fill="#0f1420" rx="3"/>
+      <text x="10" y="20" fill="#facc15" font-size="11px" font-weight="700">ROW 0 (Bar 0)</text>
+      <text x="10" y="36" class="text-sec">idx &amp; ~1 = 0</text>
+      <text x="10" y="52" class="text-sec">09:55:00 UTC</text>
+
+      <!-- Данные OHLC -->
+      <g transform="translate(110, 8)">
+        <text x="0" y="16" class="col-name">Open [0]:  <tspan class="val-int">5010</tspan> <tspan class="val-dec">($50.10)</tspan></text>
+        <text x="0" y="34" class="col-name">High [1]:  <tspan class="val-int">5015</tspan> <tspan class="val-dec">($50.15)</tspan></text>
+        <text x="0" y="52" class="col-name">Low [2]:   <tspan class="val-int">4980</tspan> <tspan class="val-dec">($49.80)</tspan></text>
+        <text x="0" y="70" class="col-name">Close [3]: <tspan class="val-int">4985</tspan> <tspan class="val-dec">($49.85)</tspan></text>
+      </g>
+
+      <!-- Данные Volume/Delta/CVD -->
+      <g transform="translate(320, 8)">
+        <text x="0" y="16" class="col-name">Volume [4]:     <tspan class="val-int">25100</tspan> <tspan class="val-dec">(25.10)</tspan></text>
+        <text x="0" y="34" class="col-name">Delta [5]:      <tspan class="val-int" fill="#f87171">-12100</tspan> <tspan class="val-dec">(-12.10)</tspan></text>
+        <text x="0" y="52" class="col-name">CVD [6]:        <tspan class="val-int" fill="#f87171">-12100</tspan> <tspan class="val-dec">(-12.10)</tspan></text>
+        <text x="0" y="70" class="col-name">CountTrade [12]:<tspan class="val-int">142</tspan> <tspan class="val-dec">trades</tspan></text>
+      </g>
+
+      <!-- Данные VWAP -->
+      <g transform="translate(610, 8)">
+        <text x="0" y="20" class="col-name">VWAP [7]:       <tspan class="val-int">4995</tspan> <tspan class="val-dec">($49.95)</tspan></text>
+        <text x="0" y="42" class="col-name">UpperBand [8]:  <tspan class="val-int">5012</tspan> <tspan class="val-dec">($50.12)</tspan></text>
+        <text x="0" y="64" class="col-name">LowerBand [9]:  <tspan class="val-int">4978</tspan> <tspan class="val-dec">($49.78)</tspan></text>
+      </g>
+
+      <!-- Данные Time -->
+      <g transform="translate(850, 8)">
+        <text x="0" y="25" class="col-name">OpenTime [10]:</text>
+        <text x="0" y="40" class="val-int" fill="#38bdf8">1767225300000 <tspan class="val-dec">(09:55:00)</tspan></text>
+        <text x="0" y="58" class="col-name">LastTradeTime [11]:</text>
+        <text x="0" y="72" class="val-int">1767225599820 <tspan class="val-dec">(09:59:59)</tspan></text>
+      </g>
+    </g>
+
+    <!-- Строка Bar 1 (10:00:00) -->
+    <g transform="translate(10, 165)">
+      <rect width="1080" height="75" fill="#0b0e17" rx="3"/>
+      <text x="10" y="20" fill="#38bdf8" font-size="11px" font-weight="700">ROW 1 (Bar 1)</text>
+      <text x="10" y="36" class="text-sec">idx &amp; ~1 = 2</text>
+      <text x="10" y="52" class="text-sec">10:00:00 UTC</text>
+
+      <!-- Данные OHLC -->
+      <g transform="translate(110, 8)">
+        <text x="0" y="16" class="col-name">Open [0]:  <tspan class="val-int">4985</tspan> <tspan class="val-dec">($49.85)</tspan></text>
+        <text x="0" y="34" class="col-name">High [1]:  <tspan class="val-int">5025</tspan> <tspan class="val-dec">($50.25)</tspan></text>
+        <text x="0" y="52" class="col-name">Low [2]:   <tspan class="val-int">4985</tspan> <tspan class="val-dec">($49.85)</tspan></text>
+        <text x="0" y="70" class="col-name">Close [3]: <tspan class="val-int">5020</tspan> <tspan class="val-dec">($50.20)</tspan></text>
+      </g>
+
+      <!-- Данные Volume/Delta/CVD -->
+      <g transform="translate(320, 8)">
+        <text x="0" y="16" class="col-name">Volume [4]:     <tspan class="val-int">38700</tspan> <tspan class="val-dec">(38.70)</tspan></text>
+        <text x="0" y="34" class="col-name">Delta [5]:      <tspan class="val-int" fill="#4ade80">+9700</tspan> <tspan class="val-dec">(+9.70)</tspan></text>
+        <text x="0" y="52" class="col-name">CVD [6]:        <tspan class="val-int" fill="#f87171">-2400</tspan> <tspan class="val-dec">(-2.40)</tspan></text>
+        <text x="0" y="70" class="col-name">CountTrade [12]:<tspan class="val-int">218</tspan> <tspan class="val-dec">trades</tspan></text>
+      </g>
+
+      <!-- Данные VWAP -->
+      <g transform="translate(610, 8)">
+        <text x="0" y="20" class="col-name">VWAP [7]:       <tspan class="val-int">5010</tspan> <tspan class="val-dec">($50.10)</tspan></text>
+        <text x="0" y="42" class="col-name">UpperBand [8]:  <tspan class="val-int">5028</tspan> <tspan class="val-dec">($50.28)</tspan></text>
+        <text x="0" y="64" class="col-name">LowerBand [9]:  <tspan class="val-int">4992</tspan> <tspan class="val-dec">($49.92)</tspan></text>
+      </g>
+
+      <!-- Данные Time -->
+      <g transform="translate(850, 8)">
+        <text x="0" y="25" class="col-name">OpenTime [10]:</text>
+        <text x="0" y="40" class="val-int" fill="#38bdf8">1767225600000 <tspan class="val-dec">(10:00:00)</tspan></text>
+        <text x="0" y="58" class="col-name">LastTradeTime [11]:</text>
+        <text x="0" y="72" class="val-int">1767225899940 <tspan class="val-dec">(10:04:59)</tspan></text>
+      </g>
+    </g>
+  </g>
+
+  <!-- БЛОК 2: ПОЛЯ READER (Колонки 13 - 20: Bar Close & Pattern Hooks) -->
+  <g transform="translate(20, 345)">
+    <rect width="1100" height="255" class="card"/>
+    <rect width="1100" height="28" rx="4" fill="#0f172a"/>
+    <rect x="10" y="6" width="145" height="16" rx="3" class="chip-reader"/>
+    <text x="82" y="18" fill="#f3e8ff" font-size="9px" font-weight="700" text-anchor="middle">READER PIPELINE (CLOSE)</text>
+    <text x="170" y="18" fill="#94a3b8" font-size="10.5px">Рассчитывается при закрытии бара в `_update_closed_bar_and_fp_states()`</text>
+
+    <!-- Шапка секций Reader -->
+    <g transform="translate(10, 35)">
+      <rect x="0" y="0" width="260" height="28" fill="#1e293b" rx="3"/>
+      <text x="12" y="18" fill="#c084fc" font-size="10.5px" font-weight="700">[13..14] VOLATILITY (ATR / PARK)</text>
+
+      <rect x="275" y="0" width="370" height="28" fill="#1e293b" rx="3"/>
+      <text x="287" y="18" fill="#c084fc" font-size="10.5px" font-weight="700">[15..17] BAR VALUE AREA (70% VOL)</text>
+
+      <rect x="660" y="0" width="420" height="28" fill="#1e293b" rx="3"/>
+      <text x="672" y="18" fill="#c084fc" font-size="10.5px" font-weight="700">[18..20] COMPOSITE FOOTPRINT VA (CUMULATIVE)</text>
+    </g>
+
+    <!-- Данные Reader Bar 0 -->
+    <g transform="translate(10, 72)">
+      <rect width="1080" height="75" fill="#0f1420" rx="3"/>
+      <text x="10" y="25" fill="#facc15" font-size="11px" font-weight="700">ROW 0 (Bar 0)</text>
+      <text x="10" y="42" class="text-sec">bwo = 0</text>
+
+      <!-- ATR / PARK -->
+      <g transform="translate(120, 10)">
+        <text x="0" y="20" class="col-name">ATR [13]:  <tspan class="val-int">35</tspan> <tspan class="val-dec">(35 ticks = $0.35)</tspan></text>
+        <text x="0" y="45" class="col-name">PARK [14]: <tspan class="val-int">48200</tspan> <tspan class="val-dec">(Var: 0.0000482)</tspan></text>
+      </g>
+
+      <!-- BAR VA -->
+      <g transform="translate(390, 10)">
+        <text x="0" y="18" class="col-name">BH_POC [15]: <tspan class="val-int" fill="#facc15">5005</tspan> <tspan class="val-dec">($50.05)</tspan></text>
+        <text x="0" y="38" class="col-name">BH_VAH [16]: <tspan class="val-int">5010</tspan> <tspan class="val-dec">($50.10)</tspan></text>
+        <text x="0" y="58" class="col-name">BH_VAL [17]: <tspan class="val-int">4990</tspan> <tspan class="val-dec">($49.90)</tspan></text>
+      </g>
+
+      <!-- COMPOSITE FP VA -->
+      <g transform="translate(770, 10)">
+        <text x="0" y="18" class="col-name">BH_POC_FP [18]: <tspan class="val-int" fill="#facc15">5005</tspan> <tspan class="val-dec">($50.05)</tspan></text>
+        <text x="0" y="38" class="col-name">BH_VAH_FP [19]: <tspan class="val-int">5010</tspan> <tspan class="val-dec">($50.10)</tspan></text>
+        <text x="0" y="58" class="col-name">BH_VAL_FP [20]: <tspan class="val-int">4990</tspan> <tspan class="val-dec">($49.90)</tspan></text>
+      </g>
+    </g>
+
+    <!-- Данные Reader Bar 1 -->
+    <g transform="translate(10, 160)">
+      <rect width="1080" height="75" fill="#0b0e17" rx="3"/>
+      <text x="10" y="25" fill="#38bdf8" font-size="11px" font-weight="700">ROW 1 (Bar 1)</text>
+      <text x="10" y="42" class="text-sec">bwo = 1</text>
+
+      <!-- ATR / PARK -->
+      <g transform="translate(120, 10)">
+        <text x="0" y="20" class="col-name">ATR [13]:  <tspan class="val-int">39</tspan> <tspan class="val-dec">(Wilder smoothed: $0.39)</tspan></text>
+        <text x="0" y="45" class="col-name">PARK [14]: <tspan class="val-int">52140</tspan> <tspan class="val-dec">(Var: 0.0000521)</tspan></text>
+      </g>
+
+      <!-- BAR VA -->
+      <g transform="translate(390, 10)">
+        <text x="0" y="18" class="col-name">BH_POC [15]: <tspan class="val-int" fill="#facc15">5005</tspan> <tspan class="val-dec">($50.05)</tspan></text>
+        <text x="0" y="38" class="col-name">BH_VAH [16]: <tspan class="val-int">5020</tspan> <tspan class="val-dec">($50.20)</tspan></text>
+        <text x="0" y="58" class="col-name">BH_VAL [17]: <tspan class="val-int">5000</tspan> <tspan class="val-dec">($50.00)</tspan></text>
+      </g>
+
+      <!-- COMPOSITE FP VA -->
+      <g transform="translate(770, 10)">
+        <text x="0" y="18" class="col-name">BH_POC_FP [18]: <tspan class="val-int" fill="#facc15">5005</tspan> <tspan class="val-dec">($50.05)</tspan></text>
+        <text x="0" y="38" class="col-name">BH_VAH_FP [19]: <tspan class="val-int">5015</tspan> <tspan class="val-dec">($50.15)</tspan></text>
+        <text x="0" y="58" class="col-name">BH_VAL_FP [20]: <tspan class="val-int">4990</tspan> <tspan class="val-dec">($49.90)</tspan></text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Итоговая информационная полоса -->
+  <g transform="translate(20, 615)">
+    <rect width="1100" height="45" rx="4" fill="#0e131d" stroke="#1e2638" stroke-width="1"/>
+    <text x="20" y="27" fill="#64748b" font-size="11px">ACCESS IN STRATEGY (FootprintEngine):</text>
+    <text x="290" y="27" fill="#38bdf8" font-size="11px" font-weight="700">self.fp.bar[idx].ind.close.n</text>
+    <text x="510" y="27" fill="#facc15" font-size="11px" font-weight="700">self.fp.bar[idx].vp.poc.n</text>
+    <text x="700" y="27" fill="#c084fc" font-size="11px" font-weight="700">self.fp.bar[idx].ind.atr</text>
+    <text x="870" y="27" fill="#4ade80" font-size="11px" font-weight="700">self.fp.headers[bwo, c.BH_CVD]</text>
+  </g>
+</svg>
