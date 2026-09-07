@@ -64,15 +64,13 @@
 - **`core.ipc`** — `HostManager` (main process) / `NodeManager` (workers) bind
   shared-memory segments to typed config dataclasses; `supervisor()` wraps every
   worker entrypoint with `Dispatcher` setup/teardown.
-- **`visualization`** — post-run metrics (`analyze/`) and a matplotlib dashboard
-  (`plot/`) rendered to a standalone HTML report (`render/html.py`).
 
 </details>
 
 <details open>
 <summary><h2>Installation</h2></summary>
 
-Pinned to **Python 3.13.12**, built with Hatch/`hatchling`.
+Pinned to **Python >=3.13,<3.14**, built with Hatch/`hatchling`.
 
 ```bash
 git clone https://github.com/shs-me/Imprint.git
@@ -86,7 +84,7 @@ pip install -e ".[all]"        # or "[plot]" / "[dev]" individually
 
 | Extra  | Installs             | Use case                       |
 |--------|-----------------------|---------------------------------|
-| `plot` | `matplotlib`          | HTML dashboard rendering        |
+| `plot` | `plotly`          | HTML dashboard rendering        |
 | `dev`  | `pytest`, `pytest-cov`, `ruff` | Tests and linting      |
 | `all`  | `plot` + `dev`        | Everything                      |
 
@@ -300,7 +298,7 @@ Imprint/
 │   │       ├── streaming/        # backtest replay / live WS ingestion
 │   │       ├── engine/            # per-tick footprint + strategy loop
 │   │       └── executing/          # signal → order routing (sim or live)
-│   └── visualization/          # metrics, matplotlib plots, HTML report
+│   └── visualization/          # metrics, plotly plots, HTML report
 ├── example/                   # runnable strategy + Binance/Bybit adapters
 └── tests/                # pytest suite
 ```
@@ -310,8 +308,8 @@ Imprint/
 <details open>
 <summary><h2>Requirements</h2></summary>
 
-- Python **3.13.12** exactly (`requires-python == "3.13.12"`)
-- `numpy==2.4.6`, `numba==0.66.0`, `msgspec==0.21.1`, `websockets==16.1.1`, `loguru==0.7.3`
+- Python **>=3.13,<3.14**
+- `numpy==2.4.6`, `numba==0.66.0`, `msgspec==0.21.1`, `websockets==16.1.1`, 'httpx==0.28.1`, `loguru==0.7.3`
 - POSIX-compliant OS recommended for `multiprocessing.shared_memory`
 
 </details>
