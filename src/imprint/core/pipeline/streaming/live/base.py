@@ -11,7 +11,6 @@ from websockets.asyncio.client import connect
 
 from imprint.core.pipeline.streaming.base import Base as GlobalBase
 from imprint.core.settings import StatusCodes as scs
-from imprint.core.utils.tools import dump_exception
 
 
 @dataclass(slots=True)
@@ -33,7 +32,7 @@ class Base(GlobalBase, ABC):
 
                 except MsgspecError:
                     await ws.close()
-                    dump_exception()
+                    self.manager.dump_exc()
                     return self.manager.set_proc_sc(
                         scs.ERROR, wait_main_task=True
                     )

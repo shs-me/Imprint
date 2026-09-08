@@ -8,7 +8,7 @@ import pytest
 
 from imprint.core import constant as c
 from imprint.core.configs import Account, Coin, Footprint, Setup
-from imprint.core.exchange.account.manager import (
+from imprint.core.exchange_sim.account.manager import (
     EquityC,
     EquityH,
     EquityL,

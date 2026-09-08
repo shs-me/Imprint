@@ -12,7 +12,6 @@ from imprint.core import configs
 from imprint.core.configs import Configuration, SharedMemorySegments
 from imprint.core.ipc.manager import HostManager, NodeManager
 from imprint.core.settings import KwgsKeys as kk
-from imprint.core.utils.handlers import error_handler
 
 
 @dataclass(slots=True)
@@ -25,7 +24,6 @@ class Dispatcher:
     shm: SharedMemory = field(init=False)
     shm_buf: memoryview = field(init=False)
 
-    @error_handler()
     def run_client(self, func: FunctionType) -> None:
         """Initializes shared memory resources and executes target process function with assigned Manager."""
 

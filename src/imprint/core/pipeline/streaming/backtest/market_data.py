@@ -7,10 +7,10 @@ from typing import override
 from numpy import int64
 from numpy.typing import NDArray
 
+from imprint.core.ipc import node_handler
 from imprint.core.pipeline.streaming.base import Base
 from imprint.core.pipeline.utils.base_data_prepare import BaseDataPrepare
 from imprint.core.settings import StatusCodes as scs
-from imprint.core.utils.handlers import error_handler
 
 
 @dataclass(slots=True)
@@ -49,7 +49,7 @@ class MarketDataStream(Base):
         )
         self.prepare.start()
 
-    @error_handler(set_status_code=True)
+    @node_handler()
     def run(self) -> None:
         # Local Links
         wid, rid = self.ds_wid, self.ds_rid

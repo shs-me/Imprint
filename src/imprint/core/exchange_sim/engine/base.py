@@ -6,14 +6,18 @@ from numpy import int64, uint8
 from numpy.typing import NDArray
 
 from imprint.core import constant as c
-from imprint.core.exchange.account.manager import update_equity_ohlc
-from imprint.core.exchange.account.position import (
+from imprint.core.exchange_sim.account.base import to_nMargin
+from imprint.core.exchange_sim.account.manager import update_equity_ohlc
+from imprint.core.exchange_sim.account.position import (
     update_mae_and_mfe,
     update_position,
     update_unrealized_nPnl,
 )
-from imprint.core.exchange.sim.matching_engine import MatchingEngine, matching
-from imprint.core.exchange.sim.user_data_stream import set_user_data
+from imprint.core.exchange_sim.engine.matching_engine import (
+    MatchingEngine,
+    matching,
+)
+from imprint.core.exchange_sim.engine.user_data_stream import set_user_data
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -36,8 +40,8 @@ class Base(MatchingEngine):
                 gus_data_header=self.gus_data_header,
                 gus_wid=self.gus_wid,
                 gus_cell_amount=self.gus_cell_amount,
-                data_example=self.data_example,
-                deRow=self.deRow,
+                executed_orders=self.executed_orders,
+                eoRow=self.eoRow,
                 slippage=self.slippage,
                 leverage=self.leverage,
                 makerNcommission=self.makerNcommission,
@@ -91,8 +95,8 @@ def _start(
     gus_data_header: memoryview,
     gus_wid: memoryview,
     gus_cell_amount: int,
-    data_example: NDArray[int64],
-    deRow: memoryview,
+    executed_orders: NDArray[int64],
+    eoRow: memoryview,
     slippage: int,
     leverage: int,
     makerNcommission: int,
@@ -179,8 +183,8 @@ def _start(
             order_book=order_book,
             order_id_buf=order_id_buf,
             obRow=obRow,
-            data_example=data_example,
-            deRow=deRow,
+            executed_orders=executed_orders,
+            eoRow=eoRow,
             slippage=slippage,
         )
         if executed:
@@ -190,8 +194,8 @@ def _start(
                 gus_data_header=gus_data_header,
                 gus_wid=gus_wid,
                 gus_cell_amount=gus_cell_amount,
-                data_example=data_example,
-                deRow=deRow,
+                executed_orders=executed_orders,
+                eoRow=eoRow,
                 makerNcommission=makerNcommission,
                 takerNcommission=takerNcommission,
                 price_mult=price_mult,
@@ -254,8 +258,8 @@ def _processing_executed_orders(
     gus_data_header: memoryview,
     gus_wid: memoryview,
     gus_cell_amount: int,
-    data_example: NDArray[int64],
-    deRow: memoryview,
+    executed_orders: NDArray[int64],
+    eoRow: memoryview,
     makerNcommission: int,
     takerNcommission: int,
     price_mult: int,
@@ -273,44 +277,34 @@ def _processing_executed_orders(
     short_mae: memoryview,
     short_mfe: memoryview,
 ) -> None:
-    max_de_row: int = deRow[0]
-    for de_row in range(max_de_row):
-        deRow[0] -= 1
-        (
-            _trade_timestamp,
-            order_param,
-            _order_id,
-            nPrice,
-            nQty,
-            nCommission,
-            _mae,
-            _mfe,
-        ) = data_example[de_row, :]
+    for eo_row in range(eoRow[0]):
+        eoRow[0] -= 1
 
-        is_buy = bool(order_param & c.OF_BUY)
-        is_long = bool(order_param & c.OF_LONG)
-        is_maker = bool(order_param & c.OF_LIMIT)
+        order_param = executed_orders[eo_row, c.TP_order_param]
+        nPrice = executed_orders[eo_row, c.TP_nPrice]
+        nQty = executed_orders[eo_row, c.TP_nQty]
 
-        is_open = (is_buy and is_long) or (not is_buy and not is_long)
+        is_buy: bool = bool(order_param & c.OF_BUY)
+        is_long: bool = bool(order_param & c.OF_LONG)
+        is_maker: bool = bool(order_param & c.OF_LIMIT)
+
+        is_open: bool = (is_buy and is_long) or (not is_buy and not is_long)
 
         if bool(order_param & c.OF_FILLED):
             rate: int = makerNcommission if is_maker else takerNcommission
             commission: float = (
                 ((nPrice / price_mult) * (nQty / qty_mult)) * rate / 10_000
             )
-            nCommission = round(commission * scale_mult)
-            data_example[de_row, 5] = nCommission
+            nCommission: int = round(commission * scale_mult)
+            executed_orders[eo_row, c.TP_nCommission] = nCommission
 
             if not is_open:
                 if is_long:
-                    data_example[de_row, 6] = long_mae[0]
-                    data_example[de_row, 7] = long_mfe[0]
+                    executed_orders[eo_row, c.TP_nMAE] = long_mae[0]
+                    executed_orders[eo_row, c.TP_nMFE] = long_mfe[0]
                 else:
-                    data_example[de_row, 6] = short_mae[0]
-                    data_example[de_row, 7] = short_mfe[0]
-            else:
-                data_example[de_row, 6] = 0
-                data_example[de_row, 7] = 0
+                    executed_orders[eo_row, c.TP_nMAE] = long_mae[0]
+                    executed_orders[eo_row, c.TP_nMFE] = long_mfe[0]
 
             update_position(
                 nPrice=nPrice,
@@ -338,8 +332,13 @@ def _processing_executed_orders(
         elif bool(order_param & c.OF_NEW) and (not is_maker):
             continue
 
+        elif bool(order_param & c.OF_CANCELED) and is_open:
+            lockedNbalance[0] -= to_nMargin(
+                nPrice, nQty, leverage, price_mult, qty_mult, scale_mult
+            )
+
         set_user_data(
-            data=data_example[de_row, :].view(uint8),
+            data=executed_orders[eo_row, :].view(uint8),
             gus_data_buf=gus_data_buf,
             gus_data_buf_size=gus_data_buf_size,
             gus_data_header=gus_data_header,

@@ -64,7 +64,7 @@
 - **`core.ipc`** — `HostManager` (main process) / `NodeManager` (workers) bind
   shared-memory segments to typed config dataclasses; `supervisor()` wraps every
   worker entrypoint with `Dispatcher` setup/teardown.
-- **`visualization`** — post-run metrics (`analyze/`) and a matplotlib dashboard
+- **`visualization`** — post-run metrics (`analyze/`) and a plotly dashboard
   (`plot/`) rendered to a standalone HTML report (`render/html.py`).
 
 </details>
@@ -86,7 +86,7 @@ pip install -e ".[all]"        # or "[plot]" / "[dev]" individually
 
 | Extra  | Installs             | Use case                       |
 |--------|-----------------------|---------------------------------|
-| `plot` | `matplotlib`          | HTML dashboard rendering        |
+| `plot` | `plotly`          | HTML dashboard rendering        |
 | `dev`  | `pytest`, `pytest-cov`, `ruff` | Tests and linting      |
 | `all`  | `plot` + `dev`        | Everything                      |
 
@@ -111,20 +111,22 @@ from my_strategy.binance_adapters import (
 )
 
 imp = Imprint(
-    run_mode=Backtest,
-    backtest=Backtest(
-        account=Account(leverage=50, balance=5_000),
-        tick_size="0.01",
-        lot_size="0.001",
-        backtest_start_date="2026-01-01",
-        backtest_end_date="2026-01-07",
-    ),
-    live=Live(  # required even in backtest mode — pass empty/placeholder values
-        connector=Connector(),
-        agg_trades_decoder=MyAggTradesDecoder,
-        order_encoder=MyOrderEncoder,
-        user_stream_decoder=MyUserStreamDecoder,
-    ),
+    run_mode=(
+        Backtest,
+        Backtest(
+            account=Account(leverage=50, balance=5_000),
+            tick_size="0.01",
+            lot_size="0.001",
+            backtest_start_date="2026-01-01",
+            backtest_end_date="2026-01-07",
+        ),
+        Live( 
+            connector=Connector(),
+            agg_trades_decoder=MyAggTradesDecoder,
+            order_encoder=MyOrderEncoder,
+            user_stream_decoder=MyUserStreamDecoder,
+        ),
+    ), # Or run_mode=Backtest(...) | Real(...),
     symbol="DASHUSDT",
     strategy=Strategy(
         algorithm=MyIntraDayAlgorithm,
@@ -184,13 +186,21 @@ class MyHedgeExecution(BaseExecution):
     def on_signal(
         self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
     ) -> None:
+        # - - - 
         self.send_order(
-            timestamp=time_get_signal + self.con.latency,
-            order_param=order_param,
-            client_order_id=self.con.newClientOrderId,
-            nPrice=nPrice,
-            nQty=nQty,
+            timestamp=time_get_signal, order_param=order_param,
+            client_order_id=self.con.newClientOrderId, nPrice=nPrice, nQty=nQty,
         )
+        
+    def on_filled_order(self, timestamp: int, is_long: bool, is_buy: bool, order_id: int,
+                        client_order_id: int, nPrice: int, nQty: int, nCommission: int,
+                        ) -> None: ...
+                        
+    def on_canceled_order(self, timestamp: int, is_long: bool, is_buy: bool, order_id: int,
+                        client_order_id: int, nPrice: int, nQty: int, nCommission: int,
+                        ) -> None: ...
+    
+
 ```
 
 Live exchange support requires an `AggTradesDecoder`, `OrderEncoder`, and
@@ -271,10 +281,10 @@ Every aggregated trade flows through a deterministic, low-latency processing loo
 > 📊 **Live Demo**: Explore a sample interactive backtest report on [GitHub Pages](https://shs-me.github.io/Imprint/).
 
 ### Key Features
-- **Synchronized Overview (2:1 Layout)**: Vertically coupled Dynamic Equity/Drawdown and Candlestick execution chart with shared X-axis panning and trade markers.
-- **Smart Viewport & Timeframe Resampling**: Focuses on the most recent 144 bars by default with free historical navigation, one-click `ALL` history expansion, and on-the-fly timeframe switching.
 - **Institutional KPI Tear-Sheet**: Multi-column analytics panel covering portfolio returns, risk ratios (Sharpe, Sortino, Calmar), Van Tharp SQN, Kelly Criterion, streaks, and Long vs. Short directional breakdowns.
 - **Order-Flow Trade Distribution**: High-density profile mapping realized PnL against Maximum Favorable Excursion (MFE) and Maximum Adverse Excursion (MAE) relative to entry price.
+- **Synchronized Equity & Price (2:1 Layout)**: Vertically coupled Dynamic Equity/Drawdown and Candlestick execution chart with shared X-axis panning and trade markers.
+- **Smart Viewport & Timeframe Resampling**: Focuses on the most recent 144 bars by default with free historical navigation, one-click `ALL` history expansion, and on-the-fly timeframe switching.
 - **Full-Screen Workspace**: One-click native full-screen mode optimizing chart real estate for deep microstructure analysis.
 
 </details>
@@ -300,7 +310,7 @@ Imprint/
 │   │       ├── streaming/        # backtest replay / live WS ingestion
 │   │       ├── engine/            # per-tick footprint + strategy loop
 │   │       └── executing/          # signal → order routing (sim or live)
-│   └── visualization/          # metrics, matplotlib plots, HTML report
+│   └── visualization/          # metrics, plotly plots, HTML report
 ├── example/                   # runnable strategy + Binance/Bybit adapters
 └── tests/                # pytest suite
 ```
@@ -311,7 +321,7 @@ Imprint/
 <summary><h2>Requirements</h2></summary>
 
 - Python **3.13.12** exactly (`requires-python == "3.13.12"`)
-- `numpy==2.4.6`, `numba==0.66.0`, `msgspec==0.21.1`, `websockets==16.1.1`, `loguru==0.7.3`
+- `numpy==2.4.6`, `numba==0.66.0`, `msgspec==0.21.1`, `websockets==16.1.1`, `loguru==0.7.3`, `httpx==0.28.1`
 - POSIX-compliant OS recommended for `multiprocessing.shared_memory`
 
 </details>

@@ -2,16 +2,15 @@ from dataclasses import dataclass
 from multiprocessing.synchronize import Event
 from typing import override
 
-from imprint.core.exchange.account import Account
 from imprint.core.pipeline.executing.base import Base
 
 
 @dataclass(slots=True)
-class Live(Base[Account]):
+class Live(Base):
     execution_event: Event
 
     @override
-    def init_session(self) -> None: ...
+    def child_post_init(self) -> None: ...
 
     @override
     def alarm_clock(
@@ -29,40 +28,8 @@ class Live(Base[Account]):
                 self.execution_event.wait(timeout=0.1)
 
     @override
-    def pre_execute_signal_action(self, time_get_signal: int) -> None:
-        pass
-
+    def pre_execute_signal_action(self, time_get_signal: int) -> None: ...
     @override
-    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-
-        data = user_data_raw_buf.cast("q")
-        event_type = data[1]
-
-        if event_type == 1:
-            timestamp: int = data[0]
-            order_param: int = data[2]
-            order_id: int = data[3]
-            nPrice: int = data[4]
-            nQty: int = data[5]
-            nCommission: int = data[6]
-
-            self.executor.on_order_update(
-                timestamp, order_param, order_id, nPrice, nQty, nCommission
-            )
-            self.con.update_orders_history(
-                timestamp,
-                order_param,
-                order_id,
-                nPrice,
-                nQty,
-                nCommission,
-                0,
-                0,
-            )
-
-        elif event_type == 2:
-            pass
-
+    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None: ...
     @override
-    def post_final_action(self) -> None:
-        pass
+    def post_final_action(self) -> None: ...

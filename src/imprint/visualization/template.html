@@ -115,19 +115,19 @@
 </div>
 
 <div class="tab-bar">
-    <button class="tab-btn active" onclick="openTab(event, 'tab1')">📈 Overview (Equity & Price)</button>
-    <button class="tab-btn" onclick="openTab(event, 'tab2')">📊 KPI Dashboard</button>
-    <button class="tab-btn" onclick="openTab(event, 'tab3')">📉 PnL & Distribution</button>
+    <button class="tab-btn active" onclick="openTab(event, 'tab1')">📊 KPI Dashboard</button>
+    <button class="tab-btn" onclick="openTab(event, 'tab2')">📉 PnL & Distribution</button>
+    <button class="tab-btn" onclick="openTab(event, 'tab3')">📈 Equity & Price</button>
 </div>
 
 <div id="tab1" class="tab-content active">
-    {div_overview}
-</div>
-<div id="tab2" class="tab-content">
     {div_dashboard}
 </div>
-<div id="tab3" class="tab-content">
+<div id="tab2" class="tab-content">
     {div_dist}
+</div>
+<div id="tab3" class="tab-content">
+    {div_equity_and_price}
 </div>
 
 <script>

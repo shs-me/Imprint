@@ -1,28 +1,23 @@
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import override
 
-from imprint.core.exchange.sim import ExchangeSim
+from imprint.core import constant as c
+from imprint.core.exchange_sim import ExchangeSim
 from imprint.core.pipeline.executing.base import Base
 
 
 @dataclass(slots=True)
-class Backtest(Base[ExchangeSim]):
+class Backtest(Base):
+    exchange_sim: ExchangeSim = field(init=False)
+
     @override
-    def init_session(self) -> None:
-        self.account: ExchangeSim = ExchangeSim(self.manager)
-        self.con.init_session(
-            nBalance=self.account.nBalance,
-            lockedNbalance=self.account.lockedNbalance,
-            availableNbalance=self.account.availableNbalance,
-            longNqty=self.account.longNqty,
-            longEntryNprice=self.account.longEntryNprice,
-            shortNqty=self.account.shortNqty,
-            shortEntryNprice=self.account.shortEntryNprice,
-            unrealizedNpnl=self.account.unrealizedNpnl,
-            longUnrealizedNpnl=self.account.longUnrealizedNpnl,
-            shortUnrealizedNpnl=self.account.shortUnrealizedNpnl,
-        )
+    def child_post_init(self) -> None:
+        self.exchange_sim = ExchangeSim(self.manager)
+
+        self.account.nBalance = self.exchange_sim.nBalance
+        self.account.lockedNbalance = self.exchange_sim.lockedNbalance
+        self.account.availableNbalance = self.exchange_sim.availableNbalance
 
     @override
     def alarm_clock(
@@ -33,74 +28,96 @@ class Backtest(Base[ExchangeSim]):
         RB_2: memoryview,
     ) -> None:
         matching = False
-        if self.trade_read_time[0] > self.account.trade_read_time[0]:
+        if self.trade_read_time[0] > self.exchange_sim.trade_read_time[0]:
             matching = True
         if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
             return
         if matching:
-            self.account.start(self.trade_read_time[0])
+            self.exchange_sim.start(self.trade_read_time[0])
 
         time.sleep(0)
 
     @override
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
-        timestamp = time_get_signal + self.con.latency
-        while timestamp > self.account.trade_read_time[0]:
-            self.account.start(timestamp)
+        timestamp = time_get_signal + self.exchange_sim.latency
+        while timestamp > self.exchange_sim.trade_read_time[0]:
+            self.exchange_sim.start(timestamp)
             self._check_user_data_buf()
 
-        self.readed_timestamp: int = self.account.trade_read_time[0]
+        self.readed_timestamp: int = self.exchange_sim.trade_read_time[0]
+
+    @override
+    def send_order(
+        self,
+        timestamp: int,
+        order_param: int,
+        client_order_id: int,
+        nPrice: int,
+        nQty: int,
+    ) -> None:
+        timestamp = timestamp + self.exchange_sim.latency
+        Base.send_order(
+            self, timestamp, order_param, client_order_id, nPrice, nQty
+        )
+        self.exchange_sim.lock_balance(nPrice, nQty, order_param)
 
     @override
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
         get_data: memoryview = user_data_raw_buf.cast("q")
-        timestamp: int = get_data[0]
-        order_param: int = get_data[1]
-        order_id: int = get_data[2]
-        nPrice: int = get_data[3]
-        nQty: int = get_data[4]
-        nCommission: int = get_data[5]
-        nMAE: int = get_data[6]
-        nMFE: int = get_data[7]
+        timestamp: int = get_data[c.TP_timestamp]
+        order_param: int = get_data[c.TP_order_param]
+        order_id: int = get_data[c.TP_order_id]
+        client_order_id: int = get_data[c.TP_client_order_id]
+        nPrice: int = get_data[c.TP_nPrice]
+        nQty: int = get_data[c.TP_nQty]
+        nCommission: int = get_data[c.TP_nCommission]
+        nMAE: int = get_data[c.TP_nMAE]
+        nMFE: int = get_data[c.TP_nMFE]
 
-        self.executor.on_order_update(
-            timestamp, order_param, order_id, nPrice, nQty, nCommission
+        self.exchange_sim.update_orders_history(
+            timestamp=timestamp,
+            order_param=order_param,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            nPrice=nPrice,
+            nQty=nQty,
+            nCommission=nCommission,
+            nMAE=nMAE,
+            nMFE=nMFE,
         )
-        self.con.update_orders_history(
-            timestamp,
-            order_param,
-            order_id,
-            nPrice,
-            nQty,
-            nCommission,
-            nMAE,
-            nMFE,
+        self.on_order_update(
+            timestamp=timestamp,
+            order_param=order_param,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            nPrice=nPrice,
+            nQty=nQty,
+            nCommission=nCommission,
         )
 
     @override
     def post_final_action(self) -> None:
+        _ = self.exchange_sim
+        # - - -
         max_timestamp = 9_999_999_999_999
-        while self.account.trade_read_time[0] < max_timestamp:
-            self.account.start(max_timestamp)
+        while _.trade_read_time[0] < max_timestamp:
+            _.start(max_timestamp)
             self._check_user_data_buf()
-            if (
-                self.account.prepare.complete
-                and self.account.prepare.dfmRid[0]
-                == self.account.prepare.dfmWid[0]
+            if _.prepare.complete and (
+                _.prepare.dfmRid[0] == _.prepare.dfmWid[0]
             ):
                 break
 
-        self.con.final_action()
-        self.account.final_action()
+        self.exchange_sim.final_action()
         self.manager.set_text(
-            f"Balance: {self.con.nBalance / self.con.scale} \n"
-            + f"Locked Balance: {self.con.lockedNbalance / self.con.scale} \n"
-            + f"Unrealized PNL: {self.con.unrealizedNpnl / self.con.scale} \n"
-            + f"Long Unrealized PNL: {self.con.longUnrealizedNpnl / self.con.scale} \n"
-            + f"Short Unrealized PNL: {self.con.shortUnrealizedNpnl / self.con.scale} \n"
-            + f"Long Open Qty: {self.con._longNqty[0] / self.con.qtyMult} \n"
-            + f"Short Open Qty: {self.con._shortNqty[0] / self.con.qtyMult} \n"
-            + f"Count Orders in History: {self.con.ohWid[0]} \n"
-            + f"Count Active Orders: {self.account.obRow[0]} \n"
+            f"Balance: {_.nBalance[0] / _.scale_mult} \n"
+            + f"Locked Balance: {_.lockedNbalance[0] / _.scale_mult} \n"
+            + f"Unrealized PNL: {_.unrealizedNpnl[0] / _.scale_mult} \n"
+            + f"Long Unrealized PNL: {_.longUnrealizedNpnl[0] / _.scale_mult} \n"
+            + f"Short Unrealized PNL: {_.shortUnrealizedNpnl[0] / _.scale_mult} \n"
+            + f"Long Open Qty: {_.longNqty[0] / _.qty_mult} \n"
+            + f"Short Open Qty: {_.shortNqty[0] / _.qty_mult} \n"
+            + f"Count Orders in History: {_.ohWid[0]} \n"
+            + f"Count Active Orders: {_.obRow[0]} \n"
             + f"Count Open Positions: {self.count_open_positions[0]}"
         )

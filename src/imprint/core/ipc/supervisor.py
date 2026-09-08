@@ -3,7 +3,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, TypeVar
 
-from imprint.core.utils.handlers import error_handler
+from imprint.core.utils import error_handler
 
 P = ParamSpec("P")
 R = TypeVar("R")

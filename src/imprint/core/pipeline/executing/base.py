@@ -3,22 +3,40 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Protocol, final
 
-from imprint.core.exchange.account import Account, AccountConverter
-from imprint.core.ipc import NodeManager
+from imprint.core import constant as c
+from imprint.core.account import Account
+from imprint.core.ipc import NodeManager, node_handler
+from imprint.core.settings import PositionFSM
 from imprint.core.settings import StatusCodes as scs
-from imprint.core.utils.handlers import error_handler
 
 
 class ExecutionProtocol(Protocol):
     def on_signal(
-        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
+        self,
+        signal_id: int,
+        time_get_signal: int,
+        order_param: int,
+        nPrice: int,
+        nQty: int,
     ) -> None: ...
-
-    def on_order_update(
+    def on_filled_order(
         self,
         timestamp: int,
-        order_param: int,
+        is_long: bool,
+        is_buy: bool,
         order_id: int,
+        client_order_id: int,
+        nPrice: int,
+        nQty: int,
+        nCommission: int,
+    ) -> None: ...
+    def on_canceled_order(
+        self,
+        timestamp: int,
+        is_long: bool,
+        is_buy: bool,
+        order_id: int,
+        client_order_id: int,
         nPrice: int,
         nQty: int,
         nCommission: int,
@@ -37,7 +55,7 @@ class SendOrderMethodSignature(Protocol):
 
 
 @dataclass(slots=True)
-class Base[T: Account](ABC):
+class Base(ABC):
     manager: NodeManager
     executor: ExecutionProtocol
 
@@ -68,9 +86,9 @@ class Base[T: Account](ABC):
     )
     trade_read_time: memoryview = field(init=False)
     readed_timestamp: int = field(default=0, init=False)
-    con: AccountConverter = field(init=False)
-    account: T = field(init=False)
+    account: Account = field(init=False)
 
+    @final
     def __post_init__(self) -> None:
         cfgSN = self.manager.cfgSignal
         self.__sn_cell_amount = cfgSN.cell_amount
@@ -99,19 +117,14 @@ class Base[T: Account](ABC):
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
         self.__engine_complete = cfgMetrics.engine_complete.view
 
-        self.con = AccountConverter(
-            cfgAccount=self.manager.cfgAccount,
-            cfgStrategy=self.manager.cfgRiskManagement,
-            price_prec=self.manager.cfgCoin.price_prec,
-            qty_prec=self.manager.cfgCoin.qty_prec,
-        )
-        self.init_session()
+        self.account = Account(self.manager)
+        self.child_post_init()
 
     @abstractmethod
-    def init_session(self) -> None: ...
+    def child_post_init(self) -> None: ...
 
     @final
-    @error_handler(set_status_code=True)
+    @node_handler()
     def run(self) -> None:
         while True:
             if self.manager.have_status():
@@ -167,24 +180,28 @@ class Base[T: Account](ABC):
     def __check_signal_buf(
         self,
     ) -> None:
-        nPrice, timestamp, order_param = self.__get_signal_data()
+        signal_id, nPrice, timestamp, order_param = self.__get_signal_data()
         self._check_user_data_buf()
         self.pre_execute_signal_action(timestamp)
         self._check_user_data_buf()
-        if self.con.lossNbalanceSafeLimit:
-            if self.con.lockedNbalanceSafeLimit:
+        if self.account.lossNbalanceSafeLimit:
+            if self.account.lockedNbalanceSafeLimit:
                 if (
-                    nominalNqty := self.con.nominalEntryNqtyWithLeverage
+                    nominalNqty := self.account.nominalEntryNqtyWithLeverage
                 ) is not None:
-                    if (timestamp + self.con.timer) <= self.readed_timestamp:
+                    if (
+                        (timestamp + self.account.time_for_expired_signal)
+                        <= self.readed_timestamp
+                    ) or self.account.is_averaging(order_param):
                         return
 
-                    nQty: int = self.con.entryNqtyWithLeverage(
+                    nQty: int = self.account.entryNqtyWithLeverage(
                         nPrice, nominalNqty
                     )
                     self.executor.on_signal(
-                        timestamp, order_param, nPrice, nQty
+                        signal_id, timestamp, order_param, nPrice, nQty
                     )
+
                 else:
                     self.manager.set_proc_sc(
                         code=scs.QTY_LESS_LIMIT, wait_main_task=True
@@ -198,17 +215,17 @@ class Base[T: Account](ABC):
             )
 
     @final
-    def __get_signal_data(self) -> tuple[int, int, int]:
+    def __get_signal_data(self) -> tuple[int, int, int, int]:
         cell: int = self.__sn_rid[0]
         start: int = cell * self.__sn_data_size
         get_data: memoryview = self.__sn_data[
             start : start + self.__sn_data_size
         ]
-        # signal_id = get_data[0]
+        signal_id = get_data[0]
         nPrice, timestamp, order_param = get_data[1], get_data[2], get_data[3]
         new_cell: int = cell + 1
         self.__sn_rid[0] = new_cell if (new_cell < self.__sn_cell_amount) else 0
-        return nPrice, timestamp, order_param
+        return signal_id, nPrice, timestamp, order_param
 
     @abstractmethod
     def pre_execute_signal_action(self, time_get_signal: int) -> None: ...
@@ -216,25 +233,82 @@ class Base[T: Account](ABC):
     @final
     def _check_user_data_buf(self) -> None:
         while self.__gus_wid[0] != self.__gus_rid[0]:
-            raw_buf = self.__get_user_data()
-            self.preppare_user_data(raw_buf)
+            self.__get_user_data()
 
     @final
-    def __get_user_data(self) -> memoryview:
+    def __get_user_data(self) -> None:
         cell: int = self.__gus_rid[0]
         start: int = cell * self.__gus_data_size
         len_raw_data: int = self.__gus_data_header[cell]
+
         raw_data: memoryview = self.__gus_data[start : start + len_raw_data]
+        self.preppare_user_data(raw_data)
+
         new_cell: int = cell + 1
         self.__gus_rid[0] = (
             new_cell if (new_cell < self.__gus_cell_amount) else 0
         )
-        return raw_data
 
     @abstractmethod
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None: ...
 
     @final
+    def on_order_update(
+        self,
+        timestamp: int,
+        order_param: int,
+        order_id: int,
+        client_order_id: int,
+        nPrice: int,
+        nQty: int,
+        nCommission: int,
+    ) -> None:
+        is_long: bool = bool(order_param & c.OF_LONG)
+        is_buy: bool = bool(order_param & c.OF_BUY)
+        is_open: bool = (is_long and is_buy) or (not is_long and not is_buy)
+        if bool(order_param & c.OF_FILLED):
+            if is_open:
+                if is_long:
+                    self.account.long = PositionFSM.OPEN
+                else:
+                    self.account.short = PositionFSM.OPEN
+
+                self.count_open_positions[0] += 1
+            else:
+                if is_long:
+                    self.account.long = PositionFSM.CLOSE
+                else:
+                    self.account.short = PositionFSM.CLOSE
+
+            self.executor.on_filled_order(
+                timestamp=timestamp,
+                is_long=is_long,
+                is_buy=is_buy,
+                order_id=order_id,
+                client_order_id=client_order_id,
+                nPrice=nPrice,
+                nQty=nQty,
+                nCommission=nCommission,
+            )
+
+        elif bool(order_param & c.OF_CANCELED):
+            if is_open:
+                if is_long:
+                    self.account.long = PositionFSM.EMPTY
+                else:
+                    self.account.short = PositionFSM.EMPTY
+
+            self.executor.on_canceled_order(
+                timestamp=timestamp,
+                is_long=is_long,
+                is_buy=is_buy,
+                order_id=order_id,
+                client_order_id=client_order_id,
+                nPrice=nPrice,
+                nQty=nQty,
+                nCommission=nCommission,
+            )
+
     def send_order(
         self,
         timestamp: int,
@@ -247,7 +321,15 @@ class Base[T: Account](ABC):
             "@qqqqq", timestamp, order_param, client_order_id, nPrice, nQty
         )
         self.__set_user_data(raw_data)
-        self.account.update_local_lockedNbalance(nPrice, nQty, order_param)
+
+        if order_param & c.OF_NEW:
+            is_long: int = order_param & c.OF_LONG
+            is_buy: int = order_param & c.OF_BUY
+            if (is_long and is_buy) or (not is_long and not is_buy):
+                if is_long:
+                    self.account.long = PositionFSM.PENDING
+                else:
+                    self.account.short = PositionFSM.PENDING
 
     @final
     def __set_user_data(self, raw_data: bytes) -> None:

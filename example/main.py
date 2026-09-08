@@ -18,35 +18,37 @@ from imprint.api.setup import (
 
 if __name__ == "__main__":
     imp = Imprint(
-        run_mode=Backtest,
-        backtest=Backtest(
-            account=Account(
-                leverage=50,
-                balance=5000,
-                min_order_size=5,
-                taker_commission=pct(0.05),
-                maker_commission=pct(0.02),
-                slippage=pct(0.05),
-                latency_ms=100,
-                scale_prec=15,
-                active_order_limit=1000,
-                save_orders_history=True,
+        run_mode=(
+            Backtest,
+            Backtest(
+                account=Account(
+                    leverage=50,
+                    balance=5000,
+                    min_order_size=5,
+                    taker_commission=pct(0.05),
+                    maker_commission=pct(0.02),
+                    slippage=pct(0.05),
+                    latency_ms=100,
+                    scale_prec=15,
+                    active_order_limit=1000,
+                    save_orders_history=True,
+                ),
+                tick_size="0.01",
+                lot_size="0.001",
+                backtest_start_date="2026-01-01",
+                backtest_end_date="2026-01-07",
             ),
-            tick_size="0.01",
-            lot_size="0.001",
-            backtest_start_date="2026-01-01",
-            backtest_end_date="2026-01-07",
-        ),
-        live=Live(
-            connector=Connector(
-                base_uri_for_rest="https://fapi.binance.com",
-                base_uri_for_ws="wss://ws-fapi.binance.com/ws-fapi/v1",
-                base_uri_for_wss="wss://fstream.binance.com",
-                market_data_uri_for_wss="wss://fstream.binance.com/market/ws/dashusdt@aggTrade",
+            Live(
+                connector=Connector(
+                    base_uri_for_rest="https://fapi.binance.com",
+                    base_uri_for_ws="wss://ws-fapi.binance.com/ws-fapi/v1",
+                    base_uri_for_wss="wss://fstream.binance.com",
+                    market_data_uri_for_wss="wss://fstream.binance.com/market/ws/dashusdt@aggTrade",
+                ),
+                agg_trades_decoder=BinanceAggTradesDecoder,
+                order_encoder=BinanceOrderEncoder,
+                user_stream_decoder=BinanceUserStreamDecoder,
             ),
-            agg_trades_decoder=BinanceAggTradesDecoder,
-            order_encoder=BinanceOrderEncoder,
-            user_stream_decoder=BinanceUserStreamDecoder,
         ),
         symbol="DASHUSDT",
         strategy=Strategy(

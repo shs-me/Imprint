@@ -1,10 +1,13 @@
-import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
+from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
+    Figure,
+    Histogram,
+)
 
 from imprint.visualization.analyze import Stats
 from imprint.visualization.plot.utils import apply_dark_theme, empty_figure
 
 
-def plot_trade_distribution(stats: Stats) -> go.Figure:
+def plot_trade_distribution(stats: Stats) -> Figure:
     if not stats.trades_close:
         return empty_figure()
 
@@ -21,86 +24,48 @@ def plot_trade_distribution(stats: Stats) -> go.Figure:
         tc["mfe_pct"] for tc in stats.trades_close if tc["mfe_pct"] > 0
     ]
 
-    fig: go.Figure = go.Figure()
+    fig: Figure = Figure()
 
     # Precise bin size of 0.1% for precise detail visibility
-    bin_config = {"start": -20.0, "end": 20.0, "size": 0.1}
+    bin_config: dict[str, float] = {"start": -20.0, "end": 20.0, "size": 0.1}
 
-    # Bottom Layers (Solid / Opaque Base): MAE & MFE
-    # MAE: Adverse movement during TP/profit trades
-    if maes:
+    # TP & SL & MAE & MFE Disttribution
+    for pnl_pcts, name, legend, color, opacity, hovertemplate in zip(
+        [p_pnls, l_pnls, maes, mfes],
+        [
+            "TP (Realized Profit)",
+            "SL (Realized Loss)",
+            "MAE (Adverse Runup)",
+            "MFE (Favorable Runup)",
+        ],
+        ["legend", "legend2", "legend2", "legend"],
+        ["#009600", "#960000", "#960000", "#009600"],
+        [0.5, 0.5, 1.0, 1.0],
+        [
+            "TP: %{y:.2f}%<br>Count: %{x}<extra></extra>",
+            "SL: %{y:.2f}%<br>Count: %{x}<extra></extra>",
+            "MAE: %{y:.2f}%<br>Count: %{x}<extra></extra>",
+            "MFE: %{y:.2f}%<br>Count: %{x}<extra></extra>",
+        ],
+    ):
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Histogram(
-                y=maes,
-                name="MAE (Adverse Runup)",
-                legend="legend2",
-                marker_color="#C62828",
+            Histogram(
+                y=pnl_pcts,
+                name=name,
+                legend=legend,
+                marker_color=color,
                 marker_line_width=0.5,
-                marker_line_color="#121212",
-                opacity=1.0,
+                marker_line_color="#FFFFFF",
+                opacity=opacity,
                 orientation="h",
                 ybins=bin_config,
-                hovertemplate="MAE: %{y:.2f}%<br>Count: %{x}<extra></extra>",
+                hovertemplate=hovertemplate,
             )
         )
 
-    # MFE: Favorable movement during SL/loss trades
-    if mfes:
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Histogram(
-                y=mfes,
-                name="MFE (Favorable Runup)",
-                legend="legend",
-                marker_color="#00E676",
-                marker_line_width=0.5,
-                marker_line_color="#121212",
-                opacity=1.0,
-                orientation="h",
-                ybins=bin_config,
-                hovertemplate="MFE: %{y:.2f}%<br>Count: %{x}<extra></extra>",
-            )
-        )
-
-    # Top Layers (Closed outcome overlays on top): TP & SL
-    # TP (Take Profit closed trades)
-    if p_pnls:
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Histogram(
-                y=p_pnls,
-                name="TP (Realized Profit)",
-                legend="legend",
-                marker_color="#0D5233",
-                marker_line_width=0.5,
-                marker_line_color="#121212",
-                opacity=0.95,
-                orientation="h",
-                ybins=bin_config,
-                hovertemplate="TP: %{y:.2f}%<br>Count: %{x}<extra></extra>",
-            )
-        )
-
-    # SL (Stop Loss closed trades)
-    if l_pnls:
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Histogram(
-                y=l_pnls,
-                name="SL (Realized Loss)",
-                legend="legend2",
-                marker_color="#521220",
-                marker_line_width=0.5,
-                marker_line_color="#121212",
-                opacity=0.95,
-                orientation="h",
-                ybins=bin_config,
-                hovertemplate="SL: %{y:.2f}%<br>Count: %{x}<extra></extra>",
-            )
-        )
-
+    # Entry Position Line
     fig.add_hline(  # pyright: ignore[reportUnknownMemberType]
-        y=0,
-        line_width=1.5,
-        line_color="#ECEFF1",
-        opacity=0.8,
+        y=0, line_width=1.5, line_color="#ECEFF1", opacity=0.8
     )
 
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
@@ -138,6 +103,7 @@ def plot_trade_distribution(stats: Stats) -> go.Figure:
             },
         },
     )
+
     fig.update_xaxes(  # pyright: ignore[reportUnknownMemberType]
         title_text="Trade Count",
         ticks="outside",

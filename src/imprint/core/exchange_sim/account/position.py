@@ -2,17 +2,13 @@ from abc import ABC
 from dataclasses import dataclass, field
 
 from numba import njit
+from numpy import int64
 
-from imprint.core.exchange.account.base import Base
-from imprint.core.exchange.account.converter import (
-    to_long_nPnl,
-    to_nMargin,
-    to_short_nPnl,
-)
+from imprint.core.exchange_sim.account.base import Account, to_nMargin
 
 
 @dataclass
-class Position(Base, ABC):
+class Position(Account, ABC):
     longNqty: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
@@ -323,3 +319,31 @@ def _update_short_mae_and_mfe(
 ) -> None:
     short_mae[0] = min(shortUnrealizedNpnl[0], short_mae[0])
     short_mfe[0] = max(shortUnrealizedNpnl[0], short_mfe[0])
+
+
+@njit(cache=True)
+def to_long_nPnl(
+    closeNprice: int | int64,
+    entryNprice: int,
+    nQty: int | int64,
+    price_mult: int,
+    qty_mult: int,
+    scale_mult: int,
+) -> int:
+    diffNprice: int | int64 = (closeNprice - entryNprice) * 1
+    pnl: float = (diffNprice / price_mult) * (nQty / qty_mult)
+    return round(pnl * scale_mult)
+
+
+@njit(cache=True)
+def to_short_nPnl(
+    closeNprice: int | int64,
+    entryNprice: int,
+    nQty: int | int64,
+    price_mult: int,
+    qty_mult: int,
+    scale_mult: int,
+) -> int:
+    diffNprice: int | int64 = (closeNprice - entryNprice) * -1
+    pnl: float = (diffNprice / price_mult) * (nQty / qty_mult)
+    return round(pnl * scale_mult)

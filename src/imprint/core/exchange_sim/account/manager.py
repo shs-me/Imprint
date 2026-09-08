@@ -9,7 +9,7 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint.core import constant as c
-from imprint.core.exchange.account.position import Position
+from imprint.core.exchange_sim.account.position import Position
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -54,6 +54,7 @@ class Manager(Position, ABC):
         """Flushes non-zero equity history bars to disk."""
 
         self.dump_equity_history()
+        self.save_orders_history()
 
     @final
     def dump_equity_history(self) -> None:

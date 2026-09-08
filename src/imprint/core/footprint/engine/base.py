@@ -169,7 +169,7 @@ class Base(ABC):
                         ):
                             return
                         else:
-                            os.remove(f"{p}.npy")
+                            os.remove(f"{self.__base_fp_dump_path}/{p}.npy")
 
             headers_save_path: str = (
                 f"{self.__base_fp_dump_path}/"

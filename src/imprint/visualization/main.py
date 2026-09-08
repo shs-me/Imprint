@@ -14,8 +14,8 @@ from imprint.core import constant as c
 from imprint.core.settings import Timeframe
 from imprint.visualization.analyze import Stats
 from imprint.visualization.plot import (
+    plot_equity_and_chart,
     plot_info_dashboard,
-    plot_overview,
     plot_trade_distribution,
 )
 from imprint.visualization.settings import OHLC
@@ -143,9 +143,11 @@ class Render:
     def run(self) -> None:
         os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
 
-        div_overview = self.to_html_div(plot_overview(self.stats))
-        div_dashboard = self.to_html_div(plot_info_dashboard(self.stats))
-        div_dist = self.to_html_div(plot_trade_distribution(self.stats))
+        div_dashboard: str = self.to_html_div(plot_info_dashboard(self.stats))
+        div_dist: str = self.to_html_div(plot_trade_distribution(self.stats))
+        div_equity_and_price: str = self.to_html_div(
+            plot_equity_and_chart(self.stats)
+        )
 
         with resources.open_text(
             self.path_to_template, self.template_name
@@ -154,9 +156,9 @@ class Render:
                 symbol=self.symbol,
                 start_date=self.start_date_str,
                 end_date=self.end_date_str,
-                div_overview=div_overview,
                 div_dashboard=div_dashboard,
                 div_dist=div_dist,
+                div_equity_and_price=div_equity_and_price,
             )
 
         with open(self.output_path, "w", encoding="utf-8") as f:

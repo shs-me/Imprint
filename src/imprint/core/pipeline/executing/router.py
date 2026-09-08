@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from typing import override
 
-from imprint.core.exchange.account import AccountConverter
+from imprint.core.account import Account
 from imprint.core.ipc import NodeManager
 from imprint.core.pipeline.executing.backtest import Backtest as BacktestAgent
 from imprint.core.pipeline.executing.base import (
@@ -22,7 +22,7 @@ class Router(ExecutionProtocol, ABC):
 
     is_backtesting: bool = field(init=False)
     count_open_positions: memoryview = field(init=False)
-    con: AccountConverter = field(init=False)
+    account: Account = field(init=False)
     send_order: SendOrderMethodSignature = field(init=False)
 
     def __post_init__(self):
@@ -36,24 +36,43 @@ class Router(ExecutionProtocol, ABC):
 
         self.count_open_positions = self._executer.count_open_positions
         self.send_order = self._executer.send_order
-        self.con = self._executer.con
+        self.account = self._executer.account
 
     @abstractmethod
     @override
     def on_signal(
-        self, time_get_signal: int, order_param: int, nPrice: int, nQty: int
-    ) -> None:
-        pass
+        self,
+        signal_id: int,
+        time_get_signal: int,
+        order_param: int,
+        nPrice: int,
+        nQty: int,
+    ) -> None: ...
 
     @abstractmethod
     @override
-    def on_order_update(
+    def on_filled_order(
         self,
         timestamp: int,
-        order_param: int,
+        is_long: bool,
+        is_buy: bool,
         order_id: int,
+        client_order_id: int,
         nPrice: int,
         nQty: int,
         nCommission: int,
-    ) -> None:
-        pass
+    ) -> None: ...
+
+    @abstractmethod
+    @override
+    def on_canceled_order(
+        self,
+        timestamp: int,
+        is_long: bool,
+        is_buy: bool,
+        order_id: int,
+        client_order_id: int,
+        nPrice: int,
+        nQty: int,
+        nCommission: int,
+    ) -> None: ...

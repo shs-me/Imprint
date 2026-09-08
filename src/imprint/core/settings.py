@@ -2,7 +2,15 @@
 
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
 from multiprocessing import Process
-from typing import TypedDict
+from typing import Any, TypedDict
+
+
+class DumpMSG(TypedDict):
+    timestamp: str
+    type: str
+    message: str
+    traceback: list[str]
+    locals: dict[str, Any]
 
 
 class ProcsData(TypedDict):
@@ -13,6 +21,7 @@ class ProcsData(TypedDict):
     proc: Process
 
 
+@verify(CONTINUOUS, UNIQUE)
 class ProcsIds(IntEnum):
     streaming, engine, executing = 0, auto(), auto()
 
@@ -24,6 +33,7 @@ class KwgsKeys(IntEnum):
     ShmName, ShmSize = auto(), auto()
 
 
+@verify(CONTINUOUS, UNIQUE)
 class LogLevel(IntEnum):
     INFO, SUCCESS, WARNING, ERROR, CRITICAL = 0, auto(), auto(), auto(), auto()
 
@@ -74,47 +84,6 @@ class StatusCodes(IntEnum):
     ORDER_LIMIT = "Active Orders > order limit"
 
 
-class StateFlags(IntFlag):
-    """Bitmask flags marking Footprint, Bar, Indicator, and Auction market states."""
-
-    # Footprint States
-    # Footprint: RealTime
-    BID_DELTA_DOMINATION_FP, ASK_DELTA_DOMINATION_FP = auto(), auto()
-    # Footprint: Static
-    VWAP_FP, UPPER_BAND_FP, LOWER_BAND_FP = auto(), auto(), auto()
-    POC_FP, VAL_FP, VAH_FP = auto(), auto(), auto()
-    # Bar States
-    OPEN, CLOSE, HIGH, LOW = auto(), auto(), auto(), auto()
-    # Bar: Indicators
-    POC_BAR, VAL_BAR, VAH_BAR = auto(), auto(), auto()
-    # Bar: Context
-    UNFINISHED_AUCTION, FINISHED_AUCTION = auto(), auto()
-    ABSORPTION, EXHAUSTION = auto(), auto()
-    # Bid/Ask States
-    DELTA_DOMINATION, ZERO_PRINT, IMBALANCE = auto(), auto(), auto()
-    # Cluster States
-    BIG_TRADE = auto()
-
-
-class OrderFlag(IntFlag):
-    """Bitmask flags specifying order side, type, status, and position parameters."""
-
-    # Position Side
-    LONG, SHORT = auto(), auto()
-    # Side
-    BUY, SELL = auto(), auto()
-    # Type
-    LIMIT, MARKET = auto(), auto()
-    MARKET_TRIGGER, LIMIT_TRIGGER = auto(), auto()
-    # Status
-    NEW, FILLED, CANCELED = auto(), auto(), auto()
-    OCO = auto()
-
-
-class ReInitFlag(IntFlag):
-    session, idx, idy = auto(), auto(), auto()
-
-
 class Timeframe(IntEnum):
     """Bar aggregation time intervals in milliseconds."""
 
@@ -154,8 +123,8 @@ class EquityHeaders(IntEnum):
 class TradeParam(IntEnum):
     """Index mapping for trade execution record array columns."""
 
-    nPrice, nQty, timestamp, orderParam = 0, auto(), auto(), auto()
-    nCommission, orderID = auto(), auto()
+    nPrice, nQty, timestamp, order_param = 0, auto(), auto(), auto()
+    nCommission, order_id, client_order_id = auto(), auto(), auto()
     nMAE, nMFE = auto(), auto()
     ConstantCount = auto()
 
@@ -175,3 +144,47 @@ class BarHeaders(IntEnum):
     POC, VAH, VAL = auto(), auto(), auto()
     POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
     ConstantCount = auto()
+
+
+class StateFlags(IntFlag):
+    """Bitmask flags marking Footprint, Bar, Indicator, and Auction market states."""
+
+    # Footprint States
+    # Footprint: RealTime
+    BID_DELTA_DOMINATION_FP, ASK_DELTA_DOMINATION_FP = auto(), auto()
+    # Footprint: Static
+    VWAP_FP, UPPER_BAND_FP, LOWER_BAND_FP = auto(), auto(), auto()
+    POC_FP, VAL_FP, VAH_FP = auto(), auto(), auto()
+    # Bar States
+    OPEN, CLOSE, HIGH, LOW = auto(), auto(), auto(), auto()
+    # Bar: Indicators
+    POC_BAR, VAL_BAR, VAH_BAR = auto(), auto(), auto()
+    # Bar: Context
+    UNFINISHED_AUCTION, FINISHED_AUCTION = auto(), auto()
+    ABSORPTION, EXHAUSTION = auto(), auto()
+    # Bid/Ask States
+    DELTA_DOMINATION, ZERO_PRINT, IMBALANCE = auto(), auto(), auto()
+    # Cluster States
+    BIG_TRADE = auto()
+
+
+class OrderFlag(IntFlag):
+    """Bitmask flags specifying order side, type, status, and position parameters."""
+
+    # Position Side
+    LONG, SHORT = auto(), auto()
+    # Side
+    BUY, SELL = auto(), auto()
+    # Type
+    LIMIT, MARKET = auto(), auto()
+    MARKET_TRIGGER, LIMIT_TRIGGER = auto(), auto()
+    # Status
+    NEW, CANCEL, FILLED, CANCELED = auto(), auto(), auto(), auto()
+
+
+class ReInitFlag(IntFlag):
+    session, idx, idy = auto(), auto(), auto()
+
+
+class PositionFSM(IntFlag):
+    PENDING, OPEN, CLOSE, EMPTY = auto(), auto(), auto(), auto()

@@ -9,9 +9,8 @@ from numpy.typing import NDArray
 
 from imprint.core import constant as c
 from imprint.core.footprint.engine import FootprintEngine
-from imprint.core.ipc import NodeManager
+from imprint.core.ipc import NodeManager, node_handler
 from imprint.core.settings import StatusCodes as scs
-from imprint.core.utils.handlers import error_handler
 
 
 @dataclass(slots=True)
@@ -52,7 +51,7 @@ class Base(ABC):
         self.at_rid, self.at_wid = 0, 0
 
     @final
-    @error_handler(set_status_code=True)
+    @node_handler()
     def run(self) -> None:
         nPrice: int64
         nQty: int64

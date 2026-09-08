@@ -1,10 +1,13 @@
 import gc
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import override
+from functools import wraps
+from typing import ParamSpec, TypeVar, override
 
 from imprint.core.ipc.manager.base import Base
 from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils import DumpException
 
 
 @dataclass(slots=True)
@@ -17,6 +20,10 @@ class Node(Base):
     __wait_main_task: bool = field(default=False, init=False)
     __proc_status: memoryview = field(init=False)
     __task_status: memoryview = field(init=False)
+
+    __dumper: DumpException = field(
+        default_factory=lambda: DumpException(), init=False
+    )
 
     @override
     def __post_init__(self) -> None:
@@ -114,3 +121,28 @@ class Node(Base):
         """Clears task status code bitmask flags."""
 
         self.__task_status[0] &= ~(code)
+
+    def dump_exc(self, set_status_error: bool = False) -> None:
+        self.__dumper.dump_exception()
+        if set_status_error:
+            self.set_proc_sc(scs.ERROR, wait_main_task=set_status_error)
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def node_handler():
+    def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
+        @wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                manager: Node | None = getattr(args[0], "manager", None)
+                if manager:
+                    manager.dump_exc(set_status_error=True)
+
+        return wrapper
+
+    return decorator

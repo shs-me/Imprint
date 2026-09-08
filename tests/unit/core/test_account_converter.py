@@ -8,7 +8,7 @@ from pytest import MonkeyPatch, fixture
 
 from imprint.core import constant as c
 from imprint.core.configs import Account, RiskManagement, pct
-from imprint.core.exchange.account.converter import (
+from imprint.core.exchange_sim.account.converter import (
     Converter,
     to_long_nPnl,
     to_nMargin,

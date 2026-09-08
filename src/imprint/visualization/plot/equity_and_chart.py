@@ -15,7 +15,7 @@ from imprint.visualization.plot.equity import add_equity_traces
 from imprint.visualization.plot.utils import apply_dark_theme, empty_figure
 
 
-def plot_overview(stats: Stats) -> go.Figure:
+def plot_equity_and_chart(stats: Stats) -> go.Figure:
     if len(stats.eq_times) == 0 or len(stats.ohlc["time"]) == 0:
         return empty_figure()
 

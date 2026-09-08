@@ -4,8 +4,11 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint.core import constant as c
-from imprint.core.exchange.account.converter import to_long_nPnl, to_short_nPnl
-from imprint.core.exchange.account.position import update_position
+from imprint.core.exchange_sim.account.position import (
+    to_long_nPnl,
+    to_short_nPnl,
+    update_position,
+)
 from imprint.visualization.settings import CloseTrades, OpenTrades
 
 
@@ -41,8 +44,8 @@ def analyze_orders_history(
         nPrice: int = int(orders[row, c.TP_nPrice])
         nQty: int = int(orders[row, c.TP_nQty])
         timestamp: int = int(orders[row, c.TP_timestamp])
-        orderParam: int = int(orders[row, c.TP_orderParam])
-        nCommission: int = int(orders[row, c.TP_commission])
+        orderParam: int = int(orders[row, c.TP_order_param])
+        nCommission: int = int(orders[row, c.TP_nCommission])
         nMAE: int = int(orders[row, c.TP_nMAE])
         nMFE: int = int(orders[row, c.TP_nMFE])
 
@@ -54,9 +57,7 @@ def analyze_orders_history(
 
         if is_filled:
             sum_commission += nCommission / scale_mult
-            dt: datetime = datetime.fromtimestamp(
-                timestamp / 1000, tz=UTC
-            )
+            dt: datetime = datetime.fromtimestamp(timestamp / 1000, tz=UTC)
             price: float = nPrice / price_mult
             qty: float = nQty / qty_mult
             if is_open:

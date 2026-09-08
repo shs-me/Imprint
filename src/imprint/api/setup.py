@@ -28,7 +28,7 @@ from imprint.core.pipeline.utils.base_adapters import (
     UserStreamDecoder,
 )
 from imprint.core.settings import Timeframe
-from imprint.core.utils.handlers import error_handler
+from imprint.core.utils import error_handler
 
 __all__ = [
     "Account",
@@ -80,84 +80,104 @@ class Strategy:
 @final
 @dataclass(slots=True)
 class Imprint:
-    run_mode: type[Backtest | Live]
-    backtest: Backtest
-    live: Live
+    run_mode: Backtest | Live | tuple[type[Backtest | Live], Backtest, Live]
     symbol: str
     strategy: Strategy
     execution: type[BaseExecution]
 
     with_execution: bool = field(default=False)
 
-    coin: _Coin = field(init=False)
-    setup_core: _Setup = field(init=False)
-
-    kwargs: dict[str, _Cfg] = field(default_factory=dict, init=False)
+    __coin: _Coin = field(init=False)
+    __setup_core: _Setup = field(init=False)
+    __kwargs: dict[str, _Cfg] = field(default_factory=dict, init=False)
+    __backtest: Backtest = field(init=False)
+    __live: Live = field(init=False)
 
     def __post_init__(self) -> None:
         args: list[_Cfg] = [
             self.strategy.risk_management,
             self.strategy.footprint,
         ]
-        self.coin = _Coin(symbol=self.symbol)
-        self.setup_core = _Setup(
+        self.__coin = _Coin(symbol=self.symbol)
+        self.__setup_core = _Setup(
             algorithm_module=self.strategy.algorithm.__module__,
             algorithm_class_name=self.strategy.algorithm.__name__,
         )
 
-        if self.run_mode is Backtest:
-            self.setup_core.backtest_start_date = (
-                self.backtest.backtest_start_date
-            )
-            self.setup_core.backtest_end_date = self.backtest.backtest_end_date
-            self.setup_core.backtesting = True
-
-            self.coin.tick_size = self.backtest.tick_size
-            self.coin.lot_size = self.backtest.lot_size
-
-            args.append(self.coin)
-            args.append(self.backtest.account)
-
+        if self.is_backtest_mode:
+            self.__backtest_setup()
+            args.append(self.__backtest.account)
         else:
-            self.setup_core.agg_trades_decoder_module = (
-                self.live.agg_trades_decoder.__module__
-            )
-            self.setup_core.agg_trades_decoder_class_name = (
-                self.live.agg_trades_decoder.__name__
-            )
-            self.setup_core.user_stream_decoder_module = (
-                self.live.user_stream_decoder.__module__
-            )
-            self.setup_core.user_stream_decoder_class_name = (
-                self.live.user_stream_decoder.__name__
-            )
-            self.setup_core.order_encoder_module = (
-                self.live.order_encoder.__module__
-            )
-            self.setup_core.order_encoder_class_name = (
-                self.live.order_encoder.__name__
-            )
+            self.__live_setup()
+            args.append(self.__live.connector)
 
-            self.setup_core.backtesting = False
-
-            args.append(self.coin)
-            args.append(self.live.connector)
+        args.append(self.__coin)
 
         if self.with_execution:
-            self.setup_core.execution = True
-            self.setup_core.execution_module = self.execution.__module__
-            self.setup_core.execution_class_name = self.execution.__name__
+            self.__setup_core.execution = True
+            self.__setup_core.execution_module = self.execution.__module__
+            self.__setup_core.execution_class_name = self.execution.__name__
         else:
-            self.setup_core.execution = False
+            self.__setup_core.execution = False
 
-        args.append(self.setup_core)
+        args.append(self.__setup_core)
 
         for obj in args:
-            self.kwargs[obj.__class__.__name__] = obj
+            self.__kwargs[obj.__class__.__name__] = obj
+
+    @property
+    def is_backtest_mode(self) -> bool:
+        if (not hasattr(self, f"_{Imprint.__name__}__backtest")) and (
+            not hasattr(self, f"_{Imprint.__name__}__live")
+        ):
+            if isinstance(self.run_mode, tuple):
+                if self.run_mode[0] is Backtest:
+                    self.__backtest = self.run_mode[1]
+                else:
+                    self.__live = self.run_mode[2]
+            else:
+                if isinstance(self.run_mode, Backtest):
+                    self.__backtest = self.run_mode
+                else:
+                    self.__live = self.run_mode
+
+        return hasattr(self, f"_{Imprint.__name__}__backtest")
+
+    def __backtest_setup(self) -> None:
+        self.__setup_core.backtest_start_date = (
+            self.__backtest.backtest_start_date
+        )
+        self.__setup_core.backtest_end_date = self.__backtest.backtest_end_date
+        self.__setup_core.backtesting = True
+
+        self.__coin.tick_size = self.__backtest.tick_size
+        self.__coin.lot_size = self.__backtest.lot_size
+
+    def __live_setup(self) -> None:
+        self.__setup_core.agg_trades_decoder_module = (
+            self.__live.agg_trades_decoder.__module__
+        )
+        self.__setup_core.agg_trades_decoder_class_name = (
+            self.__live.agg_trades_decoder.__name__
+        )
+        self.__setup_core.user_stream_decoder_module = (
+            self.__live.user_stream_decoder.__module__
+        )
+        self.__setup_core.user_stream_decoder_class_name = (
+            self.__live.user_stream_decoder.__name__
+        )
+        self.__setup_core.order_encoder_module = (
+            self.__live.order_encoder.__module__
+        )
+        self.__setup_core.order_encoder_class_name = (
+            self.__live.order_encoder.__name__
+        )
+
+        self.__setup_core.backtesting = False
 
     @error_handler()
     def run_vis(self, auto_open: bool = True) -> None:
-        if self.run_mode is Backtest:
+        if self.is_backtest_mode:
             self.__base_logger()
 
             from imprint.core.constant import (
@@ -169,16 +189,16 @@ class Imprint:
 
             Render(
                 footprint_headers_path=BASE_FOOTPRINT_DUMP_PATH,
-                symbol=self.coin.symbol,
-                start_date_str=self.backtest.backtest_start_date,
-                end_date_str=self.backtest.backtest_end_date,
+                symbol=self.__coin.symbol,
+                start_date_str=self.__backtest.backtest_start_date,
+                end_date_str=self.__backtest.backtest_end_date,
                 equity_history_path=EQUITY_HISTORY_DUMP_PATH,
                 orders_history_path=ORDERS_HISTORY_DUMP_PATH,
-                start_balance=self.backtest.account.balance,
-                price_mult=self.coin.price_mult,
-                qty_mult=self.coin.qty_mult,
-                scale_mult=self.backtest.account.scale_mult,
-                leverage=self.backtest.account.leverage,
+                start_balance=self.__backtest.account.balance,
+                price_mult=self.__coin.price_mult,
+                qty_mult=self.__coin.qty_mult,
+                scale_mult=self.__backtest.account.scale_mult,
+                leverage=self.__backtest.account.leverage,
                 timeframe=self.strategy.footprint.timeframe,
                 auto_open=auto_open,
             )
@@ -190,38 +210,25 @@ class Imprint:
 
         from imprint.core.main import run
 
-        run(**self.kwargs)
+        run(**self.__kwargs)
 
     def __init_data(self) -> None:
         self.__base_logger()
 
-        from imprint.core.utils.tools import (
-            download_agg_trades_history,
-            to_date,
-        )
+        from imprint.core.utils import DownloadAggTradesHistory
 
-        if self.run_mode is Backtest:
-            try:
-                startDate, endDate = to_date(
-                    [
-                        self.setup_core.backtest_start_date,
-                        self.setup_core.backtest_end_date,
-                    ]
-                )
-            except ValueError as e:
-                return logger.error(f"Run Core Failed | {e}")
-
-            download_agg_trades_history(
+        if self.is_backtest_mode:
+            DownloadAggTradesHistory(
                 self.symbol,
-                startDate,
-                endDate,
-                self.coin.price_mult,
-                self.coin.qty_mult,
-            )
+                self.__backtest.backtest_start_date,
+                self.__backtest.backtest_end_date,
+                self.__coin.price_mult,
+                self.__coin.qty_mult,
+            ).download()
         else:
             # rest = RestAgent(setup.symbol, setup.run_mode.connector)
-            self.coin.tick_size = "0.01"  # rest.get_tick_size()
-            self.coin.lot_size = "0.001"  # rest.get_lot_size()
+            self.__coin.tick_size = "0.01"  # rest.get_tick_size()
+            self.__coin.lot_size = "0.001"  # rest.get_lot_size()
 
     def __base_logger(self) -> None:
         logger.remove()
@@ -238,7 +245,7 @@ class Imprint:
         logger.add(
             CORE_LOG_PATH,
             format=(
-                ("{elapsed} | " if self.setup_core.backtesting else "")
+                ("{elapsed} | " if self.is_backtest_mode else "")
                 + "{extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
             ),
             rotation="10 MB",
