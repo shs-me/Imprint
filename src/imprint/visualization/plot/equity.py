@@ -1,14 +1,17 @@
 import numpy as np
-import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
 from numpy import float64
 from numpy.typing import NDArray
+from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
+    Figure,
+    Scatter,
+)
 
 from imprint.visualization.analyze import Stats
-from imprint.visualization.analyze.resample import ResampledData
+from imprint.visualization.settings import ResampledData
 
 
 def add_equity_traces(
-    fig: go.Figure,
+    fig: Figure,
     stats: Stats,
     tf_series: list[ResampledData],
     trace_tf_map: list[int | None],
@@ -22,78 +25,46 @@ def add_equity_traces(
             tf_data["eq_close"], base_balance, dtype=float64
         )
 
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
-                x=tf_data["eq_times"],
-                y=base_line_eq,
-                mode="lines",
-                line={"color": "rgba(0,0,0,0)", "width": 0},
-                showlegend=False,
-                hoverinfo="skip",
-                visible=is_active,
-            ),
-            row=1,
-            col=1,
-            secondary_y=False,
-        )
-        trace_tf_map.append(tf_idx)
-
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
-                x=tf_data["eq_times"],
-                y=np.maximum(tf_data["eq_close"], base_balance),
-                mode="lines",
-                line={"color": "rgba(0,0,0,0)", "width": 0},
-                fill="tonexty",
-                fillcolor="rgba(0, 230, 118, 0.16)",
-                showlegend=False,
-                hoverinfo="skip",
-                visible=is_active,
-            ),
-            row=1,
-            col=1,
-            secondary_y=False,
-        )
-        trace_tf_map.append(tf_idx)
-
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
-                x=tf_data["eq_times"],
-                y=base_line_eq,
-                mode="lines",
-                line={"color": "rgba(0,0,0,0)", "width": 0},
-                showlegend=False,
-                hoverinfo="skip",
-                visible=is_active,
-            ),
-            row=1,
-            col=1,
-            secondary_y=False,
-        )
-        trace_tf_map.append(tf_idx)
-
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
-                x=tf_data["eq_times"],
-                y=np.minimum(tf_data["eq_close"], base_balance),
-                mode="lines",
-                line={"color": "rgba(0,0,0,0)", "width": 0},
-                fill="tonexty",
-                fillcolor="rgba(255, 23, 68, 0.16)",
-                showlegend=False,
-                hoverinfo="skip",
-                visible=is_active,
-            ),
-            row=1,
-            col=1,
-            secondary_y=False,
-        )
-        trace_tf_map.append(tf_idx)
+        for y, fill, fill_color, secondary_y in zip(
+            [
+                base_line_eq,
+                np.maximum(tf_data["eq_close"], base_balance),
+                base_line_eq,
+                np.minimum(tf_data["eq_close"], base_balance),
+                tf_data["rel_equity_pct"],
+            ],
+            [None, "tonexty", None, "tonexty", None],
+            [
+                None,
+                "rgba(0, 230, 118, 0.16)",
+                None,
+                "rgba(255, 23, 68, 0.16)",
+                None,
+            ],
+            [False, False, False, False, True],
+        ):
+            fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
+                Scatter(
+                    x=tf_data["eq_times"],
+                    y=y,
+                    mode="lines",
+                    line={"color": "rgba(0,0,0,0)", "width": 0},
+                    fill=fill,
+                    fillcolor=fill_color,
+                    showlegend=False,
+                    hoverinfo="skip",
+                    visible=is_active,
+                ),
+                row=1,
+                col=1,
+                secondary_y=secondary_y,
+            )
+            trace_tf_map.append(tf_idx)
 
         # Dynamic Drawdown Line with legend
         if tf_data["dynamic_drawdowns"]:
             fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-                go.Scatter(
+                Scatter(
                     x=tf_data["eq_times"],
                     y=tf_data["dynamic_drawdowns"],
                     mode="lines",
@@ -113,7 +84,7 @@ def add_equity_traces(
 
         # Equity Line
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
+            Scatter(
                 x=tf_data["eq_times"],
                 y=tf_data["eq_close"],
                 mode="lines",
@@ -130,24 +101,8 @@ def add_equity_traces(
         )
         trace_tf_map.append(tf_idx)
 
-        fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
-                x=tf_data["eq_times"],
-                y=tf_data["rel_equity_pct"],
-                mode="lines",
-                line={"color": "rgba(0,0,0,0)", "width": 0},
-                showlegend=False,
-                hoverinfo="skip",
-                visible=is_active,
-            ),
-            row=1,
-            col=1,
-            secondary_y=True,
-        )
-        trace_tf_map.append(tf_idx)
-
     fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-        go.Scatter(
+        Scatter(
             x=[stats.eq_times[0], stats.eq_times[-1]],
             y=[base_balance, base_balance],
             mode="lines",
@@ -164,7 +119,7 @@ def add_equity_traces(
     if stats.static_drawdowns:
         times_close = [tc["time"] for tc in stats.trades_close]
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
+            Scatter(
                 x=times_close,
                 y=stats.static_drawdowns,
                 mode="lines",

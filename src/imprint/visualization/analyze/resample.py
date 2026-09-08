@@ -1,13 +1,11 @@
 """Multi-timeframe bar and equity aggregation module."""
 
-from typing import TypedDict
-
 import numpy as np
 from numpy import datetime64, float64, int64
 from numpy.typing import NDArray
 
 from imprint.visualization.analyze.metrics import calculate_dynamic_drawdown
-from imprint.visualization.settings import OHLC
+from imprint.visualization.settings import OHLC, ResampledData
 
 BAR_THRESHOLD: int = 144
 
@@ -23,19 +21,29 @@ TIMEFRAME_STEPS: list[tuple[int, str]] = [
     (7 * 24 * 60 * 60 * 1000, "1w"),
 ]
 
+TIMEFRAME_MAP: dict[int, str] = dict(TIMEFRAME_STEPS)
 
-class ResampledData(TypedDict):
-    timeframe_ms: int
-    timeframe_name: str
-    ohlc: OHLC
-    eq_times: NDArray[datetime64]
-    eq_open: NDArray[float64]
-    eq_high: NDArray[float64]
-    eq_low: NDArray[float64]
-    eq_close: NDArray[float64]
-    dynamic_drawdowns: list[float64]
-    rel_equity_pct: NDArray[float64]
-    rel_price_pct: NDArray[float64]
+
+def _get_resample_indices(
+    times: NDArray[datetime64], target_tf_ms: int
+) -> tuple[NDArray[datetime64], NDArray[int64], NDArray[int64]]:
+    """Helper to calculate unique time buckets and boundary indices."""
+    times_ms: NDArray[int64] = times.astype(int64)
+    bucket_keys: NDArray[int64] = (times_ms // target_tf_ms) * target_tf_ms
+    unique_buckets, first_indices = np.unique(bucket_keys, return_index=True)
+    last_indices: NDArray[int64] = np.append(
+        first_indices[1:] - 1, len(times_ms) - 1
+    )
+    return unique_buckets.astype("datetime64[ms]"), first_indices, last_indices
+
+
+def _calc_rel_pct(
+    values: NDArray[float64], base: float | float64
+) -> NDArray[float64]:
+    """Helper to calculate percentage change relative to a base value."""
+    if len(values) == 0:
+        return np.array([], dtype=float64)
+    return (values - base) / base * 100.0
 
 
 def resample_ohlc(ohlc: OHLC, target_tf_ms: int) -> OHLC:
@@ -49,24 +57,15 @@ def resample_ohlc(ohlc: OHLC, target_tf_ms: int) -> OHLC:
             "time": np.array([], dtype="datetime64[ms]"),
         }
 
-    times_ms: NDArray[int64] = ohlc["time"].astype(int64)
-    bucket_keys: NDArray[int64] = (times_ms // target_tf_ms) * target_tf_ms
-    unique_buckets, first_indices = np.unique(bucket_keys, return_index=True)
-    last_indices: NDArray[int64] = np.append(
-        first_indices[1:] - 1, len(times_ms) - 1
+    times, first_indices, last_indices = _get_resample_indices(
+        ohlc["time"], target_tf_ms
     )
 
-    opens: NDArray[float64] = ohlc["open"][first_indices]
-    closes: NDArray[float64] = ohlc["close"][last_indices]
-    highs: NDArray[float64] = np.maximum.reduceat(ohlc["high"], first_indices)
-    lows: NDArray[float64] = np.minimum.reduceat(ohlc["low"], first_indices)
-    times: NDArray[datetime64] = unique_buckets.astype("datetime64[ms]")
-
     return {
-        "open": opens,
-        "high": highs,
-        "low": lows,
-        "close": closes,
+        "open": ohlc["open"][first_indices],
+        "high": np.maximum.reduceat(ohlc["high"], first_indices),
+        "low": np.minimum.reduceat(ohlc["low"], first_indices),
+        "close": ohlc["close"][last_indices],
         "time": times,
     }
 
@@ -100,23 +99,17 @@ def resample_equity_data(
             np.array([], dtype=float64),
         )
 
-    times_ms: NDArray[int64] = eq_times.astype(int64)
-    bucket_keys: NDArray[int64] = (times_ms // target_tf_ms) * target_tf_ms
-    unique_buckets, first_indices = np.unique(bucket_keys, return_index=True)
-    last_indices: NDArray[int64] = np.append(
-        first_indices[1:] - 1, len(times_ms) - 1
+    res_times, first_indices, last_indices = _get_resample_indices(
+        eq_times, target_tf_ms
     )
 
     res_open: NDArray[float64] = eq_open[first_indices]
     res_close: NDArray[float64] = eq_close[last_indices]
     res_high: NDArray[float64] = np.maximum.reduceat(eq_high, first_indices)
     res_low: NDArray[float64] = np.minimum.reduceat(eq_low, first_indices)
-    res_times: NDArray[datetime64] = unique_buckets.astype("datetime64[ms]")
 
     _, _, dds = calculate_dynamic_drawdown(start_balance, res_high, res_low)
-    rel_pct: NDArray[float64] = (
-        (res_close - start_balance) / start_balance * 100.0
-    )
+    rel_pct: NDArray[float64] = _calc_rel_pct(res_close, start_balance)
 
     return res_times, res_open, res_high, res_low, res_close, dds, rel_pct
 
@@ -133,24 +126,10 @@ def build_resampled_timeframes(
     dynamic_drawdowns: list[float64],
 ) -> list[ResampledData]:
     """Builds resampled timeframe hierarchy based on the > 144 bar rule."""
-    base_name: str = "Base"
-    for ms, name in TIMEFRAME_STEPS:
-        if ms == base_tf_ms:
-            base_name = name
-            break
+    base_name: str = TIMEFRAME_MAP.get(base_tf_ms, "Base")
 
     base_p: float64 = (
         ohlc["close"][0] if len(ohlc["close"]) > 0 else float64(1.0)
-    )
-    rel_price_base: NDArray[float64] = (
-        ((ohlc["close"] - base_p) / base_p * 100.0)
-        if len(ohlc["close"]) > 0
-        else np.array([], dtype=float64)
-    )
-    rel_eq_base: NDArray[float64] = (
-        ((eq_close - start_balance) / start_balance * 100.0)
-        if len(eq_close) > 0
-        else np.array([], dtype=float64)
     )
 
     resampled_list: list[ResampledData] = [
@@ -164,25 +143,18 @@ def build_resampled_timeframes(
             "eq_low": eq_low,
             "eq_close": eq_close,
             "dynamic_drawdowns": dynamic_drawdowns,
-            "rel_equity_pct": rel_eq_base,
-            "rel_price_pct": rel_price_base,
+            "rel_equity_pct": _calc_rel_pct(eq_close, start_balance),
+            "rel_price_pct": _calc_rel_pct(ohlc["close"], base_p),
         }
     ]
 
-    current_bars: int = len(ohlc["time"])
-    if current_bars <= BAR_THRESHOLD:
+    if len(ohlc["time"]) <= BAR_THRESHOLD:
         return resampled_list
 
-    start_idx: int = 0
-    for idx, (ms, _) in enumerate(TIMEFRAME_STEPS):
-        if ms > base_tf_ms:
-            start_idx = idx
-            break
-    else:
-        return resampled_list
+    for step_ms, step_name in TIMEFRAME_STEPS:
+        if step_ms <= base_tf_ms:
+            continue
 
-    for step_idx in range(start_idx, len(TIMEFRAME_STEPS)):
-        step_ms, step_name = TIMEFRAME_STEPS[step_idx]
         grouped_ohlc: OHLC = resample_ohlc(ohlc, step_ms)
         bar_count: int = len(grouped_ohlc["time"])
         if bar_count == 0:
@@ -198,10 +170,6 @@ def build_resampled_timeframes(
             target_tf_ms=step_ms,
         )
 
-        rel_p: NDArray[float64] = (
-            (grouped_ohlc["close"] - base_p) / base_p * 100.0
-        )
-
         resampled_list.append(
             {
                 "timeframe_ms": step_ms,
@@ -214,7 +182,7 @@ def build_resampled_timeframes(
                 "eq_close": eq_c,
                 "dynamic_drawdowns": dds,
                 "rel_equity_pct": rel_eq,
-                "rel_price_pct": rel_p,
+                "rel_price_pct": _calc_rel_pct(grouped_ohlc["close"], base_p),
             }
         )
 

@@ -1,6 +1,8 @@
 from typing import Any
 
-import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
+from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
+    Figure,
+)
 
 DARK_LAYOUT: dict[str, Any] = {
     "paper_bgcolor": "#121212",
@@ -25,7 +27,7 @@ def get_usd(val: float) -> str:
     return "+$" if val >= 0 else "-$"
 
 
-def apply_dark_theme(fig: go.Figure, title: str) -> go.Figure:
+def apply_dark_theme(fig: Figure, title: str) -> Figure:
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
         **DARK_LAYOUT,
         title={
@@ -70,8 +72,8 @@ def apply_dark_theme(fig: go.Figure, title: str) -> go.Figure:
     return fig
 
 
-def empty_figure(text: str = "No Trades To Display") -> go.Figure:
-    fig = go.Figure()
+def empty_figure(text: str = "No Trades To Display") -> Figure:
+    fig = Figure()
     fig.add_annotation(  # pyright: ignore[reportUnknownMemberType]
         text=text,
         xref="paper",

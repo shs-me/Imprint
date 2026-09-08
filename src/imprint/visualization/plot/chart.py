@@ -1,13 +1,20 @@
-import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
 from numpy import float64
+from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
+    Candlestick,
+    Figure,
+    Scatter,
+)
 
 from imprint.visualization.analyze import Stats
-from imprint.visualization.analyze.resample import ResampledData
-from imprint.visualization.settings import CloseTrades, OpenTrades
+from imprint.visualization.settings import (
+    CloseTrades,
+    OpenTrades,
+    ResampledData,
+)
 
 
 def add_chart_traces(
-    fig: go.Figure,
+    fig: Figure,
     stats: Stats,
     tf_series: list[ResampledData],
     trace_tf_map: list[int | None],
@@ -20,7 +27,7 @@ def add_chart_traces(
 
         # Candle
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Candlestick(
+            Candlestick(
                 x=tf_data["ohlc"]["time"],
                 open=tf_data["ohlc"]["open"],
                 high=tf_data["ohlc"]["high"],
@@ -42,7 +49,7 @@ def add_chart_traces(
 
         # Right Y tick in %
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
+            Scatter(
                 x=tf_data["ohlc"]["time"],
                 y=tf_data["rel_price_pct"],
                 mode="lines",
@@ -59,7 +66,7 @@ def add_chart_traces(
 
     # Base Price Line
     fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-        go.Scatter(
+        Scatter(
             x=[stats.ohlc["time"][0], stats.ohlc["time"][-1]],
             y=[float(start_price), float(start_price)],
             mode="lines",
@@ -79,7 +86,7 @@ def add_chart_traces(
     ]
     if buy_long:
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
+            Scatter(
                 x=[to["time"] for to in buy_long],
                 y=[to["price"] for to in buy_long],
                 mode="markers",
@@ -104,7 +111,7 @@ def add_chart_traces(
     ]
     if sell_short:
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
+            Scatter(
                 x=[to["time"] for to in sell_short],
                 y=[to["price"] for to in sell_short],
                 mode="markers",
@@ -129,7 +136,7 @@ def add_chart_traces(
     ]
     if close_long:
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
+            Scatter(
                 x=[tc["time"] for tc in close_long],
                 y=[tc["price"] for tc in close_long],
                 mode="markers",
@@ -155,7 +162,7 @@ def add_chart_traces(
     ]
     if close_short:
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
-            go.Scatter(
+            Scatter(
                 x=[tc["time"] for tc in close_short],
                 y=[tc["price"] for tc in close_short],
                 mode="markers",

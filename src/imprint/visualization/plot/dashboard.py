@@ -1,4 +1,7 @@
-import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
+from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
+    Figure,
+    Table,
+)
 
 from imprint.visualization.analyze import Stats
 from imprint.visualization.plot.utils import (
@@ -8,7 +11,7 @@ from imprint.visualization.plot.utils import (
 )
 
 
-def plot_info_dashboard(stats: Stats) -> go.Figure:
+def plot_info_dashboard(stats: Stats) -> Figure:
     if not stats.trades_close:
         return empty_figure()
 
@@ -136,9 +139,9 @@ def plot_info_dashboard(stats: Stats) -> go.Figure:
         "#1A2327" if "---" in label else "#121212" for label in r_labels
     ]
 
-    fig = go.Figure(
+    fig = Figure(
         data=[
-            go.Table(
+            Table(
                 columnorder=[1, 2, 3, 4],
                 columnwidth=[260, 200, 260, 200],
                 header={

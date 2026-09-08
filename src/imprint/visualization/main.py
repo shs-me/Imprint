@@ -5,10 +5,12 @@ from datetime import UTC, date, datetime, timedelta
 from importlib import resources
 
 import numpy as np
-import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
 from loguru import logger
 from numpy import int64
 from numpy.typing import NDArray
+from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
+    Figure,
+)
 
 from imprint.core import constant as c
 from imprint.core.settings import Timeframe
@@ -133,7 +135,7 @@ class Render:
         }
         return ohlc
 
-    def to_html_div(self, fig: go.Figure) -> str:
+    def to_html_div(self, fig: Figure) -> str:
         return fig.to_html(  # pyright: ignore[reportUnknownMemberType]
             full_html=False,
             include_plotlyjs=False,

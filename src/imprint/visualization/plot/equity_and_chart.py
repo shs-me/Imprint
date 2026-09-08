@@ -1,25 +1,24 @@
 from typing import Any
 
-import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
+from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
+    Figure,
+)
 from plotly.subplots import (  # pyright: ignore[reportMissingTypeStubs]
     make_subplots,  # pyright: ignore[reportUnknownVariableType]
 )
 
-from imprint.visualization.analyze import Stats
-from imprint.visualization.analyze.resample import (
-    ResampledData,
-    build_resampled_timeframes,
-)
+from imprint.visualization.analyze import Stats, build_resampled_timeframes
 from imprint.visualization.plot.chart import add_chart_traces
 from imprint.visualization.plot.equity import add_equity_traces
 from imprint.visualization.plot.utils import apply_dark_theme, empty_figure
+from imprint.visualization.settings import ResampledData
 
 
-def plot_equity_and_chart(stats: Stats) -> go.Figure:
+def plot_equity_and_chart(stats: Stats) -> Figure:
     if len(stats.eq_times) == 0 or len(stats.ohlc["time"]) == 0:
         return empty_figure()
 
-    fig: go.Figure = make_subplots(
+    fig: Figure = make_subplots(
         rows=2,
         cols=1,
         shared_xaxes=True,
@@ -71,57 +70,42 @@ def plot_equity_and_chart(stats: Stats) -> go.Figure:
                 }
             )
 
+    # Common layout styles for y-axes
+    base_axis = {
+        "ticks": "outside",
+        "ticklen": 6,
+        "tickfont": {"size": 11, "color": "#CFD8DC"},
+        "showline": True,
+        "linecolor": "#424242",
+    }
+
+    def make_left_axis(title: str, fmt: str) -> dict[str, Any]:
+        return {
+            **base_axis,
+            "title_text": title,
+            "title_standoff": 8,
+            "showgrid": True,
+            "tickformat": fmt,
+            "mirror": True,
+        }
+
+    def make_right_axis() -> dict[str, Any]:
+        return {
+            **base_axis,
+            "title_text": "",
+            "side": "right",
+            "ticksuffix": "%",
+            "tickformat": "+.1f",
+            "showgrid": False,
+        }
+
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
         autosize=True,
         margin={"l": 45, "r": 45, "t": 32, "b": 22},
-        yaxis={  # Left Equity
-            "title_text": "Balance (Left $ | Right %)",
-            "title_standoff": 8,
-            "showgrid": True,
-            "tickformat": ",.0f",
-            "ticks": "outside",
-            "ticklen": 6,
-            "tickfont": {"size": 11, "color": "#CFD8DC"},
-            "showline": True,
-            "mirror": True,
-            "linecolor": "#424242",
-        },
-        yaxis2={  # Right Equity
-            "title_text": "",
-            "side": "right",
-            "ticksuffix": "%",
-            "ticks": "outside",
-            "ticklen": 6,
-            "tickfont": {"size": 11, "color": "#CFD8DC"},
-            "showgrid": False,
-            "tickformat": "+.1f",
-            "showline": True,
-            "linecolor": "#424242",
-        },
-        yaxis3={  # Left Chart
-            "title_text": "Price (Left $ | Right %)",
-            "title_standoff": 8,
-            "showgrid": True,
-            "tickformat": ",.2f",
-            "ticks": "outside",
-            "ticklen": 6,
-            "tickfont": {"size": 11, "color": "#CFD8DC"},
-            "showline": True,
-            "mirror": True,
-            "linecolor": "#424242",
-        },
-        yaxis4={  # Right Chart
-            "title_text": "",
-            "side": "right",
-            "ticksuffix": "%",
-            "ticks": "outside",
-            "ticklen": 6,
-            "tickfont": {"size": 11, "color": "#CFD8DC"},
-            "showgrid": False,
-            "tickformat": "+.1f",
-            "showline": True,
-            "linecolor": "#424242",
-        },
+        yaxis=make_left_axis("Balance (Left $ | Right %)", ",.0f"),
+        yaxis2=make_right_axis(),
+        yaxis3=make_left_axis("Price (Left $ | Right %)", ",.2f"),
+        yaxis4=make_right_axis(),
         yaxis5={  # Right Dynamic Drawdown In Equity
             "title": "",
             "tickfont": {"color": "#FF5252", "size": 10},
@@ -169,41 +153,17 @@ def plot_equity_and_chart(stats: Stats) -> go.Figure:
         },
     )
 
-    updatemenus_list: list[dict[str, Any]] = []
-    # 1. Left Buttons
-    if buttons:
-        updatemenus_list.append(
-            {
-                "type": "buttons",
-                "direction": "right",
-                "active": 0,
-                "showactive": False,
-                "x": 0.0,
-                "xanchor": "left",
-                "y": 1.05,
-                "yanchor": "bottom",
-                "bgcolor": "#1E1E1E",
-                "bordercolor": "#37474F",
-                "borderwidth": 1,
-                "pad": {"r": 4, "t": 2, "b": 2},
-                "font": {
-                    "color": "#00E5FF",
-                    "size": 10,
-                    "family": "'Courier New', Consolas, monospace",
-                },
-                "buttons": buttons,
-            }
-        )
-
-    # 2. Right Buttons
-    updatemenus_list.append(
-        {
+    # Common styling helper for updatemenu buttons
+    def make_updatemenu(
+        x: float, xanchor: str, buttons_list: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        return {
             "type": "buttons",
             "direction": "right",
             "active": 0,
             "showactive": False,
-            "x": 1.0,
-            "xanchor": "right",
+            "x": x,
+            "xanchor": xanchor,
             "y": 1.05,
             "yanchor": "bottom",
             "bgcolor": "#1E1E1E",
@@ -215,7 +175,18 @@ def plot_equity_and_chart(stats: Stats) -> go.Figure:
                 "size": 10,
                 "family": "'Courier New', Consolas, monospace",
             },
-            "buttons": [
+            "buttons": buttons_list,
+        }
+
+    updatemenus_list: list[dict[str, Any]] = []
+    if buttons:
+        updatemenus_list.append(make_updatemenu(0.0, "left", buttons))
+
+    updatemenus_list.append(
+        make_updatemenu(
+            1.0,
+            "right",
+            [
                 {
                     "label": "144 Bars",
                     "method": "relayout",
@@ -241,7 +212,7 @@ def plot_equity_and_chart(stats: Stats) -> go.Figure:
                     ],
                 },
             ],
-        }
+        )
     )
 
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
