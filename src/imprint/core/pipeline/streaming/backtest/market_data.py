@@ -9,8 +9,8 @@ from numpy.typing import NDArray
 
 from imprint.core.ipc import node_handler
 from imprint.core.pipeline.streaming.base import Base
-from imprint.core.pipeline.utils.base_data_prepare import BaseDataPrepare
 from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils import BaseDataPrepare
 
 
 @dataclass(slots=True)

@@ -5,8 +5,8 @@ from typing import override
 
 from imprint.core.footprint import SyncWithExecution
 from imprint.core.pipeline.engine.base import Base
-from imprint.core.pipeline.utils.base_adapters import AggTradesDecoder
 from imprint.core.settings import StatusCodes as scs
+from imprint.core.utils import AggTradesDecoder
 
 
 @dataclass(slots=True)

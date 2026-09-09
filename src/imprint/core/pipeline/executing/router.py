@@ -6,11 +6,8 @@ from typing import override
 from imprint.core.account import Account
 from imprint.core.ipc import NodeManager
 from imprint.core.pipeline.executing.backtest import Backtest as BacktestAgent
-from imprint.core.pipeline.executing.base import (
-    ExecutionProtocol,
-    SendOrderMethodSignature,
-)
 from imprint.core.pipeline.executing.live import Live as LiveAgent
+from imprint.core.settings import ExecutionProtocol, SendOrderMethodSignature
 
 
 @dataclass

@@ -7,7 +7,7 @@ from typing import ParamSpec, TypeVar, override
 
 from imprint.core.ipc.manager.base import Base
 from imprint.core.settings import StatusCodes as scs
-from imprint.core.utils import DumpException
+from imprint.core.utils.exc_dumper import DumpException
 
 
 @dataclass(slots=True)

@@ -16,13 +16,10 @@ from imprint.core.configs import Configuration as _Cfg
 from imprint.core.configs import Setup as _Setup
 from imprint.core.footprint import FootprintEngine
 from imprint.core.pipeline.executing import BaseExecution
-from imprint.core.pipeline.utils.base_adapters import (
-    AggTradesDecoder,
-    OrderEncoder,
-    UserStreamDecoder,
-)
 from imprint.core.settings import Timeframe
-from imprint.core.utils import error_handler
+from imprint.core.utils import AggTradesDecoder, OrderEncoder, UserStreamDecoder
+from imprint.core.utils.agg_trades_history_downloader import DownloadError
+from imprint.core.utils.exc_dumper import error_handler
 
 __all__ = [
     "Account",
@@ -212,13 +209,18 @@ class Imprint:
         from imprint.core.utils import DownloadAggTradesHistory
 
         if self.is_backtest_mode:
-            DownloadAggTradesHistory(
-                self.symbol,
-                self.__backtest.backtest_start_date,
-                self.__backtest.backtest_end_date,
-                self.__coin.price_mult,
-                self.__coin.qty_mult,
-            ).download()
+            try:
+                DownloadAggTradesHistory(
+                    logger=logger,
+                    symbol=self.symbol,
+                    start_date_str=self.__backtest.backtest_start_date,
+                    end_date_str=self.__backtest.backtest_end_date,
+                    price_mult=self.__coin.price_mult,
+                    qty_mult=self.__coin.qty_mult,
+                ).download()
+            except DownloadError as e:
+                return logger.error(f"Init data failed: {e}")
+
         else:
             # rest = RestAgent(setup.symbol, setup.run_mode.connector)
             self.__coin.tick_size = "0.01"  # rest.get_tick_size()

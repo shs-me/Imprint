@@ -1,57 +1,13 @@
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Protocol, final
+from typing import final
 
 from imprint.core import constant as c
 from imprint.core.account import Account
 from imprint.core.ipc import NodeManager, node_handler
-from imprint.core.settings import PositionFSM
+from imprint.core.settings import ExecutionProtocol, PositionFSM
 from imprint.core.settings import StatusCodes as scs
-
-
-class ExecutionProtocol(Protocol):
-    def on_signal(
-        self,
-        signal_id: int,
-        time_get_signal: int,
-        order_param: int,
-        nPrice: int,
-        nQty: int,
-    ) -> None: ...
-    def on_filled_order(
-        self,
-        timestamp: int,
-        is_long: bool,
-        is_buy: bool,
-        order_id: int,
-        client_order_id: int,
-        nPrice: int,
-        nQty: int,
-        nCommission: int,
-    ) -> None: ...
-    def on_canceled_order(
-        self,
-        timestamp: int,
-        is_long: bool,
-        is_buy: bool,
-        order_id: int,
-        client_order_id: int,
-        nPrice: int,
-        nQty: int,
-        nCommission: int,
-    ) -> None: ...
-
-
-class SendOrderMethodSignature(Protocol):
-    def __call__(
-        self,
-        timestamp: int,
-        order_param: int,
-        client_order_id: int,
-        nPrice: int,
-        nQty: int,
-    ) -> None: ...
 
 
 @dataclass(slots=True)

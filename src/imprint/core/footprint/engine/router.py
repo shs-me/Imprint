@@ -105,13 +105,14 @@ class Router(AlgorithmProtocol, ABC):
 
     tick_by_tick_analyze: bool = field(default=True, init=False)
 
+    is_backtest: bool = field(init=False)
     last_idx: memoryview = field(init=False)
     fp: Footprint = field(init=False)
-
     _engine: FootprintEngine = field(init=False)
 
     def __post_init__(self) -> None:
         self._engine = FootprintEngine(self._manager, self)
+        self.is_backtest = self._manager.cfgSetup.backtesting
         self.last_idx = self._engine.last_idx.toreadonly()
         self.fp = self._engine.fp
 
@@ -143,7 +144,11 @@ class Router(AlgorithmProtocol, ABC):
     ) -> int | None:
         nPrice = int(self.fp.con.to_nPrice(idy))
         idx = idx if (idx is not None) else self.last_idx[0]
-        timestamp = int(self.fp.bar[idx].ind.last_trade_time)
+        timestamp = round(
+            self.fp.bar[idx].ind.last_trade_time
+            if self.is_backtest
+            else time.time() * 1000
+        )
         return self._sync.send_signal(
             nPrice=nPrice,
             timestamp=timestamp,

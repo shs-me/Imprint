@@ -9,7 +9,7 @@ from websockets import ClientConnection
 
 from imprint.core import constant as c
 from imprint.core.pipeline.streaming.live.base import Base
-from imprint.core.pipeline.utils.base_adapters import OrderEncoder
+from imprint.core.utils import OrderEncoder
 
 
 @dataclass(slots=True)

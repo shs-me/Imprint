@@ -67,7 +67,8 @@ class Render:
         self.headers_path = self.get_headers_path()
         if self.headers_path is None:
             return logger.warning(
-                f"Not found headers with setup: {self.timeframe.name} | {self.start_date} | {self.end_date}"
+                f"Not found headers with setup: {self.timeframe.name} | "
+                + f"{self.start_date.date()} | {self.end_date.date()}"
             )
 
         self.headers = np.load(self.headers_path)
