@@ -37,8 +37,8 @@ class Node(Base):
             self._task_id : self._task_id + 1
         ]
 
-    def set_text(self, text: str) -> None:
-        """Writes formatted process status text message to shared memory text buffer."""
+    def set_log(self, log: str) -> None:
+        """Writes formatted process status log message to shared memory log buffer."""
 
         lag: int = (
             (self._ts_wid[self._proc_id] - self._ts_rid[self._proc_id])
@@ -46,34 +46,34 @@ class Node(Base):
         ) % self._ts_cell_amount
         if lag > self._ts_safe_lag:
             return self.set_proc_sc(
-                scs.RING_BUFFER_TEXT_STREAM_OVERFLOW, wait_main_task=False
+                scs.RING_BUFFER_LOG_STREAM_OVERFLOW, wait_main_task=False
             )
 
-        b_text = text.encode()
+        b_log = log.encode()
 
-        if (len(b_text) + 8) > self._ts_data_size:
-            self.set_proc_sc(scs.BIG_TEXT_SIZE, wait_main_task=False)
+        if (len(b_log) + 8) > self._ts_data_size:
+            self.set_proc_sc(scs.BIG_LOG_SIZE, wait_main_task=False)
 
         cell: int = self._ts_wid[self._proc_id]
         need_cell: int = (self._proc_id * self._ts_cell_amount) + cell
-        self._ts_data_header[need_cell] = len(b_text)
+        self._ts_data_header[need_cell] = len(b_log)
         start: int = need_cell * self._ts_data_size
         self._ts_data[start : (start + 8)].cast("q")[0] = round(
             time.time() * 1000
         )
-        self._ts_data[(start + 8) : (start + 8) + len(b_text)] = b_text
+        self._ts_data[(start + 8) : (start + 8) + len(b_log)] = b_log
         new_cell: int = cell + 1
         self._ts_wid[self._proc_id] = (
             new_cell if new_cell < self._ts_cell_amount else 0
         )
 
-        self.set_proc_sc(scs.HAVE_TEXT, wait_main_task=False)
+        self.set_proc_sc(scs.HAVE_LOG, wait_main_task=False)
 
     def have_status(self) -> bool:
         return (
             (self.__proc_status[0] != 0) or (self.__task_status[0] != 0)
         ) and (
-            (self.__proc_status[0] != scs.HAVE_TEXT.value)
+            (self.__proc_status[0] != scs.HAVE_LOG.value)
             or (self.__task_status[0] != 0)
         )
 

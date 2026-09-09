@@ -102,4 +102,4 @@ class Base(ABC):
 
     @final
     def final_actions(self) -> None:
-        self.manager.set_text(" ")
+        self.manager.set_log(" ")

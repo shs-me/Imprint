@@ -109,7 +109,7 @@ class Backtest(Base):
                 break
 
         self.exchange_sim.final_action()
-        self.manager.set_text(
+        self.manager.set_log(
             f"Balance: {_.nBalance[0] / _.scale_mult} \n"
             + f"Locked Balance: {_.lockedNbalance[0] / _.scale_mult} \n"
             + f"Unrealized PNL: {_.unrealizedNpnl[0] / _.scale_mult} \n"

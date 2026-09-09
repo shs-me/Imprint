@@ -37,7 +37,7 @@ class Order(Base):
         encoder_type: type[OrderEncoder] = getattr(
             importlib.import_module(m_name), c_name
         )
-        self.manager.set_text(
+        self.manager.set_log(
             f"{encoder_type.__name__} used as {OrderEncoder.__name__}"
         )
         self.order_encoder = encoder_type()

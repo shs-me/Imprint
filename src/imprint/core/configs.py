@@ -234,7 +234,7 @@ class BaseRingBuf(ABC):
 
 
 @dataclass(slots=True)
-class TextStream(BaseRingBuf, SharedMemorySegments):
+class LogStream(BaseRingBuf, SharedMemorySegments):
     data_size: int = 1024
     data_header_size: int = 8
     cell_amount: int = 100

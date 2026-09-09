@@ -84,7 +84,7 @@ class Base(ABC):
 
                     if (nPrice < 0) or (nQty < 0) or (timestamp < 0):
                         self.manager.set_proc_sc(
-                            code=scs.UNVALID_DATA, wait_main_task=True
+                            code=scs.INVALID_DATA, wait_main_task=True
                         )
                         break
 
@@ -131,7 +131,7 @@ class Base(ABC):
 
         self.engine_complete[0] = 1
         self.post_final_action()
-        self.manager.set_text(
+        self.manager.set_log(
             f"Count Prepped Ticks: {self.algorithm._engine.counter_ticks} "
             + f"Count Signals: {self.algorithm._sync._count_send_signal}"
         )

@@ -65,19 +65,19 @@ class StatusCodes(IntEnum):
     COMPLETE = "Complete and exit"
     ERROR = "ERROR more info in 'exc_dump'"
     GC_COLLECT = "Collect garbage"
-    HAVE_TEXT = "Have text"
-    BIG_TEXT_SIZE = "Text size > data cell size in ring buffer"
-    RING_BUFFER_TEXT_STREAM_OVERFLOW = "Ring Buffer TextStream overflow"
+    HAVE_LOG = "Have log"
+    BIG_LOG_SIZE = "Log size too big"
+    RING_BUFFER_LOG_STREAM_OVERFLOW = "LogStream buffer overflow"
     # - - -
     # Engine
-    UNVALID_DATA = "Unvalid data (0 > price or qty or timestamp)"
-    FP_IDX_FILLED = "Footprint X axis filled or (IDX < 0)"
-    FP_IDY_FILLED = "Footprint Y axis filled"
+    INVALID_DATA = "Invalid data (0 > price or qty or timestamp)"
+    FP_IDY_FILLED = "(FP rows < ID-Y) or (ID-Y <= 0), re-init fp ..."
+    FP_IDX_FILLED = "FP cols < ID-X, re-init fp ..."
+    FP_RE_INIT = "FP re-initialized"
     ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
-    FP_RE_INIT = "Footprint re-initializated"
     # WSS/SIM
     BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"
-    DATA_PREPPERED = "Data prepareed"
+    DATA_PREPARED = "Trades data, prepared"
     # EXECUTION
     LOSS_MORE_LIMIT = "Balance >= max loss limit"
     QTY_LESS_LIMIT = "Nominal qty <= min order size"

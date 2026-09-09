@@ -111,7 +111,6 @@ def _processing_new_order(
 ) -> bool:
     is_buy: bool = bool(order_param & c.OF_BUY)
 
-    nPrice = trade_nPrice
     if bool(order_param & c.OF_MARKET):
         nPrice = _nPrice_with_slippage(trade_nPrice, is_buy, slippage)
 
@@ -119,7 +118,7 @@ def _processing_new_order(
         (is_buy and (trade_nPrice <= order_nPrice))
         or (not is_buy and (trade_nPrice >= order_nPrice))
     ):
-        pass
+        nPrice = order_nPrice
 
     elif bool(order_param & c.OF_MARKET_TRIGGER) and (
         (is_buy and (trade_nPrice >= order_nPrice))

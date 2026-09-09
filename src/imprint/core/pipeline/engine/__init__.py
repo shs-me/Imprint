@@ -31,7 +31,7 @@ def run_engine(
         sync = SyncViaEvent(manager, execution_event)
 
     engine: FootprintEngine = engine_type(manager, sync)
-    manager.set_text(f"{engine.__class__.__name__} used as FootprintEngine")
+    manager.set_log(f"{engine.__class__.__name__} used as FootprintEngine")
 
     if manager.cfgSetup.backtesting:
         from imprint.core.pipeline.engine.backtest import (

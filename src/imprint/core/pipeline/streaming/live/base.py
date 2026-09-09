@@ -26,7 +26,7 @@ class Base(GlobalBase, ABC):
                 self.url, ping_interval=20, ping_timeout=10, close_timeout=5
             ):
                 try:
-                    self.manager.set_text(f"WS Connected to {self.url}")
+                    self.manager.set_log(f"WS Connected to {self.url}")
                     while True:
                         await self.in_connection(ws)
 
@@ -41,45 +41,45 @@ class Base(GlobalBase, ABC):
                     self.exc_counter[
                         TimeoutError.__name__ or asyncio.TimeoutError.__name__
                     ] += 1
-                    self.manager.set_text(
+                    self.manager.set_log(
                         "WS Ping timeout (no heartbeat from server). Reconnecting..."
                     )
                 except ws_exc.ProtocolError as e:
                     self.exc_counter[ws_exc.ProtocolError.__name__] += 1
-                    self.manager.set_text(
+                    self.manager.set_log(
                         f"WS Protocol error: {e}. Reconnecting..."
                     )
 
                 except ws_exc.PayloadTooBig as e:
                     self.exc_counter[ws_exc.PayloadTooBig.__name__] += 1
-                    self.manager.set_text(
+                    self.manager.set_log(
                         f"WS Payload too big: {e}. Reconnecting..."
                     )
 
                 except ws_exc.InvalidState as e:
                     self.exc_counter[ws_exc.InvalidState.__name__] += 1
-                    self.manager.set_text(
+                    self.manager.set_log(
                         f"WS Invalid state: {e}. Reconnecting..."
                     )
 
         except (ws_exc.InvalidURI, ws_exc.InvalidProxy) as e:
-            self.manager.set_text(f"Fatal WS Config Error: {e}")
+            self.manager.set_log(f"Fatal WS Config Error: {e}")
             self.manager.set_proc_sc(code=scs.ERROR, wait_main_task=True)
 
         except ws_exc.InvalidHandshake as e:
-            self.manager.set_text(f"Fatal WS Handshake Rejected: {e}")
+            self.manager.set_log(f"Fatal WS Handshake Rejected: {e}")
             self.manager.set_proc_sc(code=scs.ERROR, wait_main_task=True)
 
         except ws_exc.ConcurrencyError as e:
-            self.manager.set_text(f"Fatal WS Concurrency error: {e}")
+            self.manager.set_log(f"Fatal WS Concurrency error: {e}")
             self.manager.set_proc_sc(code=scs.ERROR, wait_main_task=True)
 
         except OSError as e:
-            self.manager.set_text(f"WS Network error: {e}.")
+            self.manager.set_log(f"WS Network error: {e}.")
             self.manager.set_proc_sc(code=scs.ERROR, wait_main_task=True)
 
         except asyncio.CancelledError:
-            self.manager.set_text("WS stream cancelled.")
+            self.manager.set_log("WS stream cancelled.")
 
     @abstractmethod
     async def in_connection(self, ws: ClientConnection) -> None:

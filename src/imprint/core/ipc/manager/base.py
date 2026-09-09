@@ -31,7 +31,7 @@ class Base(ABC):
     cfgSetUserStream: cfg.SetUserStream = field(init=False)
     cfgSignal: cfg.Signal = field(init=False)
 
-    _text_stream: cfg.TextStream = field(init=False)
+    _log_stream: cfg.LogStream = field(init=False)
     _sc_sem: Semaphore = field(init=False)
     _general_event: Event = field(init=False)
 
@@ -51,13 +51,13 @@ class Base(ABC):
         self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
         self._main_status = self.cfgMetrics.main_status.view.cast("q")
 
-        self._ts_safe_lag = self._text_stream.safe_lag
-        self._ts_cell_amount = self._text_stream.cell_amount
-        self._ts_data = self._text_stream.data.view
-        self._ts_data_size = self._text_stream.data_size
-        self._ts_data_header = self._text_stream.data_header.view.cast("q")
-        self._ts_rid = self._text_stream.reader_id.view.cast("q")
-        self._ts_wid = self._text_stream.writer_id.view.cast("q")
+        self._ts_safe_lag = self._log_stream.safe_lag
+        self._ts_cell_amount = self._log_stream.cell_amount
+        self._ts_data = self._log_stream.data.view
+        self._ts_data_size = self._log_stream.data_size
+        self._ts_data_header = self._log_stream.data_header.view.cast("q")
+        self._ts_rid = self._log_stream.reader_id.view.cast("q")
+        self._ts_wid = self._log_stream.writer_id.view.cast("q")
 
     @final
     def __init_attributes(

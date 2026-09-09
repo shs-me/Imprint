@@ -23,7 +23,7 @@ class UserData(Base):
         decoder_type: type[UserStreamDecoder] = getattr(
             importlib.import_module(m_name), c_name
         )
-        self.manager.set_text(
+        self.manager.set_log(
             f"{decoder_type.__name__} used as {UserStreamDecoder.__name__}"
         )
         self.decoder = decoder_type(

@@ -75,7 +75,7 @@ class MarketDataStream(Base):
                 if not self.prepare.queue:
                     if self.prepare.complete:
                         self.manager.set_proc_sc(
-                            code=scs.DATA_PREPPERED, wait_main_task=True
+                            code=scs.DATA_PREPARED, wait_main_task=True
                         )
 
                     time.sleep(0)

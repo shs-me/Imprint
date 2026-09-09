@@ -78,10 +78,10 @@ class Host(Base):
 
         self.action_for_base_sc(sc, p_id, p_name)
 
-        if sc & scs.DATA_PREPPERED:
-            self.logger(scs.DATA_PREPPERED.label, LogLevel.WARNING, p_name)
+        if sc & scs.DATA_PREPARED:
+            self.logger(scs.DATA_PREPARED.label, LogLevel.WARNING, p_name)
             self.set_task_sc_to_proc(scs.COMPLETE)
-            self.clear_proc_sc(scs.DATA_PREPPERED, p_id)
+            self.clear_proc_sc(scs.DATA_PREPARED, p_id)
 
         if sc & scs.BIG_RAW_DATA:
             self.logger(scs.BIG_RAW_DATA.label, LogLevel.WARNING, p_name)
@@ -98,10 +98,10 @@ class Host(Base):
 
         self.action_for_base_sc(sc, p_id, p_name)
 
-        if sc & scs.UNVALID_DATA:
-            self.logger(scs.UNVALID_DATA.label, LogLevel.WARNING, p_name)
+        if sc & scs.INVALID_DATA:
+            self.logger(scs.INVALID_DATA.label, LogLevel.WARNING, p_name)
             self.close_procs = True
-            self.clear_proc_sc(scs.UNVALID_DATA, p_id)
+            self.clear_proc_sc(scs.INVALID_DATA, p_id)
 
         if sc & scs.FP_IDX_FILLED:
             self.logger(scs.FP_IDX_FILLED.label, LogLevel.WARNING, p_name)
@@ -149,12 +149,12 @@ class Host(Base):
         self.proc_is_alive(p_id)
 
     def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> None:
-        if sc & scs.HAVE_TEXT:
-            logs: list[tuple[int, str]] = self.get_text(proc_id)
+        if sc & scs.HAVE_LOG:
+            logs: list[tuple[int, str]] = self.get_log(proc_id)
             for timestamp, log in logs:
                 self.logger(log, LogLevel.INFO, proc_name, timestamp)
 
-            self.clear_proc_sc(scs.HAVE_TEXT, proc_id)
+            self.clear_proc_sc(scs.HAVE_LOG, proc_id)
 
         if sc & scs.ERROR:
             self.logger(scs.ERROR.label, LogLevel.ERROR, proc_name)
@@ -166,17 +166,17 @@ class Host(Base):
             self.procs.pop(proc_id)
             self.clear_proc_sc(scs.COMPLETE, proc_id)
 
-        if sc & scs.BIG_TEXT_SIZE:
-            self.logger(scs.BIG_TEXT_SIZE.label, LogLevel.WARNING, proc_name)
-            self.clear_proc_sc(scs.BIG_TEXT_SIZE, proc_id)
+        if sc & scs.BIG_LOG_SIZE:
+            self.logger(scs.BIG_LOG_SIZE.label, LogLevel.WARNING, proc_name)
+            self.clear_proc_sc(scs.BIG_LOG_SIZE, proc_id)
 
-        if sc & scs.RING_BUFFER_TEXT_STREAM_OVERFLOW:
+        if sc & scs.RING_BUFFER_LOG_STREAM_OVERFLOW:
             self.logger(
-                scs.RING_BUFFER_TEXT_STREAM_OVERFLOW.label,
+                scs.RING_BUFFER_LOG_STREAM_OVERFLOW.label,
                 LogLevel.WARNING,
                 proc_name,
             )
-            self.clear_proc_sc(scs.RING_BUFFER_TEXT_STREAM_OVERFLOW, proc_id)
+            self.clear_proc_sc(scs.RING_BUFFER_LOG_STREAM_OVERFLOW, proc_id)
 
     def get_proc_data(self, proc: int) -> tuple[int, str, int, int]:
         p_id: int = proc
@@ -234,8 +234,8 @@ class Host(Base):
             self._general_event.clear()
             [self.set_sc(task_id, scs.STOP) for task_id in task_ids]
 
-    def get_text(self, proc_id: int) -> list[tuple[int, str]]:
-        """Retrieves and decodes text status message for specified process ID."""
+    def get_log(self, proc_id: int) -> list[tuple[int, str]]:
+        """Retrieves and decodes log status message for specified process ID."""
         logs: list[tuple[int, str]] = []
 
         while self._ts_rid[proc_id] != self._ts_wid[proc_id]:
