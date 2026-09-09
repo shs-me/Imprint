@@ -196,14 +196,14 @@ class Imprint:
 
     @error_handler()
     def run_core(self) -> None:
-        self.__init_data()
-        self.__core_logger()
+        if self.__init_data():
+            self.__core_logger()
 
-        from imprint.core.main import run
+            from imprint.core.main import run
 
-        run(**self.__kwargs)
+            run(**self.__kwargs)
 
-    def __init_data(self) -> None:
+    def __init_data(self) -> bool:
         self.__api_logger()
 
         from imprint.core.utils import DownloadAggTradesHistory
@@ -219,12 +219,14 @@ class Imprint:
                     qty_mult=self.__coin.qty_mult,
                 ).download()
             except DownloadError as e:
-                return logger.error(f"Init data failed: {e}")
-
+                logger.error(f"Init data failed: {e}")
+                return False
         else:
             # rest = RestAgent(setup.symbol, setup.run_mode.connector)
             self.__coin.tick_size = "0.01"  # rest.get_tick_size()
             self.__coin.lot_size = "0.001"  # rest.get_lot_size()
+
+        return True
 
     def __api_logger(self) -> None:
         logger.remove()

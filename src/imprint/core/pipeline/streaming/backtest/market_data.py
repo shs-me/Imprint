@@ -1,10 +1,11 @@
-import os
 import time
 from dataclasses import dataclass, field
 from datetime import date
 from typing import override
 
 import numpy as np
+from numpy import uint8
+from numpy.lib.npyio import NpzFile
 from numpy.typing import NDArray
 
 from imprint.core.constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
@@ -21,11 +22,13 @@ class MarketDataStream(Base):
 
     datadir: str = field(init=False)
     type_data: str = field(init=False)
-    base_path: str = field(init=False)
+    data_path: str = field(init=False)
+    data_manifest_path: str = field(init=False)
 
     data_paths: list[str] = field(init=False)
     data_path_id: int = field(default=0, init=False)
-    data: NDArray[np.uint8] = field(init=False)
+    data: NDArray[uint8] = field(init=False)
+    dataz: NpzFile = field(init=False)
     read_row: int = field(default=0, init=False)
     max_data_row: int = field(init=False)
 
@@ -39,26 +42,30 @@ class MarketDataStream(Base):
 
         self.datadir = DATA_PATH
         self.type_data = DATA_TYPE_AGGTRADES_PATH
-        self.base_path = f"{self.datadir}/{self.type_data}/{self.symbol}"
+        self.data_path = (
+            f"{DATA_PATH}/{DATA_TYPE_AGGTRADES_PATH}/{self.symbol}.npz"
+        )
+        self.data_manifest_path = (
+            f"{DATA_PATH}/{DATA_TYPE_AGGTRADES_PATH}/{self.symbol}_manifest.txt"
+        )
 
         self.data_paths = self.get_data_paths()
+        self.dataz = np.load(self.data_path)
         self.change_data()
 
-    def get_data_paths(self, endwith: str = ".npy") -> list[str]:
-        paths: list[str] = [
-            p for p in os.listdir(self.base_path) if p.endswith(endwith)
-        ]
+    def get_data_paths(self) -> list[str]:
+        with open(self.data_manifest_path) as f:
+            dates_str: str = f.read()
+
         dates: list[date] = sorted(
-            [date.fromisoformat(p.split(".")[0]) for p in paths]
+            [date.fromisoformat(d) for d in dates_str.split(",")[:-1]]
         )
-        startDate: date = date.fromisoformat(self.start_date)
-        endDate: date = date.fromisoformat(self.end_date)
-        needDates: list[date] = [
-            d for d in dates if (startDate <= d <= endDate)
+        start_date: date = date.fromisoformat(self.start_date)
+        end_date: date = date.fromisoformat(self.end_date)
+        need_dates: list[date] = [
+            d for d in dates if (start_date <= d <= end_date)
         ]
-        return [
-            f"{self.base_path}/{date.isoformat(d)}{endwith}" for d in needDates
-        ]
+        return [date.isoformat(d) for d in need_dates]
 
     @node_handler()
     def run(self) -> None:
@@ -98,9 +105,7 @@ class MarketDataStream(Base):
                 ):
                     time.sleep(0.001)
 
-                raw_data: memoryview = (
-                    self.data[self.read_row, :].view(np.uint8).data
-                )
+                raw_data: memoryview = self.data[self.read_row, :].data
                 self.set_raw_data(
                     raw_data=raw_data,
                     writer_id=wid,
@@ -112,9 +117,7 @@ class MarketDataStream(Base):
                 self.read_row += 1
 
     def change_data(self) -> None:
-        self.data = np.load(
-            file=self.data_paths[self.data_path_id], mmap_mode="r"
-        )
+        self.data = self.dataz[self.data_paths[self.data_path_id]].view(uint8)
         self.data_path_id += 1
         self.max_data_row = self.data.shape[0]
         self.read_row = 0

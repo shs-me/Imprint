@@ -89,5 +89,5 @@ class Base(GlobalBase, ABC):
     async def alarm_clock(
         self, wid: memoryview, rid: memoryview, cell_amount: int, safe_lag: int
     ) -> None:
-        while self.lag_not_is_safe(wid, rid, cell_amount, safe_lag):
-            await asyncio.sleep(0)
+        while self.lag_not_is_safe(wid[0], rid[1], cell_amount, safe_lag):
+            await asyncio.sleep(0.001)

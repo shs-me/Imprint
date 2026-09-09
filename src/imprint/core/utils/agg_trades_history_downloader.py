@@ -3,6 +3,7 @@ import shutil
 import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from io import BytesIO
 
 import numpy as np
 from numpy import int64, void
@@ -26,7 +27,10 @@ class DownloadAggTradesHistory(BaseREST):
     cur_date: date = field(init=False)
     start_date: date = field(init=False)
     end_date: date = field(init=False)
+    date_str: str = field(init=False)
     data_dir: str = field(init=False)
+    data_path: str = field(init=False)
+    data_manifest_path: str = field(init=False)
 
     agg_trades_dtype: np.dtype[void] = field(
         default_factory=lambda: np.dtype(
@@ -46,7 +50,7 @@ class DownloadAggTradesHistory(BaseREST):
         self.write_timeout: float | None = None
         self.pool_timeout: float | None = None
 
-        self.base_url: str = f"{c.BASE_UM_AGGTRADES_DAILY_URL}{self.symbol}"
+        self.base_url: str = f"{c.BASE_UM_AGGTRADES_DAILY_URL}/{self.symbol}"
 
         self.start_date = date.fromisoformat(self.start_date_str)
         self.end_date = date.fromisoformat(self.end_date_str)
@@ -55,55 +59,58 @@ class DownloadAggTradesHistory(BaseREST):
             self.end_date = today - timedelta(days=1)
 
         self.cur_date = self.start_date
-        self.data_dir = (
-            f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}/{self.symbol}"
-        )
+        self.data_dir = f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}"
+        data_path: list[str] = [
+            p for p in os.listdir(self.data_dir) if p == f"{self.symbol}.npz"
+        ]
+        self.data_path = f"{self.data_dir}/{data_path[0]}" if data_path else ""
+        self.data_manifest_path = f"{self.data_dir}/{self.symbol}_manifest.txt"
         os.makedirs(self.data_dir, exist_ok=True)
 
     def download(self) -> None:
         """Downloads historical archives and converts them to binary .npy format."""
+        manifest: str = self.data_manifest
         counter: int = 0
         log_base_url: bool = False
         downloaded_days: list[str] = []
         while self.cur_date <= self.end_date:
-            date_str: str = self.cur_date.isoformat()
-            base_file: str = f"{self.data_dir}/{date_str}"
-            npy_path: str = f"{base_file}.npy"
+            self.date_str = self.cur_date.isoformat()
+            base_file: str = f"{self.data_dir}/{self.date_str}"
             zip_path: str = (
-                f"{self.data_dir}/{self.symbol}-aggTrades-{date_str}.zip"
+                f"{self.data_dir}/{self.symbol}-aggTrades-{self.date_str}.zip"
             )
             csv_path: str = f"{base_file}.csv"
 
-            if not os.path.exists(npy_path):
-                if not os.path.exists(csv_path):
-                    if not log_base_url:
-                        self.log(f"Base url: {self.base_url}")
-                        log_base_url = True
+            if self.date_str not in manifest:
+                if not log_base_url:
+                    self.log(f"Base url: {self.base_url}")
+                    log_base_url = True
 
-                    endpoint: str = f"{self.symbol}-aggTrades-{date_str}.zip"
-                    self.log(f"Fetching historical trades: {endpoint}")
-                    endpoint = f"{self.base_url}/{endpoint}"
-                    try:
-                        zip_bytes = self.send_sync(
-                            method="GET", endpoint=endpoint, response_type=bytes
-                        )
-                    except RestError as e:
-                        counter += 1
-                        err_msg: str = f"Failed to download day {date_str}: {e}"
-                        if counter >= 3:
-                            raise DownloadError(err_msg)
-                        else:
-                            self.log(err_msg, level="ERROR")
-                            continue
+                endpoint: str = f"{self.symbol}-aggTrades-{self.date_str}.zip"
+                self.log(f"Fetching historical trades: {endpoint}")
+                endpoint = f"{self.base_url}/{endpoint}"
+                try:
+                    zip_bytes = self.send_sync(
+                        method="GET", endpoint=endpoint, response_type=bytes
+                    )
+                except RestError as e:
+                    err_msg: str = (
+                        f"Failed to download day {self.date_str}: {e}"
+                    )
+                    if (counter := (counter + 1)) >= 3:
+                        raise DownloadError(err_msg)
+                    else:
+                        self.log(err_msg, level="ERROR")
+                        continue
 
-                    size: str = self.format_bytes(len(zip_bytes))
-                    with open(zip_path, "wb") as f:
-                        f.write(zip_bytes)
+                size: str = self.format_bytes(len(zip_bytes))
+                with open(zip_path, "wb") as f:
+                    f.write(zip_bytes)
 
-                    self._extract_zip(zip_path, csv_path)
-                    downloaded_days.append(f"{date_str}: {size}")
+                self._extract_zip(zip_path, csv_path)
+                downloaded_days.append(f"{self.date_str}: {size}")
 
-                self._convert_csv_to_npy(csv_path, npy_path)
+                self._convert_csv_to_npy(csv_path)
 
             self.cur_date += timedelta(days=1)
 
@@ -119,7 +126,7 @@ class DownloadAggTradesHistory(BaseREST):
         if os.path.exists(zip_path):
             os.remove(zip_path)
 
-    def _convert_csv_to_npy(self, csv_path: str, npy_path: str) -> None:
+    def _convert_csv_to_npy(self, csv_path: str) -> None:
         arr: NDArray[void] = np.genfromtxt(
             csv_path,
             usecols=(1, 2, 5, 6),
@@ -135,5 +142,29 @@ class DownloadAggTradesHistory(BaseREST):
         trades[:, 2] = arr["timestamp"].astype(int64)
         trades[:, 3] = arr["is_buyer_maker"].astype(int64)
 
-        np.save(npy_path, trades)
+        if self.data_path:
+            buffer = BytesIO()
+            np.save(buffer, trades)
+            with zipfile.ZipFile(self.data_path, "a") as z:
+                z.writestr(f"{self.date_str}.npy", buffer.getvalue())
+
+        else:
+            self.data_path = f"{self.data_dir}/{self.symbol}.npz"
+            kwd: dict[str, NDArray[int64]] = {self.date_str: trades}
+            np.savez(self.data_path, **kwd)  # pyright: ignore[reportArgumentType]
+
+        self.data_manifest = self.date_str
         os.remove(csv_path)
+
+    @property
+    def data_manifest(self) -> str:
+        try:
+            with open(self.data_manifest_path, mode="r") as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+
+    @data_manifest.setter
+    def data_manifest(self, new_data: str) -> None:
+        with open(self.data_manifest_path, mode="a") as f:
+            f.write(f"{new_data},")

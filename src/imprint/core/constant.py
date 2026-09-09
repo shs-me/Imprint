@@ -25,7 +25,7 @@ WS_API_TESTNET_URL = "wss://testnet.binancefuture.com/ws-fapi/v1"
 WS_STREAMS_TESTNET_URL = "wss://fstream.binancefuture.com"
 # Other
 BASE_UM_AGGTRADES_DAILY_URL = (
-    "https://data.binance.vision/data/futures/um/daily/aggTrades/"
+    "https://data.binance.vision/data/futures/um/daily/aggTrades"
 )
 
 # - - PATH'S - -
