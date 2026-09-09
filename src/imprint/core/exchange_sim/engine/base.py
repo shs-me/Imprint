@@ -75,6 +75,7 @@ class Base(MatchingEngine):
                 else:
                     while self.prepare.dfmWid[0] == self.prepare.dfmRid[0]:
                         if self.prepare.complete:
+                            self.trade_read_time[0] = timestamp
                             return
 
                         time.sleep(0)

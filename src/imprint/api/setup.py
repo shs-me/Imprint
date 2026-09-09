@@ -11,15 +11,9 @@ from imprint.core.configs import (
     RiskManagement,
     pct,
 )
-from imprint.core.configs import (
-    Coin as _Coin,
-)
-from imprint.core.configs import (
-    Configuration as _Cfg,
-)
-from imprint.core.configs import (
-    Setup as _Setup,
-)
+from imprint.core.configs import Coin as _Coin
+from imprint.core.configs import Configuration as _Cfg
+from imprint.core.configs import Setup as _Setup
 from imprint.core.footprint import FootprintEngine
 from imprint.core.pipeline.executing import BaseExecution
 from imprint.core.pipeline.utils.base_adapters import (
@@ -178,7 +172,7 @@ class Imprint:
     @error_handler()
     def run_vis(self, auto_open: bool = True) -> None:
         if self.is_backtest_mode:
-            self.__base_logger()
+            self.__vis_logger()
 
             from imprint.core.constant import (
                 BASE_FOOTPRINT_DUMP_PATH,
@@ -213,7 +207,7 @@ class Imprint:
         run(**self.__kwargs)
 
     def __init_data(self) -> None:
-        self.__base_logger()
+        self.__api_logger()
 
         from imprint.core.utils import DownloadAggTradesHistory
 
@@ -230,12 +224,15 @@ class Imprint:
             self.__coin.tick_size = "0.01"  # rest.get_tick_size()
             self.__coin.lot_size = "0.001"  # rest.get_lot_size()
 
-    def __base_logger(self) -> None:
+    def __api_logger(self) -> None:
         logger.remove()
 
-        from imprint.core.constant import CORE_LOG_PATH
+        from imprint.core.constant import API_LOG_PATH
 
-        logger.add(CORE_LOG_PATH, format="{time} | {level} | {message}")
+        logger.add(
+            API_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
+        )
 
     def __core_logger(self) -> None:
         logger.remove()
@@ -251,4 +248,14 @@ class Imprint:
             rotation="10 MB",
             colorize=True,
             enqueue=True,
+        )
+
+    def __vis_logger(self) -> None:
+        logger.remove()
+
+        from imprint.core.constant import VISUALIZATION_LOG_PATH
+
+        logger.add(
+            VISUALIZATION_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
         )

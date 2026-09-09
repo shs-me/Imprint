@@ -79,7 +79,6 @@ class Writer(Base, ABC):
         if self.re_init & (c.RIF_session):
             self.init_session(nPrice, timestamp)
 
-        self.counter_ticks += 1
         if result := _update(
             nPrice=nPrice,
             nQty=nQty,

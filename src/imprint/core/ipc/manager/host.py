@@ -244,9 +244,9 @@ class Host(Base):
             lrd: int = self._ts_data_header[need_cell]
             start: int = need_cell * self._ts_data_size
             t: int = self._ts_data[start : (start + 8)].cast("q")[0]
-            msg: str = bytes(
-                self._ts_data[(start + 8) : (start + 8) + lrd]
-            ).decode()
+            msg: str = f"Log: {
+                bytes(self._ts_data[(start + 8) : (start + 8) + lrd]).decode()
+            }"
             logs.append((t, msg))
             new_cell: int = cell + 1
             self._ts_rid[proc_id] = (

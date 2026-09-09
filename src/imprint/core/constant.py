@@ -31,7 +31,9 @@ BASE_UM_AGGTRADES_DAILY_URL = (
 # - - PATH'S - -
 # Logging
 LOGS_PATH = "logs"
-CORE_LOG_PATH = f"{LOGS_PATH}/core.log"
+CORE_LOG_PATH = f"{LOGS_PATH}/imprint-core.log"
+API_LOG_PATH = f"{LOGS_PATH}/imprint-api.log"
+VISUALIZATION_LOG_PATH = f"{LOGS_PATH}/imprint-vis.log"
 # Data Download
 DATA_PATH = "data"
 DATA_TYPE_AGGTRADES_PATH = "aggTrades"
