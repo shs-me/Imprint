@@ -74,14 +74,14 @@ class Base(ABC):
 
     @final
     def lag_not_is_safe(
-        self, wid: memoryview, rid: memoryview, cell_amount: int, safe_lag: int
+        self, wid: int, rid: int, cell_amount: int, safe_lag: int
     ) -> bool:
-        return ((wid[0] - rid[0] + cell_amount) % cell_amount) > safe_lag
+        return ((wid - rid + cell_amount) % cell_amount) > safe_lag
 
     @final
     def set_raw_data(
         self,
-        raw_data: bytes,
+        raw_data: bytes | memoryview,
         writer_id: memoryview,
         data: memoryview,
         data_header: memoryview,

@@ -81,13 +81,6 @@ class Base(ABC):
                     nPrice, nQty, timestamp, is_sell = self.agg_trades[
                         self.at_rid, :
                     ]
-
-                    if (nPrice < 0) or (nQty < 0) or (timestamp < 0):
-                        self.manager.set_proc_sc(
-                            code=scs.INVALID_DATA, wait_main_task=True
-                        )
-                        break
-
                     new_rid = self.at_rid + 1
                     self.at_rid = new_rid if new_rid < self.at_max_row else 0
 

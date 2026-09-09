@@ -1,5 +1,5 @@
-import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import override
 
 from numba import njit
 from numpy import int64, uint8
@@ -24,70 +24,80 @@ EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 @dataclass(slots=True)
 class Base(MatchingEngine):
-    def start(self, timestamp: int) -> None:
-        while True:
-            if _start(
-                timestamp=timestamp,
-                trade_read_time=self.trade_read_time,
-                dfm=self.prepare.dfm,
-                dfmRid=self.prepare.dfmRid,
-                dfmWid=self.prepare.dfmWid,
-                order_book=self.order_book,
-                obRow=self.obRow,
-                order_id_buf=self.order_id,
-                gus_data_buf=self.gus_data_buf,
-                gus_data_buf_size=self.gus_data_size,
-                gus_data_header=self.gus_data_header,
-                gus_wid=self.gus_wid,
-                gus_cell_amount=self.gus_cell_amount,
-                executed_orders=self.executed_orders,
-                eoRow=self.eoRow,
-                slippage=self.slippage,
-                leverage=self.leverage,
-                makerNcommission=self.makerNcommission,
-                takerNcommission=self.takerNcommission,
-                nBalance=self.nBalance,
-                lockedNbalance=self.lockedNbalance,
-                availableNbalance=self.availableNbalance,
-                dynamicNbalance=self.dynamicNbalance,
-                unrealizedNpnl=self.unrealizedNpnl,
-                longUnrealizedNpnl=self.longUnrealizedNpnl,
-                shortUnrealizedNpnl=self.shortUnrealizedNpnl,
-                longNqty=self.longNqty,
-                longEntryNprice=self.longEntryNprice,
-                shortNqty=self.shortNqty,
-                shortEntryNprice=self.shortEntryNprice,
-                price_mult=self.price_mult,
-                qty_mult=self.qty_mult,
-                scale_mult=self.scale_mult,
-                timeframe=self.timeframe,
-                equity_history=self.equity_history,
-                base_timestamp=self.base_timestamp,
-                long_mae=self.long_mae,
-                long_mfe=self.long_mfe,
-                short_mae=self.short_mae,
-                short_mfe=self.short_mfe,
-            ):
-                break
-            else:
-                if self.prepare.error is not None:
-                    raise RuntimeError(self.prepare.error)
-                else:
-                    while self.prepare.dfmWid[0] == self.prepare.dfmRid[0]:
-                        if self.prepare.complete:
-                            self.trade_read_time[0] = timestamp
-                            return
+    __ds_cell_amount: int = field(init=False)
+    __ds_data_size: int = field(init=False)
+    __ds_data: memoryview = field(init=False)
+    __ds_rid: memoryview = field(init=False)
 
-                        time.sleep(0)
+    @override
+    def __post_init__(self) -> None:
+        MatchingEngine.__post_init__(self)
+
+        cfgDS = self.manager.cfgDataStream
+        self.__ds_cell_amount = cfgDS.cell_amount
+        self.__ds_data_size = cfgDS.data_size // 8
+        self.__ds_data = cfgDS.data.view.cast("q")
+        self.__ds_rid = cfgDS.reader_id.view.cast("q")
+
+    def final_action(self, timestamp: int) -> None:
+        self.start(timestamp)
+        self.dump_equity_history()
+        self.save_orders_history()
+
+    def start(self, timestamp: int) -> None:
+        _start(
+            timestamp=timestamp,
+            trade_read_time=self.trade_read_time,
+            ds_data=self.__ds_data,
+            ds_rid=self.__ds_rid,
+            ds_data_size=self.__ds_data_size,
+            ds_cell_amount=self.__ds_cell_amount,
+            order_book=self.order_book,
+            obRow=self.obRow,
+            order_id_buf=self.order_id,
+            gus_data_buf=self.gus_data_buf,
+            gus_data_buf_size=self.gus_data_size,
+            gus_data_header=self.gus_data_header,
+            gus_wid=self.gus_wid,
+            gus_cell_amount=self.gus_cell_amount,
+            executed_orders=self.executed_orders,
+            eoRow=self.eoRow,
+            slippage=self.slippage,
+            leverage=self.leverage,
+            makerNcommission=self.makerNcommission,
+            takerNcommission=self.takerNcommission,
+            nBalance=self.nBalance,
+            lockedNbalance=self.lockedNbalance,
+            availableNbalance=self.availableNbalance,
+            dynamicNbalance=self.dynamicNbalance,
+            unrealizedNpnl=self.unrealizedNpnl,
+            longUnrealizedNpnl=self.longUnrealizedNpnl,
+            shortUnrealizedNpnl=self.shortUnrealizedNpnl,
+            longNqty=self.longNqty,
+            longEntryNprice=self.longEntryNprice,
+            shortNqty=self.shortNqty,
+            shortEntryNprice=self.shortEntryNprice,
+            price_mult=self.price_mult,
+            qty_mult=self.qty_mult,
+            scale_mult=self.scale_mult,
+            timeframe=self.timeframe,
+            equity_history=self.equity_history,
+            base_timestamp=self.base_timestamp,
+            long_mae=self.long_mae,
+            long_mfe=self.long_mfe,
+            short_mae=self.short_mae,
+            short_mfe=self.short_mfe,
+        )
 
 
 @njit(cache=True, nogil=True)
 def _start(
     timestamp: int,
     trade_read_time: memoryview,
-    dfm: NDArray[int64],
-    dfmRid: memoryview,
-    dfmWid: memoryview,
+    ds_data: memoryview,
+    ds_rid: memoryview,
+    ds_data_size: int,
+    ds_cell_amount: int,
     order_book: NDArray[int64],
     obRow: memoryview,
     order_id_buf: memoryview,
@@ -123,26 +133,23 @@ def _start(
     long_mfe: memoryview,
     short_mae: memoryview,
     short_mfe: memoryview,
-) -> bool:
-    max_row: int = dfm.shape[0]
+) -> None:
     while trade_read_time[0] < timestamp:
-        row: int = dfmRid[0]
+        cell: int = ds_rid[1]
+        start: int = cell * ds_data_size
 
-        if row == dfmWid[0]:
-            return False
-
-        trade_timestamp: int = dfm[row, 1]
+        trade_timestamp: int = ds_data[start + 2]
 
         if trade_timestamp > timestamp:
             trade_read_time[0] = timestamp
-            return True
+            return
         else:
             trade_read_time[0] = trade_timestamp
 
-        new_row: int = row + 1
-        dfmRid[0] = new_row if (new_row < max_row) else 0
+        trade_nPrice: int = ds_data[start]
 
-        trade_nPrice: int = dfm[row, 0]
+        new_cell: int = cell + 1
+        ds_rid[1] = new_cell if new_cell < ds_cell_amount else 0
 
         uNpnl = update_unrealized_nPnl(
             nPrice=trade_nPrice,
@@ -248,8 +255,6 @@ def _start(
 
         if executed:
             break
-
-    return True
 
 
 @njit(cache=True)

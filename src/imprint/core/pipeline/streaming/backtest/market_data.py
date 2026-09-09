@@ -1,53 +1,64 @@
-import struct
+import os
 import time
-from collections import deque
 from dataclasses import dataclass, field
+from datetime import date
 from typing import override
 
-from numpy import int64
+import numpy as np
 from numpy.typing import NDArray
 
+from imprint.core.constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
 from imprint.core.ipc import node_handler
 from imprint.core.pipeline.streaming.base import Base
 from imprint.core.settings import StatusCodes as scs
-from imprint.core.utils import BaseDataPrepare
-
-
-@dataclass(slots=True)
-class DataPrepare(BaseDataPrepare):
-    queue: deque[bytes] = field(
-        default_factory=lambda: deque(maxlen=10000), init=False
-    )
-
-    @override
-    def alarm_clock(self) -> None:
-        while len(self.queue) == self.queue.maxlen:
-            time.sleep(0)
-
-    @override
-    def prepare_data(self, line: NDArray[int64]) -> None:
-        self.queue.append(
-            struct.pack("@qqqq", line[0], line[1], line[2], line[3])
-        )
-
-    @override
-    def post_prepare(self) -> None:
-        pass
 
 
 @dataclass(slots=True)
 class MarketDataStream(Base):
-    prepare: DataPrepare = field(init=False)
+    symbol: str = field(init=False)
+    start_date: str = field(init=False)
+    end_date: str = field(init=False)
 
+    datadir: str = field(init=False)
+    type_data: str = field(init=False)
+    base_path: str = field(init=False)
+
+    data_paths: list[str] = field(init=False)
+    data_path_id: int = field(default=0, init=False)
+    data: NDArray[np.uint8] = field(init=False)
+    read_row: int = field(default=0, init=False)
+    max_data_row: int = field(init=False)
+
+    @override
     def __post_init__(self) -> None:
         Base.__post_init__(self)
 
-        self.prepare = DataPrepare(
-            symbol=self.manager.cfgCoin.symbol,
-            start_date=self.manager.cfgSetup.backtest_start_date,
-            end_date=self.manager.cfgSetup.backtest_end_date,
+        self.symbol = self.manager.cfgCoin.symbol
+        self.start_date = self.manager.cfgSetup.backtest_start_date
+        self.end_date = self.manager.cfgSetup.backtest_end_date
+
+        self.datadir = DATA_PATH
+        self.type_data = DATA_TYPE_AGGTRADES_PATH
+        self.base_path = f"{self.datadir}/{self.type_data}/{self.symbol}"
+
+        self.data_paths = self.get_data_paths()
+        self.change_data()
+
+    def get_data_paths(self, endwith: str = ".npy") -> list[str]:
+        paths: list[str] = [
+            p for p in os.listdir(self.base_path) if p.endswith(endwith)
+        ]
+        dates: list[date] = sorted(
+            [date.fromisoformat(p.split(".")[0]) for p in paths]
         )
-        self.prepare.start()
+        startDate: date = date.fromisoformat(self.start_date)
+        endDate: date = date.fromisoformat(self.end_date)
+        needDates: list[date] = [
+            d for d in dates if (startDate <= d <= endDate)
+        ]
+        return [
+            f"{self.base_path}/{date.isoformat(d)}{endwith}" for d in needDates
+        ]
 
     @node_handler()
     def run(self) -> None:
@@ -71,31 +82,42 @@ class MarketDataStream(Base):
                         scs.COMPLETE, wait_main_task=False
                     )
 
-            if self.prepare.error is None:
-                if not self.prepare.queue:
-                    if self.prepare.complete:
-                        self.manager.set_proc_sc(
-                            code=scs.DATA_PREPARED, wait_main_task=True
-                        )
-
-                    time.sleep(0)
-                    continue
-
-                while self.lag_not_is_safe(wid, rid, cell_amount, safe_lag):
-                    time.sleep(0)
-
-                if self.prepare.queue:
-                    raw_data: bytes = self.prepare.queue.popleft()
-                    self.set_raw_data(
-                        raw_data=raw_data,
-                        writer_id=wid,
-                        data=data,
-                        data_header=data_header,
-                        data_size=data_size,
-                        cell_amount=cell_amount,
+            if self.read_row >= self.max_data_row:
+                if self.complete():
+                    self.manager.set_proc_sc(
+                        code=scs.DATA_PREPARED, wait_main_task=True
                     )
+                    continue
+                else:
+                    self.change_data()
             else:
-                raise RuntimeError(self.prepare.error)
+                while self.lag_not_is_safe(
+                    wid[0], rid[0], cell_amount, safe_lag
+                ) or self.lag_not_is_safe(
+                    wid[0], rid[1], cell_amount, safe_lag
+                ):
+                    time.sleep(0.001)
+
+                raw_data: memoryview = (
+                    self.data[self.read_row, :].view(np.uint8).data
+                )
+                self.set_raw_data(
+                    raw_data=raw_data,
+                    writer_id=wid,
+                    data=data,
+                    data_header=data_header,
+                    data_size=data_size,
+                    cell_amount=cell_amount,
+                )
+                self.read_row += 1
+
+    def change_data(self) -> None:
+        self.data = np.load(
+            file=self.data_paths[self.data_path_id], mmap_mode="r"
+        )
+        self.data_path_id += 1
+        self.max_data_row = self.data.shape[0]
+        self.read_row = 0
 
     def complete(self) -> bool:
-        return self.prepare.complete and (not self.prepare.queue)
+        return self.data_path_id >= len(self.data_paths)

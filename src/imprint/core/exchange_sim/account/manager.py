@@ -50,13 +50,6 @@ class Manager(Position, ABC):
         )
 
     @final
-    def final_action(self) -> None:
-        """Flushes non-zero equity history bars to disk."""
-
-        self.dump_equity_history()
-        self.save_orders_history()
-
-    @final
     def dump_equity_history(self) -> None:
         """Saves active equity history array to disk."""
 

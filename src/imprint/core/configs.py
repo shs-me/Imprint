@@ -268,3 +268,4 @@ class DataStream(BaseRingBuf, SharedMemorySegments):
     data_size: int = 256
     data_header_size: int = 1
     cell_amount: int = 10_000
+    count_reader: int = 2

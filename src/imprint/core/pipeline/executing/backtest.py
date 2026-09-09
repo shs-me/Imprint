@@ -35,7 +35,7 @@ class Backtest(Base):
         if matching:
             self.exchange_sim.start(self.trade_read_time[0])
 
-        time.sleep(0)
+        time.sleep(0.001)
 
     @override
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
@@ -99,16 +99,7 @@ class Backtest(Base):
     def post_final_action(self) -> None:
         _ = self.exchange_sim
         # - - -
-        max_timestamp = 9_999_999_999_999
-        while _.trade_read_time[0] < max_timestamp:
-            _.start(max_timestamp)
-            self._check_user_data_buf()
-            if _.prepare.complete and (
-                _.prepare.dfmRid[0] == _.prepare.dfmWid[0]
-            ):
-                break
-
-        self.exchange_sim.final_action()
+        self.exchange_sim.final_action(self.trade_read_time[0])
         self.manager.set_log(
             f"Balance: {_.nBalance[0] / _.scale_mult} \n"
             + f"Locked Balance: {_.lockedNbalance[0] / _.scale_mult} \n"

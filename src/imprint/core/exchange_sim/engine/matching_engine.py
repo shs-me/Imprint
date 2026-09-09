@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 
 from imprint.core import constant as c
 from imprint.core.exchange_sim.engine.order_stream import compact_order_book
-from imprint.core.exchange_sim.engine.tick_stream import TickStream
 from imprint.core.exchange_sim.engine.user_data_stream import UserData
 
 
@@ -19,7 +18,6 @@ class MatchingEngine(UserData, ABC):
     trade_read_time: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    prepare: TickStream = field(init=False)
 
     @override
     def __post_init__(self) -> None:
@@ -27,14 +25,6 @@ class MatchingEngine(UserData, ABC):
 
         cfgAC = self.manager.cfgAccount
         self.slippage = cfgAC.slippage.fixed
-
-        self.prepare = TickStream(
-            symbol=self.manager.cfgCoin.symbol,
-            start_date=self.manager.cfgSetup.backtest_start_date,
-            end_date=self.manager.cfgSetup.backtest_end_date,
-            price_mult=self.price_mult,
-        )
-        self.prepare.start()
 
 
 @njit(cache=True)

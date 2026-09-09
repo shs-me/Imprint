@@ -81,7 +81,7 @@ class Node(Base):
         if self.__task_status[0] != 0 or self.__proc_status[0] != 0:
             if self.__wait_main_task:
                 while self.__task_status[0] == 0:
-                    time.sleep(0)
+                    time.sleep(0.001)
 
                 self.__wait_main_task = False
 
