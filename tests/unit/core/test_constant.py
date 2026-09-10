@@ -1,7 +1,7 @@
 """Unit tests for `imprint.core.constant`."""
 
-import imprint.core.constant as c
-from imprint.core.settings import (
+import imprint._core.constant as c
+from imprint._core.settings import (
     BarHeaders,
     CachedStatesData,
     EquityHeaders,

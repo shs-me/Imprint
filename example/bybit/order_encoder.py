@@ -3,7 +3,7 @@ from typing import override
 from msgspec import Struct
 from msgspec.json import Encoder
 
-from imprint.api.setup import OrderEncoder
+from imprint.configs import OrderEncoder
 
 
 class NewOrderParam(Struct):

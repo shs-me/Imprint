@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imprint.core.ipc import NodeManager
-from imprint.core.settings import StatusCodes as scs
-from imprint.core.utils.handlers import error_handler
+from imprint._core.ipc import NodeManager
+from imprint._core.settings import StatusCodes as scs
+from imprint._core.utils.handlers import error_handler
 
 
 class TestErrorHandler:

@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from imprint.core.configs import Coin, Footprint
-from imprint.core.footprint.models.converter import Converter
-from imprint.core.settings import Timeframe
+from imprint._core.configs import Coin, Footprint
+from imprint._core.footprint.models.converter import Converter
+from imprint._core.settings import Timeframe
 
 
 @pytest.fixture

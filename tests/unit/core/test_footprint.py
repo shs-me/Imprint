@@ -5,18 +5,18 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from imprint.core import constant as c
-from imprint.core.footprint.engine.reader import (
+from imprint._core import constant as c
+from imprint._core.footprint.engine.reader import (
     _update_clusters_states,
     calc_value_area,
 )
-from imprint.core.footprint.engine.router import SyncWithExecution
-from imprint.core.footprint.engine.writer import (
+from imprint._core.footprint.engine.router import SyncWithExecution
+from imprint._core.footprint.engine.writer import (
     BHM_ConstantCount,
     FU_ConstantCount,
     _update,
 )
-from imprint.core.footprint.models.base import FPArray
+from imprint._core.footprint.models.base import FPArray
 
 
 class TestFPArray:

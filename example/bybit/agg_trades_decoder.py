@@ -2,9 +2,8 @@ from collections.abc import Iterator
 from typing import override
 
 from msgspec import Struct
-from msgspec.json import Decoder
 
-from imprint.api.setup import AggTradesDecoder
+from imprint.configs import AggTradesDecoder
 
 
 class BybitAggTrade(Struct):
@@ -19,18 +18,11 @@ class BybitTradeMsg(Struct):
     data: list[BybitAggTrade]
 
 
-class BybitAggTradesDecoder(AggTradesDecoder):
+class BybitAggTradesDecoder(AggTradesDecoder[BybitTradeMsg]):
     @override
-    def __post_init__(self) -> None:
-        self.decoder: Decoder[BybitTradeMsg] = Decoder(
-            type=BybitTradeMsg, strict=False
-        )
-
-    @override
-    def decode(
-        self, raw_data: memoryview
+    def decode_agg_trade(
+        self, msg: BybitTradeMsg
     ) -> Iterator[tuple[float, float, int, int]]:
-        msg = self.decoder.decode(raw_data)
         for t in msg.data:
             is_sell = 1 if (t.S.upper() == "SELL") else 0
             yield float(t.p), float(t.v), t.T, is_sell

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imprint.core.settings import (
+from imprint._core.settings import (
     BarHeaders,
     CachedStatesData,
     EquityHeaders,

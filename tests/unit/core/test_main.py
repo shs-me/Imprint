@@ -5,9 +5,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imprint.core.configs import Setup
-from imprint.core.main import MainAgent
-from imprint.core.settings import LogLevel, ProcsIds
+from imprint._core.configs import Setup
+from imprint._core.main import MainAgent
+from imprint._core.settings import LogLevel, ProcsIds
 
 
 @pytest.fixture

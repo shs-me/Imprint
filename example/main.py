@@ -1,19 +1,18 @@
 from example.algorithm import IntraDay
 from example.binance.agg_trades_decoder import BinanceAggTradesDecoder
 from example.binance.order_encoder import BinanceOrderEncoder
+from example.binance.rest_adapter import BinanceFuturesREST
 from example.binance.user_stream_decoder import BinanceUserStreamDecoder
 from example.execution import HedgeExecution
-from imprint.api.setup import (
+from imprint import Imprint, pct, tf
+from imprint.configs import (
     Account,
     Backtest,
     Connector,
     Footprint,
-    Imprint,
     Live,
     RiskManagement,
     Strategy,
-    Timeframe,
-    pct,
 )
 
 if __name__ == "__main__":
@@ -40,21 +39,23 @@ if __name__ == "__main__":
             ),
             Live(
                 connector=Connector(
-                    base_uri_for_rest="https://fapi.binance.com",
-                    base_uri_for_ws="wss://ws-fapi.binance.com/ws-fapi/v1",
-                    base_uri_for_wss="wss://fstream.binance.com",
+                    base_rest_url="https://fapi.binance.com",
+                    base_ws_url="wss://ws-fapi.binance.com/ws-fapi/v1",
+                    base_wss_url="wss://fstream.binance.com",
                     market_data_uri_for_wss="wss://fstream.binance.com/market/ws/dashusdt@aggTrade",
+                    get_user_data_uri_for_wss="wss://fstream.binance.com/pm/v1/userSecure?listenKey=",
                 ),
                 agg_trades_decoder=BinanceAggTradesDecoder,
                 order_encoder=BinanceOrderEncoder,
                 user_stream_decoder=BinanceUserStreamDecoder,
+                exchange_rest=BinanceFuturesREST,
             ),
         ),
         symbol="DASHUSDT",
         strategy=Strategy(
             algorithm=IntraDay,
             footprint=Footprint(
-                timeframe=Timeframe.M5,
+                timeframe=tf.M5,
                 step_tick=5,
                 save_fp_headers=True,
             ),

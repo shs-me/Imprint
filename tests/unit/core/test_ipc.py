@@ -4,11 +4,11 @@ from typing import Any
 
 import pytest
 
-from imprint.core.ipc.dispatcher import Dispatcher
-from imprint.core.ipc.manager.host import Host as HostManager
-from imprint.core.ipc.manager.node import Node as NodeManager
-from imprint.core.settings import ProcsIds
-from imprint.core.settings import StatusCodes as scs
+from imprint._core.ipc.dispatcher import Dispatcher
+from imprint._core.ipc.manager.host import Host as HostManager
+from imprint._core.ipc.manager.node import Node as NodeManager
+from imprint._core.settings import ProcsIds
+from imprint._core.settings import StatusCodes as scs
 
 
 @pytest.fixture

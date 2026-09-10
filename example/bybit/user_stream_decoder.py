@@ -1,13 +1,18 @@
-from typing import override
+from typing import Any, override
 
-from imprint.api.setup import UserStreamDecoder
+from websockets import ClientConnection
+
+from imprint.configs import UserStreamDecoder
 
 
-class BybitUserStreamDecoder(UserStreamDecoder):
+class BybitUserStreamDecoder(UserStreamDecoder[Any]):
     @override
-    def __post_init__(self):
-        pass
+    async def on_pre_connect(self) -> str: ...
 
     @override
-    def decode_user_event(self, raw_json: bytes) -> bytes | None:
-        pass
+    async def on_connection(self, ws: ClientConnection) -> None: ...
+
+    @override
+    def decode_user_event(
+        self, raw_data: bytes | memoryview
+    ) -> bytes | None: ...

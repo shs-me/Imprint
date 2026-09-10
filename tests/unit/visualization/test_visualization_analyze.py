@@ -12,10 +12,10 @@ from datetime import UTC, datetime
 import numpy as np
 import pytest
 
-from imprint.core import constant as c
-from imprint.visualization.analyze.base import Stats
-from imprint.visualization.analyze.equity_history import analyze_equity_history
-from imprint.visualization.analyze.metrics import (
+from imprint._core import constant as c
+from imprint._vis.analyze.base import Stats
+from imprint._vis.analyze.equity_history import analyze_equity_history
+from imprint._vis.analyze.metrics import (
     calculate_avg_hold_time_positions,
     calculate_avg_loss,
     calculate_avg_mae_pct,
@@ -31,8 +31,8 @@ from imprint.visualization.analyze.metrics import (
     calculate_tp_sl_info,
     calculate_win_rate,
 )
-from imprint.visualization.analyze.orders_history import analyze_orders_history
-from imprint.visualization.settings import OHLC, CloseTrades, OpenTrades
+from imprint._vis.analyze.orders_history import analyze_orders_history
+from imprint._vis.settings import OHLC, CloseTrades, OpenTrades
 
 # ============================================================================
 # 1. Tests for `metrics.py`

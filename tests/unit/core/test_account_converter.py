@@ -6,9 +6,9 @@ import numpy as np
 from numpy.typing import NDArray
 from pytest import MonkeyPatch, fixture
 
-from imprint.core import constant as c
-from imprint.core.configs import Account, RiskManagement, pct
-from imprint.core.exchange_sim.account.converter import (
+from imprint._core import constant as c
+from imprint._core.configs import Account, RiskManagement, pct
+from imprint._core.exchange_sim.account.converter import (
     Converter,
     to_long_nPnl,
     to_nMargin,

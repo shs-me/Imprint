@@ -3,7 +3,7 @@ from typing import override
 
 from numpy import bool_, int64
 
-from imprint.api.setup import FootprintEngine
+from imprint.configs import FootprintEngine
 
 
 @dataclass

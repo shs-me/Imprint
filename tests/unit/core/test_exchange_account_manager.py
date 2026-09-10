@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from imprint.core import constant as c
-from imprint.core.configs import Account, Coin, Footprint, Setup
-from imprint.core.exchange_sim.account.manager import (
+from imprint._core import constant as c
+from imprint._core.configs import Account, Coin, Footprint, Setup
+from imprint._core.exchange_sim.account.manager import (
     EquityC,
     EquityH,
     EquityL,
@@ -17,7 +17,7 @@ from imprint.core.exchange_sim.account.manager import (
     Manager,
     update_equity_ohlc,
 )
-from imprint.core.settings import Timeframe
+from imprint._core.settings import Timeframe
 
 
 class ConcreteManager(Manager):

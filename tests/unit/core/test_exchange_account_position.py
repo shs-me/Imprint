@@ -2,14 +2,14 @@
 
 from unittest.mock import MagicMock
 
-from imprint.core import constant as c
-from imprint.core.configs import Account, Coin, pct
-from imprint.core.exchange_sim.account.converter import (
+from imprint._core import constant as c
+from imprint._core.configs import Account, Coin, pct
+from imprint._core.exchange_sim.account.converter import (
     to_long_nPnl,
     to_nMargin,
     to_short_nPnl,
 )
-from imprint.core.exchange_sim.account.position import (
+from imprint._core.exchange_sim.account.position import (
     Position,
     _update_long_mae_and_mfe,
     _update_long_position,

@@ -2,8 +2,8 @@ import time
 from dataclasses import dataclass
 from typing import override
 
-from imprint.api.setup import BaseExecution
-from imprint.api.setup import constant as c
+from imprint import constant as c
+from imprint.configs import BaseExecution
 
 
 @dataclass

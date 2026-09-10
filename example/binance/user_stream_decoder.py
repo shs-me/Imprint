@@ -1,20 +1,46 @@
+import asyncio
 import struct
+from asyncio import Task
+from dataclasses import dataclass, field
 from typing import Any, override
 
-import msgspec
+from websockets import ClientConnection
 
-from imprint.api.setup import UserStreamDecoder
-from imprint.api.setup import constant as c
+from imprint import constant as c
+from imprint._core.utils.base_rest import RestResponseError
+from imprint.configs import UserStreamDecoder
 
 
-class BinanceUserStreamDecoder(UserStreamDecoder):
+@dataclass(slots=True)
+class BinanceUserStreamDecoder(UserStreamDecoder[dict[str, Any]]):
+    keep_task: Task[None] | None = field(default=None, init=False)
+
     @override
-    def __post_init__(self) -> None:
-        self.decoder: msgspec.json.Decoder[Any] = msgspec.json.Decoder()
+    async def on_pre_connect(self) -> str:
+        listen_key: str = await self.rest.get_listen_key_async()
+
+        if self.keep_task and not self.keep_task.done():
+            self.keep_task.cancel()
+
+        self.keep_task = asyncio.create_task(self.keep_listen_key(listen_key))
+        return f"{self.base_url}{listen_key}"
+
+    async def keep_listen_key(self, listen_key: str) -> None:
+        try:
+            while True:
+                await asyncio.sleep(30 * 60)
+                await self.rest.keep_listen_key_async(listen_key)
+        except asyncio.CancelledError:
+            pass
+        except RestResponseError as e:
+            return self.rest.log(f"Failed to keep listen key: {e}", "ERROR")
 
     @override
-    def decode_user_event(self, raw_json: bytes) -> bytes | None:
-        data = self.decoder.decode(raw_json)
+    async def on_connection(self, ws: ClientConnection) -> None: ...
+
+    @override
+    def decode_user_event(self, raw_data: bytes | memoryview) -> bytes | None:
+        data: dict[str, Any] = self.decoder.decode(raw_data)
         event_type = data.get("e")
 
         if event_type == "ORDER_TRADE_UPDATE":

@@ -2,7 +2,7 @@
 
 import pytest
 
-from imprint.core.configs import (
+from imprint._core.configs import (
     FLOAT64,
     INT64,
     OFFSET,
@@ -23,7 +23,7 @@ from imprint.core.configs import (
     TextStream,
     pct,
 )
-from imprint.core.settings import Timeframe
+from imprint._core.settings import Timeframe
 
 
 class TestModuleConstants:

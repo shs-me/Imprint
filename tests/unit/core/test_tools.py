@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from imprint.core.utils.tools import (
+from imprint._core.utils.tools import (
     DebugEncoder,
     download_agg_trades_history,
     download_file,
@@ -154,7 +154,7 @@ class TestDumpException:
     def test_writes_valid_json_entry_to_exc_dump_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import imprint.core.constant as const
+        import imprint._core.constant as const
 
         dump_path = tmp_path / "dump" / "exc_dump.json"
         dump_path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,7 +179,7 @@ class TestDumpException:
     def test_dump_exception_when_no_active_exception(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import imprint.core.constant as const
+        import imprint._core.constant as const
 
         dump_path = tmp_path / "dump" / "exc_dump.json"
         dump_path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,7 +194,7 @@ class TestDumpException:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        import imprint.core.constant as const
+        import imprint._core.constant as const
 
         # Point to invalid dir path that cannot be written to
         monkeypatch.setattr(
@@ -212,8 +212,8 @@ class TestDumpException:
     def test_dump_exception_handles_unserializable_local_var(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import imprint.core.constant as const
-        import imprint.core.utils.tools as tools_mod
+        import imprint._core.constant as const
+        import imprint._core.utils.tools as tools_mod
 
         dump_path = tmp_path / "dump" / "exc_dump.json"
         dump_path.parent.mkdir(parents=True, exist_ok=True)
@@ -280,7 +280,7 @@ class TestDownloadAggTradesHistory:
     def test_download_agg_trades_history_all_branches(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import imprint.core.constant as const
+        import imprint._core.constant as const
 
         data_dir = tmp_path / "data"
         monkeypatch.setattr(const, "DATA_PATH", str(data_dir))
@@ -297,7 +297,7 @@ class TestDownloadAggTradesHistory:
             with zipfile.ZipFile(_path, "w") as zf:
                 zf.writestr("trade_data.csv", csv_content)
 
-        import imprint.core.utils.tools as tools_mod
+        import imprint._core.utils.tools as tools_mod
 
         monkeypatch.setattr(tools_mod, "download_file", fake_download_file)
 

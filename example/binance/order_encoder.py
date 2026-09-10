@@ -1,9 +1,9 @@
+from dataclasses import dataclass
 from typing import override
 
 from msgspec import Struct
-from msgspec.json import Encoder
 
-from imprint.api.setup import OrderEncoder
+from imprint.configs import OrderEncoder
 
 
 class NewOrderParam(Struct):
@@ -29,12 +29,8 @@ class Order(Struct):
     params: NewOrderParam | CancelOrderParam
 
 
+@dataclass(slots=True)
 class BinanceOrderEncoder(OrderEncoder):
-    encoder: Encoder
-
-    def __post_init__(self) -> None:
-        self.encoder = Encoder()
-
     @override
     def encode_new_order(
         self,
@@ -47,7 +43,7 @@ class BinanceOrderEncoder(OrderEncoder):
         price: float,
         qty: float,
         time_in_force: str = "GTC",
-    ) -> bytes:
+    ) -> bytes | None:
         payload = Order(
             id=client_order_id,
             method="order.place",
@@ -63,10 +59,12 @@ class BinanceOrderEncoder(OrderEncoder):
                 timeInForce=None if is_market else time_in_force,
             ),
         )
-        return self.encoder.encode(payload)
+        return self.encode(payload)
 
     @override
-    def encode_cancel_order(self, symbol: str, client_order_id: int) -> bytes:
+    def encode_cancel_order(
+        self, symbol: str, client_order_id: int
+    ) -> bytes | None:
         payload = Order(
             id=client_order_id,
             method="order.cancel",
@@ -75,4 +73,4 @@ class BinanceOrderEncoder(OrderEncoder):
                 origClientOrderId=f"gc_{client_order_id}",
             ),
         )
-        return self.encoder.encode(payload)
+        return self.encode(payload)
