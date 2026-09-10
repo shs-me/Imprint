@@ -1,6 +1,8 @@
 """Base synchronous & asynchronous REST client."""
 
 from abc import ABC
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Literal, Self, TypeVar, final
 
@@ -53,7 +55,7 @@ class BaseREST(ABC):
     read_timeout: float | None = field(default=10.0, init=False)
     write_timeout: float | None = field(default=10.0, init=False)
     pool_timeout: float | None = field(default=10.0, init=False)
-    _timeout: httpx.Timeout = field(init=False)
+    __timeout: httpx.Timeout = field(init=False)
 
     _sync_client: httpx.Client | None = field(
         default=None, init=False, repr=False
@@ -93,15 +95,35 @@ class BaseREST(ABC):
 
     @final
     @property
-    def sync_client(self) -> httpx.Client:
-        """Lazy initialization of sync client to avoid cross-process socket leaks."""
-        if self._sync_client is None or self._sync_client.is_closed:
-            self._timeout = httpx.Timeout(
+    def _timeout(self) -> httpx.Timeout:
+        if not hasattr(self, f"_{BaseREST.__name__}__timeout"):
+            self.__timeout = httpx.Timeout(
                 connect=self.connect_timeout,
                 read=self.read_timeout,
                 write=self.write_timeout,
                 pool=self.pool_timeout,
             )
+        else:
+            if self.__timeout.connect != self.connect_timeout:
+                self.__timeout.connect = self.connect_timeout
+
+            if self.__timeout.read != self.read_timeout:
+                self.__timeout.read = self.read_timeout
+
+            if self.__timeout.write != self.write_timeout:
+                self.__timeout.write = self.write_timeout
+
+            if self.__timeout.pool != self.pool_timeout:
+                self.__timeout.pool = self.pool_timeout
+
+        return self.__timeout
+
+    @final
+    @property
+    def sync_client(self) -> httpx.Client:
+        """Lazy initialization of sync client to avoid cross-process socket leaks."""
+
+        if self._sync_client is None or self._sync_client.is_closed:
             self._sync_client = httpx.Client(
                 base_url=self.base_url,
                 timeout=self._timeout,
@@ -115,13 +137,8 @@ class BaseREST(ABC):
     @property
     def async_client(self) -> httpx.AsyncClient:
         """Lazy initialization of async client bound to the calling event loop."""
+
         if self._async_client is None or self._async_client.is_closed:
-            self._timeout = httpx.Timeout(
-                connect=self.connect_timeout,
-                read=self.read_timeout,
-                write=self.write_timeout,
-                pool=self.pool_timeout,
-            )
             self._async_client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=self._timeout,
@@ -134,6 +151,7 @@ class BaseREST(ABC):
     @final
     def close_sync(self) -> None:
         """Closes active synchronous client session."""
+
         if self._sync_client is not None and not self._sync_client.is_closed:
             self._sync_client.close()
             self._sync_client = None
@@ -141,6 +159,7 @@ class BaseREST(ABC):
     @final
     async def close_async(self) -> None:
         """Closes active asynchronous client session."""
+
         if self._async_client is not None and not self._async_client.is_closed:
             await self._async_client.aclose()
             self._async_client = None
@@ -193,6 +212,7 @@ class BaseREST(ABC):
         self, raw_content: bytes, response_type: type[T] | None
     ) -> T | Any | bytes:
         """Decodes response bytes using msgspec with optional schema enforcement."""
+
         if not raw_content:
             return None
 
@@ -212,6 +232,45 @@ class BaseREST(ABC):
             raise RestDecodeError(f"msgspec decode error: {exc}") from exc
 
     @final
+    @contextmanager
+    def _handle_httpx_errors(
+        self, method: str, endpoint: str, is_async: bool = False
+    ) -> Generator[None]:
+        """Unified context manager to translate httpx exceptions into RestError subtypes."""
+
+        mode: str = "Async" if is_async else "Sync"
+        method_upper: str = method.upper()
+
+        try:
+            yield
+        except httpx.TimeoutException as exc:
+            msg: str = f"{mode} Timeout [{method_upper} {endpoint}]: {exc}"
+            self.log(msg, level="WARNING")
+            raise RestTimeoutError(msg) from exc
+
+        except httpx.ConnectError as exc:
+            msg = f"{mode} Connection Failed [{method_upper} {endpoint}]: {exc}"
+            self.log(msg, level="ERROR")
+            raise RestConnectionError(msg) from exc
+
+        except httpx.HTTPStatusError as exc:
+            msg = f"HTTP Error [{exc.response.status_code} on {method_upper} {endpoint}]"
+            self.log(
+                f"{msg} | Body: {exc.response.content[:300]!r}", level="ERROR"
+            )
+            raise RestResponseError(
+                status_code=exc.response.status_code,
+                message=str(exc),
+                response_body=exc.response.content,
+                headers=exc.response.headers,
+            ) from exc
+
+        except httpx.RequestError as exc:
+            msg = f"{mode} Request Error [{method_upper} {endpoint}]: {exc}"
+            self.log(msg, level="ERROR")
+            raise RestConnectionError(msg) from exc
+
+    @final
     def send_sync(
         self,
         method: str,
@@ -223,25 +282,15 @@ class BaseREST(ABC):
         response_type: type[T] | None = None,
         timeout: float | None = None,
     ) -> T | Any | bytes:
-        """Executes a synchronous HTTP request and returns the decoded msgspec object.
+        """Executes a synchronous HTTP request and returns the decoded msgspec object."""
 
-        Args:
-            method: HTTP verb ('GET', 'POST', 'DELETE', etc.)
-            endpoint: Relative path or full URL.
-            params: Query string parameters.
-            json_body: Object or msgspec.Struct to encode as JSON.
-            content: Raw byte payload.
-            headers: Specific headers for this request.
-            response_type: Optional type or msgspec.Struct for typed validation.
-            timeout: Per-request timeout override.
-        """
         payload, req_headers = self._prepare_payload(
             json_body, content, headers
         )
-        client = self.sync_client
+        client: httpx.Client = self.sync_client
 
-        try:
-            response = client.request(
+        with self._handle_httpx_errors(method, endpoint, is_async=False):
+            response: httpx.Response = client.request(
                 method=method.upper(),
                 url=endpoint,
                 params=params,
@@ -250,34 +299,6 @@ class BaseREST(ABC):
                 timeout=timeout or self._timeout,
             )
             response.raise_for_status()
-
-        except httpx.TimeoutException as exc:
-            msg = f"Sync Timeout [{method.upper()} {endpoint}]: {exc}"
-            self.log(msg, level="WARNING")
-            raise RestTimeoutError(msg) from exc
-
-        except httpx.ConnectError as exc:
-            msg = f"Sync Connection Failed [{method.upper()} {endpoint}]: {exc}"
-            self.log(msg, level="ERROR")
-            raise RestConnectionError(msg) from exc
-
-        except httpx.HTTPStatusError as exc:
-            msg = f"HTTP Error [{exc.response.status_code} on {method.upper()} {endpoint}]"
-            self.log(
-                f"{msg} | Body: {exc.response.content[:300]!r}",
-                level="ERROR",
-            )
-            raise RestResponseError(
-                status_code=exc.response.status_code,
-                message=str(exc),
-                response_body=exc.response.content,
-                headers=exc.response.headers,
-            ) from exc
-
-        except httpx.RequestError as exc:
-            msg = f"Sync Request Error [{method.upper()} {endpoint}]: {exc}"
-            self.log(msg, level="ERROR")
-            raise RestConnectionError(msg) from exc
 
         return self._decode_response(response.content, response_type)
 
@@ -293,25 +314,15 @@ class BaseREST(ABC):
         response_type: type[T] | None = None,
         timeout: float | None = None,
     ) -> T | Any | bytes:
-        """Executes an asynchronous HTTP request and returns the decoded msgspec object.
+        """Executes an asynchronous HTTP request and returns the decoded msgspec object."""
 
-        Args:
-            method: HTTP verb ('GET', 'POST', 'DELETE', etc.)
-            endpoint: Relative path or full URL.
-            params: Query string parameters.
-            json_body: Object or msgspec.Struct to encode as JSON.
-            content: Raw byte payload.
-            headers: Specific headers for this request.
-            response_type: Optional type or msgspec.Struct for typed validation.
-            timeout: Per-request timeout override.
-        """
         payload, req_headers = self._prepare_payload(
             json_body, content, headers
         )
-        client = self.async_client
+        client: httpx.AsyncClient = self.async_client
 
-        try:
-            response = await client.request(
+        with self._handle_httpx_errors(method, endpoint, is_async=True):
+            response: httpx.Response = await client.request(
                 method=method.upper(),
                 url=endpoint,
                 params=params,
@@ -320,35 +331,5 @@ class BaseREST(ABC):
                 timeout=timeout or self._timeout,
             )
             response.raise_for_status()
-
-        except httpx.TimeoutException as exc:
-            msg = f"Async Timeout [{method.upper()} {endpoint}]: {exc}"
-            self.log(msg, level="WARNING")
-            raise RestTimeoutError(msg) from exc
-
-        except httpx.ConnectError as exc:
-            msg = (
-                f"Async Connection Failed [{method.upper()} {endpoint}]: {exc}"
-            )
-            self.log(msg, level="ERROR")
-            raise RestConnectionError(msg) from exc
-
-        except httpx.HTTPStatusError as exc:
-            msg = f"HTTP Error [{exc.response.status_code} on {method.upper()} {endpoint}]"
-            self.log(
-                f"{msg} | Body: {exc.response.content[:300]!r}",
-                level="ERROR",
-            )
-            raise RestResponseError(
-                status_code=exc.response.status_code,
-                message=str(exc),
-                response_body=exc.response.content,
-                headers=exc.response.headers,
-            ) from exc
-
-        except httpx.RequestError as exc:
-            msg = f"Async Request Error [{method.upper()} {endpoint}]: {exc}"
-            self.log(msg, level="ERROR")
-            raise RestConnectionError(msg) from exc
 
         return self._decode_response(response.content, response_type)
