@@ -8,7 +8,7 @@ from numpy import uint8
 from numpy.lib.npyio import NpzFile
 from numpy.typing import NDArray
 
-from imprint.core.constant import DATA_PATH, DATA_TYPE_AGGTRADES_PATH
+from imprint.core.constant import AGG_TRADES_DATA_PATH
 from imprint.core.ipc import node_handler
 from imprint.core.pipeline.streaming.base import Base
 from imprint.core.settings import StatusCodes as scs
@@ -40,13 +40,10 @@ class MarketDataStream(Base):
         self.start_date = self.manager.cfgSetup.backtest_start_date
         self.end_date = self.manager.cfgSetup.backtest_end_date
 
-        self.datadir = DATA_PATH
-        self.type_data = DATA_TYPE_AGGTRADES_PATH
-        self.data_path = (
-            f"{DATA_PATH}/{DATA_TYPE_AGGTRADES_PATH}/{self.symbol}.npz"
-        )
+        self.type_data = AGG_TRADES_DATA_PATH
+        self.data_path = f"{AGG_TRADES_DATA_PATH}/{self.symbol}.npz"
         self.data_manifest_path = (
-            f"{DATA_PATH}/{DATA_TYPE_AGGTRADES_PATH}/{self.symbol}_manifest.txt"
+            f"{AGG_TRADES_DATA_PATH}/{self.symbol}_manifest.txt"
         )
 
         self.data_paths = self.get_data_paths()

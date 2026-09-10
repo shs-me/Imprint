@@ -7,5 +7,4 @@
 .coverage
 __pycache__/
 data
-dump
 logs

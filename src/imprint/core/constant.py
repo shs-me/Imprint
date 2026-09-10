@@ -29,24 +29,18 @@ BASE_UM_AGGTRADES_DAILY_URL = (
 )
 
 # - - PATH'S - -
-# Logging
 LOGS_PATH = "logs"
 CORE_LOG_PATH = f"{LOGS_PATH}/imprint-core.log"
 API_LOG_PATH = f"{LOGS_PATH}/imprint-api.log"
 VISUALIZATION_LOG_PATH = f"{LOGS_PATH}/imprint-vis.log"
-# Data Download
+EXC_DUMP_PATH = f"{LOGS_PATH}/exc_dump.json"
 DATA_PATH = "data"
-DATA_TYPE_AGGTRADES_PATH = "aggTrades"
-# Dump
-DUMP_PATH = "dump"
-EXC_DUMP_PATH = f"{DUMP_PATH}/exc_dump.json"
-# src/imprint/_core/constant.py
-EQUITY_HISTORY_DUMP_PATH = f"{DUMP_PATH}/equity_history.npy"
-ORDERS_HISTORY_DUMP_PATH = f"{DUMP_PATH}/order_history.npy"
-BASE_FOOTPRINT_DUMP_PATH = f"{DUMP_PATH}/FootprintHeaders"
-ALGORITHM_METADATA_DUMP_PATH = f"{DUMP_PATH}/algorithm_metadata.npy"
-# Other
-DIRS_LIST = [DATA_PATH, LOGS_PATH, DUMP_PATH]
+AGG_TRADES_DATA_PATH = f"{DATA_PATH}/aggTrades"
+FOOTPRINT_HEADERS_DATA_PATH = f"{DATA_PATH}/FootprintHeaders"
+EQUITY_HISTORY_DATA_PATH = f"{DATA_PATH}/equity_history.npy"
+ORDERS_HISTORY_DATA_PATH = f"{DATA_PATH}/order_history.npy"
+REPORT_DATA_PATH = f"{DATA_PATH}/report.html"
+DIRS_LIST = [DATA_PATH, LOGS_PATH]
 
 # - - CORE - -
 # BarHeader

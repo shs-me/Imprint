@@ -40,7 +40,7 @@ class Render:
 
     auto_open: bool
 
-    output_path: str = field(default="dump/report.html", init=False)
+    output_path: str = field(default=c.REPORT_DATA_PATH, init=False)
     template_name: str = field(default="template.html", init=False)
     path_to_template: str = field(default="imprint.visualization", init=False)
 

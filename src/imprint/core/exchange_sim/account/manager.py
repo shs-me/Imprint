@@ -54,7 +54,7 @@ class Manager(Position, ABC):
         """Saves active equity history array to disk."""
 
         valid_mask = self.equity_history[:, 0] > 0
-        np.save(c.EQUITY_HISTORY_DUMP_PATH, self.equity_history[valid_mask])
+        np.save(c.EQUITY_HISTORY_DATA_PATH, self.equity_history[valid_mask])
 
 
 @njit(cache=True)

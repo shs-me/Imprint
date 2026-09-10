@@ -83,8 +83,13 @@ class Imprint:
     __kwargs: dict[str, _Cfg] = field(default_factory=dict, init=False)
     __backtest: Backtest = field(init=False)
     __live: Live = field(init=False)
+    __init_complete: bool = field(init=False)
 
     def __post_init__(self) -> None:
+        self.__init_logger()
+
+        logger.info("Init, started.")
+
         args: list[_Cfg] = [
             self.strategy.risk_management,
             self.strategy.footprint,
@@ -116,6 +121,11 @@ class Imprint:
         for obj in args:
             self.__kwargs[obj.__class__.__name__] = obj
 
+        self.__init_complete = self.__init_data()
+        logger.info(
+            f"Init, {'completed' if self.__init_complete else 'failed'}.\n"
+        )
+
     @property
     def is_backtest_mode(self) -> bool:
         if (not hasattr(self, f"_{Imprint.__name__}__backtest")) and (
@@ -133,6 +143,45 @@ class Imprint:
                     self.__live = self.run_mode
 
         return hasattr(self, f"_{Imprint.__name__}__backtest")
+
+    def __init_logger(self) -> None:
+        import imprint.api as iapi
+        import imprint.core as icore
+        import imprint.visualization as ivis
+        from imprint.core.constant import (
+            API_LOG_PATH,
+            CORE_LOG_PATH,
+            VISUALIZATION_LOG_PATH,
+        )
+
+        logger.remove()
+        logger.add(
+            API_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | Imprint | {message}",
+            filter=lambda r: r["name"].startswith(iapi.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
+        logger.add(
+            CORE_LOG_PATH,
+            format=(
+                ("{elapsed} | " if self.is_backtest_mode else "")
+                + "{extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
+            ),
+            filter=lambda r: r["name"].startswith(icore.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
+        logger.add(
+            VISUALIZATION_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
+            filter=lambda r: r["name"].startswith(ivis.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
 
     def __backtest_setup(self) -> None:
         self.__setup_core.backtest_start_date = (
@@ -166,46 +215,7 @@ class Imprint:
 
         self.__setup_core.backtesting = False
 
-    @error_handler()
-    def run_vis(self, auto_open: bool = True) -> None:
-        if self.is_backtest_mode:
-            self.__vis_logger()
-
-            from imprint.core.constant import (
-                BASE_FOOTPRINT_DUMP_PATH,
-                EQUITY_HISTORY_DUMP_PATH,
-                ORDERS_HISTORY_DUMP_PATH,
-            )
-            from imprint.visualization import Render
-
-            Render(
-                footprint_headers_path=BASE_FOOTPRINT_DUMP_PATH,
-                symbol=self.__coin.symbol,
-                start_date_str=self.__backtest.backtest_start_date,
-                end_date_str=self.__backtest.backtest_end_date,
-                equity_history_path=EQUITY_HISTORY_DUMP_PATH,
-                orders_history_path=ORDERS_HISTORY_DUMP_PATH,
-                start_balance=self.__backtest.account.balance,
-                price_mult=self.__coin.price_mult,
-                qty_mult=self.__coin.qty_mult,
-                scale_mult=self.__backtest.account.scale_mult,
-                leverage=self.__backtest.account.leverage,
-                timeframe=self.strategy.footprint.timeframe,
-                auto_open=auto_open,
-            )
-
-    @error_handler()
-    def run_core(self) -> None:
-        if self.__init_data():
-            self.__core_logger()
-
-            from imprint.core.main import run
-
-            run(**self.__kwargs)
-
     def __init_data(self) -> bool:
-        self.__api_logger()
-
         from imprint.core.utils import DownloadAggTradesHistory
 
         if self.is_backtest_mode:
@@ -219,7 +229,7 @@ class Imprint:
                     qty_mult=self.__coin.qty_mult,
                 ).download()
             except DownloadError as e:
-                logger.error(f"Init data failed: {e}")
+                logger.error(f"Init data, failed: {e}")
                 return False
         else:
             # rest = RestAgent(setup.symbol, setup.run_mode.connector)
@@ -228,38 +238,41 @@ class Imprint:
 
         return True
 
-    def __api_logger(self) -> None:
-        logger.remove()
+    @error_handler()
+    def run_vis(self, auto_open: bool = True) -> None:
+        if self.__init_complete and self.is_backtest_mode:
+            from imprint.core.constant import (
+                EQUITY_HISTORY_DATA_PATH,
+                FOOTPRINT_HEADERS_DATA_PATH,
+                ORDERS_HISTORY_DATA_PATH,
+            )
+            from imprint.visualization.main import Render
 
-        from imprint.core.constant import API_LOG_PATH
+            logger.info("Visualization, started.")
+            Render(
+                footprint_headers_path=FOOTPRINT_HEADERS_DATA_PATH,
+                symbol=self.__coin.symbol,
+                start_date_str=self.__backtest.backtest_start_date,
+                end_date_str=self.__backtest.backtest_end_date,
+                equity_history_path=EQUITY_HISTORY_DATA_PATH,
+                orders_history_path=ORDERS_HISTORY_DATA_PATH,
+                start_balance=self.__backtest.account.balance,
+                price_mult=self.__coin.price_mult,
+                qty_mult=self.__coin.qty_mult,
+                scale_mult=self.__backtest.account.scale_mult,
+                leverage=self.__backtest.account.leverage,
+                timeframe=self.strategy.footprint.timeframe,
+                auto_open=auto_open,
+            )
+            logger.info("Visualization, closed.\n")
 
-        logger.add(
-            API_LOG_PATH,
-            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
-        )
+    @error_handler()
+    def run_core(self) -> None:
+        if self.__init_complete:
+            from imprint.core.main import run
 
-    def __core_logger(self) -> None:
-        logger.remove()
-
-        from imprint.core.constant import CORE_LOG_PATH
-
-        logger.add(
-            CORE_LOG_PATH,
-            format=(
-                ("{elapsed} | " if self.is_backtest_mode else "")
-                + "{extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
-            ),
-            rotation="10 MB",
-            colorize=True,
-            enqueue=True,
-        )
-
-    def __vis_logger(self) -> None:
-        logger.remove()
-
-        from imprint.core.constant import VISUALIZATION_LOG_PATH
-
-        logger.add(
-            VISUALIZATION_LOG_PATH,
-            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
-        )
+            logger.info(
+                f"Core in {'Backtest' if self.is_backtest_mode else 'Live'} mode, started."
+            )
+            run(**self.__kwargs)
+            logger.info("Core, closed.\n")

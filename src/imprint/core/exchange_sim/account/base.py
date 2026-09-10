@@ -97,7 +97,7 @@ class Account(Base, ABC):
 
         if self.__save_orders_history:
             np.save(
-                c.ORDERS_HISTORY_DUMP_PATH,
+                c.ORDERS_HISTORY_DATA_PATH,
                 self.orders_history[: self.ohWid[0], :],
             )
 

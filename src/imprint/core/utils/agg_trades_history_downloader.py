@@ -59,7 +59,7 @@ class DownloadAggTradesHistory(BaseREST):
             self.end_date = today - timedelta(days=1)
 
         self.cur_date = self.start_date
-        self.data_dir = f"{c.DATA_PATH}/{c.DATA_TYPE_AGGTRADES_PATH}"
+        self.data_dir = c.AGG_TRADES_DATA_PATH
         data_path: list[str] = [
             p for p in os.listdir(self.data_dir) if p == f"{self.symbol}.npz"
         ]

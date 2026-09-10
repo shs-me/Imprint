@@ -34,7 +34,7 @@ class Base(ABC):
 
         cfgCoin = self.manager.cfgCoin
         self.__base_fp_dump_path = (
-            f"{c.BASE_FOOTPRINT_DUMP_PATH}/{cfgCoin.symbol.upper()}"
+            f"{c.FOOTPRINT_HEADERS_DATA_PATH}/{cfgCoin.symbol.upper()}"
         )
 
         cfgMetrics = self.manager.cfgMetrics
