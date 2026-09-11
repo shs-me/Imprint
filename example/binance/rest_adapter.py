@@ -30,10 +30,10 @@ class UnknownFilter(BaseFilter, tag=None): ...
 
 class SymbolInfo(msgspec.Struct):
     symbol: str
-    leverage: int
     filters: list[
         PriceFilter | LotSizeFilter | MinNotionalFilter | UnknownFilter
     ]
+    leverage: int = 20
 
 
 class ExchangeInfoResponse(msgspec.Struct):

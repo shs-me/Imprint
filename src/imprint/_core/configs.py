@@ -268,22 +268,12 @@ class RingBuf:
         self.rid_buf = self.reader_id.view.cast("q")
 
     def lag_not_is_safe(self) -> bool:
-        wid, rid, max_wid, max_rid = 0, 0, 0, 0
-        while (max_wid < self.count_writer) or (max_rid < self.count_reader):
+        for rid in range(self.count_reader):
             if (
-                (self.wid_buf[wid] - self.rid_buf[rid] + self.cell_amount)
+                (self.wid_buf[0] - self.rid_buf[rid] + self.cell_amount)
                 % self.cell_amount
             ) > self.safe_lag:
                 return True
-
-            if max_wid < self.count_writer:
-                max_wid += 1
-            if wid < self.count_writer - 1:
-                wid += 1
-            if rid < self.count_reader - 1:
-                rid += 1
-            if max_rid < self.count_reader:
-                max_rid += 1
 
         return False
 
