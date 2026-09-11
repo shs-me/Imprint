@@ -1,4 +1,4 @@
-"""Unit tests for `imprint.core.constant`."""
+"""Unit tests for `imprint._core.constant`."""
 
 import imprint._core.constant as c
 from imprint._core.settings import (
@@ -122,9 +122,9 @@ class TestTradeParamAliases:
             "TP_nPrice": TradeParam.nPrice,
             "TP_nQty": TradeParam.nQty,
             "TP_timestamp": TradeParam.timestamp,
-            "TP_orderParam": TradeParam.orderParam,
-            "TP_orderID": TradeParam.orderID,
-            "TP_commission": TradeParam.nCommission,
+            "TP_order_param": TradeParam.order_param,
+            "TP_order_id": TradeParam.order_id,
+            "TP_nCommission": TradeParam.nCommission,
             "TP_nMAE": TradeParam.nMAE,
             "TP_nMFE": TradeParam.nMFE,
             "TP_ConstantCount": TradeParam.ConstantCount,
@@ -145,9 +145,9 @@ class TestOrderFlagAliases:
             "OF_MARKET_TRIGGER": OrderFlag.MARKET_TRIGGER,
             "OF_LIMIT_TRIGGER": OrderFlag.LIMIT_TRIGGER,
             "OF_NEW": OrderFlag.NEW,
+            "OF_CANCEL": OrderFlag.CANCEL,
             "OF_FILLED": OrderFlag.FILLED,
             "OF_CANCELED": OrderFlag.CANCELED,
-            "OF_OCO": OrderFlag.OCO,
         }
         for alias_name, enum_member in pairs.items():
             assert getattr(c, alias_name) == int(enum_member)
@@ -157,26 +157,24 @@ class TestPathsAndUrls:
     def test_base_directory_constants(self) -> None:
         assert c.LOGS_PATH == "logs"
         assert c.DATA_PATH == "data"
-        assert c.DUMP_PATH == "dump"
 
     def test_log_path_nested_under_logs_path(self) -> None:
-        assert c.CORE_LOG_PATH == f"{c.LOGS_PATH}/core.log"
+        assert c.CORE_LOG_PATH == f"{c.LOGS_PATH}/imprint-core.log"
+        assert c.API_LOG_PATH == f"{c.LOGS_PATH}/imprint-api.log"
+        assert c.VISUALIZATION_LOG_PATH == f"{c.LOGS_PATH}/imprint-vis.log"
+        assert c.EXC_DUMP_PATH == f"{c.LOGS_PATH}/exc_dump.json"
 
-    def test_dump_paths_nested_under_dump_path(self) -> None:
-        assert c.EXC_DUMP_PATH == f"{c.DUMP_PATH}/exc_dump.json"
-        assert c.EQUITY_HISTORY_DUMP_PATH == f"{c.DUMP_PATH}/equity_history.npy"
-        assert c.ORDERS_HISTORY_DUMP_PATH == f"{c.DUMP_PATH}/order_history.npy"
-        assert c.BASE_FOOTPRINT_DUMP_PATH == f"{c.DUMP_PATH}/FootprintHeaders"
+    def test_data_paths_nested_under_data_path(self) -> None:
+        assert c.AGG_TRADES_DATA_PATH == f"{c.DATA_PATH}/aggTrades"
+        assert c.REPORT_DATA_PATH == f"{c.DATA_PATH}/report.html"
+        assert c.EQUITY_HISTORY_DATA_PATH == f"{c.DATA_PATH}/equity_history.npy"
+        assert c.ORDERS_HISTORY_DATA_PATH == f"{c.DATA_PATH}/order_history.npy"
         assert (
-            c.ALGORITHM_METADATA_DUMP_PATH
-            == f"{c.DUMP_PATH}/algorithm_metadata.npy"
+            c.FOOTPRINT_HEADERS_DATA_PATH == f"{c.DATA_PATH}/FootprintHeaders"
         )
 
-    def test_data_type_aggtrades_path(self) -> None:
-        assert c.DATA_TYPE_AGGTRADES_PATH == "aggTrades"
-
     def test_dirs_list_contains_data_logs_and_dump(self) -> None:
-        assert c.DIRS_LIST == [c.DATA_PATH, c.LOGS_PATH, c.DUMP_PATH]
+        assert c.DIRS_LIST == [c.DATA_PATH, c.LOGS_PATH]
 
     def test_rest_and_ws_urls_are_https_and_wss(self) -> None:
         assert c.REST_API_PROD_URL.startswith("https://")

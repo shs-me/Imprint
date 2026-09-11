@@ -1,5 +1,6 @@
-"""Unit tests for `imprint.core.main.MainAgent`."""
+"""Unit tests for `imprint._core.main.MainAgent`."""
 
+from multiprocessing.synchronize import Event, Semaphore
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -22,9 +23,9 @@ class TestMainAgent:
         agent = MainAgent(manager=mock_host_manager, base_kwargs={"foo": "bar"})
         assert agent.is_backtesting is True
         assert agent.with_execution is True
-        assert agent.wss_sem is not None
-        assert agent.engine_event is not None
-        assert agent.execution_event is not None
+        assert isinstance(agent.wss_sem, Semaphore)
+        assert isinstance(agent.engine_event, Event)
+        assert isinstance(agent.execution_event, Event)
 
     def test_check_dirs_creates_directories(
         self,
@@ -34,17 +35,13 @@ class TestMainAgent:
     ) -> None:
         d1 = tmp_path / "data"
         d2 = tmp_path / "logs"
-        d3 = tmp_path / "dump"
-        monkeypatch.setattr(
-            "imprint.core.main.DIRS_LIST", [str(d1), str(d2), str(d3)]
-        )
+        monkeypatch.setattr("imprint._core.main.DIRS_LIST", [str(d1), str(d2)])
 
         agent = MainAgent(manager=mock_host_manager, base_kwargs={})
         agent.check_dirs()
 
         assert d1.exists()
         assert d2.exists()
-        assert d3.exists()
 
     def test_get_procs_funcs_with_and_without_execution(
         self, mock_host_manager: MagicMock
@@ -72,7 +69,7 @@ class TestMainAgent:
         )
 
         def dummy_streaming_proc(
-            _engine_event: ..., _wss_sem: ..., **_kwargs: ...
+            engine_event: ..., wss_sem: ..., **kwargs: ...
         ) -> None: ...
 
         kwargs = agent.get_kwargs_for_func(
@@ -102,7 +99,7 @@ class TestMainAgent:
         self, mock_host_manager: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         mock_process_cls = MagicMock()
-        monkeypatch.setattr("imprint.core.main.Process", mock_process_cls)
+        monkeypatch.setattr("imprint._core.main.Process", mock_process_cls)
 
         agent = MainAgent(manager=mock_host_manager, base_kwargs={})
         success = agent.run_procs()

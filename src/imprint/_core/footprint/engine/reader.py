@@ -3,7 +3,7 @@ from typing import Protocol, final, override
 
 import numpy as np
 from numba import njit
-from numpy import bool_, int32, int64, intp
+from numpy import bool_, int64, intp
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
@@ -145,7 +145,7 @@ def _update_clusters_states(
     idxVP: int,
     idxDP: int,
     fp: NDArray[int64],
-    fp_state: NDArray[int32],
+    fp_state: NDArray[int64],
 ) -> None:
     """Numba JIT kernel recalculating delta domination and big trade flags across clusters."""
 
@@ -168,7 +168,7 @@ def _update_closed_bar_and_fp_states(
     headers: NDArray[int64],
     headers_offset: memoryview,
     fp: NDArray[int64],
-    fp_state: NDArray[int32],
+    fp_state: NDArray[int64],
     fp_state_cache: NDArray[int64],
     baseNprice: int64,
     center: int64,
@@ -278,7 +278,7 @@ def _update_bar_states(
     headers: NDArray[int64],
     headers_offset: memoryview,
     fp: NDArray[int64],
-    fp_state: NDArray[int32],
+    fp_state: NDArray[int64],
     baseNprice: int64,
     center: int64,
     scale: int,

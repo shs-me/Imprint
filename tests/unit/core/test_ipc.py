@@ -1,4 +1,4 @@
-"""Unit tests for `imprint.core.ipc`."""
+"""Unit tests for `imprint._core.ipc`."""
 
 from typing import Any
 
@@ -59,15 +59,15 @@ class TestNodeAndHostMessaging:
     ) -> None:
         host, node = ipc_setup
 
-        node.set_text("Engine worker ready")
-        assert node._procs_status[ProcsIds.engine] & scs.HAVE_TEXT
+        node.set_log("Engine worker ready")
+        assert node._procs_status[ProcsIds.engine] & scs.HAVE_LOG
 
         # Host reads messages from TextStream buffer
-        messages = host.get_text(proc_id=ProcsIds.engine)
+        messages = host.get_log(proc_id=ProcsIds.engine)
         assert len(messages) == 1
         timestamp, text = messages[0]
         assert timestamp > 0
-        assert text == "Engine worker ready"
+        assert text == "Log: Engine worker ready"
 
     def test_node_set_proc_sc_signals_host(
         self, ipc_setup: tuple[HostManager, NodeManager]
@@ -99,8 +99,8 @@ class TestNodeAndHostMessaging:
     ) -> None:
         host, node = ipc_setup
 
-        node.set_proc_sc(scs.UNVALID_DATA, wait_main_task=False)
-        assert host._procs_status[ProcsIds.engine] & scs.UNVALID_DATA
+        node.set_proc_sc(scs.INVALID_DATA, wait_main_task=False)
+        assert host._procs_status[ProcsIds.engine] & scs.INVALID_DATA
 
-        host.clear_proc_sc(scs.UNVALID_DATA, proc_id=ProcsIds.engine)
-        assert (host._procs_status[ProcsIds.engine] & scs.UNVALID_DATA) == 0
+        host.clear_proc_sc(scs.INVALID_DATA, proc_id=ProcsIds.engine)
+        assert (host._procs_status[ProcsIds.engine] & scs.INVALID_DATA) == 0

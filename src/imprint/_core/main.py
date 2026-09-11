@@ -107,10 +107,11 @@ class MainAgent:
                 kwargs["proc_id"], kwargs["task_id"] = proc_id, task_id
 
             else:
-                return self.manager.logger(
+                self.manager.logger(
                     f"Missing arg: [{param_name}] for [{proc_name}]",
                     LogLevel.ERROR,
                 )
+                return None
 
         kwargs = self.base_kwargs | kwargs
 

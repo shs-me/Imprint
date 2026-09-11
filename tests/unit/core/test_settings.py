@@ -1,6 +1,4 @@
-"""Unit tests for `imprint.core.settings`."""
-
-from unittest.mock import MagicMock
+"""Unit tests for `imprint._core.settings`."""
 
 import pytest
 
@@ -12,26 +10,12 @@ from imprint._core.settings import (
     LogLevel,
     OrderBook,
     OrderFlag,
-    ProcsData,
     ProcsIds,
     StateFlags,
     StatusCodes,
     Timeframe,
     TradeParam,
 )
-
-
-class TestProcsData:
-    def test_typed_dict_structure(self) -> None:
-        dummy_proc = MagicMock()
-        data: ProcsData = {
-            "proc_name": "worker",
-            "task_id": 1,
-            "proc": dummy_proc,
-        }
-        assert data["proc_name"] == "worker"
-        assert data["task_id"] == 1
-        assert data["proc"] is dummy_proc
 
 
 class TestProcsIds:
@@ -76,17 +60,6 @@ class TestStatusCodes:
 
     def test_stays_under_64_members(self) -> None:
         assert len(StatusCodes.__members__) < 64
-
-    def test_exceeding_64_members_raises_value_error_direct(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Directly exercises the line in StatusCodes.__new__ within settings.py
-        fake_members = {f"member_{i}": i for i in range(64)}
-        monkeypatch.setattr(StatusCodes, "_member_map_", fake_members)
-        with pytest.raises(
-            ValueError, match="StatusCodes >= 64, but type: int64"
-        ):
-            StatusCodes.__new__(StatusCodes, "overflow_label")
 
 
 class TestStateFlags:

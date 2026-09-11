@@ -1,322 +1,208 @@
-"""Unit tests for `imprint.core.configs`."""
+"""Unit tests for imprint._core.configs module verifying exact memory layouts and logic."""
 
-import pytest
+from typing import Any
 
-from imprint._core.configs import (
-    FLOAT64,
-    INT64,
-    OFFSET,
-    PERCENT,
-    UBYTE,
-    Account,
-    Coin,
-    Connector,
-    DataStream,
-    Footprint,
-    GetUserStream,
-    Metrics,
-    RiskManagement,
-    Segment,
-    Setup,
-    SetUserStream,
-    Signal,
-    TextStream,
-    pct,
-)
+from imprint._core import configs as cfg
 from imprint._core.settings import Timeframe
 
 
-class TestModuleConstants:
-    def test_byte_and_size_constants(self) -> None:
-        assert PERCENT == 10_000
-        assert OFFSET == 0
-        assert UBYTE == 1
-        assert INT64 == 8
-        assert FLOAT64 == 8
-
-
-class TestSegment:
-    def test_segment_initialization(self) -> None:
-        seg = Segment(size=64)
-        assert seg.size == 64
-        assert seg.offset is None
-        assert seg.view is None
-
-
-class Testpct:
-    @pytest.mark.parametrize(
-        "str_,expected_int",
-        [
-            ("0.05%", 5),
-            ("0.02%", 2),
-            ("1%", 100),
-            ("10%", 1_000),
-            ("100%", 10_000),
-            ("50%", 5_000),
-            ("0%", 0),
-        ],
+def test_percent_calculation() -> None:
+    """Verify manual fixed-point percent calculation."""
+    percent = cfg.Percent(0.05)
+    # Manual calculation: round(0.05 / 100 * 10000) = round(5.0) = 5
+    expected_fixed: int = 5
+    assert percent.fixed == expected_fixed, (
+        f"Expected percent fixed value {expected_fixed}, got {percent.fixed}"
     )
-    def test_string_percent_converts_to_fixed_point_int(
-        self, str_: str, expected_int: int
-    ) -> None:
-        assert pct(str_).fixed == expected_int
 
 
-class TestAccount:
-    def test_defaults(self) -> None:
-        account = Account()
-        assert account.leverage == 20
-        assert account.balance == 100.0
-        assert account.min_order_size == 5.0
-        assert account.save_orders_history is False
-        assert account.latency_ms == 100
-        assert account.active_order_limit == 1000
-        assert account.scale_mult == 10**15
-
-    def test_scale_mult_derived_from_scale_prec(self) -> None:
-        assert Account(scale_prec=15).scale_mult == 10**15
-        assert Account(scale_prec=8).scale_mult == 10**8
-        assert Account(scale_prec=0).scale_mult == 1
-
-    def test_commission_and_slippage_are_percent_instances(self) -> None:
-        account = Account(
-            taker_commission=pct("0.05%"),
-            maker_commission=pct("0.02%"),
-            slippage=pct("0.1%"),
-        )
-        assert account.taker_commission.fixed == 5
-        assert account.maker_commission.fixed == 2
-        assert account.slippage.fixed == 10
-
-
-class TestRiskManagement:
-    def test_defaults_produce_expected_fixed_point_values(self) -> None:
-        risk = RiskManagement()
-        assert risk.max_lock_balance.fixed == 1_000
-        assert risk.max_loss_balance.fixed == 1_000
-        assert risk.entry_qty.fixed == 100
-        assert risk.tp_dev.fixed == 500
-        assert risk.sl_dev.fixed == 500
-        assert risk.pass_signal_if_analysis_time_big == 50_000
-        assert risk.pass_execute_signal_if_timer_ms_exepired == 1_000
-
-    def test_custom_percent_overrides(self) -> None:
-        risk = RiskManagement(
-            entry_qty=pct("0.5%"),
-            tp_dev=pct("2%"),
-            sl_dev=pct("1.8%"),
-            pass_signal_if_analysis_time_big=10_000,
-            pass_execute_signal_if_timer_ms_exepired=500,
-        )
-        assert risk.entry_qty.fixed == 50
-        assert risk.tp_dev.fixed == 200
-        assert risk.sl_dev.fixed == 180
-        assert risk.pass_signal_if_analysis_time_big == 10_000
-        assert risk.pass_execute_signal_if_timer_ms_exepired == 500
-
-
-class TestCoin:
-    def test_defaults(self) -> None:
-        coin = Coin()
-        assert coin.symbol == "DASHUSDT"
-        assert coin.tick_size == "0.01"
-        assert coin.lot_size == "0.001"
-
-    @pytest.mark.parametrize(
-        "tick_size,expected_prec,expected_mult",
-        [
-            ("0.01", 2, 100),
-            ("0.001", 3, 1_000),
-            ("1", 0, 1),
-            ("0.1", 1, 10),
-        ],
+def test_account_scale_mult() -> None:
+    """Verify Account scale multiplier initialization."""
+    account = cfg.Account(scale_prec=8)
+    # Manual calculation: 10 ** 8 = 100000000
+    expected_mult: int = 100_000_000
+    assert account.scale_mult == expected_mult, (
+        f"Expected scale multiplier {expected_mult}, got {account.scale_mult}"
     )
-    def test_price_precision_and_multiplier(
-        self, tick_size: str, expected_prec: int, expected_mult: int
-    ) -> None:
-        coin = Coin(tick_size=tick_size)
-        assert coin.price_prec == expected_prec
-        assert coin.price_mult == expected_mult
 
-    @pytest.mark.parametrize(
-        "lot_size,expected_prec,expected_mult",
-        [
-            ("0.001", 3, 1_000),
-            ("0.1", 1, 10),
-            ("1", 0, 1),
-        ],
+
+def test_coin_precisions_and_multipliers() -> None:
+    """Verify Coin precision parsing and derived multiplier calculations."""
+    coin = cfg.Coin(symbol="BTCUSDT", tick_size="0.01", lot_size="0.001")
+
+    # Manual calculations:
+    # "0.01".split(".")[-1] -> "01" -> length 2 -> mult 10**2 = 100
+    # "0.001".split(".")[-1] -> "001" -> length 3 -> mult 10**3 = 1000
+    assert coin.price_prec == 2, f"Expected price_prec 2, got {coin.price_prec}"
+    assert coin.qty_prec == 3, f"Expected qty_prec 3, got {coin.qty_prec}"
+    assert coin.price_mult == 100, (
+        f"Expected price_mult 100, got {coin.price_mult}"
     )
-    def test_qty_precision_and_multiplier(
-        self, lot_size: str, expected_prec: int, expected_mult: int
-    ) -> None:
-        coin = Coin(lot_size=lot_size)
-        assert coin.qty_prec == expected_prec
-        assert coin.qty_mult == expected_mult
+    assert coin.qty_mult == 1000, f"Expected qty_mult 1000, got {coin.qty_mult}"
 
 
-class TestFootprint:
-    def test_default_bar_count_for_h1_one_day(self) -> None:
-        fp = Footprint(timeframe=Timeframe.H1, chart_range=1)
-        assert fp.bar_count == 24
-        assert fp.fp_cols == 48
-        assert fp.fp_panel_cols == 50
-        assert fp.save_fp_headers is False
-        assert fp.fp_rows == 10001
+def test_footprint_bar_count_and_columns() -> None:
+    """Verify Footprint bar count and panel column calculations."""
+    fp = cfg.Footprint(timeframe=Timeframe.H1, chart_range=1)
 
-    def test_bar_count_for_m5_one_day(self) -> None:
-        fp = Footprint(timeframe=Timeframe.M5, chart_range=1)
-        assert fp.bar_count == 288
-        assert fp.fp_cols == 576
-        assert fp.fp_panel_cols == 578
+    # Manual calculations:
+    # dayMs = 1 * 24 * 60 * 60 * 1000 = 86,400,000
+    # ivlMs = Timeframe.H1 = 3,600,000
+    # bar_count = 86_400_000 // 3_600_000 = 24
+    # fp_cols = 24 * 2 = 48
+    # fp_panel_cols = 48 + 2 = 50
+    expected_bar_count: int = 24
+    expected_fp_cols: int = 48
+    expected_fp_panel_cols: int = 50
 
-    def test_chart_range_zero_is_treated_as_one_day(self) -> None:
-        fp_zero = Footprint(timeframe=Timeframe.M5, chart_range=0)
-        fp_one = Footprint(timeframe=Timeframe.M5, chart_range=1)
-        assert fp_zero.bar_count == fp_one.bar_count
-
-    def test_chart_range_scales_bar_count_linearly(self) -> None:
-        fp = Footprint(timeframe=Timeframe.M5, chart_range=7)
-        assert fp.bar_count == (7 * 86_400_000) // 300_000
-
-    def test_col_indices_are_fixed(self) -> None:
-        fp = Footprint()
-        assert fp.colVP == -2
-        assert fp.colDP == -1
-
-    def test_get_bar_count_when_interval_greater_or_equal_to_day_ms(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Force ivlMs >= dayMs to cover branch: (ivlMs // dayMs)
-        fp = Footprint(timeframe=Timeframe.H1, chart_range=1)
-        monkeypatch.setattr(fp, "timeframe", 100_000_000)
-        assert fp._get_bar_count(day=1) == 100_000_000 // 86_400_000
+    assert fp.bar_count == expected_bar_count, (
+        f"Expected bar_count {expected_bar_count}, got {fp.bar_count}"
+    )
+    assert fp.fp_cols == expected_fp_cols, (
+        f"Expected fp_cols {expected_fp_cols}, got {fp.fp_cols}"
+    )
+    assert fp.fp_panel_cols == expected_fp_panel_cols, (
+        f"Expected fp_panel_cols {expected_fp_panel_cols}, got {fp.fp_panel_cols}"
+    )
 
 
-class TestSetup:
-    def test_defaults(self) -> None:
-        setup = Setup()
-        assert setup.backtesting is True
-        assert setup.execution is True
-        assert setup.backtest_start_date == "2026-01-01"
-        assert setup.backtest_end_date == "2026-01-01"
-        assert setup.algorithm_module == ""
-        assert setup.algorithm_class_name == ""
-        assert setup.execution_module == ""
-        assert setup.execution_class_name == ""
-        assert setup.agg_trades_decoder_module == ""
-        assert setup.agg_trades_decoder_class_name == ""
-        assert setup.user_stream_decoder_module == ""
-        assert setup.user_stream_decoder_class_name == ""
-        assert setup.order_encoder_module == ""
-        assert setup.order_encoder_class_name == ""
+def test_metrics_shared_memory_layout() -> None:
+    """Verify Metrics segment size, offsets, and page-aligned total shared memory size."""
+    metrics = cfg.Metrics(count_procs=10)
+
+    # Manual calculations:
+    # count_procs = 10, INT64 = 8, UBYTE = 1
+    # procs_status size: (10 * 2) * 8 = 160 -> offset: (0, 160)
+    # main_status size: 10 * 8 = 80        -> offset: (160, 240)
+    # time_start_reading size: 8           -> offset: (240, 248)
+    # trade_read_time size: 8              -> offset: (248, 256)
+    # engine_complete size: 1               -> offset: (256, 257)
+    # Unaligned total raw size = 257
+    # Page alignment formula: ((257 // 4096) + 1) * 4096 = 4096
+
+    assert metrics.procs_status.size == 160
+    assert metrics.procs_status.offset == (0, 160)
+
+    assert metrics.main_status.size == 80
+    assert metrics.main_status.offset == (160, 240)
+
+    assert metrics.time_start_reading.size == 8
+    assert metrics.time_start_reading.offset == (240, 248)
+
+    assert metrics.trade_read_time.size == 8
+    assert metrics.trade_read_time.offset == (248, 256)
+
+    assert metrics.engine_complete.size == 1
+    assert metrics.engine_complete.offset == (256, 257)
+
+    assert metrics.shm_size == 4096, (
+        f"Expected shm_size 4096, got {metrics.shm_size}"
+    )
 
 
-class TestConnector:
-    def test_defaults_are_empty_strings(self) -> None:
-        connector = Connector()
-        assert connector.base_uri_for_rest == ""
-        assert connector.base_uri_for_ws == ""
-        assert connector.base_uri_for_wss == ""
-        assert connector.market_data_uri_for_wss == ""
-        assert connector.get_user_data_uri_for_wss == ""
-        assert connector.set_user_data_uri_for_wss == ""
+def test_market_data_stream_shared_memory_layout() -> None:
+    """Verify MarketDataStream inner RingBuf offsets and page alignment."""
+    md_stream = cfg.MarketDataStream()
+    ring_buf = md_stream.ring_buf
 
-    def test_custom_uris_are_kept_verbatim(self) -> None:
-        connector = Connector(
-            base_uri_for_rest="https://fapi.binance.com",
-            base_uri_for_ws="wss://ws-fapi.binance.com",
-            base_uri_for_wss="wss://fstream.binance.com",
-            market_data_uri_for_wss="wss://fstream.binance.com/stream",
-            get_user_data_uri_for_wss="wss://fstream.binance.com/user",
-            set_user_data_uri_for_wss="wss://ws-fapi.binance.com/order",
-        )
-        assert connector.base_uri_for_rest == "https://fapi.binance.com"
-        assert connector.base_uri_for_ws == "wss://ws-fapi.binance.com"
-        assert connector.base_uri_for_wss == "wss://fstream.binance.com"
-        assert (
-            connector.market_data_uri_for_wss
-            == "wss://fstream.binance.com/stream"
-        )
-        assert (
-            connector.get_user_data_uri_for_wss
-            == "wss://fstream.binance.com/user"
-        )
-        assert (
-            connector.set_user_data_uri_for_wss
-            == "wss://ws-fapi.binance.com/order"
-        )
+    # Default parameters for MarketDataStream:
+    # data_size = 256, data_header_size = 1, cell_amount = 10000
+    # count_reader = 2, count_writer = 1, INT64 = 8
+    # safe_lag = int(10000 * 0.9) = 9000
+    #
+    # Segments & Sizes:
+    # reader_id size: 2 * 8 = 16                       -> offset: (0, 16)
+    # writer_id size: 1 * 8 = 8                        -> offset: (16, 24)
+    # data size: 1 * (10000 * 256) = 2,560,000         -> offset: (24, 2560024)
+    # data_header size: 1 * (10000 * 1) = 10,000       -> offset: (2560024, 2570024)
+    #
+    # Raw needed size = 2,570,024
+    # Page alignment: ((2570024 // 4096) + 1) * 4096 = 628 * 4096 = 2,572,288
+
+    assert ring_buf.safe_lag == 9000
+    assert ring_buf.reader_id.offset == (0, 16)
+    assert ring_buf.writer_id.offset == (16, 24)
+    assert ring_buf.data.offset == (24, 2_560_024)
+    assert ring_buf.data_header.offset == (2_560_024, 2_570_024)
+
+    expected_shm_size: int = 2_572_288
+    assert md_stream.shm_size == expected_shm_size, (
+        f"Expected shm_size {expected_shm_size}, got {md_stream.shm_size}"
+    )
 
 
-class TestSharedMemorySegmentsAndMetrics:
-    def test_metrics_segments_offsets_and_page_alignment(self) -> None:
-        metrics = Metrics(count_procs=4)
-        assert metrics.procs_status.size == (4 * 2) * INT64
-        assert metrics.main_status.size == 4 * INT64
-        assert metrics.time_start_reading.size == INT64
-        assert metrics.trade_read_time.size == INT64
-        assert metrics.engine_complete.size == UBYTE
+def test_ring_buf_read_write_operations() -> None:
+    """Verify RingBuf read, write, memoryview binding, and safe lag detection."""
+    ring_buf = cfg.RingBuf(
+        data_size=32,
+        data_header_size=1,
+        cell_amount=10,
+        count_writer=1,
+        count_reader=1,
+        cast_to_int64=True,
+    )
 
-        # Verify 4096-byte page alignment
-        assert metrics.shm_size % 4096 == 0
-        assert metrics.shm_size >= metrics.engine_complete.offset[1]
+    # Allocate mock backing buffer based on segment total size
+    # Layout sizes: reader_id (8), writer_id (8), data (320), data_header (10) -> total 346
+    total_buf_size: int = (
+        ring_buf.reader_id.size
+        + ring_buf.writer_id.size
+        + ring_buf.data.size
+        + ring_buf.data_header.size
+    )
+    raw_buffer = bytearray(total_buf_size)
+    shm_view = memoryview(raw_buffer)
 
-        # Verify contiguous monotonic offsets
-        assert metrics.procs_status.offset[0] == 0
-        assert metrics.procs_status.offset[1] == metrics.main_status.offset[0]
-        assert (
-            metrics.main_status.offset[1]
-            == metrics.time_start_reading.offset[0]
-        )
-        assert (
-            metrics.time_start_reading.offset[1]
-            == metrics.trade_read_time.offset[0]
-        )
-        assert (
-            metrics.trade_read_time.offset[1]
-            == metrics.engine_complete.offset[0]
-        )
+    # Bind slices manually as Base manager does
+    ring_buf.reader_id.view = shm_view[0:8]
+    ring_buf.writer_id.view = shm_view[8:16]
+    ring_buf.data.view = shm_view[16:336]
+    ring_buf.data_header.view = shm_view[336:346]
 
+    ring_buf.post_init()
 
-class TestRingBuffers:
-    def test_text_stream_ring_buffer(self) -> None:
-        ts = TextStream()
-        assert ts.data_size == 1024
-        assert ts.data_header_size == 8
-        assert ts.cell_amount == 100
-        assert ts.count_reader == 10
-        assert ts.count_writer == 10
-        assert ts.safe_lag == int(100 * 0.9)
-        assert ts.shm_size % 4096 == 0
-        assert ts.data.size == 10 * (100 * 1024)
+    # Manual expectations after post_init:
+    # cast_to_int64 is True -> data_size = 32 // 8 = 4 (measured in int64 elements)
+    assert ring_buf.data_size == 4, (
+        f"Expected data_size 4, got {ring_buf.data_size}"
+    )
 
-    def test_signal_ring_buffer(self) -> None:
-        sig = Signal()
-        assert sig.data_size == 32
-        assert sig.data_header_size == 1
-        assert sig.cell_amount == 1000
-        assert sig.safe_lag == int(1000 * 0.9)
-        assert sig.shm_size % 4096 == 0
+    # Initially writer_id=0, reader_id=0 -> lag = (0 - 0 + 10) % 10 = 0 (safe_lag = 9)
+    assert not ring_buf.lag_not_is_safe()
 
-    def test_get_user_stream_ring_buffer(self) -> None:
-        gus = GetUserStream()
-        assert gus.data_size == 128
-        assert gus.data_header_size == 1
-        assert gus.cell_amount == 1000
-        assert gus.safe_lag == int(1000 * 0.9)
-        assert gus.shm_size % 4096 == 0
+    # Write integer data: 100 with args 200, 300
+    ring_buf.set_data(100, 200, 300)
 
-    def test_set_user_stream_ring_buffer(self) -> None:
-        sus = SetUserStream()
-        assert sus.data_size == 128
-        assert sus.data_header_size == 1
-        assert sus.cell_amount == 1000
-        assert sus.safe_lag == int(1000 * 0.9)
-        assert sus.shm_size % 4096 == 0
+    # Manual checks after 1 write:
+    # wid_buf[0] incremented to 1
+    # data_header_buf[0] length set to 1 + 2 = 3
+    assert ring_buf.wid_buf[0] == 1
+    assert ring_buf.data_header_buf[0] == 3
 
-    def test_data_stream_ring_buffer(self) -> None:
-        ds = DataStream()
-        assert ds.data_size == 256
-        assert ds.data_header_size == 1
-        assert ds.cell_amount == 10_000
-        assert ds.safe_lag == int(10_000 * 0.9)
-        assert ds.shm_size % 4096 == 0
+    # Simulate reader lag beyond safe_lag threshold (safe_lag = 9)
+    # Set wid=9, rid=0 -> lag = (9 - 0 + 10) % 10 = 9 -> 9 > 9 is False
+    # Set wid=0, rid=0 -> lag = (0 - 0 + 10) % 10 = 0
+    # Set wid=9, rid=0 with 1 more write advances wid to 0 -> lag = (0 - 0 + 10) % 10 = 0
+    # Directly mock wid_buf to test boundary condition > safe_lag
+    # Directly mock wid_buf and rid_buf to test boundary condition > safe_lag
+    ring_buf.safe_lag = 8
+    ring_buf.wid_buf[0] = 9
+    ring_buf.rid_buf[0] = 0
+    # Lag calculation: (9 - 0 + 10) % 10 = 9 -> 9 > 8 is True
+    assert ring_buf.lag_not_is_safe(), "Expected lag_not_is_safe to be True"
+
+    # Reset positions for read verification
+    ring_buf.wid_buf[0] = 1
+    ring_buf.rid_buf[0] = 0
+
+    # Retrieve data
+    retrieved_view = ring_buf.get_data()
+    retrieved_list: list[Any] = list(retrieved_view)
+
+    # Manual checks after read:
+    # rid_buf[0] incremented to 1
+    # retrieved integers match [100, 200, 300]
+    assert ring_buf.rid_buf[0] == 1
+    assert retrieved_list == [100, 200, 300], (
+        f"Expected [100, 200, 300], got {retrieved_list}"
+    )

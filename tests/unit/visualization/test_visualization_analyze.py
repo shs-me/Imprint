@@ -34,10 +34,6 @@ from imprint._vis.analyze.metrics import (
 from imprint._vis.analyze.orders_history import analyze_orders_history
 from imprint._vis.settings import OHLC, CloseTrades, OpenTrades
 
-# ============================================================================
-# 1. Tests for `metrics.py`
-# ============================================================================
-
 
 class TestMetrics:
     def test_calculate_net_profit(self) -> None:
@@ -226,11 +222,6 @@ class TestMetrics:
         assert dds[1] == pytest.approx(-20.0)
 
 
-# ============================================================================
-# 2. Tests for `equity_history.py`
-# ============================================================================
-
-
 class TestEquityHistory:
     def test_analyze_equity_history(self) -> None:
         scale_mult = 10**8
@@ -264,11 +255,6 @@ class TestEquityHistory:
         assert eq_close[1] == 112.0
 
 
-# ============================================================================
-# 3. Tests for `orders_history.py`
-# ============================================================================
-
-
 class TestOrdersHistory:
     def test_analyze_orders_history_long_and_short_cycles(self) -> None:
         price_mult = 100
@@ -289,30 +275,30 @@ class TestOrdersHistory:
         orders[0, c.TP_timestamp] = 1_700_000_000_000
         orders[0, c.TP_nPrice] = 100 * price_mult
         orders[0, c.TP_nQty] = 2 * qty_mult
-        orders[0, c.TP_orderParam] = (
+        orders[0, c.TP_order_param] = (
             c.OF_FILLED | c.OF_LONG | c.OF_BUY | c.OF_LIMIT
         )
-        orders[0, c.TP_commission] = round(0.05 * scale_mult)
+        orders[0, c.TP_nCommission] = round(0.05 * scale_mult)
 
         # 1: Close Long (Profit)
         orders[1, c.TP_timestamp] = 1_700_000_060_000
         orders[1, c.TP_nPrice] = 110 * price_mult  # price rose -> profit
         orders[1, c.TP_nQty] = 2 * qty_mult
-        orders[1, c.TP_orderParam] = c.OF_FILLED | c.OF_LONG | c.OF_SELL
-        orders[1, c.TP_commission] = round(0.05 * scale_mult)
+        orders[1, c.TP_order_param] = c.OF_FILLED | c.OF_LONG | c.OF_SELL
+        orders[1, c.TP_nCommission] = round(0.05 * scale_mult)
         orders[1, c.TP_nMAE] = round(-5.0 * scale_mult)
         orders[1, c.TP_nMFE] = 0
 
         # 2: Unfilled order
         orders[2, c.TP_timestamp] = 1_700_000_100_000
-        orders[2, c.TP_orderParam] = c.OF_CANCELED
+        orders[2, c.TP_order_param] = c.OF_CANCELED
 
         # 3: Open Short
         orders[3, c.TP_timestamp] = 1_700_000_120_000
         orders[3, c.TP_nPrice] = 100 * price_mult
         orders[3, c.TP_nQty] = 1 * qty_mult
-        orders[3, c.TP_orderParam] = c.OF_FILLED | c.OF_SHORT | c.OF_SELL
-        orders[3, c.TP_commission] = round(0.02 * scale_mult)
+        orders[3, c.TP_order_param] = c.OF_FILLED | c.OF_SHORT | c.OF_SELL
+        orders[3, c.TP_nCommission] = round(0.02 * scale_mult)
 
         # 4: Close Short (Loss)
         orders[4, c.TP_timestamp] = 1_700_000_180_000
@@ -320,8 +306,8 @@ class TestOrdersHistory:
             105 * price_mult
         )  # price rose -> loss for short
         orders[4, c.TP_nQty] = 1 * qty_mult
-        orders[4, c.TP_orderParam] = c.OF_FILLED | c.OF_SHORT | c.OF_BUY
-        orders[4, c.TP_commission] = round(0.02 * scale_mult)
+        orders[4, c.TP_order_param] = c.OF_FILLED | c.OF_SHORT | c.OF_BUY
+        orders[4, c.TP_nCommission] = round(0.02 * scale_mult)
         orders[4, c.TP_nMAE] = 0
         orders[4, c.TP_nMFE] = round(2.0 * scale_mult)
 
@@ -376,11 +362,6 @@ class TestOrdersHistory:
         assert tc_short["mae_pct"] == 0.0
 
 
-# ============================================================================
-# 4. Tests for `base.py` (`Stats`)
-# ============================================================================
-
-
 class TestStats:
     def test_stats_dataclass_initialization(self) -> None:
         scale_mult = 10**8
@@ -418,12 +399,12 @@ class TestStats:
         orders[0, c.TP_timestamp] = 1_767_225_600_000
         orders[0, c.TP_nPrice] = 100 * price_mult
         orders[0, c.TP_nQty] = 1 * qty_mult
-        orders[0, c.TP_orderParam] = c.OF_FILLED | c.OF_LONG | c.OF_BUY
+        orders[0, c.TP_order_param] = c.OF_FILLED | c.OF_LONG | c.OF_BUY
 
         orders[1, c.TP_timestamp] = 1_767_225_900_000
         orders[1, c.TP_nPrice] = 105 * price_mult
         orders[1, c.TP_nQty] = 1 * qty_mult
-        orders[1, c.TP_orderParam] = c.OF_FILLED | c.OF_LONG | c.OF_SELL
+        orders[1, c.TP_order_param] = c.OF_FILLED | c.OF_LONG | c.OF_SELL
         orders[1, c.TP_nMAE] = round(-1.0 * scale_mult)
 
         stats = Stats(
