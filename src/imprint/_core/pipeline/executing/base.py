@@ -6,8 +6,9 @@ from typing import final
 from imprint._core import constant as c
 from imprint._core.account import Account
 from imprint._core.ipc import NodeManager, node_handler
-from imprint._core.settings import ExecutionProtocol, PositionFSM
+from imprint._core.settings import PositionFSM
 from imprint._core.settings import StatusCodes as scs
+from imprint._core.types import ExecutionProtocol
 
 
 @dataclass(slots=True)
@@ -47,27 +48,27 @@ class Base(ABC):
     @final
     def __post_init__(self) -> None:
         cfgSN = self.manager.cfgSignal
-        self.__sn_cell_amount = cfgSN.cell_amount
-        self.__sn_data_size = cfgSN.data_size // 8
-        self.__sn_data = cfgSN.data.view.cast("q")
-        self.__sn_wid = cfgSN.writer_id.view.cast("q")
-        self.__sn_rid = cfgSN.reader_id.view.cast("q")
+        self.__sn_cell_amount = cfgSN.ring_buf.cell_amount
+        self.__sn_data_size = cfgSN.ring_buf.data_size // 8
+        self.__sn_data = cfgSN.ring_buf.data.view.cast("q")
+        self.__sn_wid = cfgSN.ring_buf.writer_id.view.cast("q")
+        self.__sn_rid = cfgSN.ring_buf.reader_id.view.cast("q")
 
         cfgGUS = self.manager.cfgGetUserStream
-        self.__gus_cell_amount = cfgGUS.cell_amount
-        self.__gus_data = cfgGUS.data.view
-        self.__gus_data_size = cfgGUS.data_size
-        self.__gus_data_header = cfgGUS.data_header.view
-        self.__gus_wid = cfgGUS.writer_id.view.cast("q")
-        self.__gus_rid = cfgGUS.reader_id.view.cast("q")
+        self.__gus_cell_amount = cfgGUS.ring_buf.cell_amount
+        self.__gus_data = cfgGUS.ring_buf.data.view
+        self.__gus_data_size = cfgGUS.ring_buf.data_size
+        self.__gus_data_header = cfgGUS.ring_buf.data_header.view
+        self.__gus_wid = cfgGUS.ring_buf.writer_id.view.cast("q")
+        self.__gus_rid = cfgGUS.ring_buf.reader_id.view.cast("q")
 
         cfgSUS = self.manager.cfgSetUserStream
-        self.__sus_cell_amount = cfgSUS.cell_amount
-        self.__sus_data = cfgSUS.data.view
-        self.__sus_data_size = cfgSUS.data_size
-        self.__sus_data_header = cfgSUS.data_header.view
-        self.__sus_wid = cfgSUS.writer_id.view.cast("q")
-        self.__sus_rid = cfgSUS.reader_id.view.cast("q")
+        self.__sus_cell_amount = cfgSUS.ring_buf.cell_amount
+        self.__sus_data = cfgSUS.ring_buf.data.view
+        self.__sus_data_size = cfgSUS.ring_buf.data_size
+        self.__sus_data_header = cfgSUS.ring_buf.data_header.view
+        self.__sus_wid = cfgSUS.ring_buf.writer_id.view.cast("q")
+        self.__sus_rid = cfgSUS.ring_buf.reader_id.view.cast("q")
 
         cfgMetrics = self.manager.cfgMetrics
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")

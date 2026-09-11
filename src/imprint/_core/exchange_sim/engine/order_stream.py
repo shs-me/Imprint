@@ -49,12 +49,12 @@ class Order(Account, ABC):
         self.__order_book_row = cfgAC.active_order_limit
 
         cfgSUS = self.manager.cfgSetUserStream
-        self.__sus_cell_amount = cfgSUS.cell_amount
-        self.__sus_data = cfgSUS.data.view
-        self.__sus_data_size = cfgSUS.data_size
-        self.__sus_data_header = cfgSUS.data_header.view
-        self.__sus_wid = cfgSUS.writer_id.view.cast("q")
-        self.__sus_rid = cfgSUS.reader_id.view.cast("q")
+        self.__sus_cell_amount = cfgSUS.ring_buf.cell_amount
+        self.__sus_data = cfgSUS.ring_buf.data.view
+        self.__sus_data_size = cfgSUS.ring_buf.data_size
+        self.__sus_data_header = cfgSUS.ring_buf.data_header.view
+        self.__sus_wid = cfgSUS.ring_buf.writer_id.view.cast("q")
+        self.__sus_rid = cfgSUS.ring_buf.reader_id.view.cast("q")
 
         self.executed_orders = np.zeros(
             (1000, c.TP_ConstantCount), dtype=np.int64

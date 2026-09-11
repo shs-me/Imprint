@@ -7,7 +7,7 @@ from types import GenericAlias
 from typing import final
 
 from imprint._core import configs as cfg
-from imprint._core.configs import Segment
+from imprint._core.configs import RingBuf, Segment
 
 
 @dataclass(slots=True)
@@ -51,13 +51,15 @@ class Base(ABC):
         self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
         self._main_status = self.cfgMetrics.main_status.view.cast("q")
 
-        self._ts_safe_lag = self._log_stream.safe_lag
-        self._ts_cell_amount = self._log_stream.cell_amount
-        self._ts_data = self._log_stream.data.view
-        self._ts_data_size = self._log_stream.data_size
-        self._ts_data_header = self._log_stream.data_header.view.cast("q")
-        self._ts_rid = self._log_stream.reader_id.view.cast("q")
-        self._ts_wid = self._log_stream.writer_id.view.cast("q")
+        self._ts_safe_lag = self._log_stream.ring_buf.safe_lag
+        self._ts_cell_amount = self._log_stream.ring_buf.cell_amount
+        self._ts_data = self._log_stream.ring_buf.data.view
+        self._ts_data_size = self._log_stream.ring_buf.data_size
+        self._ts_data_header = self._log_stream.ring_buf.data_header.view.cast(
+            "q"
+        )
+        self._ts_rid = self._log_stream.ring_buf.reader_id.view.cast("q")
+        self._ts_wid = self._log_stream.ring_buf.writer_id.view.cast("q")
 
     @final
     def __init_attributes(
@@ -84,3 +86,11 @@ class Base(ABC):
             attr_val = getattr(cfg, attr_name)
             if isinstance(attr_val, Segment):
                 attr_val.view = buf[slice(*attr_val.offset)]
+            elif isinstance(attr_val, RingBuf):
+                for ring_attr_name in attr_val.__slots__:
+                    if hasattr(attr_val, ring_attr_name):
+                        ring_attr_val = getattr(attr_val, ring_attr_name)
+                        if isinstance(ring_attr_val, Segment):
+                            ring_attr_val.view = buf[
+                                slice(*ring_attr_val.offset)
+                            ]

@@ -43,34 +43,34 @@ class Base(ABC):
         self.symbol = self.manager.cfgCoin.symbol
 
         cfgDS = self.manager.cfgDataStream
-        self.ds_safe_lag = cfgDS.safe_lag
-        self.ds_cell_amount = cfgDS.cell_amount
-        self.ds_data_size = cfgDS.data_size
-        self.ds_data_header_size = cfgDS.data_header_size
-        self.ds_data = cfgDS.data.view
-        self.ds_data_header = cfgDS.data_header.view
-        self.ds_wid = cfgDS.writer_id.view.cast("q")
-        self.ds_rid = cfgDS.reader_id.view.cast("q")
+        self.ds_safe_lag = cfgDS.ring_buf.safe_lag
+        self.ds_cell_amount = cfgDS.ring_buf.cell_amount
+        self.ds_data_size = cfgDS.ring_buf.data_size
+        self.ds_data_header_size = cfgDS.ring_buf.data_header_size
+        self.ds_data = cfgDS.ring_buf.data.view
+        self.ds_data_header = cfgDS.ring_buf.data_header.view
+        self.ds_wid = cfgDS.ring_buf.writer_id.view.cast("q")
+        self.ds_rid = cfgDS.ring_buf.reader_id.view.cast("q")
 
         cfgGUS = self.manager.cfgGetUserStream
-        self.gus_safe_lag = cfgGUS.safe_lag
-        self.gus_cell_amount = cfgGUS.cell_amount
-        self.gus_data_size = cfgGUS.data_size
-        self.gus_data_header_size = cfgGUS.data_header_size
-        self.gus_data = cfgGUS.data.view
-        self.gus_data_header = cfgGUS.data_header.view
-        self.gus_wid = cfgGUS.writer_id.view.cast("q")
-        self.gus_rid = cfgGUS.reader_id.view.cast("q")
+        self.gus_safe_lag = cfgGUS.ring_buf.safe_lag
+        self.gus_cell_amount = cfgGUS.ring_buf.cell_amount
+        self.gus_data_size = cfgGUS.ring_buf.data_size
+        self.gus_data_header_size = cfgGUS.ring_buf.data_header_size
+        self.gus_data = cfgGUS.ring_buf.data.view
+        self.gus_data_header = cfgGUS.ring_buf.data_header.view
+        self.gus_wid = cfgGUS.ring_buf.writer_id.view.cast("q")
+        self.gus_rid = cfgGUS.ring_buf.reader_id.view.cast("q")
 
         cfgSUS = self.manager.cfgSetUserStream
-        self.sus_safe_lag = cfgSUS.safe_lag
-        self.sus_cell_amount = cfgSUS.cell_amount
-        self.sus_data_size = cfgSUS.data_size
-        self.sus_data_header_size = cfgSUS.data_header_size
-        self.sus_data = cfgSUS.data.view
-        self.sus_data_header = cfgSUS.data_header.view
-        self.sus_wid = cfgSUS.writer_id.view.cast("q")
-        self.sus_rid = cfgSUS.reader_id.view.cast("q")
+        self.sus_safe_lag = cfgSUS.ring_buf.safe_lag
+        self.sus_cell_amount = cfgSUS.ring_buf.cell_amount
+        self.sus_data_size = cfgSUS.ring_buf.data_size
+        self.sus_data_header_size = cfgSUS.ring_buf.data_header_size
+        self.sus_data = cfgSUS.ring_buf.data.view
+        self.sus_data_header = cfgSUS.ring_buf.data_header.view
+        self.sus_wid = cfgSUS.ring_buf.writer_id.view.cast("q")
+        self.sus_rid = cfgSUS.ring_buf.reader_id.view.cast("q")
 
     @final
     def lag_not_is_safe(

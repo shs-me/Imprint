@@ -36,12 +36,12 @@ class SyncWithExecution(ABC):
         self.safe_lag = cfgRM.pass_signal_if_analysis_time_big
 
         cfgSN = self.manager.cfgSignal
-        self.sn_cell_amount = cfgSN.cell_amount
-        self.sn_safe_lag = cfgSN.safe_lag
-        self.sn_data_size = cfgSN.data_size // 8
-        self.sn_data = cfgSN.data.view.cast("q")
-        self.sn_wid = cfgSN.writer_id.view.cast("q")
-        self.sn_rid = cfgSN.reader_id.view.cast("q")
+        self.sn_cell_amount = cfgSN.ring_buf.cell_amount
+        self.sn_safe_lag = cfgSN.ring_buf.safe_lag
+        self.sn_data_size = cfgSN.ring_buf.data_size // 8
+        self.sn_data = cfgSN.ring_buf.data.view.cast("q")
+        self.sn_wid = cfgSN.ring_buf.writer_id.view.cast("q")
+        self.sn_rid = cfgSN.ring_buf.reader_id.view.cast("q")
 
     @property
     def signal_id(self) -> int:

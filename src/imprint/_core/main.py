@@ -12,7 +12,8 @@ from typing import Any
 from imprint._core.constant import DIRS_LIST
 from imprint._core.ipc import HostManager, supervisor
 from imprint._core.pipeline import run_engine, run_executing, run_streaming
-from imprint._core.settings import LogLevel, ProcsData, ProcsIds
+from imprint._core.settings import LogLevel, ProcsIds
+from imprint._core.types import ProcsData
 
 
 @dataclass(slots=True)

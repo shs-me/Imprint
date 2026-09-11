@@ -8,8 +8,9 @@ from typing import override
 from loguru import logger
 
 from imprint._core.ipc.manager.base import Base
-from imprint._core.settings import LogLevel, ProcsData, ProcsIds
+from imprint._core.settings import LogLevel, ProcsIds
 from imprint._core.settings import StatusCodes as scs
+from imprint._core.types import ProcsData
 
 
 @dataclass(slots=True)

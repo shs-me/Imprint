@@ -9,7 +9,7 @@ from typing import Any, Literal, Self, TypeVar, final, overload
 import httpx
 import msgspec
 
-from imprint._core.settings import LoggerProtocol, SetLogMethodSignature
+from imprint._core.types import LoggerProtocol, SetLogMethodSignature
 
 # Generic type for msgspec decoding target
 T = TypeVar("T")

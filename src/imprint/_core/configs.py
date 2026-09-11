@@ -1,6 +1,6 @@
 """Shared memory layout and component configuration data structures."""
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field
 from typing import final, override
 
@@ -166,13 +166,12 @@ class Footprint(Configuration):
 class SharedMemorySegments(Configuration, ABC):
     shm_size: int = 0
 
+    @final
     def __post_init__(self) -> None:
-        self._set_attr_use_shm()
+        self.child_post_init()
         self.shm_size = ((self.__get_need_shm_size() // 4096) + 1) * 4096
 
-    @abstractmethod
-    def _set_attr_use_shm(self) -> None:
-        pass
+    def child_post_init(self) -> None: ...
 
     @final
     def __get_need_shm_size(self) -> int:
@@ -184,6 +183,15 @@ class SharedMemorySegments(Configuration, ABC):
                     offset,
                     (offset := (offset + attr_obj.size)),
                 )
+            elif isinstance(attr_obj, RingBuf):
+                for ring_attr_name in attr_obj.__slots__:
+                    if hasattr(attr_obj, ring_attr_name):
+                        ring_attr_obj = getattr(attr_obj, ring_attr_name)
+                        if isinstance(ring_attr_obj, Segment):
+                            ring_attr_obj.offset = (
+                                offset,
+                                (offset := (offset + ring_attr_obj.size)),
+                            )
 
         return offset
 
@@ -200,7 +208,7 @@ class Metrics(SharedMemorySegments):
     engine_complete: Segment = field(init=False)
 
     @override
-    def _set_attr_use_shm(self) -> None:
+    def child_post_init(self) -> None:
         self.procs_status = Segment((self.count_procs * 2) * INT64)
         self.main_status = Segment(self.count_procs * INT64)
         self.time_start_reading = Segment(INT64)
@@ -208,8 +216,9 @@ class Metrics(SharedMemorySegments):
         self.engine_complete = Segment(UBYTE)
 
 
-@dataclass
-class BaseRingBuf(ABC):
+@final
+@dataclass(slots=True)
+class RingBuf:
     data_size: int = 1024
     data_header_size: int = 8
     cell_amount: int = 10_000
@@ -223,7 +232,7 @@ class BaseRingBuf(ABC):
     data: Segment = field(init=False)
     data_header: Segment = field(init=False)
 
-    def _set_attr_use_shm(self) -> None:
+    def __post_init__(self) -> None:
         self.safe_lag = int(self.cell_amount * 0.9)
 
         self.reader_id = Segment(self.count_reader * INT64)
@@ -237,38 +246,63 @@ class BaseRingBuf(ABC):
 
 
 @dataclass(slots=True)
-class LogStream(BaseRingBuf, SharedMemorySegments):
-    data_size: int = 1024
-    data_header_size: int = 8
-    cell_amount: int = 100
-    count_reader: int = 10
-    count_writer: int = 10
+class LogStream(SharedMemorySegments):
+    ring_buf: RingBuf = field(
+        default_factory=lambda: RingBuf(
+            data_size=1024,
+            data_header_size=8,
+            cell_amount=100,
+            count_reader=10,
+            count_writer=10,
+        ),
+        init=False,
+    )
 
 
 @dataclass(slots=True)
-class Signal(BaseRingBuf, SharedMemorySegments):
-    data_size: int = 32
-    data_header_size: int = 1
-    cell_amount: int = 1000
+class Signal(SharedMemorySegments):
+    ring_buf: RingBuf = field(
+        default_factory=lambda: RingBuf(
+            data_size=32,
+            data_header_size=1,
+            cell_amount=1000,
+        ),
+        init=False,
+    )
 
 
 @dataclass(slots=True)
-class GetUserStream(BaseRingBuf, SharedMemorySegments):
-    data_size: int = 128
-    data_header_size: int = 1
-    cell_amount: int = 1000
+class GetUserStream(SharedMemorySegments):
+    ring_buf: RingBuf = field(
+        default_factory=lambda: RingBuf(
+            data_size=128,
+            data_header_size=1,
+            cell_amount=1000,
+        ),
+        init=False,
+    )
 
 
 @dataclass(slots=True)
-class SetUserStream(BaseRingBuf, SharedMemorySegments):
-    data_size: int = 128
-    data_header_size: int = 1
-    cell_amount: int = 1000
+class SetUserStream(SharedMemorySegments):
+    ring_buf: RingBuf = field(
+        default_factory=lambda: RingBuf(
+            data_size=128,
+            data_header_size=1,
+            cell_amount=1000,
+        ),
+        init=False,
+    )
 
 
 @dataclass(slots=True)
-class DataStream(BaseRingBuf, SharedMemorySegments):
-    data_size: int = 256
-    data_header_size: int = 1
-    cell_amount: int = 10_000
-    count_reader: int = 2
+class DataStream(SharedMemorySegments):
+    ring_buf: RingBuf = field(
+        default_factory=lambda: RingBuf(
+            data_size=256,
+            data_header_size=1,
+            cell_amount=10_000,
+            count_reader=2,
+        ),
+        init=False,
+    )

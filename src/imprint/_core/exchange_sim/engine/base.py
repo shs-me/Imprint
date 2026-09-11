@@ -34,10 +34,10 @@ class Base(MatchingEngine):
         MatchingEngine.__post_init__(self)
 
         cfgDS = self.manager.cfgDataStream
-        self.__ds_cell_amount = cfgDS.cell_amount
-        self.__ds_data_size = cfgDS.data_size // 8
-        self.__ds_data = cfgDS.data.view.cast("q")
-        self.__ds_rid = cfgDS.reader_id.view.cast("q")
+        self.__ds_cell_amount = cfgDS.ring_buf.cell_amount
+        self.__ds_data_size = cfgDS.ring_buf.data_size // 8
+        self.__ds_data = cfgDS.ring_buf.data.view.cast("q")
+        self.__ds_rid = cfgDS.ring_buf.reader_id.view.cast("q")
 
     def final_action(self, timestamp: int) -> None:
         self.start(timestamp)

@@ -35,12 +35,12 @@ class Base(ABC):
 
     def __post_init__(self) -> None:
         cfgDS = self.manager.cfgDataStream
-        self.__ds_cell_amount = cfgDS.cell_amount
-        self.__ds_data_size = cfgDS.data_size
-        self.__ds_data = cfgDS.data.view
-        self.__ds_data_header = cfgDS.data_header.view
-        self.__ds_wid = cfgDS.writer_id.view.cast("q")
-        self.__ds_rid = cfgDS.reader_id.view.cast("q")
+        self.__ds_cell_amount = cfgDS.ring_buf.cell_amount
+        self.__ds_data_size = cfgDS.ring_buf.data_size
+        self.__ds_data = cfgDS.ring_buf.data.view
+        self.__ds_data_header = cfgDS.ring_buf.data_header.view
+        self.__ds_wid = cfgDS.ring_buf.writer_id.view.cast("q")
+        self.__ds_rid = cfgDS.ring_buf.reader_id.view.cast("q")
 
         cfgMetrics = self.manager.cfgMetrics
         self.time_start_analyze = cfgMetrics.time_start_reading.view.cast("q")

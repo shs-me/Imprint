@@ -26,12 +26,12 @@ class UserData(Order, ABC):
         Order.__post_init__(self)
 
         cfgGUS = self.manager.cfgGetUserStream
-        self.gus_cell_amount = cfgGUS.cell_amount
-        self.__gus_data = cfgGUS.data.view
-        self.gus_data_size = cfgGUS.data_size
-        self.gus_data_header = cfgGUS.data_header.view
-        self.gus_wid = cfgGUS.writer_id.view.cast("q")
-        self.__gus_rid = cfgGUS.reader_id.view.cast("q")
+        self.gus_cell_amount = cfgGUS.ring_buf.cell_amount
+        self.__gus_data = cfgGUS.ring_buf.data.view
+        self.gus_data_size = cfgGUS.ring_buf.data_size
+        self.gus_data_header = cfgGUS.ring_buf.data_header.view
+        self.gus_wid = cfgGUS.ring_buf.writer_id.view.cast("q")
+        self.__gus_rid = cfgGUS.ring_buf.reader_id.view.cast("q")
 
         self.gus_data_buf = np.frombuffer(self.__gus_data, uint8)
         self.gus_data_buf.fill(0)

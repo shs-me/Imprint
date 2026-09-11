@@ -35,7 +35,7 @@ if __name__ == "__main__":
                 tick_size="0.01",
                 lot_size="0.001",
                 backtest_start_date="2026-01-01",
-                backtest_end_date="2026-01-07",
+                backtest_end_date="2026-01-02",
             ),
             Live(
                 connector=Connector(
@@ -73,4 +73,4 @@ if __name__ == "__main__":
         with_execution=True,
     )
     imp.run_core()
-    imp.run_vis()
+    # imp.run_vis()

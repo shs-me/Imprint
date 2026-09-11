@@ -10,7 +10,7 @@ from types import TracebackType
 from typing import Any, ParamSpec, TypeVar, cast, final, override
 
 from imprint._core import constant as c
-from imprint._core.settings import DumpMSG
+from imprint._core.types import DumpMSG
 
 
 class DebugEncoder(json.JSONEncoder):

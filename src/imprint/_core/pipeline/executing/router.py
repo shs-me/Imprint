@@ -7,7 +7,7 @@ from imprint._core.account import Account
 from imprint._core.ipc import NodeManager
 from imprint._core.pipeline.executing.backtest import Backtest as BacktestAgent
 from imprint._core.pipeline.executing.live import Live as LiveAgent
-from imprint._core.settings import ExecutionProtocol, SendOrderMethodSignature
+from imprint._core.types import ExecutionProtocol, SendOrderMethodSignature
 
 
 @dataclass
