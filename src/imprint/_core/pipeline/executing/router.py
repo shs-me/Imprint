@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from multiprocessing.synchronize import Event
-from typing import override
+from multiprocessing.synchronize import Event, Semaphore
+from typing import final, override
 
 from imprint._core.account import Account
 from imprint._core.ipc import NodeManager
@@ -10,10 +10,11 @@ from imprint._core.pipeline.executing.live import Live as LiveAgent
 from imprint._core.types import ExecutionProtocol, SendOrderMethodSignature
 
 
-@dataclass
+@dataclass(slots=True)
 class Router(ExecutionProtocol, ABC):
     _manager: NodeManager
     _execution_event: Event
+    _wss_sem: Semaphore
 
     _executer: BacktestAgent | LiveAgent = field(init=False)
 
@@ -22,18 +23,23 @@ class Router(ExecutionProtocol, ABC):
     account: Account = field(init=False)
     send_order: SendOrderMethodSignature = field(init=False)
 
-    def __post_init__(self):
+    @final
+    def __post_init__(self) -> None:
         self.is_backtesting = self._manager.cfgSetup.backtesting
         if self.is_backtesting:
             self._executer = BacktestAgent(self._manager, self)
         else:
             self._executer = LiveAgent(
-                self._manager, self, self._execution_event
+                self._manager, self, self._execution_event, self._wss_sem
             )
 
         self.count_open_positions = self._executer.count_open_positions
         self.send_order = self._executer.send_order
         self.account = self._executer.account
+
+        self.post_init()
+
+    def post_init(self) -> None: ...
 
     @abstractmethod
     @override

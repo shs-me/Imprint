@@ -26,10 +26,10 @@ class Base(ABC):
     cfgCoin: cfg.Coin = field(init=False)
     cfgFootprint: cfg.Footprint = field(init=False)
     cfgMetrics: cfg.Metrics = field(init=False)
-    cfgDataStream: cfg.DataStream = field(init=False)
-    cfgGetUserStream: cfg.GetUserStream = field(init=False)
-    cfgSetUserStream: cfg.SetUserStream = field(init=False)
-    cfgSignal: cfg.Signal = field(init=False)
+    cfgMarketDataStream: cfg.MarketDataStream = field(init=False)
+    cfgUserDataStream: cfg.UserDataStream = field(init=False)
+    cfgOrderStream: cfg.OrderStream = field(init=False)
+    cfgSignalStream: cfg.SignalStream = field(init=False)
 
     _log_stream: cfg.LogStream = field(init=False)
     _sc_sem: Semaphore = field(init=False)
@@ -37,29 +37,12 @@ class Base(ABC):
 
     _procs_status: memoryview = field(init=False)
     _main_status: memoryview = field(init=False)
-    _ts_safe_lag: int = field(init=False)
-    _ts_cell_amount: int = field(init=False)
-    _ts_data: memoryview = field(init=False)
-    _ts_data_size: int = field(init=False)
-    _ts_data_header: memoryview = field(init=False)
-    _ts_rid: memoryview = field(init=False)
-    _ts_wid: memoryview = field(init=False)
 
     def __post_init__(self) -> None:
         self.__init_attributes(self._configs, self._main_tools)
 
         self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
         self._main_status = self.cfgMetrics.main_status.view.cast("q")
-
-        self._ts_safe_lag = self._log_stream.ring_buf.safe_lag
-        self._ts_cell_amount = self._log_stream.ring_buf.cell_amount
-        self._ts_data = self._log_stream.ring_buf.data.view
-        self._ts_data_size = self._log_stream.ring_buf.data_size
-        self._ts_data_header = self._log_stream.ring_buf.data_header.view.cast(
-            "q"
-        )
-        self._ts_rid = self._log_stream.ring_buf.reader_id.view.cast("q")
-        self._ts_wid = self._log_stream.ring_buf.writer_id.view.cast("q")
 
     @final
     def __init_attributes(
@@ -94,3 +77,5 @@ class Base(ABC):
                             ring_attr_val.view = buf[
                                 slice(*ring_attr_val.offset)
                             ]
+
+                attr_val.post_init()

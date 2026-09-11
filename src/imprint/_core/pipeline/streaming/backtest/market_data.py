@@ -67,10 +67,7 @@ class MarketDataStream(Base):
     @node_handler()
     def run(self) -> None:
         # Local Links
-        wid, rid = self.ds_wid, self.ds_rid
-        data, data_size = self.ds_data, self.ds_data_size
-        data_header = self.ds_data_header
-        cell_amount, safe_lag = self.ds_cell_amount, self.ds_safe_lag
+        _ = self.mds.ring_buf
         # - - -
         while True:
             if self.manager.have_status():
@@ -95,22 +92,10 @@ class MarketDataStream(Base):
                 else:
                     self.change_data()
             else:
-                while self.lag_not_is_safe(
-                    wid[0], rid[0], cell_amount, safe_lag
-                ) or self.lag_not_is_safe(
-                    wid[0], rid[1], cell_amount, safe_lag
-                ):
+                while _.lag_not_is_safe():
                     time.sleep(0.001)
 
-                raw_data: memoryview = self.data[self.read_row, :].data
-                self.set_raw_data(
-                    raw_data=raw_data,
-                    writer_id=wid,
-                    data=data,
-                    data_header=data_header,
-                    data_size=data_size,
-                    cell_amount=cell_amount,
-                )
+                _.set_data(self.data[self.read_row, :].data)
                 self.read_row += 1
 
     def change_data(self) -> None:

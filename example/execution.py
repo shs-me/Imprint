@@ -6,7 +6,7 @@ from imprint import constant as c
 from imprint.configs import BaseExecution
 
 
-@dataclass
+@dataclass(slots=True)
 class HedgeExecution(BaseExecution):
     @override
     def on_signal(

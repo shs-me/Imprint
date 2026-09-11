@@ -2,9 +2,8 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import override
 
-import numpy as np
 from numba import njit
-from numpy import uint8
+from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core.exchange_sim.engine.order_stream import Order
@@ -12,43 +11,40 @@ from imprint._core.exchange_sim.engine.order_stream import Order
 
 @dataclass(slots=True)
 class UserData(Order, ABC):
-    gus_cell_amount: int = field(init=False)
-    __gus_data: memoryview = field(init=False)
-    gus_data_size: int = field(init=False)
-    gus_data_header: memoryview = field(init=False)
-    gus_wid: memoryview = field(init=False)
-    __gus_rid: memoryview = field(init=False)
-
-    gus_data_buf: NDArray[uint8] = field(init=False)
+    uds_data_buf: memoryview = field(init=False)
+    uds_data_size: int = field(init=False)
+    uds_data_header_buf: memoryview = field(init=False)
+    uds_wid_buf: memoryview = field(init=False)
+    uds_cell_amount: int = field(init=False)
 
     @override
     def __post_init__(self) -> None:
         Order.__post_init__(self)
 
-        cfgGUS = self.manager.cfgGetUserStream
-        self.gus_cell_amount = cfgGUS.ring_buf.cell_amount
-        self.__gus_data = cfgGUS.ring_buf.data.view
-        self.gus_data_size = cfgGUS.ring_buf.data_size
-        self.gus_data_header = cfgGUS.ring_buf.data_header.view
-        self.gus_wid = cfgGUS.ring_buf.writer_id.view.cast("q")
-        self.__gus_rid = cfgGUS.ring_buf.reader_id.view.cast("q")
-
-        self.gus_data_buf = np.frombuffer(self.__gus_data, uint8)
-        self.gus_data_buf.fill(0)
+        uds = self.manager.cfgUserDataStream.ring_buf
+        self.uds_data_buf = uds.data_buf
+        self.uds_data_size = uds.data_size
+        self.uds_data_header_buf = uds.data_header_buf
+        self.uds_wid_buf = uds.wid_buf
+        self.uds_cell_amount = uds.cell_amount
 
 
 @njit(cache=True)
 def set_user_data(
-    data: NDArray[uint8],
-    gus_data_buf: NDArray[uint8],
-    gus_data_buf_size: int,
-    gus_data_header: memoryview,
-    gus_wid: memoryview,
-    gus_cell_amount: int,
+    data: NDArray[int64],
+    uds_data_buf: memoryview,
+    uds_data_buf_size: int,
+    uds_data_header_buf: memoryview,
+    uds_wid_buf: memoryview,
+    uds_cell_amount: int,
 ) -> None:
-    cell: int = gus_wid[0]
-    start: int = cell * gus_data_buf_size
-    gus_data_header[cell] = len(data)
-    gus_data_buf[start : start + len(data)] = data
+    cell: int = uds_wid_buf[0]
+    start: int = cell * uds_data_buf_size
+
+    lrd: int = len(data)
+    uds_data_header_buf[cell] = lrd
+    for i in range(lrd):
+        uds_data_buf[start + i] = data[i]
+
     new_cell: int = cell + 1
-    gus_wid[0] = new_cell if (new_cell < gus_cell_amount) else 0
+    uds_wid_buf[0] = new_cell if (new_cell < uds_cell_amount) else 0

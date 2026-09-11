@@ -5,9 +5,9 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, TypeVar, final
+from typing import TypeVar, final
 
-from msgspec import DecodeError, EncodeError, ValidationError
+from msgspec import DecodeError
 from msgspec.json import Decoder, Encoder
 from websockets import ClientConnection
 
@@ -154,15 +154,6 @@ class OrderEncoder(ABC):
 
     encoder: Encoder = field(default_factory=lambda: Encoder(), init=False)
 
-    @final
-    def encode(self, data: Any) -> bytes | None:
-        try:
-            return self.encoder.encode(data)
-        except EncodeError as e:
-            return self.rest.log(f"Order data encode error: {e}")
-        except ValidationError as e:
-            return self.rest.log(f"Order data validation error: {e}")
-
     @abstractmethod
     def encode_new_order(
         self,
@@ -175,12 +166,46 @@ class OrderEncoder(ABC):
         price: float,
         qty: float,
         time_in_force: str = "GTC",
-    ) -> bytes | None: ...
+    ) -> bytes: ...
 
     @abstractmethod
     def encode_cancel_order(
         self, symbol: str, client_order_id: int
-    ) -> bytes | None: ...
+    ) -> bytes: ...
+
+
+@final
+@dataclass(slots=True)
+class OrderData:
+    timestamp: int = 0
+    order_param: int = 0
+    order_id: int = 0
+    client_order_id: int = 0
+    nPrice: int = 0
+    nQty: int = 0
+    nCommission: int = 0
+
+    def __iter__(self) -> Iterator[int]:
+        yield self.timestamp
+        yield self.order_param
+        yield self.order_id
+        yield self.client_order_id
+        yield self.nPrice
+        yield self.nQty
+        yield self.nCommission
+
+
+@final
+@dataclass(slots=True)
+class BalanceData:
+    nBalance: int = 0
+    lockedNbalance: int = 0
+    availableNbalance: int = 0
+
+    def __iter__(self) -> Iterator[int]:
+        yield self.nBalance
+        yield self.lockedNbalance
+        yield self.availableNbalance
 
 
 @dataclass(slots=True)
@@ -196,6 +221,12 @@ class UserStreamDecoder[T](ABC):
     decoder: Decoder[T] = field(
         default_factory=lambda: Decoder(type=T), init=False
     )
+    order_data: OrderData = field(
+        default_factory=lambda: OrderData(), init=False
+    )
+    balance_data: BalanceData = field(
+        default_factory=lambda: BalanceData(), init=False
+    )
 
     @abstractmethod
     async def on_pre_connect(self) -> str: ...
@@ -203,14 +234,7 @@ class UserStreamDecoder[T](ABC):
     @abstractmethod
     async def on_connection(self, ws: ClientConnection) -> None: ...
 
-    @final
-    def decode(self, raw_data: bytes | memoryview) -> bytes | None:
-        try:
-            return self.decode_user_event(raw_data)
-        except DecodeError as e:
-            return self.rest.log(f"User data decode error: {e}")
-
     @abstractmethod
-    def decode_user_event(
+    def decode(
         self, raw_data: bytes | memoryview
-    ) -> bytes | None: ...
+    ) -> Iterator[OrderData | BalanceData]: ...

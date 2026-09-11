@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import final
 
+from msgspec import MsgspecError
 from websockets import ClientConnection
 from websockets import exceptions as ws_exc
 from websockets.asyncio.client import connect
@@ -32,10 +33,17 @@ class Base(GlobalBase, ABC):
                         ping_timeout=10,
                         close_timeout=5,
                     ) as ws:
-                        self.manager.set_log(f"WS Connected to {self.url}")
-                        await self.on_connection(ws)
-                        while True:
-                            await self.in_connection(ws)
+                        try:
+                            self.manager.set_log(f"WS Connected to {self.url}")
+                            await self.on_connection(ws)
+                            while True:
+                                await self.in_connection(ws)
+                        except MsgspecError:
+                            self.manager.dump_exc()
+                            await ws.close()
+                            self.manager.set_proc_sc(
+                                scs.DECODE_ERROR, wait_main_task=True
+                            )
 
                 except ws_exc.ConnectionClosedError as e:
                     self.exc_counter[ws_exc.ConnectionClosedError.__name__] += 1
@@ -97,10 +105,3 @@ class Base(GlobalBase, ABC):
 
     @abstractmethod
     async def in_connection(self, ws: ClientConnection) -> None: ...
-
-    @final
-    async def alarm_clock(
-        self, wid: memoryview, rid: memoryview, cell_amount: int, safe_lag: int
-    ) -> None:
-        while self.lag_not_is_safe(wid[0], rid[1], cell_amount, safe_lag):
-            await asyncio.sleep(0.001)

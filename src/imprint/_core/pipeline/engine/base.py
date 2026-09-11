@@ -8,6 +8,7 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
+from imprint._core.configs import MarketDataStream
 from imprint._core.footprint.engine import FootprintEngine
 from imprint._core.ipc import NodeManager, node_handler
 from imprint._core.settings import StatusCodes as scs
@@ -18,12 +19,7 @@ class Base(ABC):
     manager: NodeManager
     algorithm: FootprintEngine
 
-    __ds_cell_amount: int = field(init=False)
-    __ds_data_size: int = field(init=False)
-    __ds_data: memoryview = field(init=False)
-    __ds_data_header: memoryview = field(init=False)
-    __ds_wid: memoryview = field(init=False)
-    __ds_rid: memoryview = field(init=False)
+    __mds: MarketDataStream = field(init=False)
 
     time_start_analyze: memoryview = field(init=False)
     engine_complete: memoryview = field(init=False)
@@ -34,13 +30,7 @@ class Base(ABC):
     at_wid: int = field(init=False)
 
     def __post_init__(self) -> None:
-        cfgDS = self.manager.cfgDataStream
-        self.__ds_cell_amount = cfgDS.ring_buf.cell_amount
-        self.__ds_data_size = cfgDS.ring_buf.data_size
-        self.__ds_data = cfgDS.ring_buf.data.view
-        self.__ds_data_header = cfgDS.ring_buf.data_header.view
-        self.__ds_wid = cfgDS.ring_buf.writer_id.view.cast("q")
-        self.__ds_rid = cfgDS.ring_buf.reader_id.view.cast("q")
+        self.__mds = self.manager.cfgMarketDataStream
 
         cfgMetrics = self.manager.cfgMetrics
         self.time_start_analyze = cfgMetrics.time_start_reading.view.cast("q")
@@ -57,6 +47,8 @@ class Base(ABC):
         nQty: int64
         timestamp: int64
         is_sell: int64
+
+        _ = self.__mds.ring_buf
         # - - -
         while True:
             if self.manager.have_status():
@@ -72,11 +64,13 @@ class Base(ABC):
                         scs.COMPLETE, wait_main_task=False
                     )
 
-            if self.__ds_wid[0] == self.__ds_rid[0]:
+            if _.wid_buf[0] == _.rid_buf[0]:
                 self.alarm_clock()
 
-            if self.__ds_wid[0] != self.__ds_rid[0]:
-                self.__get_trades_data()
+            if _.wid_buf[0] != _.rid_buf[0]:
+                self.set_trade_data(
+                    self.manager.cfgMarketDataStream.ring_buf.get_data()
+                )
                 while self.at_rid != self.at_wid:
                     nPrice, nQty, timestamp, is_sell = self.agg_trades[
                         self.at_rid, :
@@ -90,7 +84,7 @@ class Base(ABC):
 
                     if (
                         (not self.algorithm.tick_by_tick_analyze)
-                        and (self.__ds_wid[0] != self.__ds_rid[0])
+                        and (_.wid_buf[0] != _.rid_buf[0])
                     ) and (
                         not (self.algorithm._engine.re_init & c.RIF_session)
                     ):
@@ -109,10 +103,10 @@ class Base(ABC):
 
     @final
     def __complete(self) -> bool:
+        _ = self.__mds.ring_buf
         return (
-            self.__ds_wid[0] == self.__ds_rid[0]
-            and self.algorithm._engine._bbox_is_readed()
-        )
+            _.wid_buf[0] == _.rid_buf[0]
+        ) and self.algorithm._engine._bbox_is_readed()
 
     @final
     def __final_actions(self) -> None:
@@ -122,34 +116,21 @@ class Base(ABC):
                 self.algorithm.last_idx[0]
             )
 
-        self.engine_complete[0] = 1
         self.post_final_action()
+        self.engine_complete[0] = 1
         self.manager.set_log(
-            f"Count Prepped Ticks: {self.algorithm._engine.counter_ticks} "
-            + f"Count Signals: {self.algorithm._sync._count_send_signal}"
+            f"Count prepped ticks: {self.algorithm._engine.counter_ticks} "
+            + f"Count signals: {self.algorithm._sync._count_send_signal}"
         )
 
     @abstractmethod
-    def post_final_action(self) -> None:
-        pass
+    def post_final_action(self) -> None: ...
 
     @abstractmethod
-    def alarm_clock(self) -> None:
-        pass
-
-    @final
-    def __get_trades_data(self) -> None:
-        cell: int = self.__ds_rid[0]
-        lrd: int = self.__ds_data_header[cell]
-        start: int = cell * self.__ds_data_size
-        new_cell: int = cell + 1
-        self.set_trade_data(self.__ds_data[start : start + lrd])
-        self.__ds_rid[0] = new_cell if new_cell < self.__ds_cell_amount else 0
+    def alarm_clock(self) -> None: ...
 
     @abstractmethod
-    def set_trade_data(self, raw_data: memoryview) -> None:
-        pass
+    def set_trade_data(self, raw_data: memoryview) -> None: ...
 
     @abstractmethod
-    def post_update(self) -> None:
-        pass
+    def post_update(self) -> None: ...

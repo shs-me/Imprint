@@ -63,16 +63,15 @@ class Backtest(Base):
 
     @override
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-        get_data: memoryview = user_data_raw_buf.cast("q")
-        timestamp: int = get_data[c.TP_timestamp]
-        order_param: int = get_data[c.TP_order_param]
-        order_id: int = get_data[c.TP_order_id]
-        client_order_id: int = get_data[c.TP_client_order_id]
-        nPrice: int = get_data[c.TP_nPrice]
-        nQty: int = get_data[c.TP_nQty]
-        nCommission: int = get_data[c.TP_nCommission]
-        nMAE: int = get_data[c.TP_nMAE]
-        nMFE: int = get_data[c.TP_nMFE]
+        timestamp: int = user_data_raw_buf[c.TP_timestamp]
+        order_param: int = user_data_raw_buf[c.TP_order_param]
+        order_id: int = user_data_raw_buf[c.TP_order_id]
+        client_order_id: int = user_data_raw_buf[c.TP_client_order_id]
+        nPrice: int = user_data_raw_buf[c.TP_nPrice]
+        nQty: int = user_data_raw_buf[c.TP_nQty]
+        nCommission: int = user_data_raw_buf[c.TP_nCommission]
+        nMAE: int = user_data_raw_buf[c.TP_nMAE]
+        nMFE: int = user_data_raw_buf[c.TP_nMFE]
 
         self.exchange_sim.update_orders_history(
             timestamp=timestamp,

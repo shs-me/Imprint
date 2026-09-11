@@ -24,11 +24,11 @@ def run_engine(
     if manager.cfgSetup.backtesting:
         from imprint._core.pipeline.engine.backtest import SyncViaSpinLock
 
-        sync = SyncViaSpinLock(manager)
+        sync = SyncViaSpinLock(manager=manager)
     else:
         from imprint._core.pipeline.engine.live import SyncViaEvent
 
-        sync = SyncViaEvent(manager, execution_event)
+        sync = SyncViaEvent(manager=manager, execution_event=execution_event)
 
     engine: FootprintEngine = engine_type(manager, sync)
     manager.set_log(f"{engine.__class__.__name__} used as FootprintEngine")
@@ -38,10 +38,12 @@ def run_engine(
             Backtest as BacktestAgent,
         )
 
-        agent = BacktestAgent(manager, engine)
+        agent = BacktestAgent(manager=manager, algorithm=engine)
     else:
         from imprint._core.pipeline.engine.live import Live as LiveAgent
 
-        agent = LiveAgent(manager, engine, engine_event)
+        agent = LiveAgent(
+            manager=manager, algorithm=engine, engine_event=engine_event
+        )
 
     agent.run()

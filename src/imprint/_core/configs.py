@@ -162,6 +162,7 @@ class Footprint(Configuration):
         return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
 
 
+# - - - Configs For IPC - - -
 @dataclass(slots=True)
 class SharedMemorySegments(Configuration, ABC):
     shm_size: int = 0
@@ -216,14 +217,16 @@ class Metrics(SharedMemorySegments):
         self.engine_complete = Segment(UBYTE)
 
 
+# - - Base Ring Buf For All Streams - -
 @final
 @dataclass(slots=True)
 class RingBuf:
-    data_size: int = 1024
-    data_header_size: int = 8
-    cell_amount: int = 10_000
+    data_size: int = 256
+    data_header_size: int = 1
+    cell_amount: int = 100
     count_writer: int = 1
     count_reader: int = 1
+    cast_to_int64: bool = False
 
     safe_lag: int = field(init=False)
 
@@ -231,6 +234,11 @@ class RingBuf:
     writer_id: Segment = field(init=False)
     data: Segment = field(init=False)
     data_header: Segment = field(init=False)
+
+    rid_buf: memoryview = field(init=False)
+    wid_buf: memoryview = field(init=False)
+    data_buf: memoryview = field(init=False)
+    data_header_buf: memoryview = field(init=False)
 
     def __post_init__(self) -> None:
         self.safe_lag = int(self.cell_amount * 0.9)
@@ -244,7 +252,71 @@ class RingBuf:
             self.count_writer * (self.cell_amount * self.data_header_size)
         )
 
+    def post_init(self) -> None:
+        if self.cast_to_int64:
+            self.data_buf = self.data.view.cast("q")
+            self.data_size = self.data_size // 8
+        else:
+            self.data_buf = self.data.view
 
+        if self.data_header_size == 8:
+            self.data_header_buf = self.data_header.view.cast("q")
+        else:
+            self.data_header_buf = self.data_header.view
+
+        self.wid_buf = self.writer_id.view.cast("q")
+        self.rid_buf = self.reader_id.view.cast("q")
+
+    def lag_not_is_safe(self) -> bool:
+        wid, rid, max_wid, max_rid = 0, 0, 0, 0
+        while (max_wid < self.count_writer) or (max_rid < self.count_reader):
+            if (
+                (self.wid_buf[wid] - self.rid_buf[rid] + self.cell_amount)
+                % self.cell_amount
+            ) > self.safe_lag:
+                return True
+
+            if max_wid < self.count_writer:
+                max_wid += 1
+            if wid < self.count_writer - 1:
+                wid += 1
+            if rid < self.count_reader - 1:
+                rid += 1
+            if max_rid < self.count_reader:
+                max_rid += 1
+
+        return False
+
+    def set_data(self, raw_data: bytes | memoryview | int, *args: int) -> None:
+        cell: int = self.wid_buf[0]
+        start: int = cell * self.data_size
+
+        if isinstance(raw_data, int):
+            self.data_buf[start] = raw_data
+            if args:
+                for idx, val in enumerate(args, start=1):
+                    self.data_buf[start + idx] = val
+
+            self.data_header_buf[cell] = 1 + len(args)
+        else:
+            lrd: int = len(raw_data)
+            self.data_header_buf[cell] = lrd
+            self.data_buf[start : start + lrd] = raw_data
+
+        new_cell = cell + 1
+        self.wid_buf[0] = new_cell if new_cell < self.cell_amount else 0
+
+    def get_data(self) -> memoryview:
+        cell: int = self.rid_buf[0]
+        lrd: int = self.data_header_buf[cell]
+        start: int = cell * self.data_size
+        raw_data: memoryview = self.data_buf[start : start + lrd]
+        new_cell: int = cell + 1
+        self.rid_buf[0] = new_cell if new_cell < self.cell_amount else 0
+        return raw_data
+
+
+# - Log Stream -
 @dataclass(slots=True)
 class LogStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
@@ -259,44 +331,51 @@ class LogStream(SharedMemorySegments):
     )
 
 
+# - Signal Stream -
 @dataclass(slots=True)
-class Signal(SharedMemorySegments):
+class SignalStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
             data_size=32,
             data_header_size=1,
             cell_amount=1000,
+            cast_to_int64=True,
         ),
         init=False,
     )
 
 
+# - User Data Stream -
 @dataclass(slots=True)
-class GetUserStream(SharedMemorySegments):
+class UserDataStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
             data_size=128,
             data_header_size=1,
             cell_amount=1000,
+            cast_to_int64=True,
         ),
         init=False,
     )
 
 
+# - Order Stream -
 @dataclass(slots=True)
-class SetUserStream(SharedMemorySegments):
+class OrderStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
             data_size=128,
             data_header_size=1,
             cell_amount=1000,
+            cast_to_int64=True,
         ),
         init=False,
     )
 
 
+# - Market Data Stream -
 @dataclass(slots=True)
-class DataStream(SharedMemorySegments):
+class MarketDataStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
             data_size=256,

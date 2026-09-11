@@ -43,7 +43,7 @@ class BinanceOrderEncoder(OrderEncoder):
         price: float,
         qty: float,
         time_in_force: str = "GTC",
-    ) -> bytes | None:
+    ) -> bytes:
         payload = Order(
             id=client_order_id,
             method="order.place",
@@ -59,12 +59,10 @@ class BinanceOrderEncoder(OrderEncoder):
                 timeInForce=None if is_market else time_in_force,
             ),
         )
-        return self.encode(payload)
+        return self.encoder.encode(payload)
 
     @override
-    def encode_cancel_order(
-        self, symbol: str, client_order_id: int
-    ) -> bytes | None:
+    def encode_cancel_order(self, symbol: str, client_order_id: int) -> bytes:
         payload = Order(
             id=client_order_id,
             method="order.cancel",
@@ -73,4 +71,4 @@ class BinanceOrderEncoder(OrderEncoder):
                 origClientOrderId=f"gc_{client_order_id}",
             ),
         )
-        return self.encode(payload)
+        return self.encoder.encode(payload)

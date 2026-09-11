@@ -7,7 +7,6 @@ from typing import Any, override
 from websockets import ClientConnection
 
 from imprint._core.pipeline.streaming.live.base import Base
-from imprint._core.settings import StatusCodes as scs
 from imprint._core.utils import UserStreamDecoder
 
 
@@ -50,26 +49,11 @@ class UserData(Base):
     @override
     async def in_connection(self, ws: ClientConnection) -> None:
         raw_data: bytes = await ws.recv(decode=False)
-        if decoded_data := self.decoder.decode(raw_data):
-            await self.alarm_clock(
-                self.gus_wid,
-                self.gus_rid,
-                self.gus_cell_amount,
-                self.gus_safe_lag,
-            )
-            if (
-                self.set_raw_data(
-                    raw_data=decoded_data,
-                    writer_id=self.gus_wid,
-                    data=self.gus_data,
-                    data_header=self.gus_data_header,
-                    data_size=self.gus_data_size,
-                    cell_amount=self.gus_cell_amount,
-                )
-                and self.execution_event.is_set() is False
-            ):
-                self.execution_event.set()
-        else:
-            self.manager.dump_exc()
-            self.manager.set_proc_sc(scs.DECODE_ERROR, wait_main_task=True)
-            await ws.close()
+        for data in self.decoder.decode(raw_data):
+            while self.uds.ring_buf.lag_not_is_safe():
+                await asyncio.sleep(0.001)
+
+            self.uds.ring_buf.set_data(*data)
+
+        if self.execution_event.is_set() is False:
+            self.execution_event.set()

@@ -9,8 +9,7 @@ from imprint._core.pipeline.engine.base import Base
 @dataclass(slots=True)
 class SyncViaSpinLock(SyncWithExecution):
     @override
-    def sync_with_execution(self) -> None:
-        pass
+    def sync_with_execution(self) -> None: ...
 
 
 @dataclass(slots=True)
@@ -28,9 +27,7 @@ class Backtest(Base):
         )
 
     @override
-    def post_update(self) -> None:
-        pass
+    def post_update(self) -> None: ...
 
     @override
-    def post_final_action(self) -> None:
-        pass
+    def post_final_action(self) -> None: ...

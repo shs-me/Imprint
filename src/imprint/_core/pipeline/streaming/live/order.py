@@ -1,6 +1,5 @@
 import asyncio
 import importlib
-import struct
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Semaphore
 from typing import override
@@ -9,7 +8,6 @@ from websockets import ClientConnection
 
 from imprint._core import constant as c
 from imprint._core.pipeline.streaming.live.base import Base
-from imprint._core.settings import StatusCodes as scs
 from imprint._core.utils import OrderEncoder
 
 
@@ -53,34 +51,16 @@ class Order(Base):
 
     @override
     async def in_connection(self, ws: ClientConnection) -> None:
+        _ = self.os.ring_buf
         await self.loop.run_in_executor(None, self.wss_sem.acquire)
 
-        if self.sus_wid[0] != self.sus_rid[0]:
-            payload: bytes | None = self.get_order_payload()
-            if payload:
-                await ws.send(payload, text=True)
-            else:
-                self.manager.dump_exc()
-                self.manager.set_proc_sc(scs.ENCODE_ERROR, wait_main_task=True)
-                await ws.close()
+        if _.wid_buf[0] != _.rid_buf[0]:
+            payload: bytes | None = self.to_payload()
+            await ws.send(payload, text=True)
 
-    def get_order_payload(self) -> bytes | None:
-        cell: int = self.sus_rid[0]
-        lrd: int = self.sus_data_header[cell]
-        start: int = cell * self.sus_data_size
-
-        raw_data: bytes | None = self.to_payload(
-            self.sus_data[start : start + lrd]
-        )
-
-        new_cell: int = cell + 1
-        self.sus_rid[0] = new_cell if new_cell < self.sus_cell_amount else 0
-
-        return raw_data
-
-    def to_payload(self, raw_data: memoryview) -> bytes | None:
-        timestamp, order_param, client_order_id, nPrice, nQty = struct.unpack(
-            "@qqqqq", raw_data
+    def to_payload(self) -> bytes:
+        timestamp, order_param, client_order_id, nPrice, nQty = (
+            self.os.ring_buf.get_data()
         )
 
         price: float = round(nPrice / self.price_mult, self.price_prec)

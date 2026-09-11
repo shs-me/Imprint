@@ -247,22 +247,22 @@ class Host(Base):
 
     def get_log(self, proc_id: int) -> list[tuple[int, str]]:
         """Retrieves and decodes log status message for specified process ID."""
+        _ = self._log_stream.ring_buf
+
         logs: list[tuple[int, str]] = []
 
-        while self._ts_rid[proc_id] != self._ts_wid[proc_id]:
-            cell: int = self._ts_rid[proc_id]
-            need_cell: int = (proc_id * self._ts_cell_amount) + cell
-            lrd: int = self._ts_data_header[need_cell]
-            start: int = need_cell * self._ts_data_size
-            t: int = self._ts_data[start : (start + 8)].cast("q")[0]
+        while _.rid_buf[proc_id] != _.wid_buf[proc_id]:
+            cell: int = _.rid_buf[proc_id]
+            need_cell: int = (proc_id * _.cell_amount) + cell
+            lrd: int = _.data_header_buf[need_cell]
+            start: int = need_cell * _.data_size
+            t: int = _.data_buf[start : (start + 8)].cast("q")[0]
             msg: str = f"Log: {
-                bytes(self._ts_data[(start + 8) : (start + 8) + lrd]).decode()
+                bytes(_.data_buf[(start + 8) : (start + 8) + lrd]).decode()
             }"
             logs.append((t, msg))
             new_cell: int = cell + 1
-            self._ts_rid[proc_id] = (
-                new_cell if new_cell < self._ts_cell_amount else 0
-            )
+            _.rid_buf[proc_id] = new_cell if new_cell < _.cell_amount else 0
 
         return logs
 

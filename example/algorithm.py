@@ -6,16 +6,14 @@ from numpy import bool_, int64
 from imprint.configs import FootprintEngine
 
 
-@dataclass
+@dataclass(slots=True)
 class IntraDay(FootprintEngine):
     alpha: int = field(default=1, init=False)
     stop_prev: int64 | int = field(default=0, init=False)
     pos_prev: int64 | int = field(default=0, init=False)
 
     @override
-    def __post_init__(self) -> None:
-        FootprintEngine.__post_init__(self)
-
+    def post_init(self) -> None:
         self.tick_by_tick_analyze: bool = False
 
     @override

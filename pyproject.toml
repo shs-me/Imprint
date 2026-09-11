@@ -87,6 +87,8 @@ pythonPlatform = "All"
 venvPath = "."
 venv = ".venv"
 
+indexing = false
+
 reportAny = false
 reportExplicitAny = false
 reportPrivateUsage = false

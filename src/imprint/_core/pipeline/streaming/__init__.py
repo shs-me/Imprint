@@ -25,5 +25,10 @@ def run_streaming(
 
         from imprint._core.pipeline.streaming.live import LiveAgent
 
-        agent = LiveAgent(manager, engine_event, execution_event, wss_sem)
+        agent = LiveAgent(
+            manager=manager,
+            engine_event=engine_event,
+            execution_event=execution_event,
+            wss_sem=wss_sem,
+        )
         asyncio.run(agent.run_streams())

@@ -1,14 +1,13 @@
 import asyncio
-import struct
 from asyncio import Task
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, override
 
 from websockets import ClientConnection
 
-from imprint import constant as c
 from imprint._core.utils.base_rest import RestResponseError
-from imprint.configs import UserStreamDecoder
+from imprint.configs import BalanceData, OrderData, UserStreamDecoder
 
 
 @dataclass(slots=True)
@@ -39,58 +38,24 @@ class BinanceUserStreamDecoder(UserStreamDecoder[dict[str, Any]]):
     async def on_connection(self, ws: ClientConnection) -> None: ...
 
     @override
-    def decode_user_event(self, raw_data: bytes | memoryview) -> bytes | None:
+    def decode(
+        self, raw_data: bytes | memoryview
+    ) -> Iterator[OrderData | BalanceData]:
         data: dict[str, Any] = self.decoder.decode(raw_data)
         event_type = data.get("e")
 
         if event_type == "ORDER_TRADE_UPDATE":
-            o = data["o"]
-            timestamp = int(data["E"])
-            order_id = int(o["i"])
-            nPrice = round(float(o["p"]) * self.price_mult)
-            nQty = round(float(o["q"]) * self.qty_mult)
-            nCommission = round(float(o.get("n", 0)) * self.scale_mult)
-
-            order_param = 0
-            order_param |= c.OF_LONG if o["S"] == "BUY" else c.OF_SHORT
-            order_param |= c.OF_BUY if o["S"] == "BUY" else c.OF_SELL
-            order_param |= c.OF_LIMIT if o["o"] == "LIMIT" else c.OF_MARKET
-
-            status = o["X"]
-            if status == "NEW":
-                order_param |= c.OF_NEW
-            elif status in ("FILLED", "PARTIALLY_FILLED"):
-                order_param |= c.OF_FILLED
-            elif status == "CANCELED":
-                order_param |= c.OF_CANCELED
-
-            return struct.pack(
-                "@qqqqqqqq",
-                timestamp,
-                1,
-                order_param,
-                order_id,
-                nPrice,
-                nQty,
-                nCommission,
-                0,
-            )
+            self.order_data.timestamp = 0
+            self.order_data.order_param = 0
+            self.order_data.order_id = 0
+            self.order_data.client_order_id = 0
+            self.order_data.nPrice = 0
+            self.order_data.nQty = 0
+            self.order_data.nCommission = 0
+            yield self.order_data
 
         elif event_type == "ACCOUNT_UPDATE":
-            timestamp = int(data["E"])
-            balances = data["a"]["B"]
-            for b in balances:
-                if b["a"] == "USDT":
-                    nBalance = round(float(b["wb"]) * self.scale_mult)
-                    return struct.pack(
-                        "@qqqqqqqq",
-                        timestamp,
-                        2,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        nBalance,
-                    )
-        return None
+            self.balance_data.nBalance = 0
+            self.balance_data.lockedNbalance = 0
+            self.balance_data.availableNbalance = 0
+            yield self.balance_data

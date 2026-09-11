@@ -1,4 +1,3 @@
-import struct
 from abc import ABC
 from dataclasses import dataclass, field
 from typing import final, override
@@ -9,6 +8,7 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
+from imprint._core.configs import OrderStream
 from imprint._core.exchange_sim.account import Account
 from imprint._core.settings import StatusCodes as scs
 
@@ -17,12 +17,7 @@ from imprint._core.settings import StatusCodes as scs
 class Order(Account, ABC):
     __order_book_row: int = field(init=False)
 
-    __sus_cell_amount: int = field(init=False)
-    __sus_data: memoryview = field(init=False)
-    __sus_data_size: int = field(init=False)
-    __sus_data_header: memoryview = field(init=False)
-    __sus_wid: memoryview = field(init=False)
-    __sus_rid: memoryview = field(init=False)
+    __os: OrderStream = field(init=False)
 
     executed_orders: NDArray[int64] = field(
         default_factory=lambda: np.zeros(
@@ -48,13 +43,7 @@ class Order(Account, ABC):
         cfgAC = self.manager.cfgAccount
         self.__order_book_row = cfgAC.active_order_limit
 
-        cfgSUS = self.manager.cfgSetUserStream
-        self.__sus_cell_amount = cfgSUS.ring_buf.cell_amount
-        self.__sus_data = cfgSUS.ring_buf.data.view
-        self.__sus_data_size = cfgSUS.ring_buf.data_size
-        self.__sus_data_header = cfgSUS.ring_buf.data_header.view
-        self.__sus_wid = cfgSUS.ring_buf.writer_id.view.cast("q")
-        self.__sus_rid = cfgSUS.ring_buf.reader_id.view.cast("q")
+        self.__os = self.manager.cfgOrderStream
 
         self.executed_orders = np.zeros(
             (1000, c.TP_ConstantCount), dtype=np.int64
@@ -71,7 +60,7 @@ class Order(Account, ABC):
     @final
     def __update_order_book(self) -> None:
         timestamp, order_param, client_order_id, nPrice, nQty = (
-            self.__get_user_data()
+            self.__os.ring_buf.get_data()
         )
 
         if self.obRow[0] >= self.order_book.shape[0]:
@@ -100,21 +89,6 @@ class Order(Account, ABC):
 
         self.eoRow[0] += 1
         self.order_id[0] += 1
-
-    @final
-    def __get_user_data(self) -> tuple[int, int, int, int, int]:
-        cell: int = self.__sus_rid[0]
-        start: int = cell * self.__sus_data_size
-        lrd = self.__sus_data_header[cell]
-
-        raw_data = self.__sus_data[start : start + lrd]
-        order_data = struct.unpack("@qqqqq", raw_data)
-
-        new_cell: int = cell + 1
-        self.__sus_rid[0] = (
-            new_cell if (new_cell < self.__sus_cell_amount) else 0
-        )
-        return order_data
 
 
 @njit(cache=True)

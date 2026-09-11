@@ -39,33 +39,29 @@ class Node(Base):
 
     def set_log(self, log: str) -> None:
         """Writes formatted process status log message to shared memory log buffer."""
-
+        _ = self._log_stream.ring_buf
         lag: int = (
-            (self._ts_wid[self._proc_id] - self._ts_rid[self._proc_id])
-            + self._ts_cell_amount
-        ) % self._ts_cell_amount
-        if lag > self._ts_safe_lag:
+            (_.wid_buf[self._proc_id] - _.rid_buf[self._proc_id])
+            + _.cell_amount
+        ) % _.cell_amount
+        if lag > _.safe_lag:
             return self.set_proc_sc(
                 scs.RING_BUFFER_LOG_STREAM_OVERFLOW, wait_main_task=False
             )
 
         b_log = log.encode()
 
-        if (len(b_log) + 8) > self._ts_data_size:
+        if (len(b_log) + 8) > _.data_size:
             self.set_proc_sc(scs.BIG_LOG_SIZE, wait_main_task=False)
 
-        cell: int = self._ts_wid[self._proc_id]
-        need_cell: int = (self._proc_id * self._ts_cell_amount) + cell
-        self._ts_data_header[need_cell] = len(b_log)
-        start: int = need_cell * self._ts_data_size
-        self._ts_data[start : (start + 8)].cast("q")[0] = round(
-            time.time() * 1000
-        )
-        self._ts_data[(start + 8) : (start + 8) + len(b_log)] = b_log
+        cell: int = _.wid_buf[self._proc_id]
+        need_cell: int = (self._proc_id * _.cell_amount) + cell
+        _.data_header_buf[need_cell] = len(b_log)
+        start: int = need_cell * _.data_size
+        _.data_buf[start : (start + 8)].cast("q")[0] = round(time.time() * 1000)
+        _.data_buf[(start + 8) : (start + 8) + len(b_log)] = b_log
         new_cell: int = cell + 1
-        self._ts_wid[self._proc_id] = (
-            new_cell if new_cell < self._ts_cell_amount else 0
-        )
+        _.wid_buf[self._proc_id] = new_cell if new_cell < _.cell_amount else 0
 
         self.set_proc_sc(scs.HAVE_LOG, wait_main_task=False)
 

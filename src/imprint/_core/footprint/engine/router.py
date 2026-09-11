@@ -6,6 +6,7 @@ from typing import final, override
 from numpy import int64
 
 from imprint._core import constant as c
+from imprint._core.configs import SignalStream
 from imprint._core.footprint.engine.reader import AlgorithmProtocol
 from imprint._core.footprint.engine.reader import Reader as FootprintEngine
 from imprint._core.footprint.models import Footprint
@@ -18,16 +19,11 @@ class SyncWithExecution(ABC):
 
     time_start_reading: memoryview = field(init=False)
     safe_lag: int = field(init=False)
-    sn_cell_amount: int = field(init=False)
-    sn_safe_lag: int = field(init=False)
-    sn_data_size: int = field(init=False)
-    sn_data: memoryview = field(init=False)
-    sn_wid: memoryview = field(init=False)
-    sn_rid: memoryview = field(init=False)
-
+    __ss: SignalStream = field(init=False)
     _signal_id: int = field(default=0, init=False)
     _count_send_signal: int = field(default=0, init=False)
 
+    @final
     def __post_init__(self) -> None:
         cfgMetrics = self.manager.cfgMetrics
         self.time_start_reading = cfgMetrics.time_start_reading.view.cast("q")
@@ -35,14 +31,9 @@ class SyncWithExecution(ABC):
         cfgRM = self.manager.cfgRiskManagement
         self.safe_lag = cfgRM.pass_signal_if_analysis_time_big
 
-        cfgSN = self.manager.cfgSignal
-        self.sn_cell_amount = cfgSN.ring_buf.cell_amount
-        self.sn_safe_lag = cfgSN.ring_buf.safe_lag
-        self.sn_data_size = cfgSN.ring_buf.data_size // 8
-        self.sn_data = cfgSN.ring_buf.data.view.cast("q")
-        self.sn_wid = cfgSN.ring_buf.writer_id.view.cast("q")
-        self.sn_rid = cfgSN.ring_buf.reader_id.view.cast("q")
+        self.__ss = self.manager.cfgSignalStream
 
+    @final
     @property
     def signal_id(self) -> int:
         self._signal_id += 1
@@ -58,37 +49,26 @@ class SyncWithExecution(ABC):
         is_market: bool,
         pass_lag: bool,
     ) -> None | int:
+        s = self.__ss.ring_buf
         if not pass_lag and (not self.lag_is_safe()):
             return
 
-        if (
-            (self.sn_wid[0] - self.sn_rid[0] + self.sn_cell_amount)
-            % self.sn_cell_amount
-        ) > self.sn_safe_lag:
+        if s.lag_not_is_safe():
             return
 
-        orderParam = 0
-        orderParam |= c.OF_LONG if is_long else c.OF_SHORT
-        orderParam |= c.OF_BUY if is_buy else c.OF_SELL
-        orderParam |= c.OF_MARKET if is_market else c.OF_LIMIT
-        orderParam |= c.OF_NEW
+        order_param = 0
+        order_param |= c.OF_LONG if is_long else c.OF_SHORT
+        order_param |= c.OF_BUY if is_buy else c.OF_SELL
+        order_param |= c.OF_MARKET if is_market else c.OF_LIMIT
+        order_param |= c.OF_NEW
 
-        cell: int = self.sn_wid[0]
-        start: int = cell * self.sn_data_size
-        set_data: memoryview = self.sn_data[start : start + self.sn_data_size]
-        set_data[0] = sid = self.signal_id
-        set_data[1], set_data[2], set_data[3] = nPrice, timestamp, orderParam
-
-        new_cell = cell + 1
-        self.sn_wid[0] = new_cell if new_cell < self.sn_cell_amount else 0
-
+        s.set_data(self.signal_id, nPrice, timestamp, order_param)
         self.sync_with_execution()
         self._count_send_signal += 1
-        return sid
+        return self._signal_id
 
     @abstractmethod
-    def sync_with_execution(self) -> None:
-        pass
+    def sync_with_execution(self) -> None: ...
 
     @final
     def lag_is_safe(self) -> bool:
@@ -98,7 +78,7 @@ class SyncWithExecution(ABC):
         return lag < self.safe_lag
 
 
-@dataclass
+@dataclass(slots=True)
 class Router(AlgorithmProtocol, ABC):
     _manager: NodeManager
     _sync: SyncWithExecution
@@ -110,11 +90,16 @@ class Router(AlgorithmProtocol, ABC):
     fp: Footprint = field(init=False)
     _engine: FootprintEngine = field(init=False)
 
+    @final
     def __post_init__(self) -> None:
         self._engine = FootprintEngine(self._manager, self)
         self.is_backtest = self._manager.cfgSetup.backtesting
         self.last_idx = self._engine.last_idx.toreadonly()
         self.fp = self._engine.fp
+
+        self.post_init()
+
+    def post_init(self) -> None: ...
 
     @abstractmethod
     @override

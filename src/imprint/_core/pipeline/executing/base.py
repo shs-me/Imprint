@@ -1,10 +1,10 @@
-import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final
 
 from imprint._core import constant as c
 from imprint._core.account import Account
+from imprint._core.configs import OrderStream, SignalStream, UserDataStream
 from imprint._core.ipc import NodeManager, node_handler
 from imprint._core.settings import PositionFSM
 from imprint._core.settings import StatusCodes as scs
@@ -16,25 +16,9 @@ class Base(ABC):
     manager: NodeManager
     executor: ExecutionProtocol
 
-    __sn_cell_amount: int = field(init=False)
-    __sn_data_size: int = field(init=False)
-    __sn_data: memoryview = field(init=False)
-    __sn_wid: memoryview = field(init=False)
-    __sn_rid: memoryview = field(init=False)
-
-    __gus_cell_amount: int = field(init=False)
-    __gus_data: memoryview = field(init=False)
-    __gus_data_size: int = field(init=False)
-    __gus_data_header: memoryview = field(init=False)
-    __gus_wid: memoryview = field(init=False)
-    __gus_rid: memoryview = field(init=False)
-
-    __sus_cell_amount: int = field(init=False)
-    __sus_data: memoryview = field(init=False)
-    __sus_data_size: int = field(init=False)
-    __sus_data_header: memoryview = field(init=False)
-    __sus_wid: memoryview = field(init=False)
-    __sus_rid: memoryview = field(init=False)
+    __ss: SignalStream = field(init=False)
+    __uds: UserDataStream = field(init=False)
+    __os: OrderStream = field(init=False)
 
     __engine_complete: memoryview = field(init=False)
 
@@ -47,28 +31,9 @@ class Base(ABC):
 
     @final
     def __post_init__(self) -> None:
-        cfgSN = self.manager.cfgSignal
-        self.__sn_cell_amount = cfgSN.ring_buf.cell_amount
-        self.__sn_data_size = cfgSN.ring_buf.data_size // 8
-        self.__sn_data = cfgSN.ring_buf.data.view.cast("q")
-        self.__sn_wid = cfgSN.ring_buf.writer_id.view.cast("q")
-        self.__sn_rid = cfgSN.ring_buf.reader_id.view.cast("q")
-
-        cfgGUS = self.manager.cfgGetUserStream
-        self.__gus_cell_amount = cfgGUS.ring_buf.cell_amount
-        self.__gus_data = cfgGUS.ring_buf.data.view
-        self.__gus_data_size = cfgGUS.ring_buf.data_size
-        self.__gus_data_header = cfgGUS.ring_buf.data_header.view
-        self.__gus_wid = cfgGUS.ring_buf.writer_id.view.cast("q")
-        self.__gus_rid = cfgGUS.ring_buf.reader_id.view.cast("q")
-
-        cfgSUS = self.manager.cfgSetUserStream
-        self.__sus_cell_amount = cfgSUS.ring_buf.cell_amount
-        self.__sus_data = cfgSUS.ring_buf.data.view
-        self.__sus_data_size = cfgSUS.ring_buf.data_size
-        self.__sus_data_header = cfgSUS.ring_buf.data_header.view
-        self.__sus_wid = cfgSUS.ring_buf.writer_id.view.cast("q")
-        self.__sus_rid = cfgSUS.ring_buf.reader_id.view.cast("q")
+        self.__ss = self.manager.cfgSignalStream
+        self.__uds = self.manager.cfgUserDataStream
+        self.__os = self.manager.cfgOrderStream
 
         cfgMetrics = self.manager.cfgMetrics
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
@@ -83,6 +48,7 @@ class Base(ABC):
     @final
     @node_handler()
     def run(self) -> None:
+        u, s = self.__uds.ring_buf, self.__ss.ring_buf
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -98,23 +64,20 @@ class Base(ABC):
                     )
 
             if self.__engine_complete[0] == 0:
-                self.alarm_clock(
-                    self.__sn_wid, self.__sn_rid, self.__gus_wid, self.__gus_rid
-                )
+                self.alarm_clock(s.wid_buf, s.rid_buf, u.wid_buf, u.rid_buf)
 
-            if self.__sn_wid[0] != self.__sn_rid[0]:
+            if s.wid_buf[0] != s.rid_buf[0]:
                 self.__check_signal_buf()
-            elif self.__gus_wid[0] != self.__gus_rid[0]:
+            elif u.wid_buf[0] != u.rid_buf[0]:
                 self._check_user_data_buf()
 
     @final
     def __complete(self) -> bool:
-        signals_readed: bool = self.__sn_wid[0] == self.__sn_rid[0]
-        user_stream_readed: bool = self.__gus_wid[0] == self.__gus_rid[0]
+        u, s = self.__uds.ring_buf, self.__ss.ring_buf
         return (
             (self.__engine_complete[0] == 1)
-            and signals_readed
-            and user_stream_readed
+            and (s.wid_buf[0] == s.rid_buf[0])
+            and (u.wid_buf[0] == u.rid_buf[0])
         )
 
     @final
@@ -137,7 +100,9 @@ class Base(ABC):
     def __check_signal_buf(
         self,
     ) -> None:
-        signal_id, nPrice, timestamp, order_param = self.__get_signal_data()
+        signal_id, nPrice, timestamp, order_param = (
+            self.__ss.ring_buf.get_data()
+        )
         self._check_user_data_buf()
         self.pre_execute_signal_action(timestamp)
         self._check_user_data_buf()
@@ -171,40 +136,14 @@ class Base(ABC):
                 code=scs.LOSS_MORE_LIMIT, wait_main_task=True
             )
 
-    @final
-    def __get_signal_data(self) -> tuple[int, int, int, int]:
-        cell: int = self.__sn_rid[0]
-        start: int = cell * self.__sn_data_size
-        get_data: memoryview = self.__sn_data[
-            start : start + self.__sn_data_size
-        ]
-        signal_id = get_data[0]
-        nPrice, timestamp, order_param = get_data[1], get_data[2], get_data[3]
-        new_cell: int = cell + 1
-        self.__sn_rid[0] = new_cell if (new_cell < self.__sn_cell_amount) else 0
-        return signal_id, nPrice, timestamp, order_param
-
     @abstractmethod
     def pre_execute_signal_action(self, time_get_signal: int) -> None: ...
 
     @final
     def _check_user_data_buf(self) -> None:
-        while self.__gus_wid[0] != self.__gus_rid[0]:
-            self.__get_user_data()
-
-    @final
-    def __get_user_data(self) -> None:
-        cell: int = self.__gus_rid[0]
-        start: int = cell * self.__gus_data_size
-        len_raw_data: int = self.__gus_data_header[cell]
-
-        raw_data: memoryview = self.__gus_data[start : start + len_raw_data]
-        self.preppare_user_data(raw_data)
-
-        new_cell: int = cell + 1
-        self.__gus_rid[0] = (
-            new_cell if (new_cell < self.__gus_cell_amount) else 0
-        )
+        _ = self.__uds.ring_buf
+        while _.wid_buf[0] != _.rid_buf[0]:
+            self.preppare_user_data(_.get_data())
 
     @abstractmethod
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None: ...
@@ -266,6 +205,14 @@ class Base(ABC):
                 nCommission=nCommission,
             )
 
+    @final
+    def on_balance_update(
+        self, nBalance: int, lockedNbalance: int, availableNbalance: int
+    ) -> None:
+        self.account.nBalance[0] = nBalance
+        self.account.lockedNbalance[0] = lockedNbalance
+        self.account.availableNbalance[0] = availableNbalance
+
     def send_order(
         self,
         timestamp: int,
@@ -274,10 +221,9 @@ class Base(ABC):
         nPrice: int,
         nQty: int,
     ) -> None:
-        raw_data: bytes = struct.pack(
-            "@qqqqq", timestamp, order_param, client_order_id, nPrice, nQty
+        self.__os.ring_buf.set_data(
+            timestamp, order_param, client_order_id, nPrice, nQty
         )
-        self.__set_user_data(raw_data)
 
         if order_param & c.OF_NEW:
             is_long: int = order_param & c.OF_LONG
@@ -287,14 +233,3 @@ class Base(ABC):
                     self.account.long = PositionFSM.PENDING
                 else:
                     self.account.short = PositionFSM.PENDING
-
-    @final
-    def __set_user_data(self, raw_data: bytes) -> None:
-        cell: int = self.__sus_wid[0]
-        start: int = cell * self.__sus_data_size
-        self.__sus_data_header[cell] = len(raw_data)
-        self.__sus_data[start : start + len(raw_data)] = raw_data
-        new_cell: int = cell + 1
-        self.__sus_wid[0] = (
-            new_cell if (new_cell < self.__sus_cell_amount) else 0
-        )

@@ -11,7 +11,9 @@ from imprint._core.footprint import FootprintEngine
 from imprint._core.pipeline.executing import BaseExecution
 from imprint._core.utils import (
     AggTradesDecoder,
+    BalanceData,
     ExchangeREST,
+    OrderData,
     OrderEncoder,
     UserStreamDecoder,
 )
@@ -20,12 +22,14 @@ __all__ = [
     "Account",
     "AggTradesDecoder",
     "Backtest",
+    "BalanceData",
     "BaseExecution",
     "Connector",
     "ExchangeREST",
     "Footprint",
     "FootprintEngine",
     "Live",
+    "OrderData",
     "OrderEncoder",
     "RiskManagement",
     "Strategy",

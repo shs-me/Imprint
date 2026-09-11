@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import override
 
 from numba import njit
-from numpy import int64, uint8
+from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
@@ -24,20 +24,20 @@ EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 @dataclass(slots=True)
 class Base(MatchingEngine):
-    __ds_cell_amount: int = field(init=False)
-    __ds_data_size: int = field(init=False)
-    __ds_data: memoryview = field(init=False)
-    __ds_rid: memoryview = field(init=False)
+    __mds_data_buf: memoryview = field(init=False)
+    __mds_data_size: int = field(init=False)
+    __mds_rid_buf: memoryview = field(init=False)
+    __mds_cell_amount: int = field(init=False)
 
     @override
     def __post_init__(self) -> None:
         MatchingEngine.__post_init__(self)
 
-        cfgDS = self.manager.cfgDataStream
-        self.__ds_cell_amount = cfgDS.ring_buf.cell_amount
-        self.__ds_data_size = cfgDS.ring_buf.data_size // 8
-        self.__ds_data = cfgDS.ring_buf.data.view.cast("q")
-        self.__ds_rid = cfgDS.ring_buf.reader_id.view.cast("q")
+        mds = self.manager.cfgMarketDataStream.ring_buf
+        self.__mds_data_buf = mds.data_buf.cast("q")
+        self.__mds_data_size = mds.data_size // 8
+        self.__mds_rid_buf = mds.rid_buf
+        self.__mds_cell_amount = mds.cell_amount
 
     def final_action(self, timestamp: int) -> None:
         self.start(timestamp)
@@ -48,18 +48,18 @@ class Base(MatchingEngine):
         _start(
             timestamp=timestamp,
             trade_read_time=self.trade_read_time,
-            ds_data=self.__ds_data,
-            ds_rid=self.__ds_rid,
-            ds_data_size=self.__ds_data_size,
-            ds_cell_amount=self.__ds_cell_amount,
+            mds_data_buf=self.__mds_data_buf,
+            mds_rid_buf=self.__mds_rid_buf,
+            mds_data_size=self.__mds_data_size,
+            mds_cell_amount=self.__mds_cell_amount,
             order_book=self.order_book,
             obRow=self.obRow,
             order_id_buf=self.order_id,
-            gus_data_buf=self.gus_data_buf,
-            gus_data_buf_size=self.gus_data_size,
-            gus_data_header=self.gus_data_header,
-            gus_wid=self.gus_wid,
-            gus_cell_amount=self.gus_cell_amount,
+            uds_data_buf=self.uds_data_buf,
+            uds_data_buf_size=self.uds_data_size,
+            uds_data_header_buf=self.uds_data_header_buf,
+            uds_wid_buf=self.uds_wid_buf,
+            uds_cell_amount=self.uds_cell_amount,
             executed_orders=self.executed_orders,
             eoRow=self.eoRow,
             slippage=self.slippage,
@@ -94,18 +94,18 @@ class Base(MatchingEngine):
 def _start(
     timestamp: int,
     trade_read_time: memoryview,
-    ds_data: memoryview,
-    ds_rid: memoryview,
-    ds_data_size: int,
-    ds_cell_amount: int,
+    mds_data_buf: memoryview,
+    mds_data_size: int,
+    mds_rid_buf: memoryview,
+    mds_cell_amount: int,
     order_book: NDArray[int64],
     obRow: memoryview,
     order_id_buf: memoryview,
-    gus_data_buf: NDArray[uint8],
-    gus_data_buf_size: int,
-    gus_data_header: memoryview,
-    gus_wid: memoryview,
-    gus_cell_amount: int,
+    uds_data_buf: memoryview,
+    uds_data_buf_size: int,
+    uds_data_header_buf: memoryview,
+    uds_wid_buf: memoryview,
+    uds_cell_amount: int,
     executed_orders: NDArray[int64],
     eoRow: memoryview,
     slippage: int,
@@ -135,10 +135,10 @@ def _start(
     short_mfe: memoryview,
 ) -> None:
     while trade_read_time[0] < timestamp:
-        cell: int = ds_rid[1]
-        start: int = cell * ds_data_size
+        cell: int = mds_rid_buf[1]
+        start: int = cell * mds_data_size
 
-        trade_timestamp: int = ds_data[start + 2]
+        trade_timestamp: int = mds_data_buf[start + 2]
 
         if trade_timestamp > timestamp:
             trade_read_time[0] = timestamp
@@ -146,10 +146,10 @@ def _start(
         else:
             trade_read_time[0] = trade_timestamp
 
-        trade_nPrice: int = ds_data[start]
+        trade_nPrice: int = mds_data_buf[start]
 
         new_cell: int = cell + 1
-        ds_rid[1] = new_cell if new_cell < ds_cell_amount else 0
+        mds_rid_buf[1] = new_cell if new_cell < mds_cell_amount else 0
 
         uNpnl = update_unrealized_nPnl(
             nPrice=trade_nPrice,
@@ -197,11 +197,11 @@ def _start(
         )
         if executed:
             _processing_executed_orders(
-                gus_data_buf=gus_data_buf,
-                gus_data_buf_size=gus_data_buf_size,
-                gus_data_header=gus_data_header,
-                gus_wid=gus_wid,
-                gus_cell_amount=gus_cell_amount,
+                uds_data_buf=uds_data_buf,
+                uds_data_buf_size=uds_data_buf_size,
+                uds_data_header_buf=uds_data_header_buf,
+                uds_wid_buf=uds_wid_buf,
+                uds_cell_amount=uds_cell_amount,
                 executed_orders=executed_orders,
                 eoRow=eoRow,
                 makerNcommission=makerNcommission,
@@ -259,11 +259,11 @@ def _start(
 
 @njit(cache=True)
 def _processing_executed_orders(
-    gus_data_buf: NDArray[uint8],
-    gus_data_buf_size: int,
-    gus_data_header: memoryview,
-    gus_wid: memoryview,
-    gus_cell_amount: int,
+    uds_data_buf: memoryview,
+    uds_data_buf_size: int,
+    uds_data_header_buf: memoryview,
+    uds_wid_buf: memoryview,
+    uds_cell_amount: int,
     executed_orders: NDArray[int64],
     eoRow: memoryview,
     makerNcommission: int,
@@ -344,10 +344,10 @@ def _processing_executed_orders(
             )
 
         set_user_data(
-            data=executed_orders[eo_row, :].view(uint8),
-            gus_data_buf=gus_data_buf,
-            gus_data_buf_size=gus_data_buf_size,
-            gus_data_header=gus_data_header,
-            gus_wid=gus_wid,
-            gus_cell_amount=gus_cell_amount,
+            data=executed_orders[eo_row, :],
+            uds_data_buf=uds_data_buf,
+            uds_data_buf_size=uds_data_buf_size,
+            uds_data_header_buf=uds_data_header_buf,
+            uds_wid_buf=uds_wid_buf,
+            uds_cell_amount=uds_cell_amount,
         )

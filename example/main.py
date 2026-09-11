@@ -32,10 +32,9 @@ if __name__ == "__main__":
                     active_order_limit=1000,
                     save_orders_history=True,
                 ),
-                tick_size="0.01",
                 lot_size="0.001",
                 backtest_start_date="2026-01-01",
-                backtest_end_date="2026-01-02",
+                backtest_end_date="2026-01-07",
             ),
             Live(
                 connector=Connector(
