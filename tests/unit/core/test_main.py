@@ -87,12 +87,13 @@ class TestMainAgent:
     ) -> None:
         agent = MainAgent(manager=mock_host_manager, base_kwargs={})
 
-        def invalid_proc(_non_existent_arg: ...): ...
+        def invalid_proc(non_existent_arg: ...): ...
 
+        proc_name = invalid_proc.__name__.split("_")[1].capitalize()
         result = agent.get_kwargs_for_func(invalid_proc, proc_id=0, task_id=10)
         assert result is None
         mock_host_manager.logger.assert_called_with(
-            "Missing arg: [non_existent_arg] for [Invalid]", LogLevel.ERROR
+            f"Missing arg: [non_existent_arg] for [{proc_name}]", LogLevel.ERROR
         )
 
     def test_run_procs_flow_with_mocked_process(

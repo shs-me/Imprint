@@ -112,22 +112,22 @@ def _update(
     re_init: int = 0
 
     idx: int64 = to_idx(
-        timestamp,
-        is_sell,
-        args[FU_baseTimestamp],
-        args[FU_tims],
-        args[FU_fp_cols],
+        timestamp=timestamp,
+        is_sell=is_sell,
+        baseTimestamp=args[FU_baseTimestamp],
+        tims=args[FU_tims],
+        fp_cols=args[FU_fp_cols],
     )
     if idx < 0:
         re_init |= c.RIF_session | c.RIF_idx
         return re_init
 
     idy: int64 = to_idy(
-        nPrice,
-        args[FU_baseNprice],
-        args[FU_center],
-        args[FU_scale],
-        args[FU_fp_rows],
+        nPrice=nPrice,
+        baseNprice=args[FU_baseNprice],
+        center=args[FU_center],
+        scale=args[FU_scale],
+        fp_rows=args[FU_fp_rows],
     )
     if idy < 0:
         re_init |= c.RIF_session | c.RIF_idy

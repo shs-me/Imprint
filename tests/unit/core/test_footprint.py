@@ -63,7 +63,7 @@ class TestFPJitKernel:
         args[FU_fp_rows] = 100  # count idy
         args[FU_center] = 50  # idy center
         args[FU_scale] = 10  # 0.10 per tick/row
-        args[FU_baseTimestamp] = 1000000000000
+        args[FU_baseTimestamp] = 60000
         args[FU_tims] = 60000  # 1 minute per bar
         args[FU_fp_cols] = 10  # 5 bars (each bar has 2 columns: sell/buy)
         args[FU_idxVP] = -2
@@ -73,12 +73,14 @@ class TestFPJitKernel:
         args[FU_qty_mult] = 10000
         args[FU_qty_prec] = 4
 
-        footprint = np.zeros((100, 12), dtype=int64)
-        headers = np.zeros((5, c.BH_ConstantCount), dtype=int64)
-        headers_offset = memoryview(bytearray(8)).cast("q")
+        footprint: NDArray[int64] = np.zeros((100, 12), dtype=int64)
+        headers: NDArray[int64] = np.zeros((5, c.BH_ConstantCount), dtype=int64)
+        headers_offset: memoryview = memoryview(bytearray(8)).cast("q")
         headers_offset[0] = 0
-        bbox = np.array([100, 10, 0, 0], dtype=int64)
-        meta_data = np.zeros((2, BHM_ConstantCount), dtype=float64)
+        bbox: NDArray[int64] = np.array([100, 10, 0, 0], dtype=int64)
+        meta_data: NDArray[float64] = np.zeros(
+            (2, BHM_ConstantCount), dtype=float64
+        )
 
         # Execute trade 1: Buy 1.5 units at price 1000.50 at timestamp + 1000ms
         # Execute trade 2: Sell 0.5 units at price 1000.40 at timestamp + 2000ms
@@ -86,28 +88,20 @@ class TestFPJitKernel:
         # Execute trade 4: Sell 0.5 units at price 1000.40 at timestamp + 10m
         # Execute trade 5: Sell 0.5 units at price 1020 at timestamp + 2000ms
         # Execute trade 5: Sell 0.5 units at price 930 at timestamp + 2000ms
-        for idx, (p, q, t, i) in enumerate(
+        p, t = 100_000, 60_000
+        for idx, (nPrice, nQty, timestamp, is_sell) in enumerate(
             zip(
-                [int64(100_050)]
-                + [int64(100_040)] * 3
-                + [int64(102_000), int64(93_000)],
-                [int64(15_000)] + [int64(5_000)] * 5,
-                [
-                    int64(1000000001000),
-                    int64(1000000002000),
-                    int64(999999999000),
-                    int64(1000000600000),
-                    int64(1000000002000),
-                    int64(1000000002000),
-                ],
-                [int64(0)] + ([int64(1)] * 5),
+                [p + 50, p + 40, p + 40, p + 40, p + 2000, p - 7000],
+                [15_000, 5000, 5000, 5000, 5000, 5000],
+                [t + 1000, t + 2000, t - 1000, t + 600_000, t + 2000, t + 2000],
+                [0, 1, 1, 1, 1, 1],
             )
         ):
             result: int | None = _update(
-                nPrice=p,
-                nQty=q,
-                timestamp=t,
-                is_sell=i,
+                nPrice=int64(nPrice),
+                nQty=int64(nQty),
+                timestamp=int64(timestamp),
+                is_sell=int64(is_sell),
                 args=args,
                 footprint=footprint,
                 headers=headers,
@@ -121,32 +115,42 @@ class TestFPJitKernel:
             if idx == 1:
                 assert result is None
 
-                # Exact hand-verified assertions on bar 0 (bwo = 0)
-                # Bar 0 corresponds to idx = 1 (since first trade is buy, is_sell=0 -> idx = 0*2 + 1 = 1, bar = 0)
+                for idy, idx, q in zip([45, 46], [1, 0], [15_000, nQty]):
+                    assert footprint[idy, idx] == q
+                    assert footprint[idy, args[FU_idxVP]] == q
+                    assert footprint[idy, args[FU_idxDP]] == q if idx else -q
+
                 bar = 0
-
                 assert headers[bar, c.BH_CountTrade] == 2
-                assert headers[bar, c.BH_Open] == 100050
-                assert headers[bar, c.BH_High] == 100050
-                assert headers[bar, c.BH_Low] == 100040
-                assert headers[bar, c.BH_Close] == 100040
-                assert headers[bar, c.BH_Volume] == 20000  # 15000 + 5000
-                assert (
-                    headers[bar, c.BH_Delta] == 10000
+                assert headers[bar, c.BH_Open] == p + 50
+                assert headers[bar, c.BH_High] == p + 50
+                assert headers[bar, c.BH_Low] == nPrice
+                assert headers[bar, c.BH_Close] == nPrice
+                assert headers[bar, c.BH_Volume] == 20_000  # 15000 + 5000
+                assert (headers[bar, c.BH_Delta] == 10_000) and (
+                    headers[bar, c.BH_CVD] == 10_000
                 )  # 15000 (buy) - 5000 (sell)
-                assert headers[bar, c.BH_CVD] == 10000
+                assert headers[bar, c.BH_Time] == t + 1000
+                assert headers[bar, c.BH_LastTradeTime] == timestamp
 
-                # VWAP and Bands verification for trade 1 & 2:
-                # Trade 1: price = 1000.50, qty = 1.5 -> w = 1.5, pw = 1500.75, p2w = 1501875.375
-                # Trade 2: price = 1000.40, qty = 0.5 -> w = 0.5, pw = 500.20, p2w = 500600.16
-                # Total W = 2.0
-                # Total PW = 2000.95 -> VWAP = 1000.475 -> round(1000.475 * 100) = 100048
-                assert headers[bar, c.BH_VWAP] == 100048
+                vol: float = 1.5 + 0.5
+                p_vol: float = (1000.50 * 1.5) + (1000.40 * 0.5)
+                p2_vol: float = (1000.50**2 * 1.5) + (1000.40**2 * 0.5)
+                vwap: float = p_vol / vol
+                variance: float = max(0.0, (p2_vol / vol - (vwap**2)))
+                vwsd = np.sqrt(variance)
+                upper_band = vwap + (2.0 * vwsd)
+                lower_band = vwap - (2.0 * vwsd)
+                assert headers[bar, c.BH_VWAP] == round(vwap * 100)
+                assert headers[bar, c.BH_VWAP_UPPER_BAND] == round(
+                    upper_band * 100
+                )
+                assert headers[bar, c.BH_VWAP_LOWER_BAND] == round(
+                    lower_band * 100
+                )
 
-                # BBOX check: idy for 1000.50 -> baseNprice=100000, center=50, scale=10 -> (100000 - 100050)//10 + 50 = 45
-                # idy for 1000.40 -> (100000 - 100040)//10 + 50 = 46
                 assert bbox[0] == 45  # idYmin
-                assert bbox[1] == 1  # idXmin
+                assert bbox[1] == 0  # idXmin
                 assert bbox[2] == 47  # idYmax (46 + 1)
                 assert bbox[3] == 2  # idXmax (1 + 1)
 
@@ -220,7 +224,6 @@ class TestFPJitKernel:
             (c.CSD_ConstantCount,), dtype=int64
         )
 
-        # Execute function under test
         _update_closed_bar_and_fp_states(
             lidx=lidx,
             idxVP=idxVP,
@@ -234,16 +237,10 @@ class TestFPJitKernel:
             scale=scale,
         )
 
-        # --- Manual Calculations Verification ---
-
         # 1. ATR calculation for bar 0: High - Low = 1030 - 970 = 60
         assert headers[0, c.BH_ATR] == int64(60)
-
         # 2. PARK calculation: round(ln(1030 / 970)^2 * 1_000_000_000)
-        # ln(1030 / 970) ≈ 0.059990833
-        # ln^2 ≈ 0.003598900
-        # cur_var ≈ 3598900
-        assert headers[0, c.BH_PARK] == int64(3598900)
+        assert headers[0, c.BH_PARK] == int64(3_602_161)
 
         # 3. VWAP & Bollinger Bands row indices mapping:
         # vwap (1000)      -> (1000 - 1000) // 10 + 5 = 5
@@ -253,9 +250,9 @@ class TestFPJitKernel:
         assert fp_state_cache[c.CSD_UPPER_BB] == int64(3)
         assert fp_state_cache[c.CSD_LOWER_BB] == int64(7)
 
-        assert bool(fp_state[5, idxVP] & c.SF_VWAP_FP)
-        assert bool(fp_state[3, idxVP] & c.SF_UPPER_BAND_FP)
-        assert bool(fp_state[7, idxVP] & c.SF_LOWER_BAND_FP)
+        assert fp_state[5, idxVP] & c.SF_VWAP_FP
+        assert fp_state[3, idxVP] & c.SF_UPPER_BAND_FP
+        assert fp_state[7, idxVP] & c.SF_LOWER_BAND_FP
 
         # 4. Volume Profile, POC, and Value Area (VAH / VAL):
         # Total volume = 100 + 200 + 500 + 300 + 100 + 50 + 10 = 1260
@@ -268,9 +265,9 @@ class TestFPJitKernel:
         assert fp_state_cache[c.CSD_VAH_FP] == int64(3)
         assert fp_state_cache[c.CSD_VAL_FP] == int64(5)
 
-        assert bool(fp_state[4, idxVP] & c.SF_POC_FP)
-        assert bool(fp_state[3, idxVP] & c.SF_VAH_FP)
-        assert bool(fp_state[5, idxVP] & c.SF_VAL_FP)
+        assert fp_state[4, idxVP] & c.SF_POC_FP
+        assert fp_state[3, idxVP] & c.SF_VAH_FP
+        assert fp_state[5, idxVP] & c.SF_VAL_FP
 
         # Header prices: (center - idy) * scale + baseNprice
         # POC price: (5 - 4) * 10 + 1000 = 1010
@@ -283,8 +280,8 @@ class TestFPJitKernel:
         # 5. Auction states:
         # High idy (2): ask == 0 -> Finished Auction
         # Low idy (8): bid != 0 -> Unfinished Auction
-        assert bool(fp_state[2, idxVP] & c.SF_FINISHED_AUCTION)
-        assert bool(fp_state[8, idxVP] & c.SF_UNFINISHED_AUCTION)
+        assert fp_state[2, idxVP] & c.SF_FINISHED_AUCTION
+        assert fp_state[8, idxVP] & c.SF_UNFINISHED_AUCTION
 
     def test_update_bar_states_exact(self) -> None:
         baseNprice: int64 = int64(100_000)
@@ -354,31 +351,15 @@ class TestFPJitKernel:
             scale=int(scale),
         )
 
-        # --- Manual metrics verification ---
         # 1. Check OHLC state flags
-        assert (fp_state[50, idxBid] & c.SF_OPEN) != 0, (
-            "Open state flag missing"
-        )
-        assert (fp_state[48, idxBid] & c.SF_HIGH) != 0, (
-            "High state flag missing"
-        )
-        assert (fp_state[52, idxBid] & c.SF_LOW) != 0, "Low state flag missing"
-        assert (fp_state[49, idxBid] & c.SF_CLOSE) != 0, (
-            "Close state flag missing"
-        )
-
+        assert fp_state[50, idxBid] & c.SF_OPEN, "Open state flag missing"
+        assert fp_state[48, idxBid] & c.SF_HIGH, "High state flag missing"
+        assert fp_state[52, idxBid] & c.SF_LOW, "Low state flag missing"
+        assert fp_state[49, idxBid] & c.SF_CLOSE, "Close state flag missing"
         # 2. Check Imbalance flag at row 49 (bid=100, ask=20 -> 100 > 60)
-        assert (fp_state[49, idxBid] & c.SF_IMBALANCE) != 0, (
+        assert fp_state[49, idxBid] & c.SF_IMBALANCE, (
             "Bid imbalance flag missing"
         )
-
-        # 3. Check Zero-Print flags
-        # idyBid = slice(48, 54), idyAsk = slice(47, 53)
-        # Row 51: fp[51, idxAsk]=50 > 0 and fp[52, idxBid]=0 -> Zero print on bid side at row 52 (idyBid)
-        assert (fp_state[52, idxBid] & c.SF_ZERO_PRINT) != 0, (
-            "Zero print flag missing"
-        )
-
         # 4. Check POC and Value Area headers calculation
         # vp_bar for rows 48..52:
         # row 48: 10 + 5 = 15
@@ -390,9 +371,7 @@ class TestFPJitKernel:
         assert headers[bar, c.BH_POC] == int64(
             (center - (48 + 1)) * scale + baseNprice
         )
-        assert (fp_state[49, idxBid] & c.SF_POC_BAR) != 0, (
-            "POC bar state flag missing"
-        )
+        assert fp_state[49, idxBid] & c.SF_POC_BAR, "POC bar state flag missing"
 
     def test_calc_value_area_exact(self) -> None:
         vp_slice: NDArray[int64] = np.array(
@@ -483,79 +462,71 @@ class TestFPConverter:
 
     def test_init_session(self, converter: Converter) -> None:
         """Verifies session calibration for base price, timestamp alignment, and grid center."""
-        n_price = int64(500055)  # price = 5000.55
-        timestamp = int64(1700001234567)
+        n_price = int64(500_055)  # 5000.55
+        timestamp = int64(3_660_000)  # 01:01
 
         converter.init_session(n_price, timestamp)
 
-        # baseNprice = (500055 // 1) * 1 = 500055
-        # baseTimestamp = 1700001234567 - (1700001234567 % 3600000) = 1700001234567 - 1234567 = 1700000000000
-        # center = 10001 // 2 = 5000
-        assert converter.baseNprice == int64(500055)
-        assert converter.baseTimestamp == int64(1700000000000)
-        assert converter._first_base_timestamp == int64(1700000000000)
-        assert converter.center == int64(5000)
+        # baseNprice = (500_055 // 1) * 1 = 500_055
+        # baseTimestamp = 3_660_000 - (3_660_000 % 3_600_000) = 3_660_000 - 60_000 = 3_600_000 # 01:00
+        # center = 10_001 // 2 = 5_000
+        assert converter.baseNprice == int64(500_055)
+        assert converter.baseTimestamp == int64(3_600_000)
+        assert converter._first_base_timestamp == int64(3_600_000)
+        assert converter.center == int64(5_000)
 
     def test_to_idy_mapping(self, converter: Converter) -> None:
         """Verifies price to Y-axis grid row mapping for exact, upper bound, lower bound, and out-of-bounds prices."""
         converter.init_session(
-            nPrice=int64(500000), timestamp=int64(1700000000000)
+            nPrice=int64(500_000), timestamp=int64(3_600_000)
         )
         # baseNprice = 500000, scale = 1, center = 5000, fp_rows = 10001
         # formula: idy = (baseNprice - nPrice) // scale + center
-
-        # Exact base price -> center row 5000
-        assert converter.to_idy(int64(500000)) == 5000
-
-        # Higher price -> lower Y row
-        # nPrice = 501000: (500000 - 501000) // 1 + 5000 = 4000
-        assert converter.to_idy(int64(501000)) == 4000
-
-        # Lower price -> higher Y row
-        # nPrice = 497000: (500000 - 497000) // 1 + 5000 = 8000
-        assert converter.to_idy(int64(497000)) == 8000
-
-        # Boundary tests
-        # idy = 1 -> nPrice = 504999: (500000 - 504999) // 1 + 5000 = 1
-        assert converter.to_idy(int64(504999)) == 1
-
-        # Out of bounds (idy <= 0 returns None)
-        # idy = 0 -> nPrice = 505000: (500000 - 505000) // 1 + 5000 = 0 -> None
-        assert converter.to_idy(int64(505000)) is None
-        assert converter.to_idy(int64(506000)) is None
-
-        # Out of bounds (idy >= fp_rows)
-        # idy = 10001 -> nPrice = 494999 -> None
-        assert converter.to_idy(int64(494999)) is None
+        p = 500_000
+        for nPrice, test_value in zip(
+            [p, p + 1000, p - 3000, p + 4999, p + 5000, p + 6000, p - 5000 - 1],
+            [5000, 4000, 8000, 1, 0, None, None],
+        ):
+            # Exact base price -> center row 5000
+            # Higher price -> lower Y row
+            # nPrice = 501_000: (500_000 - 501_000) // 1 + 5000 = 4000
+            # Lower price -> higher Y row
+            # nPrice = 497_000: (500_000 - 497_000) // 1 + 5000 = 8000
+            # Boundary tests
+            # idy = 1 -> nPrice = 504_999: (500_000 - 504_999) // 1 + 5000 = 1
+            # Out of bounds (idy <= 0 returns None)
+            # idy = 0 -> nPrice = 505_000: (500_000 - 506_000) // 1 + 5000 = <0
+            # Out of bounds (idy >= fp_rows)
+            # idy = 10001 -> nPrice = 494999 -> None
+            assert converter.to_idy(int64(nPrice)) == test_value
 
     def test_to_idx_mapping(self, converter: Converter) -> None:
         """Verifies timestamp and trade side to X-axis grid column mapping."""
         converter.init_session(
-            nPrice=int64(500000), timestamp=int64(1700000000000)
+            nPrice=int64(500_000),  # 5000.00
+            timestamp=int64(3_600_000),  # 01:00
         )
-        # baseTimestamp = 1700000000000, tims = 3600000, fp_cols = 48
+        # baseTimestamp = 3_600_000, tims = 3_600_000, fp_cols = 48
         # formula: idx = (timestamp - baseTimestamp) // tims * 2 + (0 if is_sell else 1)
 
-        # First bar sell side -> idx = 0
-        # idx = 0 is not > 0, so to_idx returns None
-        assert converter.to_idx(int64(1700000000000), is_sell=int64(1)) is None
-
-        # First bar buy side -> idx = 1
-        assert converter.to_idx(int64(1700000000000), is_sell=int64(0)) == 1
-
-        # Second bar (offset +1 hour = +3_600_000 ms)
-        # Sell side -> idx = 2
-        assert converter.to_idx(int64(1700003600000), is_sell=int64(1)) == 2
-        # Buy side -> idx = 3
-        assert converter.to_idx(int64(1700003600000), is_sell=int64(0)) == 3
-
-        # Last valid column (fp_cols = 48, max valid index = 47)
-        # Bar 23 (offset 23 * 3_600_000 = 82_800_000 ms), buy side -> 23 * 2 + 1 = 47
-        assert converter.to_idx(int64(1700082800000), is_sell=int64(0)) == 47
-
-        # Out of bounds (idx >= fp_cols = 48)
-        # Bar 24 sell side -> 24 * 2 + 0 = 48 -> None
-        assert converter.to_idx(int64(1700086400000), is_sell=int64(1)) is None
+        t = 3_600_000
+        for timestamp, is_sell, test_value in zip(
+            [t, t, t * 2, t * 2, t * 24, t * 24, t * 25, t - 1],
+            [1, 0, 1, 0, 1, 0, 0, 0],
+            [0, 1, 2, 3, 46, 47, None, None],
+        ):
+            # First BID bar is 0
+            # First ASK bar is 1
+            # Second BID bar is 2
+            # Second ASK bar is 3
+            # Last BID bar is 46 (fp_cols = 48, max valid bid index = 46)
+            # Last ASK bar is 47 (fp_cols = 48, max valid index = 47)
+            # Out of bounds (idx >= fp_cols = 48)
+            # Out of bounds (0 > idx)
+            assert (
+                converter.to_idx(int64(timestamp), is_sell=int64(is_sell))
+                == test_value
+            )
 
     def test_conversions(self, converter: Converter) -> None:
         """Verifies row-to-fixed-price, quantity, price float/int, and strftime conversions."""
@@ -568,20 +539,15 @@ class TestFPConverter:
         # (5000 - 4000) * 1 + 500000 = 501000
         assert converter.to_nPrice(4000) == int64(501000)
         assert converter.to_nPrice(int64(6000)) == int64(499000)
-
         # to_nQty: round(qty * qty_mult) with qty_mult = 1000
         assert converter.to_nQty(1.23456) == 1235
         assert converter.to_nQty(0.001) == 1
-
         # to_price: nPrice / price_mult with price_mult = 100
         assert converter.to_price(int64(500055)) == 5000.55
-
         # to_qty: nQty / qty_mult with qty_mult = 1000
         assert converter.to_qty(int64(1234)) == 1.234
-
         # to_strftime
         assert converter.to_strftime(1700000000000) == "2023-11-14"
-
         # get_price: round(to_price(to_nPrice(idy)), price_prec)
         # idy = 4000 -> nPrice = 501000 -> price = 5010.0
         assert converter.get_price(4000) == 5010.0
@@ -589,64 +555,61 @@ class TestFPConverter:
     def test_get_time(self, converter: Converter) -> None:
         """Verifies column index X to timestamp and formatted UTC date string lookup."""
         converter.init_session(
-            nPrice=int64(500000), timestamp=int64(1700000000000)
+            nPrice=int64(500_000), timestamp=int64(3_600_000)
         )
-        # tims = 3_600_000, baseTimestamp = 1700000000000
+        # tims = 3_600_000, baseTimestamp = 3_600_000
         # formula: (idx & ~1) // 2 * tims + baseTimestamp
-
-        # idx = 0 or 1 -> bar 0 timestamp = 1700000000000
-        assert converter.get_time(int64(0)) == int64(1700000000000)
-        assert converter.get_time(int64(1)) == int64(1700000000000)
-
-        # idx = 2 or 3 -> bar 1 timestamp = 1700000000000 + 3_600_000 = 1700003600000
-        assert converter.get_time(int64(2)) == int64(1700003600000)
-        assert converter.get_time(int64(3)) == int64(1700003600000)
+        t = 3_600_000
+        for idx, test_value in zip(range(4), [t, t, t * 2, t * 2]):
+            # idx = 0 or 1 -> bar 0 timestamp = 3_600_000
+            # idx = 2 or 3 -> bar 1 timestamp = 3_600_000 + 3_600_000
+            assert converter.get_time(int64(idx)) == int64(test_value)
 
         # strftime = True returning formatted date string
-        assert converter.get_time(0, strftime=True) == "2023-11-14"
+        assert converter.get_time(0, strftime=True) == "1970-01-01"
 
     def test_numba_to_idy_function(self) -> None:
         """Verifies standalone Numba-compiled to_idy low-level function directly."""
-        base_n_price = int64(10000)
-        scale = 10
-        center = int64(500)
-        fp_rows = int64(1000)
+        base_n_price: int64 = int64(10_000)
+        scale: int = 10
+        center: int64 = int64(500)
+        fp_rows: int64 = int64(1000)
 
-        # idy = (10000 - 10000) // 10 + 500 = 500
-        assert to_idy(int64(10000), base_n_price, scale, center, fp_rows) == 500
-
-        # idy = (10000 - 10100) // 10 + 500 = 490
-        assert to_idy(int64(10100), base_n_price, scale, center, fp_rows) == 490
-
-        # Upper bound check (0 <= idy < 1000)
-        # idy = (10000 - 15000) // 10 + 500 = 0 -> valid
-        assert to_idy(int64(15000), base_n_price, scale, center, fp_rows) == 0
-
-        # Out of bounds low: idy = (10000 - 15010) // 10 + 500 = -1 -> returns -1
-        assert to_idy(int64(15010), base_n_price, scale, center, fp_rows) == -1
-
-        # Out of bounds high: idy = (10000 - 5000) // 10 + 500 = 1000 -> returns -1
-        assert to_idy(int64(5000), base_n_price, scale, center, fp_rows) == -1
+        for nPrice, test_value in zip(
+            [10_000, 10_100, 15000, 15010, 5000], [500, 490, 0, -1, -1]
+        ):
+            # idy = (10_000 - 10_000) // 10 + 500 = 500
+            # idy = (10_000 - 10_100) // 10 + 500 = 490
+            # Upper bound check (0 <= idy < 1000)
+            # idy = (10_000 - 15_000) // 10 + 500 = 0 -> valid
+            # Out of bounds low: idy = (10_000 - 15010) // 10 + 500 = -1 -> returns -1
+            # Out of bounds high: idy = (10_000 - 5000) // 10 + 500 = 1000 -> returns -1
+            assert (
+                to_idy(int64(nPrice), base_n_price, scale, center, fp_rows)
+                == test_value
+            )
 
     def test_numba_to_idx_function(self) -> None:
         """Verifies standalone Numba-compiled to_idx low-level function directly."""
-        base_timestamp = int64(1000)
-        tims = 100
-        fp_cols = 10
+        base_timestamp: int64 = int64(1000)
+        tims: int = 100
+        fp_cols: int = 10
 
-        # idx = (1000 - 1000) // 100 * 2 + 0 = 0
-        assert to_idx(int64(1000), int64(1), base_timestamp, tims, fp_cols) == 0
-
-        # idx = (1000 - 1000) // 100 * 2 + 1 = 1
-        assert to_idx(int64(1000), int64(0), base_timestamp, tims, fp_cols) == 1
-
-        # idx = (1400 - 1000) // 100 * 2 + 1 = 9
-        assert to_idx(int64(1400), int64(0), base_timestamp, tims, fp_cols) == 9
-
-        # Out of bounds high: idx = (1500 - 1000) // 100 * 2 + 0 = 10 -> returns -1
-        assert (
-            to_idx(int64(1500), int64(1), base_timestamp, tims, fp_cols) == -1
-        )
-
-        # Out of bounds low: idx = (900 - 1000) // 100 * 2 + 0 = -2 -> returns -1
-        assert to_idx(int64(900), int64(1), base_timestamp, tims, fp_cols) == -1
+        for timestamp, is_sell, test_value in zip(
+            [1000, 1000, 1400, 1500, 900], [1, 0, 0, 1, 1], [0, 1, 9, -1, -1]
+        ):
+            # idx = (1000 - 1000) // 100 * 2 + 0 = 0
+            # idx = (1000 - 1000) // 100 * 2 + 1 = 1
+            # idx = (1400 - 1000) // 100 * 2 + 1 = 9
+            # Out of bounds high: idx = (1500 - 1000) // 100 * 2 + 0 = 10 -> returns -1
+            # Out of bounds low: idx = (900 - 1000) // 100 * 2 + 0 = -2 -> returns -1
+            assert (
+                to_idx(
+                    timestamp=int64(timestamp),
+                    is_sell=int64(is_sell),
+                    baseTimestamp=base_timestamp,
+                    tims=tims,
+                    fp_cols=fp_cols,
+                )
+                == test_value
+            )

@@ -88,10 +88,10 @@ class Converter:
             int64 | None: Grid row index or None if out of bounds.
         """
 
-        idy = to_idy(
+        idy: int64 = to_idy(
             nPrice, self.baseNprice, self.scale, self.center, self.fp_rows
         )
-        return idy if (idy > 0) else None
+        return idy if (idy >= 0) else None
 
     def to_idx(self, timestamp: int64, is_sell: int64) -> int64 | None:
         """Maps timestamp and trade side to Footprint grid X-axis column index.
@@ -100,10 +100,10 @@ class Converter:
             int64 | None: Grid column index or None if out of bounds.
         """
 
-        idx = to_idx(
+        idx: int64 = to_idx(
             timestamp, is_sell, self.baseTimestamp, self.tims, self.fp_cols
         )
-        return idx if (idx > 0) else None
+        return idx if (idx >= 0) else None
 
     def to_nPrice(self, value: int | int64) -> int64:
         """Converts Y-axis row index to fixed-point price."""
