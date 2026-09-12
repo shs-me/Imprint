@@ -1,3 +1,9 @@
+"""Worker process IPC manager and signaling node.
+
+This module provides status reporting, ring-buffered logging, task-status bitmask
+manipulation, exception dumps, and error decorator routines tailored for worker processes.
+"""
+
 import gc
 import time
 from collections.abc import Callable
@@ -12,7 +18,29 @@ from imprint._core.utils.exc_dumper import DumpException
 
 @dataclass(slots=True)
 class Node(Base):
-    """Manager instance dedicated to individual worker process status tracking and IPC signaling."""
+    """Manager instance dedicated to individual worker process status tracking and IPC signaling.
+
+    Coordinates task synchronization, error logging dumps, and sets localized status code
+    bitmask flags mapped to specific shared memory offsets.
+
+    Parameters
+    ----------
+    _proc_id : int
+        Process identifier for process status tracking.
+    _task_id : int
+        Task identifier for scheduling status and commands.
+
+    Attributes
+    ----------
+    __wait_main_task : bool
+        Flag indicating if the worker should block waiting for a task signal.
+    __proc_status : memoryview
+        Process-level status code slice of this node.
+    __task_status : memoryview
+        Task-level status code slice of this node.
+    __dumper : DumpException
+        Context-aware exception dumper for traceback and local state serialization.
+    """
 
     _proc_id: int
     _task_id: int
@@ -27,7 +55,7 @@ class Node(Base):
 
     @override
     def __post_init__(self) -> None:
-        """Binds process task and status memory views matching worker ID."""
+        """Bind process task and status memory views matching worker ID."""
         Base.__post_init__(self)
 
         self.__proc_status = self._procs_status[
@@ -38,7 +66,16 @@ class Node(Base):
         ]
 
     def set_log(self, log: str) -> None:
-        """Writes formatted process status log message to shared memory log buffer."""
+        """Write a formatted process status log message to the shared memory log buffer.
+
+        Encodes, timestamps, and inserts log entries inside the shared ring buffer,
+        raising warning codes if overflows or sizing issues occur.
+
+        Parameters
+        ----------
+        log : str
+            Plaintext log string to encode and send to the Host process.
+        """
         _ = self._log_stream.ring_buf
         lag: int = (
             (_.wid_buf[self._proc_id] - _.rid_buf[self._proc_id])
@@ -66,6 +103,14 @@ class Node(Base):
         self.set_proc_sc(scs.HAVE_LOG, wait_main_task=False)
 
     def have_status(self) -> bool:
+        """Check if any process status or task status bits are currently set.
+
+        Returns
+        -------
+        bool
+            True if status code or task code signals are present, ignoring plain
+            non-blocking HAVE_LOG states.
+        """
         return (
             (self.__proc_status[0] != 0) or (self.__task_status[0] != 0)
         ) and (
@@ -74,6 +119,16 @@ class Node(Base):
         )
 
     def check_base_task(self) -> int:
+        """Examine, process, and clear active base task state instructions.
+
+        Synchronizes task codes, wait loops, garbage collection commands, and process stops,
+        clearing the bitmasks after processing.
+
+        Returns
+        -------
+        int
+            The raw task status code bitmask value before clearing.
+        """
         if self.__task_status[0] != 0 or self.__proc_status[0] != 0:
             if self.__wait_main_task:
                 while self.__task_status[0] == 0:
@@ -105,8 +160,15 @@ class Node(Base):
             return 0
 
     def set_proc_sc(self, code: scs | int, wait_main_task: bool) -> None:
-        """Sets status code bitmask for process and signals MainManager semaphore."""
+        """Set status code bitmask for process and signal MainManager semaphore.
 
+        Parameters
+        ----------
+        code : StatusCodes or int
+            The status code bits to apply to the status view.
+        wait_main_task : bool
+            Whether the node should wait for the host before clearing the state.
+        """
         self.__proc_status[0] |= code
         self._main_status[self._proc_id] += 1
         self._sc_sem.release()
@@ -114,11 +176,23 @@ class Node(Base):
             self.__wait_main_task = wait_main_task
 
     def __clear_task_sc(self, code: scs | int) -> None:
-        """Clears task status code bitmask flags."""
+        """Clear task status code bitmask flags.
 
+        Parameters
+        ----------
+        code : StatusCodes or int
+            The status code bitmask values to strip out of the task status.
+        """
         self.__task_status[0] &= ~(code)
 
     def dump_exc(self, set_status_error: bool = False) -> None:
+        """Serialize current system exception traceback and locals to disk.
+
+        Parameters
+        ----------
+        set_status_error : bool, default False
+            If True, registers an `ERROR` status code back to the Host.
+        """
         self.__dumper.dump_exception()
         if set_status_error:
             self.set_proc_sc(scs.ERROR, wait_main_task=set_status_error)
@@ -129,6 +203,14 @@ R = TypeVar("R")
 
 
 def node_handler():
+    """Decorator to catch exceptions inside Node tasks and dump traceback details automatically.
+
+    Returns
+    -------
+    Callable[[Callable[P, R]], Callable[P, R | None]]
+        The wrapped callable processing errors inside workers safely.
+    """
+
     def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:

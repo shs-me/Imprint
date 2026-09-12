@@ -56,7 +56,7 @@ class BaseREST(ABC):
     write_timeout: float | None = field(default=10.0, init=False)
     pool_timeout: float | None = field(default=10.0, init=False)
 
-    __timeout: httpx.Timeout = field(init=False)
+    __timeout: httpx.Timeout | None = field(default=None, init=False)
     __sync_client: httpx.Client | None = field(
         default=None, init=False, repr=False
     )
@@ -95,7 +95,7 @@ class BaseREST(ABC):
     @final
     @property
     def _timeout(self) -> httpx.Timeout:
-        if not hasattr(self, f"_{BaseREST.__name__}__timeout"):
+        if self.__timeout is None:
             self.__timeout = httpx.Timeout(
                 connect=self.connect_timeout,
                 read=self.read_timeout,

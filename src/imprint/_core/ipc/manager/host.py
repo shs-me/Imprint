@@ -1,4 +1,8 @@
-"""Main process manager tracking worker process health and orchestrating tasks."""
+"""Main process manager tracking worker process health and orchestrating tasks.
+
+This module provides the central Host orchestrator manager that runs a supervision loop,
+interprets incoming status codes, manages logs across worker streams, and coordinates graceful shutdowns.
+"""
 
 import time
 from dataclasses import dataclass, field
@@ -15,7 +19,26 @@ from imprint._core.types import ProcsData
 
 @dataclass(slots=True)
 class Host(Base):
-    """Central status manager monitoring worker process health and handling process status codes."""
+    """Central status manager monitoring worker process health and handling process status codes.
+
+    The Host lives inside the orchestrator process, waiting on worker process signaling semaphores.
+    It reads/clears status codes, pulls ring-buffered logs, and executes high-level process lifecycle actions.
+
+    Attributes
+    ----------
+    with_execution : bool
+        Whether order execution is active in this session.
+    startDate : date
+        UTC date of initialization, used to schedule periodic garbage collection.
+    time_format : str
+        The logging timestamp format, adjusted automatically if backtesting is active.
+    close_procs : bool
+        Flag indicating that workers must be terminated immediately.
+    close_core : bool
+        Flag indicating that the Host orchestration loop should stop.
+    procs : dict[int, ProcsData]
+        Tracking dictionary mapping process IDs to their respective metadata (e.g. names, processes).
+    """
 
     with_execution: bool = field(init=False)
     startDate: date = field(init=False)
@@ -26,6 +49,7 @@ class Host(Base):
 
     @override
     def __post_init__(self) -> None:
+        """Initialize operational boundaries, dates, and timestamp formatting structures."""
         Base.__post_init__(self)
 
         self.with_execution = self.cfgSetup.execution
@@ -37,8 +61,14 @@ class Host(Base):
         )
 
     def run(self, procs: dict[int, ProcsData]) -> None:
-        """Primary supervisor loop waiting on process semaphores and handling status code events."""
+        """Primary supervisor loop waiting on process semaphores and handling status code events.
 
+        Parameters
+        ----------
+        procs : dict[int, ProcsData]
+            Dictionary of monitored worker process structures, mapping keys like
+            ProcsIds to process objects.
+        """
         self.procs = procs
         # - - -
         while True:
@@ -55,6 +85,7 @@ class Host(Base):
             return
 
     def check_process_status_code(self) -> None:
+        """Check status buffers for each monitored worker and handle outstanding code changes."""
         if self._main_status[ProcsIds.streaming]:
             self.check_data_streaming_proc()
             self._main_status[ProcsIds.streaming] -= 1
@@ -72,6 +103,7 @@ class Host(Base):
             self.close_core = True
 
     def check_data_streaming_proc(self) -> None:
+        """Examine streaming worker process data flags and manage pipeline data states."""
         if not self.procs.get(ProcsIds.streaming):
             return
 
@@ -92,6 +124,7 @@ class Host(Base):
         self.proc_is_alive(p_id)
 
     def check_engine_proc(self) -> None:
+        """Examine calculation engine worker flags and manage calculation/indicator feedback."""
         if not self.procs.get(ProcsIds.engine):
             return
 
@@ -120,6 +153,7 @@ class Host(Base):
         self.proc_is_alive(p_id)
 
     def check_executing_proc(self) -> None:
+        """Examine executing worker flags and handle execution boundary issues."""
         if not self.procs.get(ProcsIds.executing):
             return
 
@@ -145,6 +179,17 @@ class Host(Base):
         self.proc_is_alive(p_id)
 
     def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> None:
+        """Execute basic state resolutions and system signaling for shared status codes.
+
+        Parameters
+        ----------
+        sc : int
+            The raw process status code bitmask.
+        proc_id : int
+            The ID of the reporting process.
+        proc_name : str
+            Plaintext name of the reporting process.
+        """
         if sc & scs.HAVE_LOG:
             logs: list[tuple[int, str]] = self.get_log(proc_id)
             for timestamp, log in logs:
@@ -190,6 +235,18 @@ class Host(Base):
             self.clear_proc_sc(scs.RING_BUFFER_LOG_STREAM_OVERFLOW, proc_id)
 
     def get_proc_data(self, proc: int) -> tuple[int, str, int, int]:
+        """Fetch status and identity details for a given process key.
+
+        Parameters
+        ----------
+        proc : int
+            The process slot identifier.
+
+        Returns
+        -------
+        tuple of (int, str, int, int)
+            A tuple containing (process_id, process_name, task_id, status_code).
+        """
         p_id: int = proc
         p_name: str = self.procs[p_id]["proc_name"]
         p_task_id: int = self.procs[p_id]["task_id"]
@@ -197,23 +254,51 @@ class Host(Base):
         return p_id, p_name, p_task_id, p_sc
 
     def set_task_sc_to_proc(self, code: scs, task_id: int | None = None):
-        """Dispatches task status code to specified task slot or all active processes."""
+        """Dispatch task status code to specified task slot or all active processes.
 
+        Parameters
+        ----------
+        code : StatusCodes
+            The status code mask to apply.
+        task_id : int or None, default None
+            Specific task ID to apply status to. If None, targets all active processes.
+        """
         for v in self.procs.values():
             if (v["task_id"] == task_id) or (task_id is None):
                 self.set_sc(v["task_id"], code)
 
     def set_sc(self, id: int, code: scs) -> None:
-        """Sets status bitmask for target slot ID."""
+        """Set status bitmask for target slot ID.
 
+        Parameters
+        ----------
+        id : int
+            The slot or task identifier to update.
+        code : StatusCodes
+            The code to add to the slot's status.
+        """
         self._procs_status[id] |= code
 
     def clear_proc_sc(self, code: scs | int, proc_id: int) -> None:
-        """Clears status bitmask flags for specified process ID."""
+        """Clear status bitmask flags for specified process ID.
 
+        Parameters
+        ----------
+        code : StatusCodes or int
+            The bits/code to strip out of the status block.
+        proc_id : int
+            The process identifier to target.
+        """
         self._procs_status[proc_id] &= ~(code)
 
     def proc_is_alive(self, proc_id: int) -> None:
+        """Verify process vitality and switch the shutdown flag if dead.
+
+        Parameters
+        ----------
+        proc_id : int
+            The process identifier to check.
+        """
         if (
             self.procs.get(proc_id)
             and not self._sc_sem.get_value()
@@ -227,8 +312,7 @@ class Host(Base):
             self.close_procs = True
 
     def kill_procs(self) -> None:
-        """Terminates and joins all active worker processes."""
-
+        """Terminate and join all active worker processes."""
         for v in self.procs.values():
             if v["proc"].is_alive():
                 v["proc"].terminate()
@@ -237,8 +321,15 @@ class Host(Base):
             self.logger(scs.EXIT.label, LogLevel.INFO, v["proc_name"])
 
     def general_event(self, run: bool, task_ids: list[int]) -> None:
-        """Sets or clears general synchronization event across worker tasks."""
+        """Set or clear general synchronization event across worker tasks.
 
+        Parameters
+        ----------
+        run : bool
+            Whether to signal worker executions to run (True) or stop (False).
+        task_ids : list of int
+            List of task IDs to apply STOP codes to if run is False.
+        """
         if run:
             self._general_event.set()
         else:
@@ -246,7 +337,20 @@ class Host(Base):
             [self.set_sc(task_id, scs.STOP) for task_id in task_ids]
 
     def get_log(self, proc_id: int) -> list[tuple[int, str]]:
-        """Retrieves and decodes log status message for specified process ID."""
+        """Retrieve and decode log status message for specified process ID.
+
+        Pulls and decodes all written logs from the process's dedicated ring buffer slots.
+
+        Parameters
+        ----------
+        proc_id : int
+            Process ID owning the log queue.
+
+        Returns
+        -------
+        list of tuple of (int, str)
+            List of logs formatted as (milliseconds_timestamp, plaintext_log).
+        """
         _ = self._log_stream.ring_buf
 
         logs: list[tuple[int, str]] = []
@@ -273,6 +377,19 @@ class Host(Base):
         proc_name: str = "HOST",
         timestamp: int | None = None,
     ) -> None:
+        """Emit formatted message utilizing the system loguru binder.
+
+        Parameters
+        ----------
+        message : str
+            The log payload to write.
+        level : LogLevel
+            The custom log severity level.
+        proc_name : str, default "HOST"
+            Name of the originating process context.
+        timestamp : int or None, default None
+            Optional millisecond timestamp for the log source event.
+        """
         t = timestamp / 1000 if timestamp else time.time()
         log = logger.bind(
             time=datetime.fromtimestamp(t, tz=UTC).strftime(self.time_format),
