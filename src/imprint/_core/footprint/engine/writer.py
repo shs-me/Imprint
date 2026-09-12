@@ -109,6 +109,38 @@ def _update(
     bbox: NDArray[int64],
     meta_data: NDArray[float64],
 ) -> int | None:
+    """
+    Update footprint volume matrix, bar headers, VWAP statistics, and bounding box for a trade tick.
+
+    Parameters
+    ----------
+    nPrice : int64
+        Fixed-point price integer of incoming trade.
+    nQty : int64
+        Scaled fixed-point quantity integer of incoming trade.
+    timestamp : int64
+        Trade execution timestamp in milliseconds.
+    is_sell : int64
+        Trade direction flag (1 for sell/bid side, 0 for buy/ask side).
+    args : NDArray[int64]
+        1D array containing scaled constants, array index mappings, and converter configurations.
+    footprint : NDArray[int64]
+        2D footprint array storing volume profiles per price level and bar column.
+    headers : NDArray[int64]
+        2D array storing OHLCV, CVD, VWAP, and indicator metadata for each bar.
+    headers_offset : memoryview
+        Single-element int64 memory view maintaining active header buffer write offset.
+    bbox : NDArray[int64]
+        1D array of shape (4,) storing updated bounding box coordinates `[idYmin, idXmin, idYmax, idXmax]`.
+    meta_data : NDArray[float64]
+        2D array holding intermediate running metrics for VWAP calculation (volume, price*qty, price^2*qty).
+
+    Returns
+    -------
+    int or None
+        Bitmask integer containing re-initialization flags (`RIF_*`) if trade falls outside grid boundaries,
+        or 0 (evaluating as falsy in caller context) when update succeeds.
+    """
     re_init: int = 0
 
     idx: int64 = to_idx(

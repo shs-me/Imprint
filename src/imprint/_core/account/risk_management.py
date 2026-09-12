@@ -1,3 +1,5 @@
+"""Risk management rules, order size calculations, and order ID encoding."""
+
 from abc import ABC
 from dataclasses import dataclass, field
 from typing import final, override
@@ -8,6 +10,14 @@ from imprint._core.account.base import Base
 
 @dataclass(slots=True)
 class RiskManagement(Base, ABC):
+    """Risk management evaluator for position sizing, balance limits, and TP/SL order params.
+
+    Attributes
+    ----------
+    time_for_expired_signal : int
+        Maximum allowed time window in milliseconds for signal execution.
+    """
+
     __entry_qty: int = field(init=False)
     __tp_dev: int = field(init=False)
     __sl_dev: int = field(init=False)
@@ -15,12 +25,12 @@ class RiskManagement(Base, ABC):
     __max_loss_balance: int = field(init=False)
     __min_order_size: int = field(init=False)
     time_for_expired_signal: int = field(init=False)
-
-    tp_offset_for_order_id: int = field(default=1_000_000, init=False)
-    sl_offset_for_order_id: int = field(default=2_000_000, init=False)
+    __tp_offset_for_order_id: int = field(default=1_000_000_000, init=False)
+    __sl_offset_for_order_id: int = field(default=2_000_000_000, init=False)
 
     @override
     def __post_init__(self) -> None:
+        """Initialize risk thresholds, order sizing limits, and signal timers."""
         Base.__post_init__(self)
 
         cfgAC = self.manager.cfgAccount
@@ -39,7 +49,13 @@ class RiskManagement(Base, ABC):
     @final
     @property
     def lossNbalanceSafeLimit(self) -> bool:
-        """Evaluates whether current balance remains above max tolerable loss threshold."""
+        """Check if current balance remains above the maximum loss threshold.
+
+        Returns
+        -------
+        bool
+            True if balance loss is within tolerable limit, False otherwise.
+        """
 
         return self.nBalance[0] > (
             self.startNbalance
@@ -49,7 +65,13 @@ class RiskManagement(Base, ABC):
     @final
     @property
     def lockedNbalanceSafeLimit(self) -> bool:
-        """Evaluates whether locked margin remains below max margin lock threshold."""
+        """Check if locked balance remains below the maximum margin lock limit.
+
+        Returns
+        -------
+        bool
+            True if locked margin is below threshold, False otherwise.
+        """
 
         return self.lockedNbalance[0] < (
             self.nBalance[0] * self.__max_lock_balance // 10_000
@@ -58,14 +80,26 @@ class RiskManagement(Base, ABC):
     @final
     @property
     def nominalEntryNqty(self) -> int:
-        """Calculates unleveraged position entry allocation in scale fixed-point units."""
+        """Calculate unleveraged position entry allocation in scaled fixed-point units.
+
+        Returns
+        -------
+        int
+            Unleveraged entry amount in scale fixed-point units.
+        """
 
         return self.availableNbalance[0] * self.__entry_qty // 10_000
 
     @final
     @property
     def nominalEntryNqtyWithLeverage(self) -> int | None:
-        """Calculates leveraged entry size if above minimum order threshold."""
+        """Calculate leveraged position entry allocation if above minimum order threshold.
+
+        Returns
+        -------
+        int or None
+            Leveraged entry amount in scale units, or None if below min_order_size.
+        """
 
         if (
             qty := (self.leverage * self.nominalEntryNqty)
@@ -74,7 +108,20 @@ class RiskManagement(Base, ABC):
 
     @final
     def entryNqtyWithLeverage(self, nPrice: int, nominalNqty: int) -> int:
-        """Calculates target asset quantity int for specified entry price and nominal margin amount."""
+        """Calculate asset quantity in fixed-point integer units for entry price.
+
+        Parameters
+        ----------
+        nPrice : int
+            Asset entry price in fixed-point integer format.
+        nominalNqty : int
+            Nominal margin allocation in scale fixed-point format.
+
+        Returns
+        -------
+        int
+            Target quantity in integer fixed-point units.
+        """
 
         nominal_qty: float = nominalNqty / self.scale_mult
         return round((nominal_qty * self.price_mult * self.qty_mult) / nPrice)
@@ -83,6 +130,24 @@ class RiskManagement(Base, ABC):
     def tp_sl_param(
         self, nPrice: int, client_order_id: int, is_long: bool, is_tp: bool
     ) -> tuple[int, int, int]:
+        """Calculate target execution price, bitmask flags, and client order ID for TP/SL.
+
+        Parameters
+        ----------
+        nPrice : int
+            Base entry price in fixed-point integer format.
+        client_order_id : int
+            Base client order identifier.
+        is_long : bool
+            True for long position, False for short.
+        is_tp : bool
+            True to construct Take Profit parameters, False for Stop Loss.
+
+        Returns
+        -------
+        tuple of (int, int, int)
+            Tuple containing (nPrice_with_dev, order_param_bitmask, encoded_client_order_id).
+        """
         ticks: int = (
             nPrice * (self.__tp_dev if is_tp else self.__sl_dev) // 10_000
         )
@@ -104,29 +169,79 @@ class RiskManagement(Base, ABC):
         return nPrice_with_dev, order_param, client_order_id
 
     def to_tp_client_order_id(self, id: int) -> int:
+        """Convert generic or SL order ID to Take Profit order ID range.
+
+        Parameters
+        ----------
+        id : int
+            Raw or encoded client order ID.
+
+        Returns
+        -------
+        int
+            Client order ID with TP offset applied.
+        """
         if self.is_tp_client_order_id(id):
             return id
         else:
             if self.is_sl_client_order_id(id):
                 return (
-                    id - self.sl_offset_for_order_id
-                ) + self.tp_offset_for_order_id
+                    id - self.__sl_offset_for_order_id
+                ) + self.__tp_offset_for_order_id
             else:
-                return id + self.tp_offset_for_order_id
+                return id + self.__tp_offset_for_order_id
 
     def to_sl_client_order_id(self, id: int) -> int:
+        """Convert generic or TP order ID to Stop Loss order ID range.
+
+        Parameters
+        ----------
+        id : int
+            Raw or encoded client order ID.
+
+        Returns
+        -------
+        int
+            Client order ID with SL offset applied.
+        """
         if self.is_sl_client_order_id(id):
             return id
         else:
             if self.is_tp_client_order_id(id):
                 return (
-                    id - self.tp_offset_for_order_id
-                ) + self.sl_offset_for_order_id
+                    id - self.__tp_offset_for_order_id
+                ) + self.__sl_offset_for_order_id
             else:
-                return id + self.sl_offset_for_order_id
+                return id + self.__sl_offset_for_order_id
 
     def is_tp_client_order_id(self, id: int) -> bool:
-        return self.tp_offset_for_order_id <= id < self.sl_offset_for_order_id
+        """Check if client order ID falls within Take Profit ID range.
+
+        Parameters
+        ----------
+        id : int
+            Client order identifier.
+
+        Returns
+        -------
+        bool
+            True if order ID is a Take Profit order, False otherwise.
+        """
+        return (
+            self.__tp_offset_for_order_id <= id < self.__sl_offset_for_order_id
+        )
 
     def is_sl_client_order_id(self, id: int) -> bool:
-        return self.sl_offset_for_order_id <= id
+        """Check if client order ID falls within Stop Loss ID range.
+
+        Parameters
+        ----------
+        id : int
+            Client order identifier.
+
+        Returns
+        -------
+        bool
+            True if order ID is a Stop Loss order, False otherwise.
+        """
+        return self.__sl_offset_for_order_id <= id

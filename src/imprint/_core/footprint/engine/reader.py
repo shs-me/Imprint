@@ -147,7 +147,28 @@ def _update_clusters_states(
     fp: NDArray[int64],
     fp_state: NDArray[int64],
 ) -> None:
-    """Numba JIT kernel recalculating delta domination and big trade flags across clusters."""
+    """
+    Recalculate delta domination and big trade flags across footprint cluster regions.
+
+    Parameters
+    ----------
+    idYmin : int64
+        Minimum Y-axis row index of modified footprint slice.
+    idYmax : int64
+        Maximum Y-axis row index of modified footprint slice (exclusive).
+    idXmin : int64
+        Minimum X-axis column index of modified footprint slice.
+    idXmax : int64
+        Maximum X-axis column index of modified footprint slice (exclusive).
+    idxVP : int
+        Column index reserved for Volume Profile array in footprint matrix.
+    idxDP : int
+        Column index reserved for Delta Profile array in footprint matrix.
+    fp : NDArray[int64]
+        2D array storing base footprint volume profile and delta values.
+    fp_state : NDArray[int64]
+        2D state array storing calculated bitmask flags for footprint cells.
+    """
 
     # Clear State's
     state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
@@ -174,7 +195,35 @@ def _update_closed_bar_and_fp_states(
     center: int64,
     scale: int,
 ) -> None:
-    """Numba JIT kernel calculating ATR, VWAP, Bollinger Bands, POC, and Value Area on bar closure."""
+    """
+    Calculate indicator states and footprint flags upon bar closure.
+
+    Computes ATR, Parkinson Volatility, VWAP bands, Point of Control (POC),
+    Value Area (VAH/VAL), and auction state flags on bar close.
+
+    Parameters
+    ----------
+    lidx : int
+        Column index of closed bar bid column (`last_idx`).
+    idxVP : int
+        Column index for Volume Profile in footprint matrix.
+    headers : NDArray[int64]
+        2D array holding bar header metrics and metadata.
+    headers_offset : memoryview
+        Single-element int64 memory view maintaining header offset position.
+    fp : NDArray[int64]
+        2D array storing base footprint volume profile matrix.
+    fp_state : NDArray[int64]
+        2D array storing footprint bitmask flags.
+    fp_state_cache : NDArray[int64]
+        1D array maintaining cached indicator row indices for efficient state resets.
+    baseNprice : int64
+        Session fixed-point base price integer.
+    center : int64
+        Y-axis origin center row index offset.
+    scale : int
+        Scaled price step per footprint row.
+    """
 
     bar: int = (lidx & ~1) // 2
     bwo: int = headers_offset[0] + bar
@@ -283,7 +332,34 @@ def _update_bar_states(
     center: int64,
     scale: int,
 ) -> None:
-    """Numba JIT kernel calculating active bar OHLC, Zero-Print, Delta Domination, and Imbalances."""
+    """
+    Update microstructural states, OHLC flags, imbalance, and bar Value Area for active bar.
+
+    Parameters
+    ----------
+    idYmin : int64
+        Minimum Y-axis row index in bounding box.
+    idYmax : int64
+        Maximum Y-axis row index in bounding box.
+    idxBid : int
+        Grid column index for active bar bid volume.
+    idxAsk : int
+        Grid column index for active bar ask volume.
+    headers : NDArray[int64]
+        2D array storing bar header data.
+    headers_offset : memoryview
+        Single-element int64 memory view of active header write offset.
+    fp : NDArray[int64]
+        2D footprint base array.
+    fp_state : NDArray[int64]
+        2D footprint state bitmask array.
+    baseNprice : int64
+        Session base price integer.
+    center : int64
+        Y-axis grid center row index.
+    scale : int
+        Scaled price step per row.
+    """
 
     bar: int = (idxBid & ~1) // 2
     bwo: int = headers_offset[0] + bar
@@ -351,7 +427,21 @@ def _update_bar_states(
 def calc_value_area(
     vp_slice: NDArray[int64], center_idx: intp
 ) -> tuple[intp, intp]:
-    """Numba JIT kernel computing Value Area High (VAH) and Low (VAL) covering 70% of volume profile."""
+    """
+    Compute Value Area High (VAH) and Value Area Low (VAL) bounds covering 70% of total volume.
+
+    Parameters
+    ----------
+    vp_slice : NDArray[int64]
+        1D array slice containing volume profile across price levels.
+    center_idx : intp
+        Index of Point of Control (POC), representing the peak volume row.
+
+    Returns
+    -------
+    tuple of (intp, intp)
+        Tuple containing `(vah_idx, val_idx)` relative to `vp_slice`.
+    """
 
     target_vol: float = np.sum(vp_slice) * 0.70
     current_vol: int64 = vp_slice[center_idx]
