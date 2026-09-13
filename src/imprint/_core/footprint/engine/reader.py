@@ -53,25 +53,21 @@ class Reader(Writer):
 
     @final
     def analyze_footprint(self) -> None:
-        if self._bbox_is_readed():
-            if self.re_init & c.RIF_idx:
-                self.__update_closed_bar_and_fp()
-        else:
+        if not self._bbox_is_readed():
             idYmin, idXmin, idYmax, idXmax = self.bbox
             self.__update_clusters(idYmin, idYmax, idXmin, idXmax)
             for idx in range((idXmin & ~1), idXmax, 2):
                 idxBid, idxAsk = idx, idx + 1
-                if self.fp.bar[idx].ind.volume > 0:
-                    if (idx > self.last_idx[0]) or (
-                        (self.re_init & c.RIF_idx)
-                        and (idx == (self.fp.con.fp_cols - 2))
-                    ):
-                        self.__update_closed_bar_and_fp()
-                        self.last_idx[0] = idx
+                if idx > self.last_idx[0]:
+                    self.__update_closed_bar_and_fp()
+                    self.last_idx[0] = idx
 
-                    self.__update_bar(idYmin, idYmax, idxBid, idxAsk)
+                self.__update_bar(idYmin, idYmax, idxBid, idxAsk)
 
             self.bbox[:] = self.bbox_default_value
+
+        if self.re_init & c.RIF_idx:
+            self.__update_closed_bar_and_fp()
 
     @final
     def __update_clusters(
@@ -227,6 +223,10 @@ def _update_closed_bar_and_fp_states(
 
     bar: int = (lidx & ~1) // 2
     bwo: int = headers_offset[0] + bar
+
+    if headers[bwo, c.BH_Volume] == 0:
+        return
+
     oldBwo: int = bwo - 1
 
     highNprice: int64 = headers[bwo, c.BH_High]
@@ -363,6 +363,9 @@ def _update_bar_states(
 
     bar: int = (idxBid & ~1) // 2
     bwo: int = headers_offset[0] + bar
+
+    if headers[bwo, c.BH_Volume] == 0:
+        return
 
     openNprice: int64 = headers[bwo, c.BH_Open]
     highNprice: int64 = headers[bwo, c.BH_High]

@@ -37,12 +37,14 @@ if __name__ == "__main__":
                 backtest_end_date="2026-01-07",
             ),
             Live(
+                leverage=20,
                 connector=Connector(
                     base_rest_url="https://fapi.binance.com",
                     base_ws_url="wss://ws-fapi.binance.com/ws-fapi/v1",
                     base_wss_url="wss://fstream.binance.com",
-                    market_data_uri_for_wss="wss://fstream.binance.com/market/ws/dashusdt@aggTrade",
-                    get_user_data_uri_for_wss="wss://fstream.binance.com/pm/v1/userSecure?listenKey=",
+                    market_data_stream_url="wss://fstream.binance.com/market/ws/dashusdt@aggTrade",
+                    user_data_stream_url="wss://fstream.binance.com/ws/",
+                    order_stream_url="",
                 ),
                 agg_trades_decoder=BinanceAggTradesDecoder,
                 order_encoder=BinanceOrderEncoder,
@@ -72,4 +74,4 @@ if __name__ == "__main__":
         with_execution=True,
     )
     imp.run_core()
-    # imp.run_vis()
+    imp.run_vis()

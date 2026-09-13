@@ -14,7 +14,7 @@ from imprint._core.utils import UserStreamDecoder
 class UserData(Base):
     execution_event: Event
 
-    decoder: UserStreamDecoder[Any] = field(init=False)
+    decoder: UserStreamDecoder[Any, Any] = field(init=False)
     base_uri: str = field(init=False)
     keep_task: asyncio.Task[None] | None = field(default=None, init=False)
 
@@ -23,7 +23,7 @@ class UserData(Base):
 
         m_name: str = self.manager.cfgSetup.user_stream_decoder_module
         c_name: str = self.manager.cfgSetup.user_stream_decoder_class_name
-        decoder_type: type[UserStreamDecoder[Any]] = getattr(
+        decoder_type: type[UserStreamDecoder[Any, Any]] = getattr(
             importlib.import_module(m_name), c_name
         )
         self.manager.set_log(

@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import override
 
 from msgspec import Struct
@@ -13,6 +14,7 @@ class BinanceAggTrade(Struct):
     m: bool
 
 
+@dataclass(slots=True)
 class BinanceAggTradesDecoder(AggTradesDecoder[BinanceAggTrade]):
     @override
     def decode_agg_trade(

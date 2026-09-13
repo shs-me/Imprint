@@ -50,10 +50,11 @@ class Backtest:
 @final
 @dataclass(slots=True)
 class Live:
+    leverage: int
     connector: Connector
     agg_trades_decoder: type[AggTradesDecoder[Any]]
-    user_stream_decoder: type[UserStreamDecoder[Any]]
-    order_encoder: type[OrderEncoder]
+    user_stream_decoder: type[UserStreamDecoder[Any, Any]]
+    order_encoder: type[OrderEncoder[Any]]
     exchange_rest: type[ExchangeREST]
 
 

@@ -213,7 +213,7 @@ class Imprint:
             self.__coin.tick_size = self.__rest.tick_size
             self.__coin.lot_size = self.__rest.lot_size
             self.__account.min_order_size = self.__rest.min_order_size
-            self.__account.leverage = self.__rest.leverage
+            self.__account.leverage = self.__rest.set_leverage(self.leverage)
             try:
                 self.__account.balance = self.__rest.get_balance()
                 if not self.__account.balance:

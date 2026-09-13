@@ -1,11 +1,14 @@
+from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any, override
 
 from websockets import ClientConnection
 
-from imprint.configs import UserStreamDecoder
+from imprint.configs import BalanceData, OrderData, UserStreamDecoder
 
 
-class BybitUserStreamDecoder(UserStreamDecoder[Any]):
+@dataclass(slots=True)
+class BybitUserStreamDecoder(UserStreamDecoder[Any, Any]):
     @override
     async def on_pre_connect(self) -> str: ...
 
@@ -13,6 +16,6 @@ class BybitUserStreamDecoder(UserStreamDecoder[Any]):
     async def on_connection(self, ws: ClientConnection) -> None: ...
 
     @override
-    def decode_user_event(
+    def decode(
         self, raw_data: bytes | memoryview
-    ) -> bytes | None: ...
+    ) -> Iterator[OrderData | BalanceData]: ...

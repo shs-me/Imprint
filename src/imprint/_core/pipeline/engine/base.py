@@ -82,12 +82,7 @@ class Base(ABC):
                         nPrice, nQty, timestamp, is_sell
                     )
 
-                    if (
-                        (not self.algorithm.tick_by_tick_analyze)
-                        and (_.wid_buf[0] != _.rid_buf[0])
-                    ) and (
-                        not (self.algorithm._engine.re_init & c.RIF_session)
-                    ):
+                    if self.is_bbox_mode(_.wid_buf, _.rid_buf):
                         continue
 
                     self.time_start_analyze[0] = time.perf_counter_ns()
@@ -131,6 +126,12 @@ class Base(ABC):
 
     @abstractmethod
     def set_trade_data(self, raw_data: memoryview) -> None: ...
+
+    @final
+    def is_bbox_mode(self, wid: memoryview, rid: memoryview) -> bool:
+        return (
+            (not self.algorithm.tick_by_tick_analyze) and (wid[0] != rid[0])
+        ) and (not (self.algorithm._engine.re_init & c.RIF_session))
 
     @abstractmethod
     def post_update(self) -> None: ...

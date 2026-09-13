@@ -28,13 +28,12 @@ class ExchangeREST(BaseREST, ABC):
     __api_key: str | None = field(default=None, init=False, repr=False)
     __api_secret: str | None = field(default=None, init=False, repr=False)
 
-    __symbol_data: tuple[str, str, float, int] | None = field(
+    __symbol_data: tuple[str, str, float] | None = field(
         default=None, init=False
     )
     __tick_size: str | None = field(default=None, init=False)
     __lot_size: str | None = field(default=None, init=False)
     __min_order_size: float | None = field(default=None, init=False)
-    __leverage: int | None = field(default=None, init=False)
 
     @final
     @property
@@ -63,14 +62,8 @@ class ExchangeREST(BaseREST, ABC):
             self.__min_order_size = self.__symbol_data[2]
         return self.__min_order_size
 
-    @final
-    @property
-    def leverage(self) -> int:
-        if self.__leverage is None:
-            if self.__symbol_data is None:
-                self.__symbol_data = self._fetch_symbol_data()
-            self.__leverage = self.__symbol_data[3]
-        return self.__leverage
+    @abstractmethod
+    def _fetch_symbol_data(self) -> tuple[str, str, float]: ...
 
     @final
     @property
@@ -105,19 +98,10 @@ class ExchangeREST(BaseREST, ABC):
         return int(time.time() * 1000)
 
     @abstractmethod
-    def _fetch_symbol_data(self) -> tuple[str, str, float, int]: ...
-
-    @abstractmethod
     def get_balance(self, asset: str = "USDT") -> float: ...
 
     @abstractmethod
-    async def get_listen_key_async(self) -> str: ...
-
-    @abstractmethod
-    async def keep_listen_key_async(self, listen_key: str) -> bool: ...
-
-    @abstractmethod
-    async def close_listen_key_async(self, listen_key: str) -> bool: ...
+    def set_leverage(self, leverage: int) -> int: ...
 
     @abstractmethod
     def cancel_all_orders(self) -> bool: ...
@@ -149,19 +133,21 @@ class AggTradesDecoder[T](ABC):
 
 
 @dataclass(slots=True)
-class OrderEncoder(ABC):
-    rest: ExchangeREST
-
+class OrderEncoder[T_REST](ABC):
+    symbol: str
+    rest: T_REST
     encoder: Encoder = field(default_factory=lambda: Encoder(), init=False)
+
+    @abstractmethod
+    async def on_connection(self, ws: ClientConnection) -> None: ...
 
     @abstractmethod
     def encode_new_order(
         self,
         timestamp: int,
         client_order_id: int,
-        symbol: str,
-        is_buy: bool,
         is_long: bool,
+        is_buy: bool,
         is_market: bool,
         price: float,
         qty: float,
@@ -169,9 +155,19 @@ class OrderEncoder(ABC):
     ) -> bytes: ...
 
     @abstractmethod
-    def encode_cancel_order(
-        self, symbol: str, client_order_id: int
+    def encode_market_trigger_order(
+        self,
+        timestamp: int,
+        client_order_id: int,
+        is_long: bool,
+        is_buy: bool,
+        price: float,
+        qty: float,
+        time_in_force: str = "GTC",
     ) -> bytes: ...
+
+    @abstractmethod
+    def encode_cancel_order(self, client_order_id: int) -> bytes: ...
 
 
 @final
@@ -209,8 +205,8 @@ class BalanceData:
 
 
 @dataclass(slots=True)
-class UserStreamDecoder[T](ABC):
-    rest: ExchangeREST
+class UserStreamDecoder[T_REST, T_DECODER](ABC):
+    rest: T_REST
 
     base_url: str
 
@@ -218,7 +214,7 @@ class UserStreamDecoder[T](ABC):
     qty_mult: int
     scale_mult: int
 
-    decoder: Decoder[T] = field(
+    decoder: Decoder[T_DECODER] = field(
         default_factory=lambda: Decoder(type=T), init=False
     )
     order_data: OrderData = field(

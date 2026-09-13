@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import override
 
 from msgspec import Struct
@@ -18,6 +19,7 @@ class BybitTradeMsg(Struct):
     data: list[BybitAggTrade]
 
 
+@dataclass(slots=True)
 class BybitAggTradesDecoder(AggTradesDecoder[BybitTradeMsg]):
     @override
     def decode_agg_trade(

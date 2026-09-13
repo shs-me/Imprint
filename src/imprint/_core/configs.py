@@ -63,13 +63,12 @@ class Setup(Configuration):
 @final
 @dataclass(slots=True)
 class Connector(Configuration):
-    base_rest_testnet_url: str = ""
     base_rest_url: str = ""
     base_ws_url: str = ""
     base_wss_url: str = ""
-    market_data_uri_for_wss: str = ""
-    get_user_data_uri_for_wss: str = ""
-    set_user_data_uri_for_wss: str = ""
+    market_data_stream_url: str = ""
+    user_data_stream_url: str = ""
+    order_stream_url: str = ""
 
 
 @final

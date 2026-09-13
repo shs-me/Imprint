@@ -2,7 +2,7 @@ import asyncio
 import importlib
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Semaphore
-from typing import override
+from typing import Any, override
 
 from websockets import ClientConnection
 
@@ -20,7 +20,7 @@ class Order(Base):
     qty_prec: int = field(init=False)
     qty_mult: int = field(init=False)
 
-    order_encoder: OrderEncoder = field(init=False)
+    encoder: OrderEncoder[Any] = field(init=False)
     loop: asyncio.AbstractEventLoop = field(init=False)
 
     def __post_init__(self) -> None:
@@ -33,13 +33,13 @@ class Order(Base):
 
         m_name: str = self.manager.cfgSetup.order_encoder_module
         c_name: str = self.manager.cfgSetup.order_encoder_class_name
-        encoder_type: type[OrderEncoder] = getattr(
+        encoder_type: type[OrderEncoder[Any]] = getattr(
             importlib.import_module(m_name), c_name
         )
         self.manager.set_log(
             f"{encoder_type.__name__} used as {OrderEncoder.__name__}"
         )
-        self.order_encoder = encoder_type(self.rest)
+        self.encoder = encoder_type(symbol=self.symbol, rest=self.rest)
 
         self.loop = asyncio.get_event_loop()
 
@@ -47,15 +47,16 @@ class Order(Base):
     async def on_pre_connect(self) -> None: ...
 
     @override
-    async def on_connection(self, ws: ClientConnection) -> None: ...
+    async def on_connection(self, ws: ClientConnection) -> None:
+        await self.encoder.on_connection(ws)
 
     @override
     async def in_connection(self, ws: ClientConnection) -> None:
         _ = self.os.ring_buf
+        # - - -
         await self.loop.run_in_executor(None, self.wss_sem.acquire)
-
         if _.wid_buf[0] != _.rid_buf[0]:
-            payload: bytes | None = self.to_payload()
+            payload: bytes = self.to_payload()
             await ws.send(payload, text=True)
 
     def to_payload(self) -> bytes:
@@ -63,25 +64,33 @@ class Order(Base):
             self.os.ring_buf.get_data()
         )
 
+        is_long: bool = bool(order_param & c.OF_LONG)
+        is_buy: bool = bool(order_param & c.OF_BUY)
+
         price: float = round(nPrice / self.price_mult, self.price_prec)
         qty: float = round(nQty / self.qty_mult, self.qty_prec)
 
-        is_buy: bool = bool(order_param & c.OF_BUY)
-        is_long: bool = bool(order_param & c.OF_LONG)
-        is_market: bool = bool(order_param & c.OF_MARKET)
-
-        if bool(order_param & c.OF_CANCELED):
-            return self.order_encoder.encode_cancel_order(
-                symbol=self.symbol, client_order_id=client_order_id
+        if order_param & c.OF_CANCEL:
+            return self.encoder.encode_cancel_order(
+                client_order_id=client_order_id
             )
         else:
-            return self.order_encoder.encode_new_order(
-                timestamp=timestamp,
-                client_order_id=client_order_id,
-                symbol=self.symbol,
-                is_buy=is_buy,
-                is_long=is_long,
-                is_market=is_market,
-                price=price,
-                qty=qty,
-            )
+            if (order_param & c.OF_MARKET) or (order_param & c.OF_LIMIT):
+                return self.encoder.encode_new_order(
+                    timestamp=timestamp,
+                    client_order_id=client_order_id,
+                    is_long=is_long,
+                    is_buy=is_buy,
+                    is_market=bool(order_param & c.OF_MARKET),
+                    price=price,
+                    qty=qty,
+                )
+            else:
+                return self.encoder.encode_market_trigger_order(
+                    timestamp=timestamp,
+                    client_order_id=client_order_id,
+                    is_long=is_long,
+                    is_buy=is_buy,
+                    price=price,
+                    qty=qty,
+                )

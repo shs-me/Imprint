@@ -21,8 +21,8 @@ class LotSizeFilter(BaseFilter, tag="LOT_SIZE"):
     stepSize: str
 
 
-class MinNotionalFilter(BaseFilter, tag="MIN_NOTIONAL"):
-    notional: float
+class MinNotionalFilter(BaseFilter, tag="NOTIONAL"):
+    minNotional: float
 
 
 class UnknownFilter(BaseFilter, tag=None): ...
@@ -33,7 +33,6 @@ class SymbolInfo(msgspec.Struct):
     filters: list[
         PriceFilter | LotSizeFilter | MinNotionalFilter | UnknownFilter
     ]
-    leverage: int = 20
 
 
 class ExchangeInfoResponse(msgspec.Struct):
@@ -73,23 +72,22 @@ class BinanceFuturesREST(ExchangeREST):
         return p
 
     @override
-    def _fetch_symbol_data(self) -> tuple[str, str, float, int]:
+    def _fetch_symbol_data(self) -> tuple[str, str, float]:
         res: ExchangeInfoResponse = self.send_sync(
             "GET", "/fapi/v1/exchangeInfo", response_type=ExchangeInfoResponse
         )
-        tick_size, lot_size, min_order_size, leverage = "", "", 0.0, 0
+        tick_size, lot_size, min_order_size = "", "", 0.0
         for symbol_info in res.symbols:
             if symbol_info.symbol == self.symbol:
-                leverage = symbol_info.leverage
                 for f in symbol_info.filters:
                     if isinstance(f, PriceFilter):
                         tick_size = f.tickSize
                     elif isinstance(f, LotSizeFilter):
                         lot_size = f.stepSize
                     elif isinstance(f, MinNotionalFilter):
-                        min_order_size = f.notional
+                        min_order_size = f.minNotional
 
-        return tick_size, lot_size, min_order_size, leverage
+        return tick_size, lot_size, min_order_size
 
     @override
     def get_balance(self, asset: str = "USDT") -> float:
@@ -108,6 +106,18 @@ class BinanceFuturesREST(ExchangeREST):
         return 0.0
 
     @override
+    def set_leverage(self, leverage: int) -> int:
+        params: dict[str, Any] = self._signed_params(
+            {"symbol": self.symbol, "leverage": leverage}
+        )
+        self.send_sync(
+            "POST",
+            "/fapi/v1/leverage",
+            params=params,
+            headers=self._auth_headers(),
+        )
+        return leverage
+
     async def get_listen_key_async(self) -> str:
         res: ListenKeyResponse = await self.send_async(
             "POST",
@@ -117,7 +127,6 @@ class BinanceFuturesREST(ExchangeREST):
         )
         return res.listen_key
 
-    @override
     async def keep_listen_key_async(self, listen_key: str) -> bool:
         params: dict[str, Any] = self._signed_params({"listenKey": listen_key})
         await self.send_async(
@@ -128,7 +137,6 @@ class BinanceFuturesREST(ExchangeREST):
         )
         return True
 
-    @override
     async def close_listen_key_async(self, listen_key: str) -> bool:
         params: dict[str, Any] = self._signed_params({"listenKey": listen_key})
         await self.send_async(

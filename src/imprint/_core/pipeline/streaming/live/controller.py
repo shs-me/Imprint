@@ -42,15 +42,15 @@ class Controller:
         )
         self.rest.base_url = cfgConnector.base_rest_url
 
-        uri = cfgConnector.market_data_uri_for_wss
+        uri = cfgConnector.market_data_stream_url
         self.market_data_stream = MarketData(
             self.manager, self.rest, uri, self.engine_event
         )
-        uri = cfgConnector.get_user_data_uri_for_wss
+        uri = cfgConnector.user_data_stream_url
         self.user_data_stream = UserData(
             self.manager, self.rest, uri, self.execution_event
         )
-        uri = cfgConnector.set_user_data_uri_for_wss
+        uri = cfgConnector.order_stream_url
         self.order_stream = Order(self.manager, self.rest, uri, self.wss_sem)
 
     async def run_supervisor(self, streams: list[Task[None]]) -> None:
