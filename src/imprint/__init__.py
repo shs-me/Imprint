@@ -7,6 +7,7 @@ from imprint import configs
 from imprint._core import constant
 from imprint._core.configs import Coin as _Coin
 from imprint._core.configs import Configuration as _Cfg
+from imprint._core.configs import MarketDataStream as _MDS
 from imprint._core.configs import Percent as pct
 from imprint._core.configs import Setup as _Setup
 from imprint._core.pipeline.executing import BaseExecution
@@ -70,6 +71,7 @@ class Imprint:
             self.__backtest_setup()
         else:
             self.__live_setup()
+            args.append(_MDS(count_reader=1))
             args.append(self.__live.connector)
 
         if self.with_execution:
@@ -187,7 +189,7 @@ class Imprint:
         )
         self.__setup_core.backtesting = False
 
-        self.__account = configs.Account()
+        self.__account = configs.Account(leverage=self.__live.leverage)
 
     def __init_data(self) -> bool:
         if self.is_backtest_mode:
@@ -210,42 +212,38 @@ class Imprint:
                 logger=logger, symbol=self.symbol
             )
             self.__rest.base_url = self.__live.connector.base_rest_url
+
             self.__coin.tick_size = self.__rest.tick_size
-            self.__coin.lot_size = self.__rest.lot_size
-            self.__account.min_order_size = self.__rest.min_order_size
-            self.__account.leverage = self.__rest.set_leverage(self.leverage)
-            try:
-                self.__account.balance = self.__rest.get_balance()
-                if not self.__account.balance:
-                    logger.error(
-                        f"Init data, failed. Balance({self.__account.leverage}) is not valid"
-                    )
-                    return False
-
-            except ApiNotFoundError:
-                logger.error("Api key or api secret doest exists in env")
-                return False
-
             if not self.__coin.tick_size:
                 logger.error(
                     f"Init data, failed. Tick size({self.__coin.tick_size}) is not valid"
                 )
                 return False
+            self.__coin.lot_size = self.__rest.lot_size
             if not self.__coin.lot_size:
                 logger.error(
                     f"Init data, failed. Lot size({self.__coin.lot_size}) is not valid"
                 )
                 return False
+            self.__account.min_order_size = self.__rest.min_order_size
             if not self.__account.min_order_size:
                 logger.error(
                     f"Init data, failed. Min order size({self.__account.min_order_size}) is not valid"
                 )
                 return False
-            if not self.__account.leverage:
-                logger.error(
-                    f"Init data, failed. Leverage({self.__account.leverage}) is not valid"
-                )
-                return False
+            if self.with_execution:
+                self.__rest.set_leverage(self.__account.leverage)
+                try:
+                    self.__account.balance = self.__rest.get_balance()
+                    if not self.__account.balance:
+                        logger.error(
+                            f"Init data, failed. Balance({self.__account.leverage}) is not valid"
+                        )
+                        return False
+
+                except ApiNotFoundError:
+                    logger.error("Api key or api secret doest exists in env")
+                    return False
 
         return True
 

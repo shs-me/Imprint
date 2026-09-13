@@ -19,7 +19,6 @@ class Base(ABC):
     manager: NodeManager
 
     __init_arrays: bool = field(default=True, init=False)
-    __save_fp_headers: bool = field(init=False)
     __base_fp_dump_path: str = field(init=False)
 
     re_init: int = field(default=c.RIF_session | c.RIF_idx, init=False)
@@ -30,7 +29,6 @@ class Base(ABC):
 
     def __post_init__(self) -> None:
         cfgFP = self.manager.cfgFootprint
-        self.__save_fp_headers = self.manager.cfgFootprint.save_fp_headers
 
         cfgCoin = self.manager.cfgCoin
         self.__base_fp_dump_path = (
@@ -135,7 +133,7 @@ class Base(ABC):
 
     @final
     def save_footprint_headers(self, last_idx: int) -> None:
-        if self.__save_fp_headers:
+        if self.manager.cfgSetup.backtesting:
             os.makedirs(self.__base_fp_dump_path, exist_ok=True)
 
             start_time: str = self.fp.con.to_strftime(

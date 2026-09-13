@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TypeVar, final
+from typing import TypeVar, final, get_args, get_origin
 
 from msgspec import DecodeError
 from msgspec.json import Decoder, Encoder
@@ -101,7 +101,7 @@ class ExchangeREST(BaseREST, ABC):
     def get_balance(self, asset: str = "USDT") -> float: ...
 
     @abstractmethod
-    def set_leverage(self, leverage: int) -> int: ...
+    def set_leverage(self, leverage: int) -> None: ...
 
     @abstractmethod
     def cancel_all_orders(self) -> bool: ...
@@ -112,9 +112,15 @@ class ExchangeREST(BaseREST, ABC):
 
 @dataclass(slots=True)
 class AggTradesDecoder[T](ABC):
-    decoder: Decoder[T] = field(
-        default_factory=lambda: Decoder(type=T), init=False
-    )
+    decoder: Decoder[T] = field(init=False)
+
+    @final
+    def __post_init__(self) -> None:
+        for base in getattr(self, "__orig_bases__", []):
+            if issubclass(get_origin(base), AggTradesDecoder):
+                args = get_args(base)
+                if args:
+                    self.decoder = Decoder(type=args[0])
 
     @final
     def decode(
@@ -130,44 +136,6 @@ class AggTradesDecoder[T](ABC):
     def decode_agg_trade(
         self, msg: T
     ) -> Iterator[tuple[float, float, int, int]]: ...
-
-
-@dataclass(slots=True)
-class OrderEncoder[T_REST](ABC):
-    symbol: str
-    rest: T_REST
-    encoder: Encoder = field(default_factory=lambda: Encoder(), init=False)
-
-    @abstractmethod
-    async def on_connection(self, ws: ClientConnection) -> None: ...
-
-    @abstractmethod
-    def encode_new_order(
-        self,
-        timestamp: int,
-        client_order_id: int,
-        is_long: bool,
-        is_buy: bool,
-        is_market: bool,
-        price: float,
-        qty: float,
-        time_in_force: str = "GTC",
-    ) -> bytes: ...
-
-    @abstractmethod
-    def encode_market_trigger_order(
-        self,
-        timestamp: int,
-        client_order_id: int,
-        is_long: bool,
-        is_buy: bool,
-        price: float,
-        qty: float,
-        time_in_force: str = "GTC",
-    ) -> bytes: ...
-
-    @abstractmethod
-    def encode_cancel_order(self, client_order_id: int) -> bytes: ...
 
 
 @final
@@ -224,6 +192,14 @@ class UserStreamDecoder[T_REST, T_DECODER](ABC):
         default_factory=lambda: BalanceData(), init=False
     )
 
+    @final
+    def __post_init__(self) -> None:
+        for base in getattr(self, "__orig_bases__", []):
+            if issubclass(get_origin(base), UserStreamDecoder):
+                args = get_args(base)
+                if args:
+                    self.decoder = Decoder(type=args[1])
+
     @abstractmethod
     async def on_pre_connect(self) -> str: ...
 
@@ -234,3 +210,41 @@ class UserStreamDecoder[T_REST, T_DECODER](ABC):
     def decode(
         self, raw_data: bytes | memoryview
     ) -> Iterator[OrderData | BalanceData]: ...
+
+
+@dataclass(slots=True)
+class OrderEncoder[T_REST](ABC):
+    symbol: str
+    rest: T_REST
+    encoder: Encoder = field(default_factory=lambda: Encoder(), init=False)
+
+    @abstractmethod
+    async def on_connection(self, ws: ClientConnection) -> None: ...
+
+    @abstractmethod
+    def encode_new_order(
+        self,
+        timestamp: int,
+        client_order_id: int,
+        is_long: bool,
+        is_buy: bool,
+        is_market: bool,
+        price: float,
+        qty: float,
+        time_in_force: str = "GTC",
+    ) -> bytes: ...
+
+    @abstractmethod
+    def encode_market_trigger_order(
+        self,
+        timestamp: int,
+        client_order_id: int,
+        is_long: bool,
+        is_buy: bool,
+        price: float,
+        qty: float,
+        time_in_force: str = "GTC",
+    ) -> bytes: ...
+
+    @abstractmethod
+    def encode_cancel_order(self, client_order_id: int) -> bytes: ...

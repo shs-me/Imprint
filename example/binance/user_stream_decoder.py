@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import override
 
-from msgspec import Struct
+from msgspec import Raw, Struct
 from websockets import ClientConnection
 
 from example.binance.rest_adapter import BinanceFuturesREST
@@ -52,10 +52,7 @@ class AccountUpdateEvent(Struct, tag="ACCOUNT_UPDATE", tag_field="e"):
     E: int  # Event Time
 
 
-class UnknownEvent(Struct, tag=None, tag_field="e"): ...
-
-
-BinanceUserStreamEvent = OrderUpdateEvent | AccountUpdateEvent | UnknownEvent
+BinanceUserStreamEvent = OrderUpdateEvent | AccountUpdateEvent | Raw
 
 
 @dataclass(slots=True)

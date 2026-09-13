@@ -21,8 +21,23 @@ class LotSizeFilter(BaseFilter, tag="LOT_SIZE"):
     stepSize: str
 
 
-class MinNotionalFilter(BaseFilter, tag="NOTIONAL"):
-    minNotional: float
+class MinNotionalFilter(BaseFilter, tag="MIN_NOTIONAL"):
+    notional: str
+
+
+class MarketLotSizeFilter(BaseFilter, tag="MARKET_LOT_SIZE"): ...
+
+
+class PercentPriceFilter(BaseFilter, tag="PERCENT_PRICE"): ...
+
+
+class MaxNumOrdersFilter(BaseFilter, tag="MAX_NUM_ORDERS"): ...
+
+
+class MaxNumAlgoOrdersFilter(BaseFilter, tag="MAX_NUM_ALGO_ORDERS"): ...
+
+
+class PositionRiskControl(BaseFilter, tag="POSITION_RISK_CONTROL"): ...
 
 
 class UnknownFilter(BaseFilter, tag=None): ...
@@ -31,7 +46,15 @@ class UnknownFilter(BaseFilter, tag=None): ...
 class SymbolInfo(msgspec.Struct):
     symbol: str
     filters: list[
-        PriceFilter | LotSizeFilter | MinNotionalFilter | UnknownFilter
+        PriceFilter
+        | LotSizeFilter
+        | MarketLotSizeFilter
+        | MinNotionalFilter
+        | PercentPriceFilter
+        | MaxNumOrdersFilter
+        | MaxNumAlgoOrdersFilter
+        | PositionRiskControl
+        | UnknownFilter
     ]
 
 
@@ -85,7 +108,7 @@ class BinanceFuturesREST(ExchangeREST):
                     elif isinstance(f, LotSizeFilter):
                         lot_size = f.stepSize
                     elif isinstance(f, MinNotionalFilter):
-                        min_order_size = f.minNotional
+                        min_order_size = float(f.notional)
 
         return tick_size, lot_size, min_order_size
 
@@ -106,7 +129,7 @@ class BinanceFuturesREST(ExchangeREST):
         return 0.0
 
     @override
-    def set_leverage(self, leverage: int) -> int:
+    def set_leverage(self, leverage: int) -> None:
         params: dict[str, Any] = self._signed_params(
             {"symbol": self.symbol, "leverage": leverage}
         )
@@ -116,7 +139,6 @@ class BinanceFuturesREST(ExchangeREST):
             params=params,
             headers=self._auth_headers(),
         )
-        return leverage
 
     async def get_listen_key_async(self) -> str:
         res: ListenKeyResponse = await self.send_async(

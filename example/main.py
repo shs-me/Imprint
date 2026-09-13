@@ -18,7 +18,7 @@ from imprint.configs import (
 if __name__ == "__main__":
     imp = Imprint(
         run_mode=(
-            Backtest,
+            Live,
             Backtest(
                 account=Account(
                     leverage=50,
@@ -39,12 +39,10 @@ if __name__ == "__main__":
             Live(
                 leverage=20,
                 connector=Connector(
-                    base_rest_url="https://fapi.binance.com",
-                    base_ws_url="wss://ws-fapi.binance.com/ws-fapi/v1",
-                    base_wss_url="wss://fstream.binance.com",
-                    market_data_stream_url="wss://fstream.binance.com/market/ws/dashusdt@aggTrade",
-                    user_data_stream_url="wss://fstream.binance.com/ws/",
-                    order_stream_url="",
+                    base_rest_url="https://testnet.binancefuture.com",
+                    market_data_stream_url="wss://fstream.binancefuture.com/market/ws/dashusdt@aggTrade",
+                    user_data_stream_url="wss://fstream.binancefuture.com/ws/",
+                    order_stream_url="wss://fstream.binancefuture.com/ws-fapi/v1",
                 ),
                 agg_trades_decoder=BinanceAggTradesDecoder,
                 order_encoder=BinanceOrderEncoder,
@@ -55,11 +53,7 @@ if __name__ == "__main__":
         symbol="DASHUSDT",
         strategy=Strategy(
             algorithm=IntraDay,
-            footprint=Footprint(
-                timeframe=tf.M5,
-                step_tick=5,
-                save_fp_headers=True,
-            ),
+            footprint=Footprint(timeframe=tf.M5, step_tick=5),
             risk_management=RiskManagement(
                 max_lock_balance=pct(10.0),
                 max_loss_balance=pct(10.0),

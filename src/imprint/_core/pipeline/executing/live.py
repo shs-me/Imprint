@@ -50,7 +50,7 @@ class Live(Base):
 
     @override
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-        if len(user_data_raw_buf) > 2:
+        if len(user_data_raw_buf) > 3:
             timestamp: int = user_data_raw_buf[c.TP_timestamp]
             order_param: int = user_data_raw_buf[c.TP_order_param]
             order_id: int = user_data_raw_buf[c.TP_order_id]
@@ -71,7 +71,7 @@ class Live(Base):
         else:
             nBalance: int = user_data_raw_buf[0]
             lockedNbalance: int = user_data_raw_buf[1]
-            availableNbalance: int = user_data_raw_buf[1]
+            availableNbalance: int = user_data_raw_buf[2]
 
             self.on_balance_update(nBalance, lockedNbalance, availableNbalance)
 

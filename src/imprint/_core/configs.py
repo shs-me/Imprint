@@ -64,8 +64,6 @@ class Setup(Configuration):
 @dataclass(slots=True)
 class Connector(Configuration):
     base_rest_url: str = ""
-    base_ws_url: str = ""
-    base_wss_url: str = ""
     market_data_stream_url: str = ""
     user_data_stream_url: str = ""
     order_stream_url: str = ""
@@ -140,7 +138,6 @@ class Footprint(Configuration):
     chart_range: int = 1
     step_tick: int = 1
     fp_rows: int = 10001
-    save_fp_headers: bool = False
 
     colVP: int = field(init=False)
     colDP: int = field(init=False)
@@ -365,12 +362,15 @@ class OrderStream(SharedMemorySegments):
 # - Market Data Stream -
 @dataclass(slots=True)
 class MarketDataStream(SharedMemorySegments):
-    ring_buf: RingBuf = field(
-        default_factory=lambda: RingBuf(
+    count_reader: int = 2
+
+    ring_buf: RingBuf = field(init=False)
+
+    @override
+    def child_post_init(self) -> None:
+        self.ring_buf = RingBuf(
             data_size=256,
             data_header_size=1,
             cell_amount=10_000,
-            count_reader=2,
-        ),
-        init=False,
-    )
+            count_reader=self.count_reader,
+        )
