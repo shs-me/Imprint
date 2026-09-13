@@ -55,7 +55,9 @@ class Imprint:
     def __post_init__(self) -> None:
         self.__init_logger()
 
-        logger.info("Init, started.")
+        logger.info(
+            f"Initialization {'Backtest' if self.is_backtest_mode else 'Live'} mode, started."
+        )
 
         args: list[_Cfg] = [
             self.strategy.risk_management,
@@ -219,33 +221,49 @@ class Imprint:
                     f"Init data, failed. Tick size({self.__coin.tick_size}) is not valid"
                 )
                 return False
+            logger.info(f"Tick size: {self.__coin.tick_size}")
             self.__coin.lot_size = self.__rest.lot_size
             if not self.__coin.lot_size:
                 logger.error(
                     f"Init data, failed. Lot size({self.__coin.lot_size}) is not valid"
                 )
                 return False
+            logger.info(f"Lot size: {self.__coin.lot_size}")
             self.__account.min_order_size = self.__rest.min_order_size
             if not self.__account.min_order_size:
                 logger.error(
                     f"Init data, failed. Min order size({self.__account.min_order_size}) is not valid"
                 )
                 return False
+            logger.info(
+                f"Min nominal order size: {self.__account.min_order_size}"
+            )
             if self.with_execution:
-                self.__rest.set_leverage(self.__account.leverage)
                 try:
+                    self.__rest.set_leverage(self.__account.leverage)
+                    logger.info(f"Leverage: {self.__account.leverage}")
                     self.__account.balance = self.__rest.get_balance()
                     if not self.__account.balance:
                         logger.error(
-                            f"Init data, failed. Balance({self.__account.leverage}) is not valid"
+                            f"Init data, failed. Balance({self.__account.balance}) is not valid"
                         )
                         return False
+                    logger.info(f"Balance: {self.__account.balance}")
 
                 except ApiNotFoundError:
-                    logger.error("Api key or api secret doest exists in env")
+                    logger.error("API/SECRET key doest exists in env")
                     return False
 
         return True
+
+    @error_handler()
+    def run_core(self) -> None:
+        if self.__init_complete:
+            from imprint._core.main import run
+
+            logger.info("Core, started.")
+            run(**self.__kwargs)
+            logger.info("Core, closed.\n")
 
     @error_handler()
     def run_vis(self, auto_open: bool = True) -> None:
@@ -274,14 +292,3 @@ class Imprint:
                 auto_open=auto_open,
             )
             logger.info("Visualization, closed.\n")
-
-    @error_handler()
-    def run_core(self) -> None:
-        if self.__init_complete:
-            from imprint._core.main import run
-
-            logger.info(
-                f"Core in {'configs.Backtest' if self.is_backtest_mode else 'configs.Live'} mode, started."
-            )
-            run(**self.__kwargs)
-            logger.info("Core, closed.\n")

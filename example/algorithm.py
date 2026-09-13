@@ -14,7 +14,7 @@ class IntraDay(FootprintEngine):
 
     @override
     def post_init(self) -> None:
-        self.tick_by_tick_analyze: bool = False
+        self.tick_by_tick_analyze: bool = True
 
     @override
     def on_clusters_update(
@@ -24,7 +24,8 @@ class IntraDay(FootprintEngine):
     @override
     def on_bar_update(
         self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
-    ) -> None: ...
+    ) -> None:
+        self._manager.set_log(f"{idYmin}")
 
     @override
     def on_bar_close(self) -> None:

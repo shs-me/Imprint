@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TypeVar, final, get_args, get_origin
+from typing import Literal, TypeVar, final, get_args, get_origin
 
 from msgspec import DecodeError
 from msgspec.json import Decoder, Encoder
@@ -69,19 +69,25 @@ class ExchangeREST(BaseREST, ABC):
     @property
     def api_key(self) -> str:
         if self.__api_key is None:
-            if (api_key := os.getenv("API_KEY")) is None:
-                raise ApiNotFoundError
-            self.__api_key = api_key
+            self.__api_key = self.__get_key("API")
         return self.__api_key
 
     @final
     @property
     def api_secret(self) -> str:
         if self.__api_secret is None:
-            if (api_secret := os.getenv("API_SECRET")) is None:
-                raise ApiNotFoundError
-            self.__api_secret = api_secret
+            self.__api_secret = self.__get_key("SECRET")
         return self.__api_secret
+
+    @final
+    def __get_key(self, key: Literal["API", "SECRET"]) -> str:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        if (var := os.getenv(key + "_KEY")) is None:
+            raise ApiNotFoundError
+        else:
+            return var
 
     @final
     def _sign_hmac_sha256(self, query_or_body: str) -> str:
@@ -182,9 +188,7 @@ class UserStreamDecoder[T_REST, T_DECODER](ABC):
     qty_mult: int
     scale_mult: int
 
-    decoder: Decoder[T_DECODER] = field(
-        default_factory=lambda: Decoder(type=T), init=False
-    )
+    decoder: Decoder[T_DECODER] = field(init=False)
     order_data: OrderData = field(
         default_factory=lambda: OrderData(), init=False
     )

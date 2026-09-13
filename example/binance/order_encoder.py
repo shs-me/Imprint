@@ -65,7 +65,7 @@ class BinanceOrderEncoder(OrderEncoder[BinanceFuturesREST]):
         self.rest.log(
             "Sending session.logon for order connection authorization..."
         )
-        await ws.send(self.encoder.encode(login_payload))
+        await ws.send(self.encoder.encode(login_payload), text=True)
 
         response_raw = await ws.recv()
         self.rest.log(f"Auth response received: {response_raw!r}")

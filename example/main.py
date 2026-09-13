@@ -39,10 +39,10 @@ if __name__ == "__main__":
             Live(
                 leverage=20,
                 connector=Connector(
-                    base_rest_url="https://testnet.binancefuture.com",
-                    market_data_stream_url="wss://fstream.binancefuture.com/market/ws/dashusdt@aggTrade",
-                    user_data_stream_url="wss://fstream.binancefuture.com/ws/",
-                    order_stream_url="wss://fstream.binancefuture.com/ws-fapi/v1",
+                    base_rest_url="https://demo-fapi.binance.com",
+                    market_data_stream_url="wss://demo-fstream.binance.com/market/ws/dashusdt@aggTrade",
+                    user_data_stream_url="wss://demo-fstream.binance.com/ws/",
+                    order_stream_url="wss://testnet.binancefuture.com/ws-fapi/v1",
                 ),
                 agg_trades_decoder=BinanceAggTradesDecoder,
                 order_encoder=BinanceOrderEncoder,

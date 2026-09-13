@@ -77,10 +77,12 @@ class Controller:
     async def run_streams(self) -> None:
         async with asyncio.TaskGroup() as tg:
             streams: list[Task[None]] = [
-                tg.create_task(self.market_data_stream.run()),
-                tg.create_task(self.user_data_stream.run()),
-                tg.create_task(self.order_stream.run()),
+                tg.create_task(self.market_data_stream.run())
             ]
+            if self.manager.cfgSetup.execution:
+                streams.append(tg.create_task(self.user_data_stream.run()))
+                streams.append(tg.create_task(self.order_stream.run()))
+
             supervisor: Task[None] = tg.create_task(
                 self.run_supervisor(streams)
             )

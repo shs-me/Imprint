@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from typing import Any, override
 
-import msgspec
+from msgspec import Struct
 
 from imprint.configs import ExchangeREST
 
 
-class BaseFilter(msgspec.Struct, tag_field="filterType"): ...
+class BaseFilter(Struct, tag_field="filterType"): ...
 
 
 class PriceFilter(BaseFilter, tag="PRICE_FILTER"):
@@ -43,7 +43,7 @@ class PositionRiskControl(BaseFilter, tag="POSITION_RISK_CONTROL"): ...
 class UnknownFilter(BaseFilter, tag=None): ...
 
 
-class SymbolInfo(msgspec.Struct):
+class SymbolInfo(Struct):
     symbol: str
     filters: list[
         PriceFilter
@@ -58,21 +58,21 @@ class SymbolInfo(msgspec.Struct):
     ]
 
 
-class ExchangeInfoResponse(msgspec.Struct):
+class ExchangeInfoResponse(Struct):
     symbols: list[SymbolInfo]
 
 
-class FutureBalance(msgspec.Struct):
+class FutureBalance(Struct):
     asset: str
-    balance: float
+    balance: str
     availableBalance: str
 
 
-class ListenKeyResponse(msgspec.Struct, rename="camel"):
+class ListenKeyResponse(Struct, rename="camel"):
     listen_key: str
 
 
-class PositionRiskItem(msgspec.Struct, rename="camel"):
+class PositionRiskItem(Struct, rename="camel"):
     symbol: str
     position_amt: float
     entry_price: float
@@ -124,7 +124,7 @@ class BinanceFuturesREST(ExchangeREST):
         )
         for item in balances:
             if item.asset == asset:
-                return item.balance
+                return float(item.balance)
 
         return 0.0
 
