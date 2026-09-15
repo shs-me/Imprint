@@ -81,7 +81,6 @@ class Account(Configuration):
     latency_ms: int = 100
     scale_prec: int = 8
     active_order_limit: int = 1000
-    save_orders_history: bool = False
 
     scale_mult: int = field(init=False)
 

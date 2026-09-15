@@ -13,21 +13,6 @@ class IntraDay(FootprintEngine):
     pos_prev: int64 | int = field(default=0, init=False)
 
     @override
-    def post_init(self) -> None:
-        self.tick_by_tick_analyze: bool = True
-
-    @override
-    def on_clusters_update(
-        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
-    ) -> None: ...
-
-    @override
-    def on_bar_update(
-        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
-    ) -> None:
-        self._manager.set_log(f"{idYmin}")
-
-    @override
     def on_bar_close(self) -> None:
         lidx = self.last_idx[0]
         if not ((lidx & ~1) // 2) > (10):

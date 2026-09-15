@@ -90,7 +90,7 @@ class Base(MatchingEngine):
         )
 
 
-@njit(cache=True, nogil=True)
+@njit(cache=True)
 def _start(
     timestamp: int,
     trade_read_time: memoryview,
@@ -134,18 +134,11 @@ def _start(
     short_mae: memoryview,
     short_mfe: memoryview,
 ) -> None:
-    while trade_read_time[0] < timestamp:
+    while trade_read_time[0] != timestamp:
         cell: int = mds_rid_buf[1]
         start: int = cell * mds_data_size
 
-        trade_timestamp: int = mds_data_buf[start + 2]
-
-        if trade_timestamp > timestamp:
-            trade_read_time[0] = timestamp
-            return
-        else:
-            trade_read_time[0] = trade_timestamp
-
+        trade_read_time[0] = trade_timestamp = mds_data_buf[start + 2]
         trade_nPrice: int = mds_data_buf[start]
 
         new_cell: int = cell + 1

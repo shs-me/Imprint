@@ -18,7 +18,7 @@ from imprint.configs import (
 if __name__ == "__main__":
     imp = Imprint(
         run_mode=(
-            Live,
+            Backtest,
             Backtest(
                 account=Account(
                     leverage=50,
@@ -30,7 +30,6 @@ if __name__ == "__main__":
                     latency_ms=100,
                     scale_prec=15,
                     active_order_limit=1000,
-                    save_orders_history=True,
                 ),
                 lot_size="0.001",
                 backtest_start_date="2026-01-01",

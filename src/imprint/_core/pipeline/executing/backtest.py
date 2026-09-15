@@ -27,21 +27,17 @@ class Backtest(Base):
         WB_2: memoryview,
         RB_2: memoryview,
     ) -> None:
-        matching = False
         if self.trade_read_time[0] > self.exchange_sim.trade_read_time[0]:
-            matching = True
-        if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
-            return
-        if matching:
+            if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
+                return
             self.exchange_sim.start(self.trade_read_time[0])
-
-        time.sleep(0.001)
+        else:
+            time.sleep(0.001)
 
     @override
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
-        timestamp = time_get_signal + self.exchange_sim.latency
-        while timestamp > self.exchange_sim.trade_read_time[0]:
-            self.exchange_sim.start(timestamp)
+        while self.exchange_sim.trade_read_time[0] != time_get_signal:
+            self.exchange_sim.start(time_get_signal)
             self._check_user_data_buf()
 
         self.readed_timestamp: int = self.exchange_sim.trade_read_time[0]

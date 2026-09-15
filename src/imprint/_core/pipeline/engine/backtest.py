@@ -20,8 +20,7 @@ class Backtest(Base):
 
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
-        trade = raw_data.cast("q")
-        self.agg_trades[self.at_wid, :] = trade[0], trade[1], trade[2], trade[3]
+        self.agg_trades[self.at_wid, :] = raw_data.cast("q")[:]
         self.at_wid: int = (
             self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0
         )

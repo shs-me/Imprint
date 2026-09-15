@@ -97,21 +97,25 @@ class Router(AlgorithmProtocol, ABC):
         self.last_idx = self._engine.last_idx.toreadonly()
         self.fp = self._engine.fp
 
+        if (self.on_bar_update.__module__ != __name__) or (
+            self.on_clusters_update.__module__ != __name__
+        ):
+            self.tick_by_tick_analyze = True
+        else:
+            self.tick_by_tick_analyze = False
+
         self.post_init()
 
     def post_init(self) -> None: ...
 
-    @abstractmethod
     @override
     def on_clusters_update(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
     ) -> None: ...
 
-    @abstractmethod
     @override
     def on_bar_close(self) -> None: ...
 
-    @abstractmethod
     @override
     def on_bar_update(
         self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int

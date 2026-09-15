@@ -15,7 +15,6 @@ from imprint._core.account.base import Base
 class Account(Base, ABC):
     takerNcommission: int = field(init=False)
     makerNcommission: int = field(init=False)
-    __save_orders_history: bool = field(init=False)
 
     orders_history: NDArray[int64] = field(
         default_factory=lambda: np.zeros(
@@ -36,7 +35,6 @@ class Account(Base, ABC):
         cfgAC = self.manager.cfgAccount
         self.takerNcommission = cfgAC.taker_commission.fixed
         self.makerNcommission = cfgAC.maker_commission.fixed
-        self.__save_orders_history = cfgAC.save_orders_history
 
     @final
     def lock_balance(self, nPrice: int, nQty: int, order_param: int) -> None:
@@ -95,11 +93,10 @@ class Account(Base, ABC):
     def save_orders_history(self) -> None:
         """Flushes non-zero order history logs to disk."""
 
-        if self.__save_orders_history:
-            np.save(
-                c.ORDERS_HISTORY_DATA_PATH,
-                self.orders_history[: self.ohWid[0], :],
-            )
+        np.save(
+            c.ORDERS_HISTORY_DATA_PATH,
+            self.orders_history[: self.ohWid[0], :],
+        )
 
 
 @njit(cache=True)

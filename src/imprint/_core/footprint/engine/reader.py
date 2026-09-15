@@ -69,6 +69,19 @@ class Reader(Writer):
         if self.re_init & c.RIF_idx:
             self.__update_closed_bar_and_fp()
 
+        self.__set_last_trade_time()
+
+    @final
+    def _bbox_is_readed(self) -> bool:
+        return bool(np.all(self.bbox == self.bbox_default_value))
+
+    @final
+    def __set_last_trade_time(self) -> None:
+        if self.fp.bar[self.last_idx[0]].ind.last_trade_time:
+            self.trade_read_time[0] = int(
+                self.fp.bar[self.last_idx[0]].ind.last_trade_time
+            )
+
     @final
     def __update_clusters(
         self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
@@ -100,9 +113,6 @@ class Reader(Writer):
             scale=self.fp.con.scale,
         )
         self.algorithm.on_bar_close()
-        self.trade_read_time[0] = int(
-            self.fp.bar[self.last_idx[0]].ind.last_trade_time
-        )
 
     @final
     def __update_bar(
@@ -124,12 +134,15 @@ class Reader(Writer):
         self.algorithm.on_bar_update(idYmin, idYmax, idxBid, idxAsk)
 
     @final
-    def final_analyze(self) -> None:
-        self.__update_closed_bar_and_fp()
+    def padding_bbox(self) -> bool:
+        return ((self.bbox[3] - self.bbox[1]) < 2) and (
+            not (self.re_init & c.RIF_session)
+        )
 
     @final
-    def _bbox_is_readed(self) -> bool:
-        return bool(np.all(self.bbox == self.bbox_default_value))
+    def final_analyze(self) -> None:
+        self.__update_closed_bar_and_fp()
+        self.__set_last_trade_time()
 
 
 @njit(cache=True)
