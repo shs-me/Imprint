@@ -4,7 +4,7 @@ from datetime import date
 from typing import override
 
 import numpy as np
-from numpy import uint8
+from numpy import int64
 from numpy.lib.npyio import NpzFile
 from numpy.typing import NDArray
 
@@ -27,7 +27,7 @@ class MarketDataStream(Base):
 
     data_paths: list[str] = field(init=False)
     data_path_id: int = field(default=0, init=False)
-    data: NDArray[uint8] = field(init=False)
+    data: NDArray[int64] = field(init=False)
     dataz: NpzFile = field(init=False)
     read_row: int = field(default=0, init=False)
     max_data_row: int = field(init=False)
@@ -95,11 +95,11 @@ class MarketDataStream(Base):
                 while _.lag_not_is_safe():
                     time.sleep(0.001)
 
-                _.set_data(self.data[self.read_row, :].data)
+                _.set_data(*self.data[self.read_row, :])
                 self.read_row += 1
 
     def change_data(self) -> None:
-        self.data = self.dataz[self.data_paths[self.data_path_id]].view(uint8)
+        self.data = self.dataz[self.data_paths[self.data_path_id]]
         self.data_path_id += 1
         self.max_data_row = self.data.shape[0]
         self.read_row = 0

@@ -71,6 +71,7 @@ class Imprint:
 
         if self.is_backtest_mode:
             self.__backtest_setup()
+            args.append(_MDS(data_size=32, cast_to_int64=True))
         else:
             self.__live_setup()
             args.append(_MDS(count_reader=1))

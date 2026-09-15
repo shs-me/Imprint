@@ -94,7 +94,11 @@ class Backtest(Base):
     def post_final_action(self) -> None:
         _ = self.exchange_sim
         # - - -
-        self.exchange_sim.final_action(self.trade_read_time[0])
+        while _.trade_read_time[0] != self.trade_read_time[0]:
+            _.start(self.trade_read_time[0])
+            self._check_user_data_buf()
+
+        _.final_action()
         self.manager.set_log(
             f"Balance: {_.nBalance[0] / _.scale_mult} \n"
             + f"Locked Balance: {_.lockedNbalance[0] / _.scale_mult} \n"

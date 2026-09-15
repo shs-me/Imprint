@@ -4,6 +4,8 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import final, override
 
+from numpy import int64
+
 from imprint._core.settings import Timeframe
 
 PERCENT: int = 10_000
@@ -272,17 +274,20 @@ class RingBuf:
 
         return False
 
-    def set_data(self, raw_data: bytes | memoryview | int, *args: int) -> None:
+    def set_data(
+        self, raw_data: bytes | memoryview | int | int64, *args: int | int64
+    ) -> None:
         cell: int = self.wid_buf[0]
         start: int = cell * self.data_size
 
-        if isinstance(raw_data, int):
+        if isinstance(raw_data, (int, int64)):
             self.data_buf[start] = raw_data
+            lrd = len(args)
             if args:
-                for idx, val in enumerate(args, start=1):
-                    self.data_buf[start + idx] = val
+                for idx in range(lrd):
+                    self.data_buf[start + (idx + 1)] = args[idx]
 
-            self.data_header_buf[cell] = 1 + len(args)
+            self.data_header_buf[cell] = 1 + lrd
         else:
             lrd: int = len(raw_data)
             self.data_header_buf[cell] = lrd
@@ -361,15 +366,18 @@ class OrderStream(SharedMemorySegments):
 # - Market Data Stream -
 @dataclass(slots=True)
 class MarketDataStream(SharedMemorySegments):
+    data_size: int = 256
     count_reader: int = 2
+    cast_to_int64: bool = False
 
     ring_buf: RingBuf = field(init=False)
 
     @override
     def child_post_init(self) -> None:
         self.ring_buf = RingBuf(
-            data_size=256,
+            data_size=self.data_size,
             data_header_size=1,
             cell_amount=10_000,
             count_reader=self.count_reader,
+            cast_to_int64=self.cast_to_int64,
         )

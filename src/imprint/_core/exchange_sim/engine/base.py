@@ -34,13 +34,12 @@ class Base(MatchingEngine):
         MatchingEngine.__post_init__(self)
 
         mds = self.manager.cfgMarketDataStream.ring_buf
-        self.__mds_data_buf = mds.data_buf.cast("q")
-        self.__mds_data_size = mds.data_size // 8
+        self.__mds_data_buf = mds.data_buf
+        self.__mds_data_size = mds.data_size
         self.__mds_rid_buf = mds.rid_buf
         self.__mds_cell_amount = mds.cell_amount
 
-    def final_action(self, timestamp: int) -> None:
-        self.start(timestamp)
+    def final_action(self) -> None:
         self.dump_equity_history()
         self.save_orders_history()
 
