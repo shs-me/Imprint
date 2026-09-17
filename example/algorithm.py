@@ -1,63 +1,48 @@
 from dataclasses import dataclass, field
 from typing import override
 
-from numpy import bool_, int64
+from numpy import int64
 
+from imprint import constant as c
 from imprint.configs import FootprintEngine
 
 
 @dataclass(slots=True)
 class IntraDay(FootprintEngine):
-    alpha: int = field(default=1, init=False)
-    stop_prev: int64 | int = field(default=0, init=False)
-    pos_prev: int64 | int = field(default=0, init=False)
+    idy_use: int | int64 = field(default=0, init=False)
+    idx_use: int | int64 = field(default=0, init=False)
+    need_states: int = field(
+        default=c.SF_POC_BAR
+        | c.SF_POC_FP
+        | c.SF_VWAP_FP
+        | c.SF_VAH_BAR
+        | c.SF_VAL_BAR
+        | c.SF_VAH_FP
+        | c.SF_VAL_FP,
+        init=False,
+    )
 
     @override
-    def on_bar_close(self) -> None:
-        lidx = self.last_idx[0]
-        if not ((lidx & ~1) // 2) > (10):
+    def on_bar_update(
+        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
+    ) -> None:
+        if not ((idxBid // 2) > 20):
             return
 
-        curr_atr: int64 = self.fp.bar[lidx].ind.atr
-        curr_close: int64 = self.fp.bar[lidx].ind.close.n
-        pre_close: int64 = self.fp.bar[lidx - 2].ind.close.n
+        if (self.idy_use == idYmin) and (self.idx_use == idxBid):
+            return
 
-        nLoss: int64 = self.alpha * curr_atr
-        if curr_close > self.stop_prev and pre_close > self.stop_prev:
-            stop_curr = max(self.stop_prev, curr_close - nLoss)
-
-        elif curr_close < self.stop_prev and pre_close < self.stop_prev:
-            stop_curr = min(self.stop_prev, curr_close + nLoss)
-
-        elif curr_close > self.stop_prev:
-            stop_curr = curr_close - nLoss
-
-        else:
-            stop_curr = curr_close + nLoss
-
-        if pre_close < self.stop_prev and curr_close > stop_curr:
-            pos_curr = 1
-        elif pre_close > self.stop_prev and curr_close < stop_curr:
-            pos_curr = -1
-        else:
-            pos_curr = self.pos_prev
-
-        above: bool_ = (curr_close > stop_curr) and (
-            pre_close <= self.stop_prev
-        )
-        below: bool_ = (curr_close < stop_curr) and (
-            pre_close >= self.stop_prev
-        )
-
-        if (curr_close > stop_curr) and above:
-            _ = self.send_signal(
-                True, True, True, self.fp.bar[lidx].ind.close.id
-            )
-
-        if (curr_close < stop_curr) and below:
-            _ = self.send_signal(
-                True, False, False, self.fp.bar[lidx].ind.close.id
-            )
-
-        self.stop_prev = stop_curr
-        self.pos_prev = pos_curr
+        bar = self.fp.bar[idxBid]
+        avg_vol = bar.ind.avg_volume
+        bar_state = bar.state
+        bar_base = bar.base
+        ind = bar.ind
+        idy = idYmin - bar.ind.high.id
+        nPrice = self.fp.con.to_nPrice(idYmin)
+        if (
+            (bar_base[idy, 1] > (avg_vol * 0.25))
+            and (bar_state[idy, 1] & c.SF_DELTA_DOMINATION)
+            and ((nPrice >= ind.fp_vwap.n) and (nPrice >= ind.fp_poc.n))
+        ):
+            self.idy_use, self.idx_use = idYmin, idxBid
+            self.send_signal(True, True, True, idYmin)

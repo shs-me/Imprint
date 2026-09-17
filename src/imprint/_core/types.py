@@ -10,6 +10,8 @@ class ExecutionProtocol(Protocol):
         order_param: int,
         nPrice: int,
         nQty: int,
+        tp_dev: int,
+        sl_dev: int,
     ) -> None: ...
     def on_filled_order(
         self,

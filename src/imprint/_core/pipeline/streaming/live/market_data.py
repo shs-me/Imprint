@@ -27,7 +27,7 @@ class MarketData(Base):
             await asyncio.sleep(0.001)
 
         if len(raw_data) < self.mds.ring_buf.data_size:
-            self.mds.ring_buf.set_data(raw_data)
+            self.mds.set_data_in_live(raw_data)
         else:
             return self.manager.set_proc_sc(
                 code=scs.BIG_RAW_DATA, wait_main_task=True

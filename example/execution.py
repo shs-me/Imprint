@@ -16,7 +16,10 @@ class HedgeExecution(BaseExecution):
         order_param: int,
         nPrice: int,
         nQty: int,
+        tp_dev: int = 0,
+        sl_dev: int = 0,
     ) -> None:
+        self.account.set_tp_sel_dev(tp_dev, sl_dev, order_param)
         self.send_order(
             timestamp=time_get_signal,
             order_param=order_param,

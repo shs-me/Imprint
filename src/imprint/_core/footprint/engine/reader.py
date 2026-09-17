@@ -32,18 +32,6 @@ class Reader(Writer):
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
 
-    __trade_read_time: memoryview = field(init=False)
-
-    @final
-    @override
-    def child_init_array(self, nPrice: int64) -> None:
-        Writer.child_init_array(self, nPrice)
-
-        if not (self.re_init & c.RIF_idy):
-            self.__trade_read_time = (
-                self.manager.cfgMetrics.trade_read_time.view.cast("q")
-            )
-
     @final
     @override
     def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:

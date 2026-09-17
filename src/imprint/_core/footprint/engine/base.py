@@ -27,6 +27,7 @@ class Base(ABC):
     bbox: NDArray[int64] = field(init=False)
     fp: Footprint = field(init=False)
 
+    @final
     def __post_init__(self) -> None:
         cfgFP = self.manager.cfgFootprint
 

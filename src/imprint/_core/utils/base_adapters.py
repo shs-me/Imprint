@@ -155,15 +155,6 @@ class OrderData:
     nQty: int = 0
     nCommission: int = 0
 
-    def __iter__(self) -> Iterator[int]:
-        yield self.timestamp
-        yield self.order_param
-        yield self.order_id
-        yield self.client_order_id
-        yield self.nPrice
-        yield self.nQty
-        yield self.nCommission
-
 
 @final
 @dataclass(slots=True)
@@ -171,11 +162,6 @@ class BalanceData:
     nBalance: int = 0
     lockedNbalance: int = 0
     availableNbalance: int = 0
-
-    def __iter__(self) -> Iterator[int]:
-        yield self.nBalance
-        yield self.lockedNbalance
-        yield self.availableNbalance
 
 
 @dataclass(slots=True)

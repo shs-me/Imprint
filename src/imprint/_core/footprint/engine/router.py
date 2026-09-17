@@ -22,6 +22,8 @@ class SyncWithExecution(ABC):
     __ss: SignalStream = field(init=False)
     _signal_id: int = field(default=0, init=False)
     _count_send_signal: int = field(default=0, init=False)
+    base_tp_dev: int = field(default=0, init=False)
+    base_sl_dev: int = field(default=0, init=False)
 
     @final
     def __post_init__(self) -> None:
@@ -29,6 +31,8 @@ class SyncWithExecution(ABC):
         self.time_start_reading = cfgMetrics.time_start_reading.view.cast("q")
 
         cfgRM = self.manager.cfgRiskManagement
+        self.base_tp_dev = cfgRM.tp_dev.fixed
+        self.base_sl_dev = cfgRM.sl_dev.fixed
         self.safe_lag = cfgRM.pass_signal_if_analysis_time_big
 
         self.__ss = self.manager.cfgSignalStream
@@ -48,6 +52,8 @@ class SyncWithExecution(ABC):
         is_buy: bool,
         is_market: bool,
         pass_lag: bool,
+        tp_dev: int = 0,
+        sl_dev: int = 0,
     ) -> None | int:
         s = self.__ss.ring_buf
         if not pass_lag and (not self.lag_is_safe()):
@@ -62,7 +68,14 @@ class SyncWithExecution(ABC):
         order_param |= c.OF_MARKET if is_market else c.OF_LIMIT
         order_param |= c.OF_NEW
 
-        s.set_data(self.signal_id, nPrice, timestamp, order_param)
+        self.__ss.set_data(
+            signal_id=self.signal_id,
+            nPrice=nPrice,
+            timestamp=timestamp,
+            order_param=order_param,
+            tp_dev=tp_dev if tp_dev else self.base_tp_dev,
+            sl_dev=sl_dev if sl_dev else self.base_sl_dev,
+        )
         self.sync_with_execution()
         self._count_send_signal += 1
         return self._signal_id
@@ -129,6 +142,8 @@ class Router(AlgorithmProtocol, ABC):
         is_buy: bool,
         idy: int64,
         idx: int | None = None,
+        tp_dev: int = 0,
+        sl_dev: int = 0,
         pass_lag: bool = True,
     ) -> int | None:
         nPrice = int(self.fp.con.to_nPrice(idy))
@@ -144,5 +159,7 @@ class Router(AlgorithmProtocol, ABC):
             is_long=is_long,
             is_buy=is_buy,
             is_market=is_market,
+            tp_dev=tp_dev,
+            sl_dev=sl_dev,
             pass_lag=pass_lag,
         )

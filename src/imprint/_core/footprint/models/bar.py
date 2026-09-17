@@ -42,7 +42,8 @@ class Bar:
     bar_id: int | int64 = field(default=0, init=False)
     bar_side: T_BID | T_ASK = field(default=0, init=False)
 
-    __blike: BarLike = field(default_factory=lambda: BarLike(), init=False)
+    __bblike: BarLike = field(default_factory=lambda: BarLike(), init=False)
+    __bslike: BarLike = field(default_factory=lambda: BarLike(), init=False)
 
     def __post_init__(self) -> None:
         self.ind = Indicators(self)
@@ -62,18 +63,18 @@ class Bar:
     @property
     def base(self) -> BarLike:
         idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        self.__blike[None] = self._fp.base[
+        self.__bblike[None] = self._fp.base[
             idYmin : idYmax + 1, self.idXbid : self.idXbid + 2
         ]
-        return self.__blike
+        return self.__bblike
 
     @property
     def state(self) -> BarLike:
         idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        self.__blike[None] = self._fp.state[
+        self.__bslike[None] = self._fp.state[
             idYmin : idYmax + 1, self.idXbid : self.idXbid + 2
         ]
-        return self.__blike
+        return self.__bslike
 
 
 @final

@@ -50,6 +50,8 @@ class Router(ExecutionProtocol, ABC):
         order_param: int,
         nPrice: int,
         nQty: int,
+        tp_dev: int = 0,
+        sl_dev: int = 0,
     ) -> None: ...
 
     @abstractmethod

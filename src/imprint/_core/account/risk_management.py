@@ -19,8 +19,10 @@ class RiskManagement(Base, ABC):
     """
 
     __entry_qty: int = field(init=False)
-    __tp_dev: int = field(init=False)
-    __sl_dev: int = field(init=False)
+    __long_tp_dev: int = field(init=False)
+    __long_sl_dev: int = field(init=False)
+    __short_tp_dev: int = field(init=False)
+    __short_sl_dev: int = field(init=False)
     __max_lock_balance: int = field(init=False)
     __max_loss_balance: int = field(init=False)
     __min_order_size: int = field(init=False)
@@ -38,8 +40,6 @@ class RiskManagement(Base, ABC):
 
         cfgRM = self.manager.cfgRiskManagement
         self.__entry_qty = cfgRM.entry_qty.fixed
-        self.__tp_dev = cfgRM.tp_dev.fixed
-        self.__sl_dev = cfgRM.sl_dev.fixed
         self.__max_lock_balance = cfgRM.max_lock_balance.fixed
         self.__max_loss_balance = cfgRM.max_loss_balance.fixed
         self.time_for_expired_signal = (
@@ -127,6 +127,13 @@ class RiskManagement(Base, ABC):
         return round((nominal_qty * self.price_mult * self.qty_mult) / nPrice)
 
     @final
+    def set_tp_sel_dev(self, tp: int, sl: int, order_param: int) -> None:
+        if order_param & c.OF_LONG:
+            self.__long_tp_dev, self.__long_sl_dev = tp, sl
+        else:
+            self.__short_tp_dev, self.__short_sl_dev = tp, sl
+
+    @final
     def tp_sl_param(
         self, nPrice: int, client_order_id: int, is_long: bool, is_tp: bool
     ) -> tuple[int, int, int]:
@@ -148,9 +155,12 @@ class RiskManagement(Base, ABC):
         tuple of (int, int, int)
             Tuple containing (nPrice_with_dev, order_param_bitmask, encoded_client_order_id).
         """
-        ticks: int = (
-            nPrice * (self.__tp_dev if is_tp else self.__sl_dev) // 10_000
+        dev: int = (
+            (self.__long_tp_dev if is_tp else self.__long_sl_dev)
+            if is_long
+            else (self.__short_tp_dev if is_tp else self.__short_sl_dev)
         )
+        ticks: int = nPrice * dev // 10_000
         ticks = (
             (ticks if is_tp else -ticks)
             if is_long

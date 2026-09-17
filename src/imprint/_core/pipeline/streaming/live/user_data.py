@@ -53,7 +53,7 @@ class UserData(Base):
             while self.uds.ring_buf.lag_not_is_safe():
                 await asyncio.sleep(0.001)
 
-            self.uds.ring_buf.set_data(*data)
+            self.uds.set_data(data)
 
         if self.execution_event.is_set() is False:
             self.execution_event.set()

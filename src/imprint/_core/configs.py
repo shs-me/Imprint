@@ -4,9 +4,9 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import final, override
 
-from numpy import int64
-
+from imprint._core import constant as c
 from imprint._core.settings import Timeframe
+from imprint._core.utils.base_adapters import BalanceData, OrderData
 
 PERCENT: int = 10_000
 
@@ -274,26 +274,13 @@ class RingBuf:
 
         return False
 
-    def set_data(
-        self, raw_data: bytes | memoryview | int | int64, *args: int | int64
-    ) -> None:
+    def get_cell(self) -> int:
         cell: int = self.wid_buf[0]
-        start: int = cell * self.data_size
+        return cell * self.data_size
 
-        if isinstance(raw_data, (int, int64)):
-            self.data_buf[start] = raw_data
-            lrd = len(args)
-            if args:
-                for idx in range(lrd):
-                    self.data_buf[start + (idx + 1)] = args[idx]
-
-            self.data_header_buf[cell] = 1 + lrd
-        else:
-            lrd: int = len(raw_data)
-            self.data_header_buf[cell] = lrd
-            self.data_buf[start : start + lrd] = raw_data
-
-        new_cell = cell + 1
+    def set_cell(self, len_data: int) -> None:
+        self.data_header_buf[self.wid_buf[0]] = len_data
+        new_cell = self.wid_buf[0] + 1
         self.wid_buf[0] = new_cell if new_cell < self.cell_amount else 0
 
     def get_data(self) -> memoryview:
@@ -334,6 +321,24 @@ class SignalStream(SharedMemorySegments):
         init=False,
     )
 
+    def set_data(
+        self,
+        signal_id: int,
+        nPrice: int,
+        timestamp: int,
+        order_param: int,
+        tp_dev: int,
+        sl_dev: int,
+    ) -> None:
+        start: int = self.ring_buf.get_cell()
+        self.ring_buf.data_buf[start] = signal_id
+        self.ring_buf.data_buf[start + 1] = nPrice
+        self.ring_buf.data_buf[start + 2] = timestamp
+        self.ring_buf.data_buf[start + 3] = order_param
+        self.ring_buf.data_buf[start + 4] = tp_dev
+        self.ring_buf.data_buf[start + 5] = sl_dev
+        self.ring_buf.set_cell(len_data=6)
+
 
 # - User Data Stream -
 @dataclass(slots=True)
@@ -348,6 +353,26 @@ class UserDataStream(SharedMemorySegments):
         init=False,
     )
 
+    def set_data(self, data: OrderData | BalanceData) -> None:
+        start: int = self.ring_buf.get_cell()
+        if isinstance(data, OrderData):
+            self.ring_buf.data_buf[start + c.TP_timestamp] = data.timestamp
+            self.ring_buf.data_buf[start + c.TP_order_param] = data.order_param
+            self.ring_buf.data_buf[start + c.TP_order_id] = data.order_id
+            self.ring_buf.data_buf[start + c.TP_client_order_id] = (
+                data.client_order_id
+            )
+            self.ring_buf.data_buf[start + c.TP_nPrice] = data.nPrice
+            self.ring_buf.data_buf[start + c.TP_nQty] = data.nQty
+            self.ring_buf.data_buf[start + c.TP_nCommission] = data.nCommission
+            lrd = 7
+        else:
+            self.ring_buf.data_buf[start] = data.nBalance
+            self.ring_buf.data_buf[start + 1] = data.lockedNbalance
+            self.ring_buf.data_buf[start + 2] = data.availableNbalance
+            lrd = 3
+        self.ring_buf.set_cell(len_data=lrd)
+
 
 # - Order Stream -
 @dataclass(slots=True)
@@ -361,6 +386,22 @@ class OrderStream(SharedMemorySegments):
         ),
         init=False,
     )
+
+    def set_data(
+        self,
+        timestamp: int,
+        order_param: int,
+        client_order_id: int,
+        nPrice: int,
+        nQty: int,
+    ) -> None:
+        start: int = self.ring_buf.get_cell()
+        self.ring_buf.data_buf[start] = timestamp
+        self.ring_buf.data_buf[start + 1] = order_param
+        self.ring_buf.data_buf[start + 2] = client_order_id
+        self.ring_buf.data_buf[start + 3] = nPrice
+        self.ring_buf.data_buf[start + 4] = nQty
+        self.ring_buf.set_cell(len_data=5)
 
 
 # - Market Data Stream -
@@ -381,3 +422,19 @@ class MarketDataStream(SharedMemorySegments):
             count_reader=self.count_reader,
             cast_to_int64=self.cast_to_int64,
         )
+
+    def set_data_in_live(self, raw_data: bytes | memoryview) -> None:
+        start: int = self.ring_buf.get_cell()
+        lrd: int = len(raw_data)
+        self.ring_buf.data_buf[start : start + lrd] = raw_data
+        self.ring_buf.set_cell(len_data=lrd)
+
+    def set_data_in_backtest(
+        self, nPrice: int, nQty: int, timestamp: int, is_sell: int
+    ) -> None:
+        start: int = self.ring_buf.get_cell()
+        self.ring_buf.data_buf[start] = nPrice
+        self.ring_buf.data_buf[start + 1] = nQty
+        self.ring_buf.data_buf[start + 2] = timestamp
+        self.ring_buf.data_buf[start + 3] = is_sell
+        self.ring_buf.set_cell(len_data=4)

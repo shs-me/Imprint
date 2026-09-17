@@ -66,9 +66,6 @@ class MarketDataStream(Base):
 
     @node_handler()
     def run(self) -> None:
-        # Local Links
-        _ = self.mds.ring_buf
-        # - - -
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -92,10 +89,15 @@ class MarketDataStream(Base):
                 else:
                     self.change_data()
             else:
-                while _.lag_not_is_safe():
+                while self.mds.ring_buf.lag_not_is_safe():
                     time.sleep(0.001)
 
-                _.set_data(*self.data[self.read_row, :])
+                self.mds.set_data_in_backtest(
+                    nPrice=self.data[self.read_row, 0],
+                    nQty=self.data[self.read_row, 1],
+                    timestamp=self.data[self.read_row, 2],
+                    is_sell=self.data[self.read_row, 3],
+                )
                 self.read_row += 1
 
     def change_data(self) -> None:

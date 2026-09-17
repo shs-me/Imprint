@@ -100,7 +100,7 @@ class Base(ABC):
     def __check_signal_buf(
         self,
     ) -> None:
-        signal_id, nPrice, timestamp, order_param = (
+        signal_id, nPrice, timestamp, order_param, tp_dev, sl_dev = (
             self.__ss.ring_buf.get_data()
         )
         self._check_user_data_buf()
@@ -121,7 +121,13 @@ class Base(ABC):
                         nPrice, nominalNqty
                     )
                     self.executor.on_signal(
-                        signal_id, timestamp, order_param, nPrice, nQty
+                        signal_id=signal_id,
+                        time_get_signal=timestamp,
+                        order_param=order_param,
+                        nPrice=nPrice,
+                        nQty=nQty,
+                        tp_dev=tp_dev,
+                        sl_dev=sl_dev,
                     )
 
                 else:
@@ -221,8 +227,12 @@ class Base(ABC):
         nPrice: int,
         nQty: int,
     ) -> None:
-        self.__os.ring_buf.set_data(
-            timestamp, order_param, client_order_id, nPrice, nQty
+        self.__os.set_data(
+            timestamp=timestamp,
+            order_param=order_param,
+            client_order_id=client_order_id,
+            nPrice=nPrice,
+            nQty=nQty,
         )
 
         if order_param & c.OF_NEW:
