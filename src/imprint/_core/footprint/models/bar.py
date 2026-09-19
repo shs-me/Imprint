@@ -44,6 +44,7 @@ class Bar:
 
     __bblike: BarLike = field(default_factory=lambda: BarLike(), init=False)
     __bslike: BarLike = field(default_factory=lambda: BarLike(), init=False)
+    __btlike: BarLike = field(default_factory=lambda: BarLike(), init=False)
 
     def __post_init__(self) -> None:
         self.ind = Indicators(self)
@@ -75,6 +76,14 @@ class Bar:
             idYmin : idYmax + 1, self.idXbid : self.idXbid + 2
         ]
         return self.__bslike
+
+    @property
+    def ctrade(self) -> BarLike:
+        idYmin, idYmax = self.ind.high.id, self.ind.low.id
+        self.__btlike[None] = self._fp.ctrade[
+            idYmin : idYmax + 1, self.idXbid : self.idXbid + 2
+        ]
+        return self.__btlike
 
 
 @final
@@ -167,18 +176,22 @@ class Indicators[T]:
     def volume(self) -> int64:
         return self._bar._get_header(c.BH_Volume)
 
-    @property
-    def avg_volume(self) -> int64:
-        bar_min, bar_max = max(0, self._bar.bar_id - 20), self._bar.bar_id + 1
+    def avg_volume(self, range: int) -> int64:
+        bar_min, bar_max = (
+            max(0, self._bar.bar_id - range),
+            self._bar.bar_id + 1,
+        )
         return int64(self._bar._fp.headers[bar_min:bar_max, c.BH_Volume].mean())
 
     @property
     def trade_count(self) -> int64:
         return self._bar._get_header(c.BH_CountTrade)
 
-    @property
-    def avg_trade_count(self) -> int64:
-        bar_min, bar_max = max(0, self._bar.bar_id - 20), self._bar.bar_id + 1
+    def avg_trade_count(self, range: int) -> int64:
+        bar_min, bar_max = (
+            max(0, self._bar.bar_id - range),
+            self._bar.bar_id + 1,
+        )
         return self._bar._fp.headers[bar_min:bar_max, c.BH_CountTrade].mean()
 
     @property

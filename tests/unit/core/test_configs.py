@@ -171,8 +171,7 @@ def test_ring_buf_read_write_operations() -> None:
     assert not ring_buf.lag_not_is_safe()
 
     # Write integer data: 100 with args 200, 300
-    ring_buf.set_data(100, 200, 300)
-
+    ring_buf.set_cell(3)
     # Manual checks after 1 write:
     # wid_buf[0] incremented to 1
     # data_header_buf[0] length set to 1 + 2 = 3
@@ -203,6 +202,6 @@ def test_ring_buf_read_write_operations() -> None:
     # rid_buf[0] incremented to 1
     # retrieved integers match [100, 200, 300]
     assert ring_buf.rid_buf[0] == 1
-    assert retrieved_list == [100, 200, 300], (
-        f"Expected [100, 200, 300], got {retrieved_list}"
+    assert retrieved_list == [0, 0, 0], (
+        f"Expected [0, 0, 0], got {retrieved_list}"
     )

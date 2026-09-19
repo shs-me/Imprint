@@ -2,7 +2,6 @@
 
 from imprint._core.settings import (
     BarHeaders,
-    CachedStatesData,
     EquityHeaders,
     OrderBook,
     OrderFlag,
@@ -92,15 +91,6 @@ SF_ZERO_PRINT: int = int(StateFlags.ZERO_PRINT)
 SF_IMBALANCE: int = int(StateFlags.IMBALANCE)
 SF_BIG_TRADE: int = int(StateFlags.BIG_TRADE)
 
-# CachedStates
-CSD_VWAP: int = int(CachedStatesData.VWAP)
-CSD_UPPER_BB: int = int(CachedStatesData.UPPER_BB)
-CSD_LOWER_BB: int = int(CachedStatesData.LOWER_BB)
-CSD_POC_FP: int = int(CachedStatesData.POC_FP)
-CSD_VAH_FP: int = int(CachedStatesData.VAH_FP)
-CSD_VAL_FP: int = int(CachedStatesData.VAL_FP)
-CSD_ConstantCount: int = int(CachedStatesData.ConstantCount)
-
 # OrderBook
 OB_timestamp: int = int(OrderBook.timestamp)
 OB_orderParam: int = int(OrderBook.orderParam)
@@ -151,5 +141,4 @@ RIF_idy: int = int(ReInitFlag.idy)
 # Tools
 ATR_PERIOD: int = 14
 PARK_PERIOD: int = 12
-AVG_VOL_PERIOD: int = 12
 VAR_SCALE: int = 1_000_000_000

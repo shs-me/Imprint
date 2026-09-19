@@ -26,17 +26,17 @@ class Footprint(Chart):
 
     base: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
     state: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
+    ctrade: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
 
-    state_cache: NDArray[int64] = field(init=False)
     headers: NDArray[int64] = field(init=False)
     bar: Bar = field(init=False)
     vp: VolumeProfile[Footprint] = field(init=False)
     dp: DeltaProfile[Footprint] = field(init=False)
 
+    last_idx: int = field(default=0, init=False)
     __plike: PriceLike[Footprint] = field(init=False)
 
     def __post_init__(self) -> None:
-        self.state_cache = np.zeros((c.CSD_ConstantCount,), dtype=int64)
         self.headers = np.zeros(
             shape=(self.con.total_bar_count, c.BH_ConstantCount), dtype=int64
         )
@@ -48,16 +48,20 @@ class Footprint(Chart):
         self.__plike = PriceLike(self.con, Qty(self))
 
     @property
+    def last_bar(self) -> int:
+        return (self.last_idx & ~1) // 2
+
+    @property
     def vwap(self) -> PriceLike[Footprint]:
-        return self.__plike[self.state_cache[c.CSD_VWAP]]
+        return self.__plike[self.headers[self.last_bar, c.BH_VWAP]]
 
     @property
     def vwap_up_band(self) -> PriceLike[Footprint]:
-        return self.__plike[self.state_cache[c.CSD_UPPER_BB]]
+        return self.__plike[self.headers[self.last_bar, c.BH_VWAP_UPPER_BAND]]
 
     @property
     def vwap_low_band(self) -> PriceLike[Footprint]:
-        return self.__plike[self.state_cache[c.CSD_LOWER_BB]]
+        return self.__plike[self.headers[self.last_bar, c.BH_VWAP_LOWER_BAND]]
 
 
 @final
@@ -82,15 +86,15 @@ class VolumeProfile[T](ProfileLike[T]):
 
     @property
     def poc(self) -> PriceLike[T]:
-        return self.__plike[self._fp.state_cache[c.CSD_POC_FP]]
+        return self.__plike[self._fp.headers[self._fp.last_bar, c.BH_POC_FP]]
 
     @property
     def vah(self) -> PriceLike[T]:
-        return self.__plike[self._fp.state_cache[c.CSD_VAH_FP]]
+        return self.__plike[self._fp.headers[self._fp.last_bar, c.BH_VAH_FP]]
 
     @property
     def val(self) -> PriceLike[T]:
-        return self.__plike[self._fp.state_cache[c.CSD_VAL_FP]]
+        return self.__plike[self._fp.headers[self._fp.last_bar, c.BH_VAL_FP]]
 
 
 @final

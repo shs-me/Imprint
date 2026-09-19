@@ -79,6 +79,7 @@ class Base(ABC):
     def __init_idx(self, nPrice: int64, timestamp: int64) -> None:
         self.fp.base.fill(0)
         self.fp.state.fill(0)
+        self.fp.ctrade.fill(0)
 
         if self.fp.con._first_base_timestamp:
             new_offset = self.fp.headers_offset[0] + (self.fp.con.bar_count)
@@ -110,6 +111,9 @@ class Base(ABC):
             self.fp.state = FPArray(
                 self.fp.con.fp_rows, self.fp.con.fp_panel_cols
             )
+            self.fp.ctrade = FPArray(
+                self.fp.con.fp_rows, self.fp.con.fp_panel_cols
+            )
             self.bbox = np.zeros((4,), dtype=int64)
             self.bbox_default_value = np.array(
                 [self.fp.con.fp_rows, self.fp.con.fp_cols, 0, 0], dtype=int64
@@ -126,6 +130,7 @@ class Base(ABC):
 
             self.fp.base = self.fp.base.padding(int(before), int(after))
             self.fp.state = self.fp.state.padding(int(before), int(after))
+            self.fp.ctrade = self.fp.state.padding(int(before), int(after))
 
         self.child_init_array(nPrice)
 

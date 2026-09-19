@@ -52,13 +52,13 @@ if __name__ == "__main__":
         symbol="DASHUSDT",
         strategy=Strategy(
             algorithm=IntraDay,
-            footprint=Footprint(timeframe=tf.M5, step_tick=5),
+            footprint=Footprint(timeframe=tf.M1, step_tick=5),
             risk_management=RiskManagement(
                 max_lock_balance=pct(10.0),
                 max_loss_balance=pct(10.0),
                 entry_qty=pct(0.5),
                 tp_dev=pct(0.5),
-                sl_dev=pct(0.5),
+                sl_dev=pct(0.25),
                 pass_signal_if_analysis_time_big=50_000,
                 pass_execute_signal_if_timer_ms_exepired=1000,
             ),

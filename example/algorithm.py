@@ -26,23 +26,25 @@ class IntraDay(FootprintEngine):
     def on_bar_update(
         self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
     ) -> None:
-        if not ((idxBid // 2) > 20):
+        if not ((idxBid // 2) > (60 * 4)):
             return
 
         if (self.idy_use == idYmin) and (self.idx_use == idxBid):
             return
 
         bar = self.fp.bar[idxBid]
-        avg_vol = bar.ind.avg_volume
-        bar_state = bar.state
         bar_base = bar.base
-        ind = bar.ind
         idy = idYmin - bar.ind.high.id
-        nPrice = self.fp.con.to_nPrice(idYmin)
-        if (
-            (bar_base[idy, 1] > (avg_vol * 0.25))
-            and (bar_state[idy, 1] & c.SF_DELTA_DOMINATION)
-            and ((nPrice >= ind.fp_vwap.n) and (nPrice >= ind.fp_poc.n))
+        avg_vol = bar.ind.avg_volume(4 * 60)
+
+        if (bar_base[idy, 1] > (avg_vol * 0.3)) and (
+            bar.state[idy, 1] & c.SF_IMBALANCE
         ):
             self.idy_use, self.idx_use = idYmin, idxBid
             self.send_signal(True, True, True, idYmin)
+
+        elif (bar_base[idy, 0] > (avg_vol * 0.3)) and (
+            bar.state[idy, 0] & c.SF_IMBALANCE
+        ):
+            self.idy_use, self.idx_use = idYmin, idxBid
+            self.send_signal(True, False, False, idYmin)

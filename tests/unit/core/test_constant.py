@@ -191,5 +191,4 @@ class TestToolConstants:
     def test_period_and_scale_constants_are_positive(self) -> None:
         assert c.ATR_PERIOD == 14
         assert c.PARK_PERIOD == 12
-        assert c.AVG_VOL_PERIOD == 12
         assert c.VAR_SCALE == 1_000_000_000

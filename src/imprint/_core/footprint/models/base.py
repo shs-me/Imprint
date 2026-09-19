@@ -47,10 +47,10 @@ class FPArray(np.ndarray):
 class Chart(ABC):
     con: Converter
 
-    base: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
-    state: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
+    base: FPArray = field(init=False)
+    state: FPArray = field(init=False)
+    ctrade: FPArray = field(init=False)
 
-    state_cache: NDArray[int64] = field(init=False)
     headers: NDArray[int64] = field(init=False)
     headers_offset: memoryview = field(init=False)
 

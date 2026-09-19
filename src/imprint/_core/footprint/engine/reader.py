@@ -95,7 +95,6 @@ class Reader(Writer):
             headers_offset=self.fp.headers_offset,
             fp=self.fp.base,
             fp_state=self.fp.state,
-            fp_state_cache=self.fp.state_cache,
             baseNprice=self.fp.con.baseNprice,
             center=self.fp.con.center,
             scale=self.fp.con.scale,
@@ -118,6 +117,7 @@ class Reader(Writer):
             baseNprice=self.fp.con.baseNprice,
             center=self.fp.con.center,
             scale=self.fp.con.scale,
+            step_tick=self.fp.con.step_tick,
         )
         self.algorithm.on_bar_update(idYmin, idYmax, idxBid, idxAsk)
 
@@ -187,7 +187,6 @@ def _update_closed_bar_and_fp_states(
     headers_offset: memoryview,
     fp: NDArray[int64],
     fp_state: NDArray[int64],
-    fp_state_cache: NDArray[int64],
     baseNprice: int64,
     center: int64,
     scale: int,
@@ -212,8 +211,6 @@ def _update_closed_bar_and_fp_states(
         2D array storing base footprint volume profile matrix.
     fp_state : NDArray[int64]
         2D array storing footprint bitmask flags.
-    fp_state_cache : NDArray[int64]
-        1D array maintaining cached indicator row indices for efficient state resets.
     baseNprice : int64
         Session fixed-point base price integer.
     center : int64
@@ -261,11 +258,6 @@ def _update_closed_bar_and_fp_states(
     else:
         headers[bwo, c.BH_PARK] = cur_var
 
-    # Clear Footprint Static State's
-    state_2 = c.SF_POC_FP | c.SF_VAH_FP | c.SF_VAL_FP
-    fp_state[fp_state_cache[c.CSD_POC_FP : c.CSD_VAL_FP + 1], idxVP] &= ~(
-        state_2
-    )
     state_3 = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
     fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
 
@@ -279,29 +271,20 @@ def _update_closed_bar_and_fp_states(
     ) // scale + center
 
     if 0 <= vwap < fp_state.shape[0]:
-        fp_state[fp_state_cache[c.CSD_VWAP], idxVP] &= ~(c.SF_VWAP_FP)
-        fp_state[vwap, idxVP] |= c.SF_VWAP_FP
-        fp_state_cache[c.CSD_VWAP] = vwap
+        fp_state[vwap, lidx] |= c.SF_VWAP_FP
     if 0 <= vwap_bb_upper < fp_state.shape[0]:
-        fp_state[fp_state_cache[c.CSD_UPPER_BB], idxVP] &= ~(c.SF_UPPER_BAND_FP)
-        fp_state[vwap_bb_upper, idxVP] |= c.SF_UPPER_BAND_FP
-        fp_state_cache[c.CSD_UPPER_BB] = vwap_bb_upper
+        fp_state[vwap_bb_upper, lidx] |= c.SF_UPPER_BAND_FP
     if 0 <= vwap_bb_lower < fp_state.shape[0]:
-        fp_state[fp_state_cache[c.CSD_LOWER_BB], idxVP] &= ~(c.SF_LOWER_BAND_FP)
-        fp_state[vwap_bb_lower, idxVP] |= c.SF_LOWER_BAND_FP
-        fp_state_cache[c.CSD_LOWER_BB] = vwap_bb_lower
+        fp_state[vwap_bb_lower, lidx] |= c.SF_LOWER_BAND_FP
 
     # Update POC + VA
     poc: intp = np.argmax(fp[:, idxVP])
     vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
-    fp_state[poc, idxVP] |= c.SF_POC_FP
-    fp_state_cache[c.CSD_POC_FP] = poc
+    fp_state[poc, lidx] |= c.SF_POC_FP
     headers[bwo, c.BH_POC_FP] = (center - poc) * scale + baseNprice
-    fp_state[vah, idxVP] |= c.SF_VAH_FP
-    fp_state_cache[c.CSD_VAH_FP] = vah
+    fp_state[vah, lidx] |= c.SF_VAH_FP
     headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + baseNprice
-    fp_state[val, idxVP] |= c.SF_VAL_FP
-    fp_state_cache[c.CSD_VAL_FP] = val
+    fp_state[val, lidx] |= c.SF_VAL_FP
     headers[bwo, c.BH_VAL_FP] = (center - val) * scale + baseNprice
 
     # Update Auction
@@ -332,6 +315,7 @@ def _update_bar_states(
     baseNprice: int64,
     center: int64,
     scale: int,
+    step_tick: int,
 ) -> None:
     """
     Update microstructural states, OHLC flags, imbalance, and bar Value Area for active bar.
@@ -360,6 +344,8 @@ def _update_bar_states(
         Y-axis grid center row index.
     scale : int
         Scaled price step per row.
+    step_tick : int
+        Number of ticks aggregated per footprint row.
     """
 
     bar: int = (idxBid & ~1) // 2
@@ -378,34 +364,43 @@ def _update_bar_states(
     low_idy: int64 = (baseNprice - lowNprice) // scale + center
     close_idy: int64 = (baseNprice - closeNprice) // scale + center
 
-    ymax_climp = min(idYmax + 1, fp.shape[0] - 1)
-    idyBid: slice[int64, int64] = slice(idYmin + 1, ymax_climp + 1)
-    idyAsk: slice[int64, int64] = slice(idYmin, ymax_climp)
-
-    # Clear State's
-    state1 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
-    fp_state[idYmin:ymax_climp, idxBid : idxBid + 2] &= ~(state1)
     state2 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
     state3 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
     fp_state[high_idy : low_idy + 1, idxBid] &= ~(state2 | state3)
 
-    # Update ZeroPrint
-    bidZP: NDArray[bool_] = (fp[idyAsk, idxAsk] > 0) & (fp[idyBid, idxBid] == 0)
-    askZP: NDArray[bool_] = (fp[idyBid, idxBid] > 0) & (fp[idyAsk, idxAsk] == 0)
-    fp_state[idyBid, idxBid][bidZP] |= c.SF_ZERO_PRINT
-    fp_state[idyAsk, idxAsk][askZP] |= c.SF_ZERO_PRINT
+    state1 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
+    fp_state[idYmin:idYmax, idxBid : idxBid + 2] &= ~state1
 
-    # Update Delta Domination
-    bidDD: NDArray[bool_] = (fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) < 0
-    askDD: NDArray[bool_] = (fp[idyBid, idxBid] - fp[idyAsk, idxAsk]) > 0
-    fp_state[idyBid, idxBid][bidDD] |= c.SF_DELTA_DOMINATION
-    fp_state[idyAsk, idxAsk][askDD] |= c.SF_DELTA_DOMINATION
+    for idy in range(idYmin, idYmax):
+        bid_val, ask_val = fp[idy, idxBid], fp[idy, idxAsk]
 
-    # Update IMBALANCE
-    bidImb: NDArray[bool_] = fp[idyBid, idxBid] > (fp[idyAsk, idxAsk] * 3)
-    askImb: NDArray[bool_] = fp[idyAsk, idxAsk] > (fp[idyBid, idxBid] * 3)
-    fp_state[idyBid, idxBid][bidImb] |= c.SF_IMBALANCE
-    fp_state[idyAsk, idxAsk][askImb] |= c.SF_IMBALANCE
+        if (ask_val > 0) and (bid_val == 0):
+            fp_state[idy, idxBid] |= c.SF_ZERO_PRINT
+
+        elif (bid_val > 0) and (ask_val == 0):
+            fp_state[idy, idxAsk] |= c.SF_ZERO_PRINT
+
+        if bid_val > ask_val:
+            fp_state[idy, idxBid] |= c.SF_DELTA_DOMINATION
+
+        elif ask_val > bid_val:
+            fp_state[idy, idxAsk] |= c.SF_DELTA_DOMINATION
+
+        if step_tick > 1:
+            if bid_val > (ask_val * 3):
+                fp_state[idy, idxBid] |= c.SF_IMBALANCE
+
+            elif ask_val > (bid_val * 3):
+                fp_state[idy, idxAsk] |= c.SF_IMBALANCE
+        else:
+            ymin, ymax = max(high_idy, idy - 1), min(low_idy, idy + 1)
+            if (idy > ymin) and (bid_val > (fp[ymin, idxAsk] * 3)):
+                fp_state[idy, idxBid] |= c.SF_IMBALANCE
+                fp_state[ymin, idxAsk] &= ~(c.SF_IMBALANCE)
+
+            if (idy < ymax) and (ask_val > (fp[ymax, idxBid] * 3)):
+                fp_state[idy, idxAsk] |= c.SF_IMBALANCE
+                fp_state[ymax, idxBid] &= ~(c.SF_IMBALANCE)
 
     # Update OHLC
     fp_state[open_idy, idxBid] |= c.SF_OPEN

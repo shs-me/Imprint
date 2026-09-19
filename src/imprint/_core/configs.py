@@ -313,7 +313,7 @@ class LogStream(SharedMemorySegments):
 class SignalStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
-            data_size=32,
+            data_size=(6 * 8),
             data_header_size=1,
             cell_amount=1000,
             cast_to_int64=True,
@@ -345,7 +345,7 @@ class SignalStream(SharedMemorySegments):
 class UserDataStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
-            data_size=128,
+            data_size=(7 * 8),
             data_header_size=1,
             cell_amount=1000,
             cast_to_int64=True,
@@ -379,7 +379,7 @@ class UserDataStream(SharedMemorySegments):
 class OrderStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
-            data_size=128,
+            data_size=(5 * 8),
             data_header_size=1,
             cell_amount=1000,
             cast_to_int64=True,

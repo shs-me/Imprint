@@ -86,6 +86,7 @@ class Writer(Base, ABC):
             is_sell=is_sell,
             args=self.__args,
             footprint=self.fp.base,
+            ctrade=self.fp.ctrade,
             headers=self.fp.headers,
             headers_offset=self.fp.headers_offset,
             bbox=self.bbox,
@@ -104,6 +105,7 @@ def _update(
     is_sell: int64,
     args: NDArray[int64],
     footprint: NDArray[int64],
+    ctrade: NDArray[int64],
     headers: NDArray[int64],
     headers_offset: memoryview,
     bbox: NDArray[int64],
@@ -126,6 +128,8 @@ def _update(
         1D array containing scaled constants, array index mappings, and converter configurations.
     footprint : NDArray[int64]
         2D footprint array storing volume profiles per price level and bar column.
+    ctrade : NDArray[int64]
+        2D footprint array storing count trades profiles per price level and bar column.
     headers : NDArray[int64]
         2D array storing OHLCV, CVD, VWAP, and indicator metadata for each bar.
     headers_offset : memoryview
@@ -172,6 +176,8 @@ def _update(
     footprint[idy, idx] += nQty
     footprint[idy, args[FU_idxVP]] += nQty
     footprint[idy, args[FU_idxDP]] += -nQty if is_sell else nQty
+    ctrade[idy, idx] += 1
+    ctrade[idy, args[FU_idxVP]] += 1
 
     # Update Headers
     bar: int64 = (idx & ~1) // 2

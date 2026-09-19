@@ -76,15 +76,6 @@ class Timeframe(IntEnum):
 
 
 @verify(CONTINUOUS, UNIQUE)
-class CachedStatesData(IntEnum):
-    """Index mapping for cached static Footprint indicators array."""
-
-    VWAP, UPPER_BB, LOWER_BB = 0, auto(), auto()
-    POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
-    ConstantCount = auto()
-
-
-@verify(CONTINUOUS, UNIQUE)
 class OrderBook(IntEnum):
     """Index mapping for internal order book array columns."""
 
