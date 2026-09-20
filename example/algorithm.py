@@ -26,10 +26,12 @@ class IntraDay(FootprintEngine):
         idy = idYmin - bar.ind.high.id
         bid, ask = bar.state[idy, :]
 
-        if ask & c.SF_BIG_TRADE and ask & c.SF_IMBALANCE:
+        if ask & c.SF_BIG_CLUSTER:
             self.idx_use, self.idy_use = idxBid, idYmin
-            self.send_signal(False, False, False, idYmin)
+            if ask & c.SF_IMBALANCE:
+                self.send_signal(False, False, False, idYmin)
 
-        elif bid & c.SF_BIG_TRADE and bid & c.SF_IMBALANCE:
+        elif bid & c.SF_BIG_CLUSTER and bid & c.SF_IMBALANCE:
             self.idx_use, self.idy_use = idxBid, idYmin
-            self.send_signal(False, True, True, idYmin)
+            if bid & c.SF_IMBALANCE:
+                self.send_signal(False, True, True, idYmin)

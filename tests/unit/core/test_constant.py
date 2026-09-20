@@ -67,7 +67,7 @@ class TestStateFlagAliases:
             "SF_DELTA_DOMINATION": StateFlags.DELTA_DOMINATION,
             "SF_ZERO_PRINT": StateFlags.ZERO_PRINT,
             "SF_IMBALANCE": StateFlags.IMBALANCE,
-            "SF_BIG_TRADE": StateFlags.BIG_TRADE,
+            "SF_BIG_CLUSTER": StateFlags.BIG_CLUSTER,
         }
         for alias_name, enum_member in pairs.items():
             assert getattr(c, alias_name) == int(enum_member)

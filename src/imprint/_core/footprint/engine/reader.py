@@ -161,20 +161,11 @@ def _update_clusters_states(
         1D array containing scaled constants, array index mappings, and converter configurations.
     """
 
-    bar: int64 = (idXmax & ~1) // 2
+    bar: int64 = (idXmax - 1) // 2
     bwo: int64 = headers_offset[0] + bar
 
     if headers[bwo, c.BH_Volume] == 0:
         return
-
-    fp_state[idYmin:idYmax, idXmin:idXmax] &= ~(c.SF_BIG_TRADE)
-
-    bar_min, bar_max = max(0, bwo - 21), bwo + 1
-    vol: int64 = int64(headers[bar_min:bar_max, c.BH_Volume].mean() * 0.33)
-    for idy in range(idYmin, idYmax):
-        for idx in range(idXmin, idXmax):
-            if fp[idy, idx] > vol:
-                fp_state[idy, idx] |= c.SF_BIG_TRADE
 
     state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
     fp_state[idYmin:idYmax, args[w.FU_idxVP]] &= ~(state1)
@@ -187,6 +178,20 @@ def _update_clusters_states(
     fp_state[idYmin:idYmax, args[w.FU_idxVP]][askDD] |= (
         c.SF_ASK_DELTA_DOMINATION_FP
     )
+
+    bar_min, bar_max = max(0, bwo - args[w.FU_avg_vol_period]), bwo + 1
+    if (bar_max - bar_min) >= args[w.FU_avg_vol_period]:
+        vol: int64 = int64(
+            headers[bar_min:bar_max, c.BH_Volume].mean()
+            * (args[w.FU_big_cluster_mult] / 10_000)
+        )
+
+        for idy in range(idYmin, idYmax):
+            for idx in range(idXmin, idXmax):
+                if (not (fp_state[idy, idx] & c.SF_BIG_CLUSTER)) and (
+                    fp[idy, idx] > vol
+                ):
+                    fp_state[idy, idx] |= c.SF_BIG_CLUSTER
 
 
 @njit(cache=True)
@@ -245,9 +250,10 @@ def _update_closed_bar_and_fp_states(
             abs(highNprice - pre_c),
             abs(lowNprice - pre_c),
         )
+        atr_period = args[w.FU_atr_period]
         headers[bwo, c.BH_ATR] = (
-            (pre_atr * (c.ATR_PERIOD - 1)) + tr
-        ) // c.ATR_PERIOD
+            (pre_atr * (atr_period - 1)) + tr
+        ) // atr_period
     else:
         headers[bwo, c.BH_ATR] = highNprice - lowNprice
 
@@ -256,9 +262,10 @@ def _update_closed_bar_and_fp_states(
     cur_var: int = round((log_ratio * log_ratio) * c.VAR_SCALE)
     if bar > 0:
         pre_var: int64 = headers[oldBwo, c.BH_PARK]
+        park_period = args[w.FU_park_period]
         headers[bwo, c.BH_PARK] = (
-            (pre_var * (c.PARK_PERIOD - 1)) + cur_var
-        ) // c.PARK_PERIOD
+            (pre_var * (park_period - 1)) + cur_var
+        ) // park_period
     else:
         headers[bwo, c.BH_PARK] = cur_var
 

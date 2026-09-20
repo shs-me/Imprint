@@ -89,7 +89,7 @@ SF_EXHAUSTION: int = int(StateFlags.EXHAUSTION)
 SF_DELTA_DOMINATION: int = int(StateFlags.DELTA_DOMINATION)
 SF_ZERO_PRINT: int = int(StateFlags.ZERO_PRINT)
 SF_IMBALANCE: int = int(StateFlags.IMBALANCE)
-SF_BIG_TRADE: int = int(StateFlags.BIG_TRADE)
+SF_BIG_CLUSTER: int = int(StateFlags.BIG_CLUSTER)
 
 # OrderBook
 OB_timestamp: int = int(OrderBook.timestamp)
@@ -139,6 +139,4 @@ RIF_idx: int = int(ReInitFlag.idx)
 RIF_idy: int = int(ReInitFlag.idy)
 
 # Tools
-ATR_PERIOD: int = 14
-PARK_PERIOD: int = 12
 VAR_SCALE: int = 1_000_000_000

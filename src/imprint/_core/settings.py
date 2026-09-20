@@ -136,7 +136,7 @@ class StateFlags(IntFlag):
     # Bid/Ask States
     DELTA_DOMINATION, ZERO_PRINT, IMBALANCE = auto(), auto(), auto()
     # Cluster States
-    BIG_TRADE = auto()
+    BIG_CLUSTER = auto()
 
 
 class OrderFlag(IntFlag):

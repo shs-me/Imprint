@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
     Figure,
     Scatter,
@@ -36,14 +38,14 @@ def plot_trade_distribution(stats: Stats) -> Figure:
 
     # Process closed trades by sequence index
     for trade_no, tc in enumerate(stats.trades_close, start=1):
-        t = tc["time"]
-        pnl = tc["pnl"]
-        pnl_pct = tc["pnl_pct"]
-        side = "Long" if tc["is_long"] else "Short"
-        price = tc["price"]
-        balance = tc["balance"]
-        mae_pct = tc["mae_pct"]
-        mfe_pct = tc["mfe_pct"]
+        t: datetime = tc["time"]
+        pnl: float = tc["pnl"]
+        pnl_pct: float = tc["pnl_pct"]
+        side: str = "Long" if tc["is_long"] else "Short"
+        price: float = tc["price"]
+        balance: float = tc["balance"]
+        mae_pct: float = tc["mae_pct"]
+        mfe_pct: float = tc["mfe_pct"]
 
         if pnl_pct >= 0:
             # Winning trade (TP)
