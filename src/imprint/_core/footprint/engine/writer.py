@@ -31,8 +31,11 @@ from imprint._core.footprint.models.converter import to_idx, to_idy
     FU_price_prec,
     FU_qty_mult,
     FU_qty_prec,
+    FU_step_tick,
+    FU_with_ctrade,
+    FU_with_state,
     FU_ConstantCount,
-) = [v for v in range(14)]
+) = [v for v in range(17)]
 
 
 @dataclass(slots=True)
@@ -40,7 +43,7 @@ class Writer(Base, ABC):
     counter_ticks: int = field(default=0, init=False)
 
     __meta_data: NDArray[float64] = field(init=False)
-    __args: NDArray[int64] = field(init=False)
+    _args: NDArray[int64] = field(init=False)
 
     @override
     def child_init_array(self, nPrice: int64) -> None:
@@ -48,29 +51,32 @@ class Writer(Base, ABC):
             self.__meta_data = np.zeros(
                 shape=(2, BHM_ConstantCount), dtype=float64
             )
-            self.__args = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
-            self.__args[FU_idxVP] = self.fp.con.idxVP
-            self.__args[FU_idxDP] = self.fp.con.idxDP
-            self.__args[FU_price_mult] = self.fp.con.price_mult
-            self.__args[FU_price_prec] = self.fp.con.price_prec
-            self.__args[FU_qty_mult] = self.fp.con.qty_mult
-            self.__args[FU_qty_prec] = self.fp.con.qty_prec
-            self.__args[FU_tims] = self.fp.con.tims
-            self.__args[FU_fp_cols] = self.fp.con.fp_cols
-            self.__args[FU_scale] = self.fp.con.scale
+            self._args = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
+            self._args[FU_idxVP] = self.fp.con.idxVP
+            self._args[FU_idxDP] = self.fp.con.idxDP
+            self._args[FU_price_mult] = self.fp.con.price_mult
+            self._args[FU_price_prec] = self.fp.con.price_prec
+            self._args[FU_qty_mult] = self.fp.con.qty_mult
+            self._args[FU_qty_prec] = self.fp.con.qty_prec
+            self._args[FU_tims] = self.fp.con.tims
+            self._args[FU_fp_cols] = self.fp.con.fp_cols
+            self._args[FU_scale] = self.fp.con.scale
+            self._args[FU_with_ctrade] = 1 if self.with_ctrade else 0
+            self._args[FU_with_state] = 1 if self.with_state else 0
+            self._args[FU_step_tick] = self.fp.con.step_tick
 
         else:
-            self.__args[FU_center] = self.fp.con.center
+            self._args[FU_center] = self.fp.con.center
 
-        self.__args[FU_fp_rows] = self.fp.con.fp_rows
+        self._args[FU_fp_rows] = self.fp.con.fp_rows
 
     @override
     def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
         self.__meta_data.fill(0)
 
-        self.__args[FU_baseNprice] = self.fp.con.baseNprice
-        self.__args[FU_baseTimestamp] = self.fp.con.baseTimestamp
-        self.__args[FU_center] = self.fp.con.center
+        self._args[FU_baseNprice] = self.fp.con.baseNprice
+        self._args[FU_baseTimestamp] = self.fp.con.baseTimestamp
+        self._args[FU_center] = self.fp.con.center
 
     @final
     def update_footprint(
@@ -84,7 +90,7 @@ class Writer(Base, ABC):
             nQty=nQty,
             timestamp=timestamp,
             is_sell=is_sell,
-            args=self.__args,
+            args=self._args,
             footprint=self.fp.base,
             ctrade=self.fp.ctrade,
             headers=self.fp.headers,
@@ -176,8 +182,9 @@ def _update(
     footprint[idy, idx] += nQty
     footprint[idy, args[FU_idxVP]] += nQty
     footprint[idy, args[FU_idxDP]] += -nQty if is_sell else nQty
-    ctrade[idy, idx] += 1
-    ctrade[idy, args[FU_idxVP]] += 1
+    if args[FU_with_ctrade]:
+        ctrade[idy, idx] += 1
+        ctrade[idy, args[FU_idxVP]] += 1
 
     # Update Headers
     bar: int64 = (idx & ~1) // 2

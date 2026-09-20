@@ -114,24 +114,21 @@ def analyze_orders_history(
 
                 pnl: float = nPnl / scale_mult
 
-                entry_p = (
+                entry_p: float = (
                     longEntryNprice[0] if is_long else shortEntryNprice[0]
                 ) / price_mult
 
-                pnl_pct = (
+                pnl_pct: float = (
                     ((price - entry_p) if is_long else (entry_p - price))
                     / entry_p
                     * 100.0
                 )
 
-                if pnl > 0:
-                    mae = nMAE / scale_mult
-                    mae_pct = -abs(mae / (entry_p * qty) * 100.0)
-                    mfe, mfe_pct = 0.0, 0.0
-                else:
-                    mfe = nMFE / scale_mult
-                    mfe_pct = abs(mfe / (entry_p * qty) * 100.0)
-                    mae, mae_pct = 0.0, 0.0
+                mae: float = nMAE / scale_mult
+                mae_pct: float = -abs(mae / (entry_p * qty) * 100.0)
+
+                mfe: float = nMFE / scale_mult
+                mfe_pct: float = abs(mfe / (entry_p * qty) * 100.0)
 
                 all_pnls.append(pnl)
                 update_position(

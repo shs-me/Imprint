@@ -26,10 +26,14 @@ class Base(ABC):
     bbox_default_value: NDArray[int64] = field(init=False)
     bbox: NDArray[int64] = field(init=False)
     fp: Footprint = field(init=False)
+    with_state: bool = field(init=False)
+    with_ctrade: bool = field(init=False)
 
     @final
     def __post_init__(self) -> None:
         cfgFP = self.manager.cfgFootprint
+        self.with_state = cfgFP.state
+        self.with_ctrade = cfgFP.ctrade
 
         cfgCoin = self.manager.cfgCoin
         self.__base_fp_dump_path = (
@@ -78,8 +82,10 @@ class Base(ABC):
     @final
     def __init_idx(self, nPrice: int64, timestamp: int64) -> None:
         self.fp.base.fill(0)
-        self.fp.state.fill(0)
-        self.fp.ctrade.fill(0)
+        if self.with_state:
+            self.fp.state.fill(0)
+        if self.with_ctrade:
+            self.fp.ctrade.fill(0)
 
         if self.fp.con._first_base_timestamp:
             new_offset = self.fp.headers_offset[0] + (self.fp.con.bar_count)
@@ -108,12 +114,14 @@ class Base(ABC):
             self.fp.base = FPArray(
                 self.fp.con.fp_rows, self.fp.con.fp_panel_cols
             )
-            self.fp.state = FPArray(
-                self.fp.con.fp_rows, self.fp.con.fp_panel_cols
-            )
-            self.fp.ctrade = FPArray(
-                self.fp.con.fp_rows, self.fp.con.fp_panel_cols
-            )
+            if self.with_state:
+                self.fp.state = FPArray(
+                    self.fp.con.fp_rows, self.fp.con.fp_panel_cols
+                )
+            if self.with_ctrade:
+                self.fp.ctrade = FPArray(
+                    self.fp.con.fp_rows, self.fp.con.fp_panel_cols
+                )
             self.bbox = np.zeros((4,), dtype=int64)
             self.bbox_default_value = np.array(
                 [self.fp.con.fp_rows, self.fp.con.fp_cols, 0, 0], dtype=int64
@@ -129,8 +137,10 @@ class Base(ABC):
                 before, after = 0, need_rows
 
             self.fp.base = self.fp.base.padding(int(before), int(after))
-            self.fp.state = self.fp.state.padding(int(before), int(after))
-            self.fp.ctrade = self.fp.state.padding(int(before), int(after))
+            if self.with_state:
+                self.fp.state = self.fp.state.padding(int(before), int(after))
+            if self.with_ctrade:
+                self.fp.ctrade = self.fp.state.padding(int(before), int(after))
 
         self.child_init_array(nPrice)
 

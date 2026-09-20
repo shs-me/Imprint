@@ -139,16 +139,16 @@ class Footprint(Configuration):
     chart_range: int = 1
     step_tick: int = 1
     fp_rows: int = 10001
+    state: bool = False
+    ctrade: bool = False
 
-    colVP: int = field(init=False)
-    colDP: int = field(init=False)
+    colVP: int = field(default=-2, init=False)
+    colDP: int = field(default=-1, init=False)
     bar_count: int = field(init=False)
     fp_cols: int = field(init=False)
     fp_panel_cols: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.colVP = -2
-        self.colDP = -1
         self.bar_count = self._get_bar_count(day=self.chart_range)
         self.fp_cols = self.bar_count * 2
         self.fp_panel_cols = self.fp_cols + 2
@@ -345,7 +345,7 @@ class SignalStream(SharedMemorySegments):
 class UserDataStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
-            data_size=(7 * 8),
+            data_size=(c.TP_ConstantCount * 8),
             data_header_size=1,
             cell_amount=1000,
             cast_to_int64=True,
@@ -353,7 +353,7 @@ class UserDataStream(SharedMemorySegments):
         init=False,
     )
 
-    def set_data(self, data: OrderData | BalanceData) -> None:
+    def set_data_in_live(self, data: OrderData | BalanceData) -> None:
         start: int = self.ring_buf.get_cell()
         if isinstance(data, OrderData):
             self.ring_buf.data_buf[start + c.TP_timestamp] = data.timestamp

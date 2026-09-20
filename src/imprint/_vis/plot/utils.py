@@ -39,7 +39,7 @@ def apply_dark_theme(fig: Figure, title: str) -> Figure:
             },
             "x": 0.5,
             "xanchor": "center",
-            "y": 0.96,
+            "y": 0.975,
         },
         legend={
             "bgcolor": "rgba(18, 18, 18, 0.85)",

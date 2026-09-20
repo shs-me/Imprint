@@ -7,7 +7,7 @@ from numpy import bool_, int64, intp
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
-from imprint._core.footprint.engine.writer import Writer
+from imprint._core.footprint.engine import writer as w
 
 
 class AlgorithmProtocol(Protocol):
@@ -25,7 +25,7 @@ class AlgorithmProtocol(Protocol):
 
 
 @dataclass(slots=True)
-class Reader(Writer):
+class Reader(w.Writer):
     algorithm: AlgorithmProtocol
 
     last_idx: memoryview = field(
@@ -35,7 +35,7 @@ class Reader(Writer):
     @final
     @override
     def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        Writer.child_init_idx(self, nPrice, timestamp)
+        w.Writer.child_init_idx(self, nPrice, timestamp)
 
         self.last_idx[0] = 0
 
@@ -43,7 +43,9 @@ class Reader(Writer):
     def analyze_footprint(self) -> None:
         if not self._bbox_is_readed():
             idYmin, idXmin, idYmax, idXmax = self.bbox
-            self.__update_clusters(idYmin, idYmax, idXmin, idXmax)
+            if self.with_state:
+                self.__update_clusters(idYmin, idYmax, idXmin, idXmax)
+
             for idx in range((idXmin & ~1), idXmax, 2):
                 idxBid, idxAsk = idx, idx + 1
                 if idx > self.last_idx[0]:
@@ -79,10 +81,11 @@ class Reader(Writer):
             idYmax=idYmax,
             idXmin=idXmin,
             idXmax=idXmax,
-            idxVP=self.fp.con.idxVP,
-            idxDP=self.fp.con.idxDP,
             fp=self.fp.base,
             fp_state=self.fp.state,
+            headers=self.fp.headers,
+            headers_offset=self.fp.headers_offset,
+            args=self._args,
         )
         self.algorithm.on_clusters_update(idYmin, idYmax, idXmin, idXmax)
 
@@ -90,14 +93,11 @@ class Reader(Writer):
     def __update_closed_bar_and_fp(self) -> None:
         _update_closed_bar_and_fp_states(
             lidx=self.last_idx[0],
-            idxVP=self.fp.con.idxVP,
-            headers=self.fp.headers,
-            headers_offset=self.fp.headers_offset,
             fp=self.fp.base,
             fp_state=self.fp.state,
-            baseNprice=self.fp.con.baseNprice,
-            center=self.fp.con.center,
-            scale=self.fp.con.scale,
+            headers=self.fp.headers,
+            headers_offset=self.fp.headers_offset,
+            args=self._args,
         )
         self.algorithm.on_bar_close()
 
@@ -110,22 +110,13 @@ class Reader(Writer):
             idYmax=idYmax,
             idxBid=idxBid,
             idxAsk=idxAsk,
-            headers=self.fp.headers,
-            headers_offset=self.fp.headers_offset,
             fp=self.fp.base,
             fp_state=self.fp.state,
-            baseNprice=self.fp.con.baseNprice,
-            center=self.fp.con.center,
-            scale=self.fp.con.scale,
-            step_tick=self.fp.con.step_tick,
+            headers=self.fp.headers,
+            headers_offset=self.fp.headers_offset,
+            args=self._args,
         )
         self.algorithm.on_bar_update(idYmin, idYmax, idxBid, idxAsk)
-
-    @final
-    def padding_bbox(self) -> bool:
-        return ((self.bbox[3] - self.bbox[1]) < 2) and (
-            not (self.re_init & c.RIF_session)
-        )
 
     @final
     def final_analyze(self) -> None:
@@ -139,10 +130,11 @@ def _update_clusters_states(
     idYmax: int64,
     idXmin: int64,
     idXmax: int64,
-    idxVP: int,
-    idxDP: int,
     fp: NDArray[int64],
     fp_state: NDArray[int64],
+    headers: NDArray[int64],
+    headers_offset: memoryview,
+    args: NDArray[int64],
 ) -> None:
     """
     Recalculate delta domination and big trade flags across footprint cluster regions.
@@ -157,39 +149,54 @@ def _update_clusters_states(
         Minimum X-axis column index of modified footprint slice.
     idXmax : int64
         Maximum X-axis column index of modified footprint slice (exclusive).
-    idxVP : int
-        Column index reserved for Volume Profile array in footprint matrix.
-    idxDP : int
-        Column index reserved for Delta Profile array in footprint matrix.
     fp : NDArray[int64]
         2D array storing base footprint volume profile and delta values.
     fp_state : NDArray[int64]
         2D state array storing calculated bitmask flags for footprint cells.
+    headers : NDArray[int64]
+        2D array storing bar header data.
+    headers_offset : memoryview
+        Single-element int64 memory view of active header write offset.
+    args : NDArray[int64]
+        1D array containing scaled constants, array index mappings, and converter configurations.
     """
 
-    # Clear State's
-    state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
-    fp_state[idYmin:idYmax, idxVP] &= ~(state1)
+    bar: int64 = (idXmax & ~1) // 2
+    bwo: int64 = headers_offset[0] + bar
+
+    if headers[bwo, c.BH_Volume] == 0:
+        return
+
     fp_state[idYmin:idYmax, idXmin:idXmax] &= ~(c.SF_BIG_TRADE)
 
-    # Update Delta Domination
-    bidDD: NDArray[bool_] = fp[idYmin:idYmax, idxDP] < 0
-    askDD: NDArray[bool_] = fp[idYmin:idYmax, idxDP] > 0
-    fp_state[idYmin:idYmax, idxVP][bidDD] |= c.SF_BID_DELTA_DOMINATION_FP
-    fp_state[idYmin:idYmax, idxVP][askDD] |= c.SF_ASK_DELTA_DOMINATION_FP
+    bar_min, bar_max = max(0, bwo - 21), bwo + 1
+    vol: int64 = int64(headers[bar_min:bar_max, c.BH_Volume].mean() * 0.33)
+    for idy in range(idYmin, idYmax):
+        for idx in range(idXmin, idXmax):
+            if fp[idy, idx] > vol:
+                fp_state[idy, idx] |= c.SF_BIG_TRADE
+
+    state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
+    fp_state[idYmin:idYmax, args[w.FU_idxVP]] &= ~(state1)
+
+    bidDD: NDArray[bool_] = fp[idYmin:idYmax, args[w.FU_idxDP]] < 0
+    askDD: NDArray[bool_] = fp[idYmin:idYmax, args[w.FU_idxDP]] > 0
+    fp_state[idYmin:idYmax, args[w.FU_idxVP]][bidDD] |= (
+        c.SF_BID_DELTA_DOMINATION_FP
+    )
+    fp_state[idYmin:idYmax, args[w.FU_idxVP]][askDD] |= (
+        c.SF_ASK_DELTA_DOMINATION_FP
+    )
 
 
 @njit(cache=True)
 def _update_closed_bar_and_fp_states(
     lidx: int,
-    idxVP: int,
     headers: NDArray[int64],
     headers_offset: memoryview,
     fp: NDArray[int64],
     fp_state: NDArray[int64],
-    baseNprice: int64,
-    center: int64,
-    scale: int,
+    args: NDArray[int64],
 ) -> None:
     """
     Calculate indicator states and footprint flags upon bar closure.
@@ -201,8 +208,6 @@ def _update_closed_bar_and_fp_states(
     ----------
     lidx : int
         Column index of closed bar bid column (`last_idx`).
-    idxVP : int
-        Column index for Volume Profile in footprint matrix.
     headers : NDArray[int64]
         2D array holding bar header metrics and metadata.
     headers_offset : memoryview
@@ -211,12 +216,8 @@ def _update_closed_bar_and_fp_states(
         2D array storing base footprint volume profile matrix.
     fp_state : NDArray[int64]
         2D array storing footprint bitmask flags.
-    baseNprice : int64
-        Session fixed-point base price integer.
-    center : int64
-        Y-axis origin center row index offset.
-    scale : int
-        Scaled price step per footprint row.
+    args : NDArray[int64]
+        1D array containing scaled constants, array index mappings, and converter configurations.
     """
 
     bar: int = (lidx & ~1) // 2
@@ -230,8 +231,11 @@ def _update_closed_bar_and_fp_states(
     highNprice: int64 = headers[bwo, c.BH_High]
     lowNprice: int64 = headers[bwo, c.BH_Low]
 
-    high_idy: int64 = (baseNprice - highNprice) // scale + center
-    low_idy: int64 = (baseNprice - lowNprice) // scale + center
+    bNprice, idxVP = args[w.FU_baseNprice], args[w.FU_idxVP]
+    scale, center = args[w.FU_scale], args[w.FU_center]
+
+    high_idy: int64 = (bNprice - highNprice) // scale + center
+    low_idy: int64 = (bNprice - lowNprice) // scale + center
 
     # ATR
     if bar > 0:
@@ -258,16 +262,30 @@ def _update_closed_bar_and_fp_states(
     else:
         headers[bwo, c.BH_PARK] = cur_var
 
-    state_3 = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
-    fp_state[high_idy : low_idy + 1, idxVP] &= ~(state_3)
+    # Update POC + VA
+    poc: intp = np.argmax(fp[:, idxVP])
+    vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
+    headers[bwo, c.BH_POC_FP] = (center - poc) * scale + bNprice
+    headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + bNprice
+    headers[bwo, c.BH_VAL_FP] = (center - val) * scale + bNprice
+
+    if not args[w.FU_with_state]:
+        return
+
+    fp_state[poc, lidx] |= c.SF_POC_FP
+    fp_state[vah, lidx] |= c.SF_VAH_FP
+    fp_state[val, lidx] |= c.SF_VAL_FP
+
+    state = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
+    fp_state[high_idy : low_idy + 1, idxVP] &= ~(state)
 
     # Update VWAP+BB
-    vwap = (baseNprice - headers[bwo, c.BH_VWAP]) // scale + center
+    vwap = (bNprice - headers[bwo, c.BH_VWAP]) // scale + center
     vwap_bb_lower = (
-        baseNprice - headers[bwo, c.BH_VWAP_LOWER_BAND]
+        bNprice - headers[bwo, c.BH_VWAP_LOWER_BAND]
     ) // scale + center
     vwap_bb_upper = (
-        baseNprice - headers[bwo, c.BH_VWAP_UPPER_BAND]
+        bNprice - headers[bwo, c.BH_VWAP_UPPER_BAND]
     ) // scale + center
 
     if 0 <= vwap < fp_state.shape[0]:
@@ -276,16 +294,6 @@ def _update_closed_bar_and_fp_states(
         fp_state[vwap_bb_upper, lidx] |= c.SF_UPPER_BAND_FP
     if 0 <= vwap_bb_lower < fp_state.shape[0]:
         fp_state[vwap_bb_lower, lidx] |= c.SF_LOWER_BAND_FP
-
-    # Update POC + VA
-    poc: intp = np.argmax(fp[:, idxVP])
-    vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
-    fp_state[poc, lidx] |= c.SF_POC_FP
-    headers[bwo, c.BH_POC_FP] = (center - poc) * scale + baseNprice
-    fp_state[vah, lidx] |= c.SF_VAH_FP
-    headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + baseNprice
-    fp_state[val, lidx] |= c.SF_VAL_FP
-    headers[bwo, c.BH_VAL_FP] = (center - val) * scale + baseNprice
 
     # Update Auction
     high_finished, low_finished = (
@@ -308,14 +316,11 @@ def _update_bar_states(
     idYmax: int64,
     idxBid: int,
     idxAsk: int,
-    headers: NDArray[int64],
-    headers_offset: memoryview,
     fp: NDArray[int64],
     fp_state: NDArray[int64],
-    baseNprice: int64,
-    center: int64,
-    scale: int,
-    step_tick: int,
+    headers: NDArray[int64],
+    headers_offset: memoryview,
+    args: NDArray[int64],
 ) -> None:
     """
     Update microstructural states, OHLC flags, imbalance, and bar Value Area for active bar.
@@ -330,22 +335,16 @@ def _update_bar_states(
         Grid column index for active bar bid volume.
     idxAsk : int
         Grid column index for active bar ask volume.
-    headers : NDArray[int64]
-        2D array storing bar header data.
-    headers_offset : memoryview
-        Single-element int64 memory view of active header write offset.
     fp : NDArray[int64]
         2D footprint base array.
     fp_state : NDArray[int64]
         2D footprint state bitmask array.
-    baseNprice : int64
-        Session base price integer.
-    center : int64
-        Y-axis grid center row index.
-    scale : int
-        Scaled price step per row.
-    step_tick : int
-        Number of ticks aggregated per footprint row.
+    headers : NDArray[int64]
+        2D array storing bar header data.
+    headers_offset : memoryview
+        Single-element int64 memory view of active header write offset.
+    args : NDArray[int64]
+        1D array containing scaled constants, array index mappings, and converter configurations.
     """
 
     bar: int = (idxBid & ~1) // 2
@@ -359,14 +358,38 @@ def _update_bar_states(
     lowNprice: int64 = headers[bwo, c.BH_Low]
     closeNprice: int64 = headers[bwo, c.BH_Close]
 
-    open_idy: int64 = (baseNprice - openNprice) // scale + center
-    high_idy: int64 = (baseNprice - highNprice) // scale + center
-    low_idy: int64 = (baseNprice - lowNprice) // scale + center
-    close_idy: int64 = (baseNprice - closeNprice) // scale + center
+    bNprice, step_tick = args[w.FU_baseNprice], args[w.FU_step_tick]
+    scale, center = args[w.FU_scale], args[w.FU_center]
+
+    open_idy: int64 = (bNprice - openNprice) // scale + center
+    high_idy: int64 = (bNprice - highNprice) // scale + center
+    low_idy: int64 = (bNprice - lowNprice) // scale + center
+    close_idy: int64 = (bNprice - closeNprice) // scale + center
+
+    vp_bar: NDArray[int64] = (
+        fp[high_idy : low_idy + 1, idxBid] + fp[high_idy : low_idy + 1, idxAsk]
+    )
+    poc: intp = np.argmax(vp_bar)
+    vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
+    headers[bwo, c.BH_POC] = (center - (high_idy + poc)) * scale + bNprice
+    headers[bwo, c.BH_VAH] = (center - (high_idy + vah)) * scale + bNprice
+    headers[bwo, c.BH_VAL] = (center - (high_idy + val)) * scale + bNprice
+
+    if not args[w.FU_with_state]:
+        return
 
     state2 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
     state3 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
     fp_state[high_idy : low_idy + 1, idxBid] &= ~(state2 | state3)
+
+    fp_state[open_idy, idxBid] |= c.SF_OPEN
+    fp_state[high_idy, idxBid] |= c.SF_HIGH
+    fp_state[low_idy, idxBid] |= c.SF_LOW
+    fp_state[close_idy, idxBid] |= c.SF_CLOSE
+
+    fp_state[(high_idy + poc), idxBid] |= c.SF_POC_BAR
+    fp_state[(high_idy + vah), idxBid] |= c.SF_VAH_BAR
+    fp_state[(high_idy + val), idxBid] |= c.SF_VAL_BAR
 
     state1 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
     fp_state[idYmin:idYmax, idxBid : idxBid + 2] &= ~state1
@@ -401,25 +424,6 @@ def _update_bar_states(
             if (idy < ymax) and (ask_val > (fp[ymax, idxBid] * 3)):
                 fp_state[idy, idxAsk] |= c.SF_IMBALANCE
                 fp_state[ymax, idxBid] &= ~(c.SF_IMBALANCE)
-
-    # Update OHLC
-    fp_state[open_idy, idxBid] |= c.SF_OPEN
-    fp_state[high_idy, idxBid] |= c.SF_HIGH
-    fp_state[low_idy, idxBid] |= c.SF_LOW
-    fp_state[close_idy, idxBid] |= c.SF_CLOSE
-
-    # Update VA + POC
-    vp_bar: NDArray[int64] = (
-        fp[high_idy : low_idy + 1, idxBid] + fp[high_idy : low_idy + 1, idxAsk]
-    )
-    poc: intp = np.argmax(vp_bar)
-    vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
-    headers[bwo, c.BH_POC] = (center - (high_idy + poc)) * scale + baseNprice
-    headers[bwo, c.BH_VAH] = (center - (high_idy + vah)) * scale + baseNprice
-    headers[bwo, c.BH_VAL] = (center - (high_idy + val)) * scale + baseNprice
-    fp_state[(high_idy + poc), idxBid] |= c.SF_POC_BAR
-    fp_state[(high_idy + vah), idxBid] |= c.SF_VAH_BAR
-    fp_state[(high_idy + val), idxBid] |= c.SF_VAL_BAR
 
 
 @njit(cache=True)

@@ -89,6 +89,9 @@ venvPath = "."
 venv = ".venv"
 
 indexing = false
+ignore = [
+    "**/__pycache__"
+]
 
 reportAny = false
 reportExplicitAny = false
