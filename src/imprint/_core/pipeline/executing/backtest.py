@@ -69,6 +69,7 @@ class Backtest(Base):
         nMAE: int = user_data_raw_buf[c.TP_nMAE]
         nMFE: int = user_data_raw_buf[c.TP_nMFE]
 
+        _ = self.account
         self.exchange_sim.update_orders_history(
             timestamp=timestamp,
             order_param=order_param,
@@ -79,6 +80,12 @@ class Backtest(Base):
             nCommission=nCommission,
             nMAE=nMAE,
             nMFE=nMFE,
+            planned_tp=(
+                _._long_tp_dev if (order_param & c.OF_LONG) else _._short_tp_dev
+            ),
+            planned_sl=(
+                _._long_sl_dev if (order_param & c.OF_LONG) else _._short_sl_dev
+            ),
         )
         self.on_order_update(
             timestamp=timestamp,

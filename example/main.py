@@ -1,8 +1,10 @@
 from example.algorithm import IntraDay
-from example.binance.agg_trades_decoder import BinanceAggTradesDecoder
-from example.binance.order_encoder import BinanceOrderEncoder
-from example.binance.rest_adapter import BinanceFuturesREST
-from example.binance.user_stream_decoder import BinanceUserStreamDecoder
+from example.binance import (
+    BinanceAggTradesDecoder,
+    BinanceFuturesREST,
+    BinanceOrderEncoder,
+    BinanceUserStreamDecoder,
+)
 from example.execution import HedgeExecution
 from imprint import Imprint, pct, tf
 from imprint.configs import (
@@ -52,13 +54,20 @@ if __name__ == "__main__":
         symbol="DASHUSDT",
         strategy=Strategy(
             algorithm=IntraDay,
-            footprint=Footprint(timeframe=tf.M5, step_tick=5, state=True),
+            footprint=Footprint(
+                timeframe=tf.M1,
+                step_tick=5,
+                state=True,
+                ctrade=True,
+                avg_vol_period=4 * 60,
+                big_cluster_mult=0.5,
+            ),
             risk_management=RiskManagement(
                 max_lock_balance=pct(10.0),
                 max_loss_balance=pct(10.0),
                 entry_qty=pct(0.5),
-                tp_dev=pct(0.5),
-                sl_dev=pct(0.3),
+                tp_dev=pct(1.0),
+                sl_dev=pct(1.0),
                 pass_signal_if_analysis_time_big=50_000,
                 pass_execute_signal_if_timer_ms_exepired=1000,
             ),

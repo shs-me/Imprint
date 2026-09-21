@@ -96,7 +96,7 @@ class TradeParam(IntEnum):
 
     nPrice, nQty, timestamp, order_param = 0, auto(), auto(), auto()
     nCommission, order_id, client_order_id = auto(), auto(), auto()
-    nMAE, nMFE = auto(), auto()
+    nMAE, nMFE, planned_tp, planned_sl = auto(), auto(), auto(), auto()
     ConstantCount = auto()
 
 

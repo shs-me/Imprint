@@ -48,6 +48,8 @@ def analyze_orders_history(
         nCommission: int = int(orders[row, c.TP_nCommission])
         nMAE: int = int(orders[row, c.TP_nMAE])
         nMFE: int = int(orders[row, c.TP_nMFE])
+        planned_sl: int = int(orders[row, c.TP_planned_sl])
+        planned_tp: int = int(orders[row, c.TP_planned_tp])
 
         is_filled: bool = bool(orderParam & c.OF_FILLED)
         is_maker: bool = bool(orderParam & c.OF_LIMIT)
@@ -166,6 +168,8 @@ def analyze_orders_history(
                         "mae_pct": mae_pct,
                         "mfe": mfe,
                         "mfe_pct": mfe_pct,
+                        "planned_tp_pct": planned_tp / 10_000 * 100,
+                        "planned_sl_pct": -(planned_sl / 10_000 * 100),
                     }
                 )
 

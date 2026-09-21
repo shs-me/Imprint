@@ -18,11 +18,11 @@ class RiskManagement(Base, ABC):
         Maximum allowed time window in milliseconds for signal execution.
     """
 
+    _long_tp_dev: int = field(default=0, init=False)
+    _long_sl_dev: int = field(default=0, init=False)
+    _short_tp_dev: int = field(default=0, init=False)
+    _short_sl_dev: int = field(default=0, init=False)
     __entry_qty: int = field(init=False)
-    __long_tp_dev: int = field(init=False)
-    __long_sl_dev: int = field(init=False)
-    __short_tp_dev: int = field(init=False)
-    __short_sl_dev: int = field(init=False)
     __max_lock_balance: int = field(init=False)
     __max_loss_balance: int = field(init=False)
     __min_order_size: int = field(init=False)
@@ -129,9 +129,9 @@ class RiskManagement(Base, ABC):
     @final
     def set_tp_sel_dev(self, tp: int, sl: int, order_param: int) -> None:
         if order_param & c.OF_LONG:
-            self.__long_tp_dev, self.__long_sl_dev = tp, sl
+            self._long_tp_dev, self._long_sl_dev = tp, sl
         else:
-            self.__short_tp_dev, self.__short_sl_dev = tp, sl
+            self._short_tp_dev, self._short_sl_dev = tp, sl
 
     @final
     def tp_sl_param(
@@ -156,9 +156,9 @@ class RiskManagement(Base, ABC):
             Tuple containing (nPrice_with_dev, order_param_bitmask, encoded_client_order_id).
         """
         dev: int = (
-            (self.__long_tp_dev if is_tp else self.__long_sl_dev)
+            (self._long_tp_dev if is_tp else self._long_sl_dev)
             if is_long
-            else (self.__short_tp_dev if is_tp else self.__short_sl_dev)
+            else (self._short_tp_dev if is_tp else self._short_sl_dev)
         )
         ticks: int = nPrice * dev // 10_000
         ticks = (

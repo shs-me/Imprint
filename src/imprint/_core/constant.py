@@ -117,6 +117,8 @@ TP_client_order_id: int = int(TradeParam.client_order_id)
 TP_nCommission: int = int(TradeParam.nCommission)
 TP_nMAE: int = int(TradeParam.nMAE)
 TP_nMFE: int = int(TradeParam.nMFE)
+TP_planned_tp: int = int(TradeParam.planned_tp)
+TP_planned_sl: int = int(TradeParam.planned_sl)
 TP_ConstantCount: int = int(TradeParam.ConstantCount)
 
 # OrderFlag

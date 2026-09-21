@@ -17,6 +17,8 @@ class CloseTrades(TypedDict):
     mae_pct: float
     mfe: float
     mfe_pct: float
+    planned_tp_pct: float
+    planned_sl_pct: float
 
 
 class OpenTrades(TypedDict):

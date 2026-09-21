@@ -91,6 +91,8 @@ class Base(ABC):
                         fp_engine.update_footprint(
                             nPrice, nQty, timestamp, is_sell
                         )
+                        if not self.is_bbox_mode(_.wid_buf, _.rid_buf):
+                            fp_engine.analyze_footprint()
 
                     self.post_update()
 

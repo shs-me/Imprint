@@ -142,6 +142,9 @@ class Base(ABC):
             if self.with_ctrade:
                 self.fp.ctrade = self.fp.state.padding(int(before), int(after))
 
+            self.bbox_default_value[0] = self.fp.con.fp_rows
+            self.bbox[:] = self.bbox_default_value
+
         self.child_init_array(nPrice)
 
     @abstractmethod

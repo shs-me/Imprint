@@ -69,6 +69,8 @@ class Account(Base, ABC):
         nCommission: int,
         nMAE: int = 0,
         nMFE: int = 0,
+        planned_tp: int = 0,
+        planned_sl: int = 0,
     ) -> None:
         ohWid, oh = self.ohWid, self.orders_history
         # - - -
@@ -81,6 +83,8 @@ class Account(Base, ABC):
         oh[ohWid[0], c.TP_nCommission] = nCommission
         oh[ohWid[0], c.TP_nMAE] = nMAE
         oh[ohWid[0], c.TP_nMFE] = nMFE
+        oh[ohWid[0], c.TP_planned_tp] = planned_tp
+        oh[ohWid[0], c.TP_planned_sl] = planned_sl
         ohWid[0] += 1
         if ohWid[0] >= oh.shape[0]:
             old_rows: int = oh.shape[0]
