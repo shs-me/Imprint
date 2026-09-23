@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Protocol, final, override
+from typing import final, override
 
 import numpy as np
 from numba import njit
@@ -10,24 +10,8 @@ from imprint._core import constant as c
 from imprint._core.footprint.engine import writer as w
 
 
-class AlgorithmProtocol(Protocol):
-    tick_by_tick_analyze: bool
-
-    def on_clusters_update(
-        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
-    ) -> None: ...
-
-    def on_bar_close(self) -> None: ...
-
-    def on_bar_update(
-        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
-    ) -> None: ...
-
-
 @dataclass(slots=True)
 class Reader(w.Writer):
-    algorithm: AlgorithmProtocol
-
     last_idx: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
@@ -179,12 +163,9 @@ def _update_clusters_states(
         c.SF_ASK_DELTA_DOMINATION_FP
     )
 
-    bar_min, bar_max = max(0, bwo - args[w.FU_avg_vol_period]), bwo + 1
-    if (bar_max - bar_min) >= args[w.FU_avg_vol_period]:
-        vol: int64 = int64(
-            headers[bar_min:bar_max, c.BH_Volume].mean()
-            * (args[w.FU_big_cluster_mult] / 10_000)
-        )
+    ma_vol: int64 = headers[bwo - 1, c.BH_MA_VOL]
+    if ma_vol:
+        vol: int64 = int64(ma_vol * (args[w.FU_big_cluster_mult] / 10_000))
 
         for idy in range(idYmin, idYmax):
             for idx in range(idXmin, idXmax):
@@ -268,6 +249,35 @@ def _update_closed_bar_and_fp_states(
         ) // park_period
     else:
         headers[bwo, c.BH_PARK] = cur_var
+
+    bar_max = bwo
+
+    # MA Volume
+    period: int64 = args[w.FU_ma_vol_period]
+    bar_min: int | int64 = max(0, bwo - period)
+    if (bar_max - bar_min) >= period:
+        headers[bwo, c.BH_MA_VOL] = int64(
+            headers[bar_min:bar_max, c.BH_Volume].mean()
+        )
+
+    # MA Count Trade
+    period = args[w.FU_ma_count_trade_period]
+    bar_min = max(0, bwo - period)
+    if (bar_max - bar_min) >= period:
+        headers[bwo, c.BH_MA_COUNT_TRADE] = int64(
+            headers[bar_min:bar_max, c.BH_CountTrade].mean()
+        )
+
+    # MA Avg Trade Size
+    period = args[w.FU_ma_ats_period]
+    bar_min = max(0, bwo - period)
+    if (bar_max - bar_min) >= period:
+        headers[bwo, c.BH_MA_ATS] = int64(
+            (
+                headers[bar_min:bar_max, c.BH_Volume]
+                // headers[bar_min:bar_max, c.BH_CountTrade]
+            ).mean()
+        )
 
     # Update POC + VA
     poc: intp = np.argmax(fp[:, idxVP])

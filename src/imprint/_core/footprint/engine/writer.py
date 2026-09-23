@@ -36,10 +36,12 @@ from imprint._core.footprint.models.converter import to_idx, to_idy
     FU_with_state,
     FU_atr_period,
     FU_park_period,
-    FU_avg_vol_period,
+    FU_ma_vol_period,
+    FU_ma_ats_period,
+    FU_ma_count_trade_period,
     FU_big_cluster_mult,
     FU_ConstantCount,
-) = [v for v in range(21)]
+) = [v for v in range(23)]
 
 
 @dataclass(slots=True)
@@ -68,12 +70,17 @@ class Writer(Base, ABC):
             self._args[FU_with_ctrade] = 1 if self.with_ctrade else 0
             self._args[FU_with_state] = 1 if self.with_state else 0
             self._args[FU_step_tick] = self.fp.con.step_tick
-            cfgFP = self.manager.cfgFootprint
-            self._args[FU_atr_period] = cfgFP.atr_period
-            self._args[FU_park_period] = cfgFP.park_period
-            self._args[FU_avg_vol_period] = cfgFP.avg_vol_period
+            self._args[FU_atr_period] = self.algorithm.atr_period
+            self._args[FU_park_period] = self.algorithm.park_period
+            self._args[FU_ma_ats_period] = (
+                self.algorithm.ma_avg_trade_size_period
+            )
+            self._args[FU_ma_vol_period] = self.algorithm.ma_volume_period
+            self._args[FU_ma_count_trade_period] = (
+                self.algorithm.ma_count_trade_period
+            )
             self._args[FU_big_cluster_mult] = round(
-                cfgFP.big_cluster_mult * 10_000
+                self.algorithm.big_cluster_mult * 10_000
             )
 
         else:

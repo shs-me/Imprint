@@ -7,10 +7,10 @@ from numpy import int64
 
 from imprint._core import constant as c
 from imprint._core.configs import SignalStream
-from imprint._core.footprint.engine.reader import AlgorithmProtocol
 from imprint._core.footprint.engine.reader import Reader as FootprintEngine
 from imprint._core.footprint.models import Footprint
 from imprint._core.ipc import NodeManager
+from imprint._core.types import AlgorithmProtocol
 
 
 @dataclass(slots=True)
@@ -97,6 +97,12 @@ class Router(AlgorithmProtocol, ABC):
     _sync: SyncWithExecution
 
     tick_by_tick_analyze: bool = field(default=True, init=False)
+    atr_period: int = field(default=14, init=False)
+    park_period: int = field(default=12, init=False)
+    ma_volume_period: int = field(default=21, init=False)
+    ma_count_trade_period: int = field(default=21, init=False)
+    ma_avg_trade_size_period: int = field(default=21, init=False)
+    big_cluster_mult: float = field(default=0.33, init=False)
 
     is_backtest: bool = field(init=False)
     last_idx: memoryview = field(init=False)

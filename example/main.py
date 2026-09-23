@@ -55,12 +55,7 @@ if __name__ == "__main__":
         strategy=Strategy(
             algorithm=IntraDay,
             footprint=Footprint(
-                timeframe=tf.M1,
-                step_tick=5,
-                state=True,
-                ctrade=True,
-                avg_vol_period=4 * 60,
-                big_cluster_mult=0.5,
+                timeframe=tf.M1, step_tick=5, state=True, ctrade=True
             ),
             risk_management=RiskManagement(
                 max_lock_balance=pct(10.0),

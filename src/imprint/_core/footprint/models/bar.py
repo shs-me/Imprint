@@ -176,27 +176,25 @@ class Indicators[T]:
     def volume(self) -> int64:
         return self._bar._get_header(c.BH_Volume)
 
-    def avg_volume(self, range: int) -> int64:
-        bar_min, bar_max = (
-            max(0, self._bar.bar_id - range),
-            self._bar.bar_id + 1,
-        )
-        return int64(self._bar._fp.headers[bar_min:bar_max, c.BH_Volume].mean())
+    @property
+    def ma_volume(self) -> int64:
+        return self._bar._get_header(c.BH_MA_VOL)
 
     @property
     def trade_count(self) -> int64:
         return self._bar._get_header(c.BH_CountTrade)
 
-    def avg_trade_count(self, range: int) -> int64:
-        bar_min, bar_max = (
-            max(0, self._bar.bar_id - range),
-            self._bar.bar_id + 1,
-        )
-        return self._bar._fp.headers[bar_min:bar_max, c.BH_CountTrade].mean()
+    @property
+    def ma_trade_count(self) -> int64:
+        return self._bar._get_header(c.BH_MA_COUNT_TRADE)
 
     @property
     def avg_trade_size(self) -> int64:
         return self.volume // self.trade_count
+
+    @property
+    def ma_avg_trade_size(self) -> int64:
+        return self._bar._get_header(c.BH_MA_ATS)
 
     @property
     def delta(self) -> int64:

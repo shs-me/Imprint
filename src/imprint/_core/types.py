@@ -1,6 +1,28 @@
 from multiprocessing import Process
 from typing import Any, Protocol, TypedDict, overload
 
+from numpy import int64
+
+
+class AlgorithmProtocol(Protocol):
+    tick_by_tick_analyze: bool
+    atr_period: int
+    park_period: int
+    ma_volume_period: int
+    ma_count_trade_period: int
+    ma_avg_trade_size_period: int
+    big_cluster_mult: float
+
+    def on_clusters_update(
+        self, idYmin: int64, idYmax: int64, idXmin: int64, idXmax: int64
+    ) -> None: ...
+
+    def on_bar_close(self) -> None: ...
+
+    def on_bar_update(
+        self, idYmin: int64, idYmax: int64, idxBid: int, idxAsk: int
+    ) -> None: ...
+
 
 class ExecutionProtocol(Protocol):
     def on_signal(

@@ -141,10 +141,6 @@ class Footprint(Configuration):
     fp_rows: int = 10001
     state: bool = False
     ctrade: bool = False
-    atr_period: int = 14
-    park_period: int = 12
-    avg_vol_period: int = 20
-    big_cluster_mult: float = 0.33
 
     colVP: int = field(default=-2, init=False)
     colDP: int = field(default=-1, init=False)

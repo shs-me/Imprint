@@ -12,11 +12,13 @@ from imprint._core import constant as c
 from imprint._core.footprint.models import Converter, Footprint, FPArray
 from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
+from imprint._core.types import AlgorithmProtocol
 
 
 @dataclass(slots=True)
 class Base(ABC):
     manager: NodeManager
+    algorithm: AlgorithmProtocol
 
     __init_arrays: bool = field(default=True, init=False)
     __base_fp_dump_path: str = field(init=False)

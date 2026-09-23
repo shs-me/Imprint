@@ -112,6 +112,7 @@ class BarHeaders(IntEnum):
     CountTrade = auto()
     # Footprint Reader
     ATR, PARK = auto(), auto()
+    MA_VOL, MA_COUNT_TRADE, MA_ATS = auto(), auto(), auto()
     POC, VAH, VAL = auto(), auto(), auto()
     POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
     ConstantCount = auto()
