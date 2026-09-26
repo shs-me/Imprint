@@ -156,6 +156,139 @@
     document.addEventListener('fullscreenchange', () => {{
         setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
     }});
+
+    window.addEventListener('load', function() {{
+        var gd = document.querySelector('#tab3 .plotly-graph-div');
+        if (!gd) return;
+
+        if (gd._context) {{
+            gd._context.doubleClick = false;
+        }}
+
+        function getActiveTraces() {{
+            var candle = gd.data.find(function(tr) {{
+                return tr.type === 'candlestick' && tr.visible !== false;
+            }});
+            var equity = gd.data.find(function(tr) {{
+                return tr.name && tr.name.indexOf('Equity') === 0 && tr.visible !== false;
+            }});
+            return {{ candle: candle, equity: equity }};
+        }}
+
+        function calcAutozoomY(x0, x1) {{
+            var trs = getActiveTraces();
+            var c = trs.candle;
+            var eq = trs.equity;
+            if (!c || !c.x || c.x.length === 0) return {{}};
+
+            var t0 = new Date(x0).getTime();
+            var t1 = new Date(x1).getTime();
+
+            var pLo = Infinity, pHi = -Infinity;
+            var eqLo = Infinity, eqHi = -Infinity;
+
+            for (var i = 0; i < c.x.length; i++) {{
+                var ct = new Date(c.x[i]).getTime();
+                if (ct >= t0 && ct <= t1) {{
+                    if (c.low[i] < pLo) pLo = c.low[i];
+                    if (c.high[i] > pHi) pHi = c.high[i];
+                    if (eq && eq.y && eq.y[i] !== undefined) {{
+                        if (eq.y[i] < eqLo) eqLo = eq.y[i];
+                        if (eq.y[i] > eqHi) eqHi = eq.y[i];
+                    }}
+                }}
+            }}
+
+            var layoutUpdate = {{}};
+
+            if (pLo < Infinity && pHi > -Infinity) {{
+                var pPad = (pHi - pLo) * 0.04 || 1.0;
+                layoutUpdate['yaxis3.range'] = [pLo - pPad, pHi + pPad];
+                var baseP = c.close[0] || 1.0;
+                layoutUpdate['yaxis4.range'] = [
+                    (pLo - pPad - baseP) / baseP * 100.0,
+                    (pHi + pPad - baseP) / baseP * 100.0
+                ];
+            }}
+
+            if (eqLo < Infinity && eqHi > -Infinity) {{
+                var eqPad = (eqHi - eqLo) * 0.04 || 1.0;
+                layoutUpdate['yaxis.range'] = [eqLo - eqPad, eqHi + eqPad];
+                var baseB = eq.y[0] || 1.0;
+                layoutUpdate['yaxis2.range'] = [
+                    (eqLo - eqPad - baseB) / baseB * 100.0,
+                    (eqHi + eqPad - baseB) / baseB * 100.0
+                ];
+            }}
+
+            return layoutUpdate;
+        }}
+
+        var updating = false;
+
+        function toggleRange() {{
+            var trs = getActiveTraces();
+            var c = trs.candle;
+            if (!c || !c.x || c.x.length === 0) return;
+
+            var n = c.x.length;
+            var xFullStart = c.x[0];
+            var xFullEnd = c.x[n - 1];
+
+            var curX0 = gd.layout.xaxis.range ? gd.layout.xaxis.range[0] : null;
+            var curX1 = gd.layout.xaxis.range ? gd.layout.xaxis.range[1] : null;
+
+            var isFull = (curX0 && curX1 &&
+                new Date(curX0).getTime() <= new Date(xFullStart).getTime() &&
+                new Date(curX1).getTime() >= new Date(xFullEnd).getTime());
+
+            var targetX0, targetX1;
+
+            if (isFull) {{
+                var s = n > 144 ? n - 144 : 0;
+                targetX0 = c.x[s];
+                targetX1 = c.x[n - 1];
+            }} else {{
+                targetX0 = xFullStart;
+                targetX1 = xFullEnd;
+            }}
+
+            var layoutUpdate = calcAutozoomY(targetX0, targetX1);
+            layoutUpdate['xaxis.range'] = [targetX0, targetX1];
+            layoutUpdate['xaxis2.range'] = [targetX0, targetX1];
+
+            updating = true;
+            Plotly.relayout(gd, layoutUpdate).then(function() {{
+                updating = false;
+            }});
+        }}
+
+        gd.on('plotly_doubleclick', function() {{
+            toggleRange();
+            return false;
+        }});
+
+        gd.addEventListener('dblclick', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            toggleRange();
+        }});
+
+        gd.on('plotly_relayout', function(ed) {{
+            if (updating) return;
+            var x0 = ed['xaxis.range[0]'] || (ed['xaxis.range'] && ed['xaxis.range'][0]);
+            var x1 = ed['xaxis.range[1]'] || (ed['xaxis.range'] && ed['xaxis.range'][1]);
+            if (!x0 || !x1) return;
+
+            var layoutUpdate = calcAutozoomY(x0, x1);
+            if (layoutUpdate && Object.keys(layoutUpdate).length > 0) {{
+                updating = true;
+                Plotly.relayout(gd, layoutUpdate).then(function() {{
+                    updating = false;
+                }});
+            }}
+        }});
+    }});
 </script>
 </body>
 </html>

@@ -205,11 +205,31 @@ def _update(
         ctrade[idy, args[FU_idxVP]] += 1
 
     # Update Headers
+    ho: int = headers_offset[0]
     bar: int64 = (idx & ~1) // 2
-    bwo: int64 = headers_offset[0] + bar
+    bwo: int64 = ho + bar
     if headers[bwo, c.BH_CountTrade] == 0:
         headers[bwo, c.BH_Open : c.BH_Close + 1] = nPrice
         headers[bwo, c.BH_Time] = timestamp
+
+        prev_bar: int64 = bar - 1
+        prev_t, prev_p = 0, 0
+
+        while prev_bar >= 0:
+            if headers[(ho + prev_bar), 0] == 0:
+                prev_bar -= 1
+            else:
+                prev_t = headers[(ho + prev_bar), c.BH_Time]
+                prev_p = headers[(ho + prev_bar), c.BH_Close]
+                prev_bar += 1
+                break
+
+        while 0 <= prev_bar < bar:
+            headers[(ho + prev_bar), c.BH_Time] = prev_t = (
+                prev_t + args[FU_tims]
+            )
+            headers[(ho + prev_bar), c.BH_Open : c.BH_Close + 1] = prev_p
+            prev_bar += 1
 
     headers[bwo, c.BH_High] = max(nPrice, headers[bwo, c.BH_High])
     headers[bwo, c.BH_Low] = min(nPrice, headers[bwo, c.BH_Low])

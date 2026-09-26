@@ -1,5 +1,6 @@
 import numpy as np
 from numpy import datetime64, float64
+from numpy.typing import NDArray
 from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
     Candlestick,
     Figure,
@@ -7,81 +8,87 @@ from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
 )
 
 from imprint._vis.analyze import Stats
-from imprint._vis.settings import (
-    CloseTrades,
-    OpenTrades,
-    ResampledData,
-)
+from imprint._vis.settings import CloseTrades, OpenTrades, ResampledData
 
 
 def _group_open_trades(
-    trades: list[OpenTrades], tf_ms: int, is_long: bool
+    trades: list[OpenTrades],
+    candle_times: NDArray[datetime64],
+    is_long: bool,
 ) -> tuple[list[datetime64], list[float], list[str]]:
     filtered = [t for t in trades if t["is_long"] == is_long]
-    if not filtered:
+    if not filtered or len(candle_times) == 0:
         return [], [], []
 
+    trade_times = np.array(
+        [np.datetime64(t["time"].replace(tzinfo=None), "ms") for t in filtered]
+    )
+    indices = np.clip(
+        np.searchsorted(candle_times, trade_times, side="right") - 1,
+        0,
+        len(candle_times) - 1,
+    )
+
     buckets: dict[int, list[OpenTrades]] = {}
-    for t in filtered:
-        t_ms = int(t["time"].timestamp() * 1000)
-        bucket = (t_ms // tf_ms) * tf_ms
-        buckets.setdefault(bucket, []).append(t)
+    for idx, t in zip(indices, filtered):
+        buckets.setdefault(int(idx), []).append(t)
 
     times: list[datetime64] = []
     prices: list[float] = []
     hover_texts: list[str] = []
     side = "Long" if is_long else "Short"
 
-    for b_ms, group in buckets.items():
-        times.append(np.datetime64(b_ms, "ms"))
-        avg_price = float(np.mean([item["price"] for item in group]))
-        prices.append(avg_price)
+    for idx, group in buckets.items():
+        c_time = candle_times[idx]
+        times.append(c_time)
+        avg_p = float(np.mean([item["price"] for item in group]))
+        prices.append(avg_p)
         count = len(group)
-        if count == 1:
-            hover_texts.append(
-                f"Entry {side}: ${avg_price:,.2f}<br>Time: {np.datetime64(b_ms, 'ms')}"
-            )
-        else:
-            hover_texts.append(
-                f"Entry {side} (x{count}): avg ${avg_price:,.2f}<br>Time: {np.datetime64(b_ms, 'ms')}"
-            )
+        tag = f"Entry {side}" if count == 1 else f"Entry {side} (x{count})"
+        hover_texts.append(f"{tag}: ${avg_p:,.2f}<br>Time: {c_time}")
 
     return times, prices, hover_texts
 
 
 def _group_close_trades(
-    trades: list[CloseTrades], tf_ms: int, is_long: bool
+    trades: list[CloseTrades],
+    candle_times: NDArray[datetime64],
+    is_long: bool,
 ) -> tuple[list[datetime64], list[float], list[str]]:
     filtered = [t for t in trades if t["is_long"] == is_long]
-    if not filtered:
+    if not filtered or len(candle_times) == 0:
         return [], [], []
 
+    trade_times = np.array(
+        [np.datetime64(t["time"].replace(tzinfo=None), "ms") for t in filtered]
+    )
+    indices = np.clip(
+        np.searchsorted(candle_times, trade_times, side="right") - 1,
+        0,
+        len(candle_times) - 1,
+    )
+
     buckets: dict[int, list[CloseTrades]] = {}
-    for t in filtered:
-        t_ms = int(t["time"].timestamp() * 1000)
-        bucket = (t_ms // tf_ms) * tf_ms
-        buckets.setdefault(bucket, []).append(t)
+    for idx, t in zip(indices, filtered):
+        buckets.setdefault(int(idx), []).append(t)
 
     times: list[datetime64] = []
     prices: list[float] = []
     hover_texts: list[str] = []
     side = "Long" if is_long else "Short"
 
-    for b_ms, group in buckets.items():
-        times.append(np.datetime64(b_ms, "ms"))
-        avg_price: float = float(np.mean([item["price"] for item in group]))
-        prices.append(avg_price)
-        total_pnl: float = float(np.sum([item["pnl"] for item in group]))
-        avg_pnl_pct: float = float(np.mean([item["pnl_pct"] for item in group]))
-        count: int = len(group)
-        if count == 1:
-            hover_texts.append(
-                f"Close {side}: ${avg_price:,.2f}<br>PnL: ${total_pnl:,.2f} ({avg_pnl_pct:+.2f}%)<br>Time: {np.datetime64(b_ms, 'ms')}"
-            )
-        else:
-            hover_texts.append(
-                f"Close {side} (x{count}): avg ${avg_price:,.2f}<br>Total PnL: ${total_pnl:,.2f} (avg {avg_pnl_pct:+.2f}%)<br>Time: {np.datetime64(b_ms, 'ms')}"
-            )
+    for idx, group in buckets.items():
+        c_time = candle_times[idx]
+        times.append(c_time)
+        avg_p = float(np.mean([item["price"] for item in group]))
+        prices.append(avg_p)
+        tot_pnl = float(np.sum([item["pnl"] for item in group]))
+        avg_pct = float(np.mean([item["pnl_pct"] for item in group]))
+        count = len(group)
+        tag = f"Close {side}" if count == 1 else f"Close {side} (x{count})"
+        hover_texts.append(
+            f"{tag}: ${avg_p:,.2f}<br>PnL: ${tot_pnl:,.2f} ({avg_pct:+.2f}%)<br>Time: {c_time}"
+        )
 
     return times, prices, hover_texts
 
@@ -99,15 +106,14 @@ def add_chart_traces(
     has_close_long = any(tc["is_long"] for tc in stats.trades_close)
     has_close_short = any(not tc["is_long"] for tc in stats.trades_close)
 
-    # Candles and Trade markers for every timeframe
     for tf_idx, tf_data in enumerate(tf_series):
         is_active: bool = tf_idx == 0
-        tf_ms: int = tf_data["timeframe_ms"]
+        c_times = tf_data["ohlc"]["time"]
 
         # Candle
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
             Candlestick(
-                x=tf_data["ohlc"]["time"],
+                x=c_times,
                 open=tf_data["ohlc"]["open"],
                 high=tf_data["ohlc"]["high"],
                 low=tf_data["ohlc"]["low"],
@@ -129,7 +135,7 @@ def add_chart_traces(
         # Right Y tick in %
         fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
             Scatter(
-                x=tf_data["ohlc"]["time"],
+                x=c_times,
                 y=tf_data["rel_price_pct"],
                 mode="lines",
                 line={"color": "rgba(0,0,0,0)", "width": 0},
@@ -146,7 +152,7 @@ def add_chart_traces(
         # Trade Markers
         if has_buy_long:
             x_bl, y_bl, h_bl = _group_open_trades(
-                stats.trades_open, tf_ms, is_long=True
+                stats.trades_open, c_times, is_long=True
             )
             fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
                 Scatter(
@@ -174,7 +180,7 @@ def add_chart_traces(
 
         if has_sell_short:
             x_ss, y_ss, h_ss = _group_open_trades(
-                stats.trades_open, tf_ms, is_long=False
+                stats.trades_open, c_times, is_long=False
             )
             fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
                 Scatter(
@@ -202,7 +208,7 @@ def add_chart_traces(
 
         if has_close_long:
             x_cl, y_cl, h_cl = _group_close_trades(
-                stats.trades_close, tf_ms, is_long=True
+                stats.trades_close, c_times, is_long=True
             )
             fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
                 Scatter(
@@ -230,7 +236,7 @@ def add_chart_traces(
 
         if has_close_short:
             x_cs, y_cs, h_cs = _group_close_trades(
-                stats.trades_close, tf_ms, is_long=False
+                stats.trades_close, c_times, is_long=False
             )
             fig.add_trace(  # pyright: ignore[reportUnknownMemberType]
                 Scatter(

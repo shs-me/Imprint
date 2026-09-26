@@ -141,7 +141,11 @@ class Render:
         return fig.to_html(  # pyright: ignore[reportUnknownMemberType]
             full_html=False,
             include_plotlyjs=False,
-            config={"responsive": True, "displayModeBar": True},
+            config={
+                "responsive": True,
+                "displayModeBar": True,
+                "doubleClick": False,
+            },
         )
 
     def run(self) -> None:

@@ -1,5 +1,9 @@
+"""Synchronized equity and candlestick price chart rendering module."""
+
 from typing import Any
 
+import numpy as np
+from numpy import float64
 from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
     Figure,
 )
@@ -8,10 +12,46 @@ from plotly.subplots import (  # pyright: ignore[reportMissingTypeStubs]
 )
 
 from imprint._vis.analyze import Stats, build_resampled_timeframes
+from imprint._vis.analyze.resample import BAR_THRESHOLD
 from imprint._vis.plot.chart import add_chart_traces
 from imprint._vis.plot.equity import add_equity_traces
 from imprint._vis.plot.utils import apply_dark_theme, empty_figure
 from imprint._vis.settings import ResampledData
+
+
+def _get_144_bounds(
+    tf_data: ResampledData, base_b: float, base_p: float64
+) -> dict[str, Any]:
+    times = tf_data["ohlc"]["time"]
+    n: int = len(times)
+    s = slice(-BAR_THRESHOLD, None) if n > BAR_THRESHOLD else slice(None)
+
+    x0: str = str(times[-BAR_THRESHOLD]) if n > BAR_THRESHOLD else str(times[0])
+    x1: str = str(times[-1])
+
+    p_lo: float = float(np.min(tf_data["ohlc"]["low"][s]))
+    p_hi: float = float(np.max(tf_data["ohlc"]["high"][s]))
+    p_pad: float = (p_hi - p_lo) * 0.04 or 1.0
+
+    eq_lo: float = float(np.min(tf_data["eq_low"][s]))
+    eq_hi: float = float(np.max(tf_data["eq_high"][s]))
+    eq_pad: float = (eq_hi - eq_lo) * 0.04 or 1.0
+
+    rp_lo: float = (p_lo - base_p) / base_p * 100.0
+    rp_hi: float = (p_hi - base_p) / base_p * 100.0
+    rp_pad: float = (rp_hi - rp_lo) * 0.04 or 0.1
+
+    req_lo: float = (eq_lo - base_b) / base_b * 100.0
+    req_hi: float = (eq_hi - base_b) / base_b * 100.0
+    req_pad: float = (req_hi - req_lo) * 0.04 or 0.1
+
+    return {
+        "x": [x0, x1],
+        "p": [p_lo - p_pad, p_hi + p_pad],
+        "eq": [eq_lo - eq_pad, eq_hi + eq_pad],
+        "rp": [rp_lo - rp_pad, rp_hi + rp_pad],
+        "req": [req_lo - req_pad, req_hi + req_pad],
+    }
 
 
 def plot_equity_and_chart(stats: Stats) -> Figure:
@@ -48,38 +88,47 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
     add_equity_traces(fig, stats, tf_series, trace_tf_map)
     add_chart_traces(fig, stats, tf_series, trace_tf_map)
 
-    all_times = stats.ohlc["time"]
-    x_end: str = str(all_times[-1])
-    x_full_start: str = str(all_times[0])
-    x_start_144: str = (
-        str(all_times[-144]) if len(all_times) > 144 else x_full_start
-    )
+    base_p: float64 = stats.ohlc["close"][0]
+    base_b: float = stats.start_balance
+    init_b = _get_144_bounds(tf_series[0], base_b, base_p)
 
-    # Timeframe Buttons
     buttons: list[dict[str, Any]] = []
     if len(tf_series) > 1:
         for target_k, tf_data in enumerate(tf_series):
-            visibility_vector: list[bool] = [
+            vis: list[bool] = [
                 (t_idx is None or t_idx == target_k) for t_idx in trace_tf_map
             ]
+            b = _get_144_bounds(tf_data, base_b, base_p)
             buttons.append(
                 {
                     "label": tf_data["timeframe_name"],
                     "method": "update",
-                    "args": [{"visible": visibility_vector}],
+                    "args": [
+                        {"visible": vis},
+                        {
+                            "xaxis.range": b["x"],
+                            "xaxis2.range": b["x"],
+                            "yaxis.range": b["eq"],
+                            "yaxis2.range": b["req"],
+                            "yaxis3.range": b["p"],
+                            "yaxis4.range": b["rp"],
+                        },
+                    ],
                 }
             )
 
-    # Common layout styles for y-axes
-    base_axis = {
+    base_axis: dict[str, Any] = {
         "ticks": "outside",
         "ticklen": 6,
         "tickfont": {"size": 11, "color": "#CFD8DC"},
         "showline": True,
         "linecolor": "#424242",
+        "fixedrange": False,
     }
 
-    def make_left_axis(title: str, fmt: str) -> dict[str, Any]:
+    def make_left_axis(
+        title: str, fmt: str, y_range: list[float]
+    ) -> dict[str, Any]:
         return {
             **base_axis,
             "title_text": title,
@@ -87,9 +136,10 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
             "showgrid": True,
             "tickformat": fmt,
             "mirror": True,
+            "range": y_range,
         }
 
-    def make_right_axis() -> dict[str, Any]:
+    def make_right_axis(y_range: list[float]) -> dict[str, Any]:
         return {
             **base_axis,
             "title_text": "",
@@ -97,15 +147,18 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
             "ticksuffix": "%",
             "tickformat": "+.1f",
             "showgrid": False,
+            "range": y_range,
         }
 
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
         autosize=True,
         margin={"l": 45, "r": 45, "t": 32, "b": 22},
-        yaxis=make_left_axis("Balance (Left $ | Right %)", ",.0f"),
-        yaxis2=make_right_axis(),
-        yaxis3=make_left_axis("Price (Left $ | Right %)", ",.2f"),
-        yaxis4=make_right_axis(),
+        yaxis=make_left_axis(
+            "Balance (Left $ | Right %)", ",.0f", init_b["eq"]
+        ),
+        yaxis2=make_right_axis(init_b["req"]),
+        yaxis3=make_left_axis("Price (Left $ | Right %)", ",.2f", init_b["p"]),
+        yaxis4=make_right_axis(init_b["rp"]),
         yaxis5={  # Right Dynamic Drawdown In Equity
             "title": "",
             "tickfont": {"color": "#FF5252", "size": 10},
@@ -153,74 +206,34 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
         },
     )
 
-    # Common styling helper for updatemenu buttons
-    def make_updatemenu(
-        x: float, xanchor: str, buttons_list: list[dict[str, Any]]
-    ) -> dict[str, Any]:
-        return {
-            "type": "buttons",
-            "direction": "right",
-            "active": 0,
-            "showactive": False,
-            "x": x,
-            "xanchor": xanchor,
-            "y": 1.05,
-            "yanchor": "bottom",
-            "bgcolor": "#1E1E1E",
-            "bordercolor": "#37474F",
-            "borderwidth": 1,
-            "pad": {"r": 4, "t": 2, "b": 2},
-            "font": {
-                "color": "#00E5FF",
-                "size": 10,
-                "family": "'Courier New', Consolas, monospace",
-            },
-            "buttons": buttons_list,
-        }
-
-    updatemenus_list: list[dict[str, Any]] = []
     if buttons:
-        updatemenus_list.append(make_updatemenu(0.0, "left", buttons))
-
-    updatemenus_list.append(
-        make_updatemenu(
-            1.0,
-            "right",
-            [
+        fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
+            updatemenus=[
                 {
-                    "label": "144 Bars",
-                    "method": "relayout",
-                    "args": [
-                        {
-                            "xaxis.range": [x_start_144, x_end],
-                            "xaxis2.range": [x_start_144, x_end],
-                            "xaxis.autorange": False,
-                            "xaxis2.autorange": False,
-                        }
-                    ],
-                },
-                {
-                    "label": "ALL",
-                    "method": "relayout",
-                    "args": [
-                        {
-                            "xaxis.range": [x_full_start, x_end],
-                            "xaxis2.range": [x_full_start, x_end],
-                            "xaxis.autorange": False,
-                            "xaxis2.autorange": False,
-                        }
-                    ],
-                },
-            ],
+                    "type": "buttons",
+                    "direction": "right",
+                    "active": 0,
+                    "showactive": False,
+                    "x": 0.0,
+                    "xanchor": "left",
+                    "y": 1.05,
+                    "yanchor": "bottom",
+                    "bgcolor": "#1E1E1E",
+                    "bordercolor": "#37474F",
+                    "borderwidth": 1,
+                    "pad": {"r": 4, "t": 2, "b": 2},
+                    "font": {
+                        "color": "#00E5FF",
+                        "size": 10,
+                        "family": "'Courier New', Consolas, monospace",
+                    },
+                    "buttons": buttons,
+                }
+            ]
         )
-    )
-
-    fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
-        updatemenus=updatemenus_list
-    )
 
     fig.update_xaxes(  # pyright: ignore[reportUnknownMemberType]
-        range=[x_start_144, x_end],
+        range=init_b["x"],
         ticks="outside",
         ticklen=6,
         tickfont={"size": 11, "color": "#CFD8DC"},
