@@ -137,6 +137,12 @@
         document.getElementById(id).classList.add('active');
         e.currentTarget.classList.add('active');
         window.dispatchEvent(new Event('resize'));
+        if (id === 'tab3') {{
+            var gd = document.querySelector('#tab3 .plotly-graph-div');
+            if (gd && window.Plotly) {{
+                Plotly.Plots.resize(gd);
+            }}
+        }}
     }}
 
     function toggleFullscreen() {{
@@ -161,133 +167,273 @@
         var gd = document.querySelector('#tab3 .plotly-graph-div');
         if (!gd) return;
 
-        if (gd._context) {{
-            gd._context.doubleClick = false;
-        }}
-
-        function getActiveTraces() {{
-            var candle = gd.data.find(function(tr) {{
+        function getActiveCandle() {{
+            if (!gd.data) return null;
+            return gd.data.find(function(tr) {{
+                return tr.type === 'candlestick' && tr.visible === true;
+            }}) || gd.data.find(function(tr) {{
                 return tr.type === 'candlestick' && tr.visible !== false;
             }});
-            var equity = gd.data.find(function(tr) {{
-                return tr.name && tr.name.indexOf('Equity') === 0 && tr.visible !== false;
-            }});
-            return {{ candle: candle, equity: equity }};
         }}
 
-        function calcAutozoomY(x0, x1) {{
-            var trs = getActiveTraces();
-            var c = trs.candle;
-            var eq = trs.equity;
-            if (!c || !c.x || c.x.length === 0) return {{}};
+        function normStr(v) {{
+            if (v === null || v === undefined) return '';
+            if (typeof v === 'number') {{
+                return new Date(v).toISOString().replace('T', ' ').slice(0, 19);
+            }}
+            return String(v).replace('T', ' ');
+        }}
 
-            var t0 = new Date(x0).getTime();
-            var t1 = new Date(x1).getTime();
+        function getLast144(c) {{
+            var n = c.x.length;
+            var i0 = n > 144 ? (n - 144) : 0;
+            var i1 = n - 1;
+            return {{ i0: i0, i1: i1, x0: c.x[i0], x1: c.x[i1] }};
+        }}
 
-            var pLo = Infinity, pHi = -Infinity;
-            var eqLo = Infinity, eqHi = -Infinity;
+        function getFull(c) {{
+            var n = c.x.length;
+            return {{ i0: 0, i1: n - 1, x0: c.x[0], x1: c.x[n - 1] }};
+        }}
 
-            for (var i = 0; i < c.x.length; i++) {{
-                var ct = new Date(c.x[i]).getTime();
-                if (ct >= t0 && ct <= t1) {{
-                    if (c.low[i] < pLo) pLo = c.low[i];
-                    if (c.high[i] > pHi) pHi = c.high[i];
-                    if (eq && eq.y && eq.y[i] !== undefined) {{
-                        if (eq.y[i] < eqLo) eqLo = eq.y[i];
-                        if (eq.y[i] > eqHi) eqHi = eq.y[i];
-                    }}
+        function getVisibleIndices(c, x0, x1) {{
+            var n = c.x.length;
+            if (n === 0) return null;
+
+            var s0 = normStr(x0);
+            var s1 = normStr(x1);
+            if (s0 > s1) {{ var tmp = s0; s0 = s1; s1 = tmp; }}
+
+            var l = 0, r = n - 1, i0 = 0;
+            while (l <= r) {{
+                var m = (l + r) >> 1;
+                if (normStr(c.x[m]) < s0) {{
+                    l = m + 1;
+                }} else {{
+                    i0 = m;
+                    r = m - 1;
                 }}
             }}
 
-            var layoutUpdate = {{}};
-
-            if (pLo < Infinity && pHi > -Infinity) {{
-                var pPad = (pHi - pLo) * 0.04 || 1.0;
-                layoutUpdate['yaxis3.range'] = [pLo - pPad, pHi + pPad];
-                var baseP = c.close[0] || 1.0;
-                layoutUpdate['yaxis4.range'] = [
-                    (pLo - pPad - baseP) / baseP * 100.0,
-                    (pHi + pPad - baseP) / baseP * 100.0
-                ];
+            l = 0; r = n - 1; var i1 = n - 1;
+            while (l <= r) {{
+                var m = (l + r) >> 1;
+                if (normStr(c.x[m]) <= s1) {{
+                    i1 = m;
+                    l = m + 1;
+                }} else {{
+                    r = m - 1;
+                }}
             }}
 
-            if (eqLo < Infinity && eqHi > -Infinity) {{
-                var eqPad = (eqHi - eqLo) * 0.04 || 1.0;
-                layoutUpdate['yaxis.range'] = [eqLo - eqPad, eqHi + eqPad];
-                var baseB = eq.y[0] || 1.0;
-                layoutUpdate['yaxis2.range'] = [
-                    (eqLo - eqPad - baseB) / baseB * 100.0,
-                    (eqHi + eqPad - baseB) / baseB * 100.0
-                ];
+            if (i0 > i1) {{
+                i0 = Math.max(0, Math.min(i0, n - 1));
+                i1 = i0;
             }}
 
-            return layoutUpdate;
+            return {{ i0: i0, i1: i1 }};
+        }}
+
+        function getPriceRange(c, i0, i1) {{
+            var minP = Infinity, maxP = -Infinity;
+            for (var i = i0; i <= i1; i++) {{
+                var lo = c.low[i];
+                var hi = c.high[i];
+                if (lo !== undefined && lo !== null && lo < minP) minP = lo;
+                if (hi !== undefined && hi !== null && hi > maxP) maxP = hi;
+            }}
+            if (!isFinite(minP) || !isFinite(maxP)) return null;
+            return {{ min: minP, max: maxP }};
         }}
 
         var updating = false;
+        var relayoutTimer = null;
+        var lastActiveName = null;
 
-        function toggleRange() {{
-            var trs = getActiveTraces();
-            var c = trs.candle;
+        function apply144Bars(c) {{
             if (!c || !c.x || c.x.length === 0) return;
+            var target = getLast144(c);
+            var pr = getPriceRange(c, target.i0, target.i1);
+            if (!pr) return;
 
-            var n = c.x.length;
-            var xFullStart = c.x[0];
-            var xFullEnd = c.x[n - 1];
-
-            var curX0 = gd.layout.xaxis.range ? gd.layout.xaxis.range[0] : null;
-            var curX1 = gd.layout.xaxis.range ? gd.layout.xaxis.range[1] : null;
-
-            var isFull = (curX0 && curX1 &&
-                new Date(curX0).getTime() <= new Date(xFullStart).getTime() &&
-                new Date(curX1).getTime() >= new Date(xFullEnd).getTime());
-
-            var targetX0, targetX1;
-
-            if (isFull) {{
-                var s = n > 144 ? n - 144 : 0;
-                targetX0 = c.x[s];
-                targetX1 = c.x[n - 1];
-            }} else {{
-                targetX0 = xFullStart;
-                targetX1 = xFullEnd;
-            }}
-
-            var layoutUpdate = calcAutozoomY(targetX0, targetX1);
-            layoutUpdate['xaxis.range'] = [targetX0, targetX1];
-            layoutUpdate['xaxis2.range'] = [targetX0, targetX1];
+            var pad = (pr.max - pr.min) * 0.05 || (pr.min * 0.01) || 1.0;
+            var yMin = pr.min - pad;
+            var yMax = pr.max + pad;
+            var baseP = (c.close && c.close[0]) ? c.close[0] : 1.0;
 
             updating = true;
-            Plotly.relayout(gd, layoutUpdate).then(function() {{
+            Plotly.relayout(gd, {{
+                'xaxis.range': [target.x0, target.x1],
+                'xaxis2.range': [target.x0, target.x1],
+                'yaxis3.range': [yMin, yMax],
+                'yaxis4.range': [
+                    (yMin - baseP) / baseP * 100.0,
+                    (yMax - baseP) / baseP * 100.0
+                ]
+            }}).then(function() {{
+                updating = false;
+            }}).catch(function() {{
                 updating = false;
             }});
         }}
+
+        function checkTimeframeChange() {{
+            var c = getActiveCandle();
+            if (!c) return;
+            if (c.name !== lastActiveName) {{
+                lastActiveName = c.name;
+                apply144Bars(c);
+            }}
+        }}
+
+        function autozoomPrice(x0, x1) {{
+            var c = getActiveCandle();
+            if (!c || !c.x || c.x.length === 0) return;
+
+            var idxs = getVisibleIndices(c, x0, x1);
+            if (!idxs) return;
+
+            var pr = getPriceRange(c, idxs.i0, idxs.i1);
+            if (!pr) return;
+
+            var pad = (pr.max - pr.min) * 0.05 || (pr.min * 0.01) || 1.0;
+            var yMin = pr.min - pad;
+            var yMax = pr.max + pad;
+            var baseP = (c.close && c.close[0]) ? c.close[0] : 1.0;
+
+            updating = true;
+            Plotly.relayout(gd, {{
+                'yaxis3.range': [yMin, yMax],
+                'yaxis4.range': [
+                    (yMin - baseP) / baseP * 100.0,
+                    (yMax - baseP) / baseP * 100.0
+                ]
+            }}).then(function() {{
+                updating = false;
+            }}).catch(function() {{
+                updating = false;
+            }});
+        }}
+
+        function handleRelayout(ed) {{
+            if (updating || !ed) return;
+
+            var c = getActiveCandle();
+            if (c && c.name !== lastActiveName) {{
+                lastActiveName = c.name;
+                apply144Bars(c);
+                return;
+            }}
+
+            if (ed['yaxis3.range'] || ed['yaxis3.range[0]'] ||
+                ed['yaxis4.range'] || ed['yaxis4.range[0]'] ||
+                ed['yaxis.range']  || ed['yaxis.range[0]']  ||
+                ed['yaxis2.range'] || ed['yaxis2.range[0]']) {{
+                return;
+            }}
+
+            var x0 = null, x1 = null;
+            if (ed['xaxis2.range[0]'] !== undefined && ed['xaxis2.range[1]'] !== undefined) {{
+                x0 = ed['xaxis2.range[0]'];
+                x1 = ed['xaxis2.range[1]'];
+            }} else if (ed['xaxis.range[0]'] !== undefined && ed['xaxis.range[1]'] !== undefined) {{
+                x0 = ed['xaxis.range[0]'];
+                x1 = ed['xaxis.range[1]'];
+            }} else if (Array.isArray(ed['xaxis2.range'])) {{
+                x0 = ed['xaxis2.range'][0];
+                x1 = ed['xaxis2.range'][1];
+            }} else if (Array.isArray(ed['xaxis.range'])) {{
+                x0 = ed['xaxis.range'][0];
+                x1 = ed['xaxis.range'][1];
+            }} else if (gd._fullLayout) {{
+                var ax = gd._fullLayout.xaxis2 || gd._fullLayout.xaxis;
+                if (ax && ax.range) {{
+                    x0 = ax.range[0];
+                    x1 = ax.range[1];
+                }}
+            }}
+
+            if (x0 === null || x1 === null) return;
+
+            if (relayoutTimer) cancelAnimationFrame(relayoutTimer);
+            relayoutTimer = requestAnimationFrame(function() {{
+                autozoomPrice(x0, x1);
+            }});
+        }}
+
+        function toggleRange() {{
+            var c = getActiveCandle();
+            if (!c || !c.x || c.x.length === 0) return;
+
+            var n = c.x.length;
+            var curX0 = null, curX1 = null;
+            if (gd._fullLayout) {{
+                var ax = gd._fullLayout.xaxis2 || gd._fullLayout.xaxis;
+                if (ax && ax.range) {{
+                    curX0 = ax.range[0];
+                    curX1 = ax.range[1];
+                }}
+            }}
+
+            var sCur0 = normStr(curX0);
+            var sCur1 = normStr(curX1);
+            var sFull0 = normStr(c.x[0]);
+            var sFull1 = normStr(c.x[n - 1]);
+
+            var isFull = (sCur0 && sCur1 && sCur0 <= sFull0 && sCur1 >= sFull1);
+
+            var target = isFull ? getLast144(c) : getFull(c);
+            var pr = getPriceRange(c, target.i0, target.i1);
+            if (!pr) return;
+
+            var pad = (pr.max - pr.min) * 0.05 || (pr.min * 0.01) || 1.0;
+            var yMin = pr.min - pad;
+            var yMax = pr.max + pad;
+            var baseP = (c.close && c.close[0]) ? c.close[0] : 1.0;
+
+            var updateObj = {{
+                'xaxis.range': [target.x0, target.x1],
+                'xaxis2.range': [target.x0, target.x1],
+                'yaxis3.range': [yMin, yMax],
+                'yaxis4.range': [
+                    (yMin - baseP) / baseP * 100.0,
+                    (yMax - baseP) / baseP * 100.0
+                ]
+            }};
+
+            updating = true;
+            Plotly.relayout(gd, updateObj).then(function() {{
+                updating = false;
+            }}).catch(function() {{
+                updating = false;
+            }});
+        }}
+
+        var initialCandle = getActiveCandle();
+        if (initialCandle) {{
+            lastActiveName = initialCandle.name;
+            apply144Bars(initialCandle);
+        }}
+
+        gd.on('plotly_restyle', function() {{
+            setTimeout(checkTimeframeChange, 30);
+        }});
+        gd.on('plotly_buttonclicked', function() {{
+            setTimeout(checkTimeframeChange, 30);
+        }});
 
         gd.on('plotly_doubleclick', function() {{
             toggleRange();
             return false;
         }});
-
         gd.addEventListener('dblclick', function(e) {{
             e.preventDefault();
             e.stopPropagation();
             toggleRange();
         }});
 
-        gd.on('plotly_relayout', function(ed) {{
-            if (updating) return;
-            var x0 = ed['xaxis.range[0]'] || (ed['xaxis.range'] && ed['xaxis.range'][0]);
-            var x1 = ed['xaxis.range[1]'] || (ed['xaxis.range'] && ed['xaxis.range'][1]);
-            if (!x0 || !x1) return;
-
-            var layoutUpdate = calcAutozoomY(x0, x1);
-            if (layoutUpdate && Object.keys(layoutUpdate).length > 0) {{
-                updating = true;
-                Plotly.relayout(gd, layoutUpdate).then(function() {{
-                    updating = false;
-                }});
-            }}
-        }});
+        gd.on('plotly_relayout', handleRelayout);
+        gd.on('plotly_relayouting', handleRelayout);
     }});
 </script>
 </body>

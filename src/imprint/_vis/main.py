@@ -144,7 +144,7 @@ class Render:
             config={
                 "responsive": True,
                 "displayModeBar": True,
-                "doubleClick": False,
+                "scrollZoom": True,
             },
         )
 

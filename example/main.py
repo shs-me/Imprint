@@ -70,5 +70,5 @@ if __name__ == "__main__":
         execution=HedgeExecution,
         with_execution=True,
     )
-    imp.run_core()
+    # imp.run_core()
     imp.run_vis()

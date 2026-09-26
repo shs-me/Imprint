@@ -33,24 +33,23 @@ def _get_144_bounds(
     p_hi: float = float(np.max(tf_data["ohlc"]["high"][s]))
     p_pad: float = (p_hi - p_lo) * 0.04 or 1.0
 
-    eq_lo: float = float(np.min(tf_data["eq_low"][s]))
-    eq_hi: float = float(np.max(tf_data["eq_high"][s]))
-    eq_pad: float = (eq_hi - eq_lo) * 0.04 or 1.0
+    eq_lo: float = min(float(np.min(tf_data["eq_low"])), base_b)
+    eq_hi: float = max(float(np.max(tf_data["eq_high"])), base_b)
+    eq_pad: float = (eq_hi - eq_lo) * 0.05 or 1.0
 
     rp_lo: float = (p_lo - base_p) / base_p * 100.0
     rp_hi: float = (p_hi - base_p) / base_p * 100.0
     rp_pad: float = (rp_hi - rp_lo) * 0.04 or 0.1
 
-    req_lo: float = (eq_lo - base_b) / base_b * 100.0
-    req_hi: float = (eq_hi - base_b) / base_b * 100.0
-    req_pad: float = (req_hi - req_lo) * 0.04 or 0.1
+    req_lo: float = (eq_lo - eq_pad - base_b) / base_b * 100.0
+    req_hi: float = (eq_hi + eq_pad - base_b) / base_b * 100.0
 
     return {
         "x": [x0, x1],
         "p": [p_lo - p_pad, p_hi + p_pad],
         "eq": [eq_lo - eq_pad, eq_hi + eq_pad],
         "rp": [rp_lo - rp_pad, rp_hi + rp_pad],
-        "req": [req_lo - req_pad, req_hi + req_pad],
+        "req": [req_lo, req_hi],
     }
 
 
@@ -98,22 +97,11 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
             vis: list[bool] = [
                 (t_idx is None or t_idx == target_k) for t_idx in trace_tf_map
             ]
-            b = _get_144_bounds(tf_data, base_b, base_p)
             buttons.append(
                 {
                     "label": tf_data["timeframe_name"],
-                    "method": "update",
-                    "args": [
-                        {"visible": vis},
-                        {
-                            "xaxis.range": b["x"],
-                            "xaxis2.range": b["x"],
-                            "yaxis.range": b["eq"],
-                            "yaxis2.range": b["req"],
-                            "yaxis3.range": b["p"],
-                            "yaxis4.range": b["rp"],
-                        },
-                    ],
+                    "method": "restyle",
+                    "args": [{"visible": vis}],
                 }
             )
 
@@ -123,11 +111,10 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
         "tickfont": {"size": 11, "color": "#CFD8DC"},
         "showline": True,
         "linecolor": "#424242",
-        "fixedrange": False,
     }
 
     def make_left_axis(
-        title: str, fmt: str, y_range: list[float]
+        title: str, fmt: str, y_range: list[float], fixed: bool = False
     ) -> dict[str, Any]:
         return {
             **base_axis,
@@ -137,6 +124,7 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
             "tickformat": fmt,
             "mirror": True,
             "range": y_range,
+            "fixedrange": fixed,
         }
 
     def make_right_axis(y_range: list[float]) -> dict[str, Any]:
@@ -148,16 +136,19 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
             "tickformat": "+.1f",
             "showgrid": False,
             "range": y_range,
+            "fixedrange": True,
         }
 
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
         autosize=True,
         margin={"l": 45, "r": 45, "t": 32, "b": 22},
         yaxis=make_left_axis(
-            "Balance (Left $ | Right %)", ",.0f", init_b["eq"]
+            "Balance (Left $ | Right %)", ",.0f", init_b["eq"], fixed=True
         ),
         yaxis2=make_right_axis(init_b["req"]),
-        yaxis3=make_left_axis("Price (Left $ | Right %)", ",.2f", init_b["p"]),
+        yaxis3=make_left_axis(
+            "Price (Left $ | Right %)", ",.2f", init_b["p"], fixed=False
+        ),
         yaxis4=make_right_axis(init_b["rp"]),
         yaxis5={  # Right Dynamic Drawdown In Equity
             "title": "",
