@@ -113,20 +113,15 @@ class Base(ABC):
     def __init_array(self, nPrice: int64) -> None:
         if not (self.re_init & c.RIF_idy):
             self.fp.con.fp_rows = 2 * (nPrice * 20 // 100 // self.fp.con.scale)
-            self.fp.base = FPArray(
-                self.fp.con.fp_rows, self.fp.con.fp_panel_cols
+            rows, cols = self.fp.con.fp_rows, self.fp.con.fp_panel_cols
+            self.fp._re_init_arr(
+                base=FPArray(rows, cols),
+                state=(FPArray(rows, cols) if self.with_state else None),
+                ctrade=(FPArray(rows, cols) if self.with_ctrade else None),
             )
-            if self.with_state:
-                self.fp.state = FPArray(
-                    self.fp.con.fp_rows, self.fp.con.fp_panel_cols
-                )
-            if self.with_ctrade:
-                self.fp.ctrade = FPArray(
-                    self.fp.con.fp_rows, self.fp.con.fp_panel_cols
-                )
             self.bbox = np.zeros((4,), dtype=int64)
             self.bbox_default_value = np.array(
-                [self.fp.con.fp_rows, self.fp.con.fp_cols, 0, 0], dtype=int64
+                [rows, self.fp.con.fp_cols, 0, 0], dtype=int64
             )
         else:
             need_rows: int64 = nPrice * 20 // 100 // self.fp.con.scale
@@ -138,12 +133,19 @@ class Base(ABC):
             else:
                 before, after = 0, need_rows
 
-            self.fp.base = self.fp.base.padding(int(before), int(after))
-            if self.with_state:
-                self.fp.state = self.fp.state.padding(int(before), int(after))
-            if self.with_ctrade:
-                self.fp.ctrade = self.fp.state.padding(int(before), int(after))
-
+            self.fp._re_init_arr(
+                base=self.fp.base.padding(int(before), int(after)),
+                state=(
+                    self.fp.state.padding(int(before), int(after))
+                    if self.with_state
+                    else None
+                ),
+                ctrade=(
+                    self.fp.ctrade.padding(int(before), int(after))
+                    if self.with_ctrade
+                    else None
+                ),
+            )
             self.bbox_default_value[0] = self.fp.con.fp_rows
             self.bbox[:] = self.bbox_default_value
 

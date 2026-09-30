@@ -2,45 +2,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast, final, overload, override
+from typing import cast, final
 
-import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core.footprint.models.converter import Converter
-
-if TYPE_CHECKING:
-    from imprint._core.footprint.models.typing import (
-        T_FP,
-        T_INDEX,
-        T_SLICE,
-        T_VP,
-    )
-
-
-@final
-class FPArray(np.ndarray):
-    def __new__(cls, rows: int | int64, cols: int | int64) -> FPArray:
-        obj = super().__new__(cls, shape=(rows, cols), dtype=int64)
-        obj.fill(0)
-        return obj
-
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return
-
-    @overload
-    def __getitem__(self, key: tuple[T_INDEX, T_INDEX], /) -> int64: ...  # pyright: ignore[reportOverlappingOverload]
-    @overload
-    def __getitem__(self, key: T_FP, /) -> FPArray: ...
-    @override
-    def __getitem__(self, key: T_FP, /):  # pyright: ignore[reportInconsistentOverload,reportIncompatibleMethodOverride]
-        return super().__getitem__(key)
-
-    def padding(self, before: int, after: int) -> FPArray:
-        return np.pad(self, pad_width=((before, after), (0, 0))).view(FPArray)
+from imprint._core.utils import FPArray
 
 
 @dataclass(slots=True)
@@ -53,20 +21,6 @@ class Chart(ABC):
 
     headers: NDArray[int64] = field(init=False)
     headers_offset: memoryview = field(init=False)
-
-
-@dataclass(slots=True)
-class ProfileLike[T](ABC):
-    _idx: int | None
-
-    _arr: FPArray = field(init=False)
-
-    @overload
-    def __getitem__(self, key: T_INDEX, /) -> int64: ...
-    @overload
-    def __getitem__(self, key: T_SLICE, /) -> FPArray: ...
-    def __getitem__(self, key: T_VP, /):  # pyright: ignore[reportInconsistentOverload]
-        return self._arr[key, self._idx] if self._idx else self._arr[key]
 
 
 @final

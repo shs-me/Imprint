@@ -6,8 +6,8 @@ from numba import njit
 from numpy import bool_, int64, intp
 from numpy.typing import NDArray
 
+import imprint._core.footprint.engine.writer as w
 from imprint._core import constant as c
-from imprint._core.footprint.engine import writer as w
 
 
 @dataclass(slots=True)
@@ -152,20 +152,20 @@ def _update_clusters_states(
         return
 
     state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
-    fp_state[idYmin:idYmax, args[w.FU_idxVP]] &= ~(state1)
+    fp_state[idYmin:idYmax, args[w.ID_idxVP]] &= ~(state1)
 
-    bidDD: NDArray[bool_] = fp[idYmin:idYmax, args[w.FU_idxDP]] < 0
-    askDD: NDArray[bool_] = fp[idYmin:idYmax, args[w.FU_idxDP]] > 0
-    fp_state[idYmin:idYmax, args[w.FU_idxVP]][bidDD] |= (
+    bidDD: NDArray[bool_] = fp[idYmin:idYmax, args[w.ID_idxDP]] < 0
+    askDD: NDArray[bool_] = fp[idYmin:idYmax, args[w.ID_idxDP]] > 0
+    fp_state[idYmin:idYmax, args[w.ID_idxVP]][bidDD] |= (
         c.SF_BID_DELTA_DOMINATION_FP
     )
-    fp_state[idYmin:idYmax, args[w.FU_idxVP]][askDD] |= (
+    fp_state[idYmin:idYmax, args[w.ID_idxVP]][askDD] |= (
         c.SF_ASK_DELTA_DOMINATION_FP
     )
 
     ma_vol: int64 = headers[bwo - 1, c.BH_MA_VOL]
     if ma_vol:
-        vol: int64 = int64(ma_vol * (args[w.FU_big_cluster_mult] / 10_000))
+        vol: int64 = int64(ma_vol * (args[w.ID_big_cluster_mult] / 10_000))
 
         for idy in range(idYmin, idYmax):
             for idx in range(idXmin, idXmax):
@@ -217,8 +217,8 @@ def _update_closed_bar_and_fp_states(
     highNprice: int64 = headers[bwo, c.BH_High]
     lowNprice: int64 = headers[bwo, c.BH_Low]
 
-    bNprice, idxVP = args[w.FU_baseNprice], args[w.FU_idxVP]
-    scale, center = args[w.FU_scale], args[w.FU_center]
+    bNprice, idxVP = args[w.ID_baseNprice], args[w.ID_idxVP]
+    scale, center = args[w.ID_scale], args[w.ID_center]
 
     high_idy: int64 = (bNprice - highNprice) // scale + center
     low_idy: int64 = (bNprice - lowNprice) // scale + center
@@ -231,7 +231,7 @@ def _update_closed_bar_and_fp_states(
             abs(highNprice - pre_c),
             abs(lowNprice - pre_c),
         )
-        atr_period = args[w.FU_atr_period]
+        atr_period = args[w.ID_atr_period]
         headers[bwo, c.BH_ATR] = (
             (pre_atr * (atr_period - 1)) + tr
         ) // atr_period
@@ -243,7 +243,7 @@ def _update_closed_bar_and_fp_states(
     cur_var: int = round((log_ratio * log_ratio) * c.VAR_SCALE)
     if bar > 0:
         pre_var: int64 = headers[oldBwo, c.BH_PARK]
-        park_period = args[w.FU_park_period]
+        park_period = args[w.ID_park_period]
         headers[bwo, c.BH_PARK] = (
             (pre_var * (park_period - 1)) + cur_var
         ) // park_period
@@ -253,7 +253,7 @@ def _update_closed_bar_and_fp_states(
     bar_max = bwo
 
     # MA Volume
-    period: int64 = args[w.FU_ma_vol_period]
+    period: int64 = args[w.ID_ma_vol_period]
     bar_min: int | int64 = max(0, bwo - period)
     if (bar_max - bar_min) >= period:
         headers[bwo, c.BH_MA_VOL] = int64(
@@ -261,7 +261,7 @@ def _update_closed_bar_and_fp_states(
         )
 
     # MA Count Trade
-    period = args[w.FU_ma_count_trade_period]
+    period = args[w.ID_ma_count_trade_period]
     bar_min = max(0, bwo - period)
     if (bar_max - bar_min) >= period:
         headers[bwo, c.BH_MA_COUNT_TRADE] = int64(
@@ -269,7 +269,7 @@ def _update_closed_bar_and_fp_states(
         )
 
     # MA Avg Trade Size
-    period = args[w.FU_ma_ats_period]
+    period = args[w.ID_ma_ats_period]
     bar_min = max(0, bwo - period)
     if (bar_max - bar_min) >= period:
         headers[bwo, c.BH_MA_ATS] = int64(
@@ -286,7 +286,7 @@ def _update_closed_bar_and_fp_states(
     headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + bNprice
     headers[bwo, c.BH_VAL_FP] = (center - val) * scale + bNprice
 
-    if not args[w.FU_with_state]:
+    if not args[w.ID_with_state]:
         return
 
     fp_state[poc, lidx] |= c.SF_POC_FP
@@ -375,8 +375,8 @@ def _update_bar_states(
     lowNprice: int64 = headers[bwo, c.BH_Low]
     closeNprice: int64 = headers[bwo, c.BH_Close]
 
-    bNprice, step_tick = args[w.FU_baseNprice], args[w.FU_step_tick]
-    scale, center = args[w.FU_scale], args[w.FU_center]
+    bNprice, step_tick = args[w.ID_baseNprice], args[w.ID_step_tick]
+    scale, center = args[w.ID_scale], args[w.ID_center]
 
     open_idy: int64 = (bNprice - openNprice) // scale + center
     high_idy: int64 = (bNprice - highNprice) // scale + center
@@ -392,7 +392,7 @@ def _update_bar_states(
     headers[bwo, c.BH_VAH] = (center - (high_idy + vah)) * scale + bNprice
     headers[bwo, c.BH_VAL] = (center - (high_idy + val)) * scale + bNprice
 
-    if not args[w.FU_with_state]:
+    if not args[w.ID_with_state]:
         return
 
     state2 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE

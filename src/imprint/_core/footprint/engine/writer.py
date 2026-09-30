@@ -10,38 +10,38 @@ from numpy.typing import NDArray
 from imprint._core import constant as c
 from imprint._core.footprint.engine.base import Base
 from imprint._core.footprint.models.converter import to_idx, to_idy
+from imprint._core.utils import IndexGenerator, VarArray
 
-(
-    BHM_VWAP_W,
-    BHM_VWAP_PW,
-    BHM_VWAP_P2W,
-    BHM_ConstantCount,
-) = [v for v in range(4)]
-(
-    FU_baseNprice,
-    FU_center,
-    FU_scale,
-    FU_fp_rows,
-    FU_baseTimestamp,
-    FU_tims,
-    FU_fp_cols,
-    FU_idxVP,
-    FU_idxDP,
-    FU_price_mult,
-    FU_price_prec,
-    FU_qty_mult,
-    FU_qty_prec,
-    FU_step_tick,
-    FU_with_ctrade,
-    FU_with_state,
-    FU_atr_period,
-    FU_park_period,
-    FU_ma_vol_period,
-    FU_ma_ats_period,
-    FU_ma_count_trade_period,
-    FU_big_cluster_mult,
-    FU_ConstantCount,
-) = [v for v in range(23)]
+next_id = IndexGenerator()
+BHM_VWAP_W: int = next_id()
+BHM_VWAP_PW: int = next_id()
+BHM_VWAP_P2W: int = next_id()
+BHM_ConstantCount: int = next_id()
+
+next_id = IndexGenerator()
+ID_baseNprice: int = next_id()
+ID_center: int = next_id()
+ID_scale: int = next_id()
+ID_fp_rows: int = next_id()
+ID_baseTimestamp: int = next_id()
+ID_tims: int = next_id()
+ID_fp_cols: int = next_id()
+ID_idxVP: int = next_id()
+ID_idxDP: int = next_id()
+ID_price_mult: int = next_id()
+ID_price_prec: int = next_id()
+ID_qty_mult: int = next_id()
+ID_qty_prec: int = next_id()
+ID_step_tick: int = next_id()
+ID_with_ctrade: int = next_id()
+ID_with_state: int = next_id()
+ID_atr_period: int = next_id()
+ID_park_period: int = next_id()
+ID_ma_vol_period: int = next_id()
+ID_ma_ats_period: int = next_id()
+ID_ma_count_trade_period: int = next_id()
+ID_big_cluster_mult: int = next_id()
+ID_ConstantCount: int = next_id()
 
 
 @dataclass(slots=True)
@@ -49,7 +49,9 @@ class Writer(Base, ABC):
     counter_ticks: int = field(default=0, init=False)
 
     __meta_data: NDArray[float64] = field(init=False)
-    _args: NDArray[int64] = field(init=False)
+    _args: VarArray = field(
+        default_factory=lambda: VarArray(ID_ConstantCount), init=False
+    )
 
     @override
     def child_init_array(self, nPrice: int64) -> None:
@@ -57,44 +59,43 @@ class Writer(Base, ABC):
             self.__meta_data = np.zeros(
                 shape=(2, BHM_ConstantCount), dtype=float64
             )
-            self._args = np.zeros(shape=(FU_ConstantCount,), dtype=int64)
-            self._args[FU_idxVP] = self.fp.con.idxVP
-            self._args[FU_idxDP] = self.fp.con.idxDP
-            self._args[FU_price_mult] = self.fp.con.price_mult
-            self._args[FU_price_prec] = self.fp.con.price_prec
-            self._args[FU_qty_mult] = self.fp.con.qty_mult
-            self._args[FU_qty_prec] = self.fp.con.qty_prec
-            self._args[FU_tims] = self.fp.con.tims
-            self._args[FU_fp_cols] = self.fp.con.fp_cols
-            self._args[FU_scale] = self.fp.con.scale
-            self._args[FU_with_ctrade] = 1 if self.with_ctrade else 0
-            self._args[FU_with_state] = 1 if self.with_state else 0
-            self._args[FU_step_tick] = self.fp.con.step_tick
-            self._args[FU_atr_period] = self.algorithm.atr_period
-            self._args[FU_park_period] = self.algorithm.park_period
-            self._args[FU_ma_ats_period] = (
+            self._args[ID_idxVP] = self.fp.con.idxVP
+            self._args[ID_idxDP] = self.fp.con.idxDP
+            self._args[ID_price_mult] = self.fp.con.price_mult
+            self._args[ID_price_prec] = self.fp.con.price_prec
+            self._args[ID_qty_mult] = self.fp.con.qty_mult
+            self._args[ID_qty_prec] = self.fp.con.qty_prec
+            self._args[ID_tims] = self.fp.con.tims
+            self._args[ID_fp_cols] = self.fp.con.fp_cols
+            self._args[ID_scale] = self.fp.con.scale
+            self._args[ID_with_ctrade] = 1 if self.with_ctrade else 0
+            self._args[ID_with_state] = 1 if self.with_state else 0
+            self._args[ID_step_tick] = self.fp.con.step_tick
+            self._args[ID_atr_period] = self.algorithm.atr_period
+            self._args[ID_park_period] = self.algorithm.park_period
+            self._args[ID_ma_ats_period] = (
                 self.algorithm.ma_avg_trade_size_period
             )
-            self._args[FU_ma_vol_period] = self.algorithm.ma_volume_period
-            self._args[FU_ma_count_trade_period] = (
+            self._args[ID_ma_vol_period] = self.algorithm.ma_volume_period
+            self._args[ID_ma_count_trade_period] = (
                 self.algorithm.ma_count_trade_period
             )
-            self._args[FU_big_cluster_mult] = round(
+            self._args[ID_big_cluster_mult] = round(
                 self.algorithm.big_cluster_mult * 10_000
             )
 
         else:
-            self._args[FU_center] = self.fp.con.center
+            self._args[ID_center] = self.fp.con.center
 
-        self._args[FU_fp_rows] = self.fp.con.fp_rows
+        self._args[ID_fp_rows] = self.fp.con.fp_rows
 
     @override
     def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
         self.__meta_data.fill(0)
 
-        self._args[FU_baseNprice] = self.fp.con.baseNprice
-        self._args[FU_baseTimestamp] = self.fp.con.baseTimestamp
-        self._args[FU_center] = self.fp.con.center
+        self._args[ID_baseNprice] = self.fp.con.baseNprice
+        self._args[ID_baseTimestamp] = self.fp.con.baseTimestamp
+        self._args[ID_center] = self.fp.con.center
 
     @final
     def update_footprint(
@@ -174,9 +175,9 @@ def _update(
     idx: int64 = to_idx(
         timestamp=timestamp,
         is_sell=is_sell,
-        baseTimestamp=args[FU_baseTimestamp],
-        tims=args[FU_tims],
-        fp_cols=args[FU_fp_cols],
+        baseTimestamp=args[ID_baseTimestamp],
+        tims=args[ID_tims],
+        fp_cols=args[ID_fp_cols],
     )
     if idx < 0:
         re_init |= c.RIF_session | c.RIF_idx
@@ -184,25 +185,25 @@ def _update(
 
     idy: int64 = to_idy(
         nPrice=nPrice,
-        baseNprice=args[FU_baseNprice],
-        center=args[FU_center],
-        scale=args[FU_scale],
-        fp_rows=args[FU_fp_rows],
+        baseNprice=args[ID_baseNprice],
+        center=args[ID_center],
+        scale=args[ID_scale],
+        fp_rows=args[ID_fp_rows],
     )
     if idy < 0:
         re_init |= c.RIF_session | c.RIF_idy
         return re_init
 
-    price_mult, price_prec = args[FU_price_mult], args[FU_price_prec]
-    qty_mult, qty_prec = args[FU_qty_mult], args[FU_qty_prec]
+    price_mult, price_prec = args[ID_price_mult], args[ID_price_prec]
+    qty_mult, qty_prec = args[ID_qty_mult], args[ID_qty_prec]
 
     # Update Footprint
     footprint[idy, idx] += nQty
-    footprint[idy, args[FU_idxVP]] += nQty
-    footprint[idy, args[FU_idxDP]] += -nQty if is_sell else nQty
-    if args[FU_with_ctrade]:
+    footprint[idy, args[ID_idxVP]] += nQty
+    footprint[idy, args[ID_idxDP]] += -nQty if is_sell else nQty
+    if args[ID_with_ctrade]:
         ctrade[idy, idx] += 1
-        ctrade[idy, args[FU_idxVP]] += 1
+        ctrade[idy, args[ID_idxVP]] += 1
 
     # Update Headers
     ho: int = headers_offset[0]
@@ -226,7 +227,7 @@ def _update(
 
         while 0 <= prev_bar < bar:
             headers[(ho + prev_bar), c.BH_Time] = prev_t = (
-                prev_t + args[FU_tims]
+                prev_t + args[ID_tims]
             )
             headers[(ho + prev_bar), c.BH_Open : c.BH_Close + 1] = prev_p
             prev_bar += 1

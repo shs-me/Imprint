@@ -18,12 +18,14 @@ from imprint._core.exchange_sim.engine.matching_engine import (
     matching,
 )
 from imprint._core.exchange_sim.engine.user_data_stream import set_user_data
+from imprint._core.utils import VarArray
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
 @dataclass(slots=True)
 class Base(MatchingEngine):
+    __args: VarArray = field(init=False)
     __mds_data_buf: memoryview = field(init=False)
     __mds_data_size: int = field(init=False)
     __mds_rid_buf: memoryview = field(init=False)

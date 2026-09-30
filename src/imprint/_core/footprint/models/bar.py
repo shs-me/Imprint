@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, final, overload, override
 
@@ -7,22 +8,18 @@ import numpy as np
 from numpy import float64, int64
 
 from imprint._core import constant as c
-from imprint._core.footprint.models.base import (
-    Chart,
-    FPArray,
-    PriceLike,
-    ProfileLike,
-    QtyLike,
-)
+from imprint._core.footprint.models.base import Chart, PriceLike, QtyLike
+from imprint._core.utils import FPArray
 
 if TYPE_CHECKING:
-    from imprint._core.footprint.models.typing import (
+    from imprint._core.typing import (
         T_ASK,
         T_BAR,
         T_BID,
         T_IDY,
         T_INDEX,
         T_SLICE,
+        T_VP,
     )
 
 PARK_FACTOR: int = 1.0 / (4.0 * np.log(2.0))
@@ -48,8 +45,8 @@ class Bar:
 
     def __post_init__(self) -> None:
         self.ind = Indicators(self)
-        self.vp = VolumeProfile(None, self)
-        self.dp = DeltaProfile(None, self)
+        self.vp = VolumeProfile(self)
+        self.dp = DeltaProfile(self)
 
     def __getitem__(self, idx: int | int64) -> Bar:
         self.idx = idx
@@ -264,20 +261,30 @@ class Indicators[T]:
         return self.__plike[self._bar._get_header(c.BH_VAL_FP)]
 
 
-@final
 @dataclass(slots=True)
-class VolumeProfile[T](ProfileLike[T]):
+class ProfileLike[T](ABC):
     _bar: Bar
+    __arr: FPArray = field(init=False)
 
     __plike: PriceLike[T] = field(init=False)
 
     def __post_init__(self) -> None:
         self.__plike = PriceLike(self._bar._fp.con, Qty(self._bar))
 
+    @overload
+    def __getitem__(self, key: T_INDEX, /) -> int64: ...
+    @overload
+    def __getitem__(self, key: T_SLICE, /) -> FPArray: ...
+    def __getitem__(self, key: T_VP, /):  # pyright: ignore[reportInconsistentOverload]
+        return self.__arr[key]
+
+
+@dataclass(slots=True)
+class VolumeProfile[T](ProfileLike[T]):
     @property
     def base(self) -> VolumeProfile[T]:
         bar = self._bar.base
-        self._arr = bar.bid.i + bar.ask.i  # pyright: ignore[reportAttributeAccessIssue]
+        self.__arr = bar.bid.i + bar.ask.i  # pyright: ignore[reportAttributeAccessIssue]
         return self
 
     @property
@@ -293,15 +300,12 @@ class VolumeProfile[T](ProfileLike[T]):
         return self.__plike[self._bar._get_header(c.BH_VAL)]
 
 
-@final
 @dataclass(slots=True)
 class DeltaProfile[T](ProfileLike[T]):
-    _bar: Bar
-
     @property
     def base(self) -> DeltaProfile[T]:
         bar = self._bar.base
-        self._arr = bar.bid.i - bar.ask.i  # pyright: ignore[reportAttributeAccessIssue]
+        self.__arr = bar.bid.i - bar.ask.i  # pyright: ignore[reportAttributeAccessIssue]
         return self
 
 
