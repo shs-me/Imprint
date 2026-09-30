@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, final, override
+from typing import Any, Self, final, override
 
 import numpy as np
 from numpy import int64
@@ -19,9 +19,8 @@ class IndexGenerator:
         return v
 
 
-@final
 class FPArray(np.ndarray):
-    def __new__(cls, rows: int | int64, cols: int | int64) -> FPArray:
+    def __new__(cls, rows: int | int64, cols: int | int64) -> Self:
         obj = super().__new__(cls, shape=(rows, cols), dtype=int64)
         obj.fill(0)
         return obj
@@ -33,6 +32,28 @@ class FPArray(np.ndarray):
 
     def padding(self, before: int, after: int) -> FPArray:
         return np.pad(self, pad_width=((before, after), (0, 0))).view(FPArray)
+
+
+class RowArray(FPArray): ...
+
+
+class ColArray(FPArray): ...
+
+
+@final
+class BidArray(ColArray): ...
+
+
+@final
+class AskArray(ColArray): ...
+
+
+@final
+class VPArray(ColArray): ...
+
+
+@final
+class DPArray(ColArray): ...
 
 
 @final

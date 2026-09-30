@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 
 import imprint._core.footprint.engine.writer as w
 from imprint._core import constant as c
+from imprint._core.utils import FPArray, VarArray
 
 
 @dataclass(slots=True)
@@ -178,11 +179,11 @@ def _update_clusters_states(
 @njit(cache=True)
 def _update_closed_bar_and_fp_states(
     lidx: int,
+    fp: FPArray,
+    fp_state: FPArray,
     headers: NDArray[int64],
     headers_offset: memoryview,
-    fp: NDArray[int64],
-    fp_state: NDArray[int64],
-    args: NDArray[int64],
+    args: VarArray,
 ) -> None:
     """
     Calculate indicator states and footprint flags upon bar closure.
@@ -194,15 +195,15 @@ def _update_closed_bar_and_fp_states(
     ----------
     lidx : int
         Column index of closed bar bid column (`last_idx`).
+    fp : FPArray
+        2D array storing base footprint volume profile matrix.
+    fp_state : FPArray
+        2D array storing footprint bitmask flags.
     headers : NDArray[int64]
         2D array holding bar header metrics and metadata.
     headers_offset : memoryview
         Single-element int64 memory view maintaining header offset position.
-    fp : NDArray[int64]
-        2D array storing base footprint volume profile matrix.
-    fp_state : NDArray[int64]
-        2D array storing footprint bitmask flags.
-    args : NDArray[int64]
+    args : VarArray
         1D array containing scaled constants, array index mappings, and converter configurations.
     """
 
@@ -333,11 +334,11 @@ def _update_bar_states(
     idYmax: int64,
     idxBid: int,
     idxAsk: int,
-    fp: NDArray[int64],
-    fp_state: NDArray[int64],
+    fp: FPArray,
+    fp_state: FPArray,
     headers: NDArray[int64],
     headers_offset: memoryview,
-    args: NDArray[int64],
+    args: VarArray,
 ) -> None:
     """
     Update microstructural states, OHLC flags, imbalance, and bar Value Area for active bar.
@@ -352,15 +353,15 @@ def _update_bar_states(
         Grid column index for active bar bid volume.
     idxAsk : int
         Grid column index for active bar ask volume.
-    fp : NDArray[int64]
+    fp : FPArray
         2D footprint base array.
-    fp_state : NDArray[int64]
+    fp_state : FPArray
         2D footprint state bitmask array.
     headers : NDArray[int64]
         2D array storing bar header data.
     headers_offset : memoryview
         Single-element int64 memory view of active header write offset.
-    args : NDArray[int64]
+    args : VarArray
         1D array containing scaled constants, array index mappings, and converter configurations.
     """
 

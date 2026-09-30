@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from abc import ABC
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, final, overload, override
+from typing import cast, final, override
 
 import numpy as np
 from numpy import int64
@@ -13,9 +12,7 @@ from imprint._core.footprint.models.bar import Bar
 from imprint._core.footprint.models.base import Chart, PriceLike, QtyLike
 from imprint._core.footprint.models.converter import Converter
 from imprint._core.utils import FPArray
-
-if TYPE_CHECKING:
-    from imprint._core.typing import T_INDEX, T_SLICE, T_VP
+from imprint._core.utils.base import DPArray, VPArray
 
 
 @final
@@ -42,8 +39,8 @@ class Footprint(Chart):
         self.headers_offset = memoryview(bytearray(8)).cast("q")
 
         self.bar = Bar(self)
-        self.vp = VolumeProfile(self.con.idxVP, self)
-        self.dp = DeltaProfile(self.con.idxDP, self)
+        self.vp = VolumeProfile(self)
+        self.dp = DeltaProfile(self)
         self.__plike = PriceLike(self.con, Qty(self))
 
     def _re_init_arr(  # pyright: ignore[reportUnusedFunction]
@@ -76,58 +73,43 @@ class Footprint(Chart):
 
 
 @dataclass(slots=True)
-class ProfileLike[T](ABC):
-    _idx: int
+class VolumeProfile[T]:
     _fp: Footprint
 
-    __arr: FPArray = field(init=False)
-    __base: FPArray = field(init=False)
-    __state: FPArray = field(init=False)
-    __plike: PriceLike[T] = field(init=False)
+    _plike: PriceLike[T] = field(init=False)
+    base: VPArray = field(init=False)
+    state: VPArray = field(init=False)
 
     def __post_init__(self) -> None:
-        self.__plike = PriceLike(self._fp.con, Qty(self._fp))
+        self._plike = PriceLike(self._fp.con, Qty(self._fp))
 
     def _re_init_arr(self) -> None:
-        self.__base = self._fp.base[:, self._idx]
-        self.__state = self._fp.state[:, self._idx]
-        self.__arr = self.__base
+        self.base = cast(VPArray, self._fp.base[:, self._fp.con.idxVP])
+        self.state = cast(VPArray, self._fp.state[:, self._fp.con.idxVP])
 
-    @overload
-    def __getitem__(self, key: T_INDEX, /) -> int64: ...
-    @overload
-    def __getitem__(self, key: T_SLICE, /) -> FPArray: ...
-    def __getitem__(self, key: T_VP, /):  # pyright: ignore[reportInconsistentOverload]
-        return self.__arr[key]
-
-    @property
-    def base(self) -> ProfileLike[T]:
-        self.__arr = self.__base
-        return self
-
-    @property
-    def state(self) -> ProfileLike[T]:
-        self.__arr = self.__state
-        return self
-
-
-@dataclass(slots=True)
-class VolumeProfile[T](ProfileLike[T]):
     @property
     def poc(self) -> PriceLike[T]:
-        return self.__plike[self._fp.headers[self._fp.last_bar, c.BH_POC_FP]]
+        return self._plike[self._fp.headers[self._fp.last_bar, c.BH_POC_FP]]
 
     @property
     def vah(self) -> PriceLike[T]:
-        return self.__plike[self._fp.headers[self._fp.last_bar, c.BH_VAH_FP]]
+        return self._plike[self._fp.headers[self._fp.last_bar, c.BH_VAH_FP]]
 
     @property
     def val(self) -> PriceLike[T]:
-        return self.__plike[self._fp.headers[self._fp.last_bar, c.BH_VAL_FP]]
+        return self._plike[self._fp.headers[self._fp.last_bar, c.BH_VAL_FP]]
 
 
 @dataclass(slots=True)
-class DeltaProfile[T](ProfileLike[T]): ...
+class DeltaProfile[T]:
+    _fp: Footprint
+
+    base: DPArray = field(init=False)
+    state: DPArray = field(init=False)
+
+    def _re_init_arr(self) -> None:
+        self.base = cast(DPArray, self._fp.base[:, self._fp.con.idxDP])
+        self.state = cast(DPArray, self._fp.state[:, self._fp.con.idxDP])
 
 
 @final

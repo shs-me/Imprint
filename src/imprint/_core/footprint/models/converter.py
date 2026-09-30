@@ -318,7 +318,11 @@ class Converter:
 
 @njit(cache=True)
 def to_idy(
-    nPrice: int64, baseNprice: int64, scale: int, center: int64, fp_rows: int64
+    nPrice: int64,
+    baseNprice: int64,
+    scale: int | int64,
+    center: int64,
+    fp_rows: int64,
 ) -> int64:
     """
     Map fixed-point price to Footprint grid Y-axis row index.
@@ -354,8 +358,8 @@ def to_idx(
     timestamp: int64,
     is_sell: int64,
     baseTimestamp: int64,
-    tims: int,
-    fp_cols: int,
+    tims: int | int64,
+    fp_cols: int | int64,
 ) -> int64:
     """
     Map trade timestamp and order side to Footprint grid X-axis column index.

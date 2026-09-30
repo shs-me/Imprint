@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from abc import ABC
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, final, overload, override
+from typing import TYPE_CHECKING, final, override
 
 import numpy as np
 from numpy import float64, int64
@@ -10,17 +9,10 @@ from numpy import float64, int64
 from imprint._core import constant as c
 from imprint._core.footprint.models.base import Chart, PriceLike, QtyLike
 from imprint._core.utils import FPArray
+from imprint._core.utils.base import DPArray, VPArray
 
 if TYPE_CHECKING:
-    from imprint._core.typing import (
-        T_ASK,
-        T_BAR,
-        T_BID,
-        T_IDY,
-        T_INDEX,
-        T_SLICE,
-        T_VP,
-    )
+    from imprint._core.typing import T_ASK, T_BID
 
 PARK_FACTOR: int = 1.0 / (4.0 * np.log(2.0))
 
@@ -39,10 +31,6 @@ class Bar:
     bar_id: int | int64 = field(default=0, init=False)
     bar_side: T_BID | T_ASK = field(default=0, init=False)
 
-    __bblike: BarLike = field(default_factory=lambda: BarLike(), init=False)
-    __bslike: BarLike = field(default_factory=lambda: BarLike(), init=False)
-    __btlike: BarLike = field(default_factory=lambda: BarLike(), init=False)
-
     def __post_init__(self) -> None:
         self.ind = Indicators(self)
         self.vp = VolumeProfile(self)
@@ -58,81 +46,21 @@ class Bar:
     def _get_header(self, header: int) -> int64:
         return self._fp.headers[self.bar_id, header]
 
-    @property
-    def base(self) -> BarLike:
+    def __view_bar(self, arr: FPArray) -> FPArray:
         idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        self.__bblike[None] = self._fp.base[
-            idYmin : idYmax + 1, self.idXbid : self.idXbid + 2
-        ]
-        return self.__bblike
+        return arr[idYmin : idYmax + 1, self.idXbid : self.idXbid + 2]
 
     @property
-    def state(self) -> BarLike:
-        idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        self.__bslike[None] = self._fp.state[
-            idYmin : idYmax + 1, self.idXbid : self.idXbid + 2
-        ]
-        return self.__bslike
+    def base(self) -> FPArray:
+        return self.__view_bar(self._fp.base)
 
     @property
-    def ctrade(self) -> BarLike:
-        idYmin, idYmax = self.ind.high.id, self.ind.low.id
-        self.__btlike[None] = self._fp.ctrade[
-            idYmin : idYmax + 1, self.idXbid : self.idXbid + 2
-        ]
-        return self.__btlike
-
-
-@final
-@dataclass(slots=True)
-class BarLike:
-    __blike: BidLike = field(default_factory=lambda: BidLike(), init=False)
-    __alike: AskLike = field(default_factory=lambda: AskLike(), init=False)
-
-    __arr: FPArray = field(init=False)
-
-    def __setitem__(self, key: None, arr: FPArray) -> None:
-        self.__arr = arr
-
-    @overload
-    def __getitem__(self, key: tuple[T_INDEX, T_ASK | T_BID], /) -> int64: ...  # pyright: ignore[reportOverlappingOverload]
-    @overload
-    def __getitem__(self, key: T_BAR, /) -> FPArray: ...
-    def __getitem__(self, key: T_BAR, /):  # pyright: ignore[reportInconsistentOverload]
-        return self.__arr[key]
+    def state(self) -> FPArray:
+        return self.__view_bar(self._fp.state)
 
     @property
-    def all(self) -> BarLike:
-        return self
-
-    @property
-    def bid(self) -> BidLike:
-        self.__blike[None] = self.__arr[:, 0]
-        return self.__blike
-
-    @property
-    def ask(self) -> AskLike:
-        self.__alike[None] = self.__arr[:, 1]
-        return self.__alike
-
-
-@dataclass(slots=True)
-class BidLike:
-    i: FPArray = field(init=False)
-
-    def __setitem__(self, key: None, arr: FPArray) -> None:
-        self.i = arr
-
-    @overload
-    def __getitem__(self, key: T_INDEX) -> int64: ...
-    @overload
-    def __getitem__(self, key: T_SLICE) -> FPArray: ...
-    def __getitem__(self, key: T_IDY):  # pyright: ignore[reportInconsistentOverload]
-        return self.i[key]
-
-
-@dataclass(slots=True)
-class AskLike(BidLike): ...
+    def ctrade(self) -> FPArray:
+        return self.__view_bar(self._fp.ctrade)
 
 
 @final
@@ -261,31 +189,20 @@ class Indicators[T]:
         return self.__plike[self._bar._get_header(c.BH_VAL_FP)]
 
 
+@final
 @dataclass(slots=True)
-class ProfileLike[T](ABC):
+class VolumeProfile[T]:
     _bar: Bar
-    __arr: FPArray = field(init=False)
 
     __plike: PriceLike[T] = field(init=False)
 
     def __post_init__(self) -> None:
         self.__plike = PriceLike(self._bar._fp.con, Qty(self._bar))
 
-    @overload
-    def __getitem__(self, key: T_INDEX, /) -> int64: ...
-    @overload
-    def __getitem__(self, key: T_SLICE, /) -> FPArray: ...
-    def __getitem__(self, key: T_VP, /):  # pyright: ignore[reportInconsistentOverload]
-        return self.__arr[key]
-
-
-@dataclass(slots=True)
-class VolumeProfile[T](ProfileLike[T]):
     @property
-    def base(self) -> VolumeProfile[T]:
+    def base(self) -> VPArray:
         bar = self._bar.base
-        self.__arr = bar.bid.i + bar.ask.i  # pyright: ignore[reportAttributeAccessIssue]
-        return self
+        return bar[:, 0] + bar[:, 1]  # pyright: ignore[reportReturnType]
 
     @property
     def poc(self) -> PriceLike[T]:
@@ -300,13 +217,15 @@ class VolumeProfile[T](ProfileLike[T]):
         return self.__plike[self._bar._get_header(c.BH_VAL)]
 
 
+@final
 @dataclass(slots=True)
-class DeltaProfile[T](ProfileLike[T]):
+class DeltaProfile[T]:
+    _bar: Bar
+
     @property
-    def base(self) -> DeltaProfile[T]:
+    def base(self) -> DPArray:
         bar = self._bar.base
-        self.__arr = bar.bid.i - bar.ask.i  # pyright: ignore[reportAttributeAccessIssue]
-        return self
+        return bar[:, 0] - bar[:, 1]  # pyright: ignore[reportReturnType]
 
 
 @final

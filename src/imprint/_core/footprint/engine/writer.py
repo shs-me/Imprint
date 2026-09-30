@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from imprint._core import constant as c
 from imprint._core.footprint.engine.base import Base
 from imprint._core.footprint.models.converter import to_idx, to_idy
-from imprint._core.utils import IndexGenerator, VarArray
+from imprint._core.utils import FPArray, IndexGenerator, VarArray
 
 next_id = IndexGenerator()
 BHM_VWAP_W: int = next_id()
@@ -128,13 +128,13 @@ def _update(
     nQty: int64,
     timestamp: int64,
     is_sell: int64,
-    args: NDArray[int64],
-    footprint: NDArray[int64],
-    ctrade: NDArray[int64],
+    footprint: FPArray,
+    ctrade: FPArray,
     headers: NDArray[int64],
     headers_offset: memoryview,
     bbox: NDArray[int64],
     meta_data: NDArray[float64],
+    args: VarArray,
 ) -> int | None:
     """
     Update footprint volume matrix, bar headers, VWAP statistics, and bounding box for a trade tick.
@@ -149,11 +149,9 @@ def _update(
         Trade execution timestamp in milliseconds.
     is_sell : int64
         Trade direction flag (1 for sell/bid side, 0 for buy/ask side).
-    args : NDArray[int64]
-        1D array containing scaled constants, array index mappings, and converter configurations.
-    footprint : NDArray[int64]
+    footprint : FPArray
         2D footprint array storing volume profiles per price level and bar column.
-    ctrade : NDArray[int64]
+    ctrade : FPArray
         2D footprint array storing count trades profiles per price level and bar column.
     headers : NDArray[int64]
         2D array storing OHLCV, CVD, VWAP, and indicator metadata for each bar.
@@ -163,6 +161,8 @@ def _update(
         1D array of shape (4,) storing updated bounding box coordinates `[idYmin, idXmin, idYmax, idXmax]`.
     meta_data : NDArray[float64]
         2D array holding intermediate running metrics for VWAP calculation (volume, price*qty, price^2*qty).
+    args : VarArray
+        1D array containing scaled constants, array index mappings, and converter configurations.
 
     Returns
     -------

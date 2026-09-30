@@ -11,5 +11,4 @@ T_IDX = T_1D
 T_VP = T_IDY
 T_BID = Literal[0]
 T_ASK = Literal[1]
-T_FP = T_IDY | tuple[T_IDY, T_IDX]
-T_BAR = T_IDY | tuple[T_IDY, T_BID | T_ASK | T_SLICE]
+T_FP = T_IDY | tuple[T_IDY, T_IDX | T_ASK | T_BID]
