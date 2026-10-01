@@ -104,6 +104,9 @@ class ExchangeREST(BaseREST, ABC):
         return int(time.time() * 1000)
 
     @abstractmethod
+    async def get_agg_trades(self, first_id: int, last_id: int) -> bytes: ...
+
+    @abstractmethod
     def get_balance(self, asset: str = "USDT") -> float: ...
 
     @abstractmethod
@@ -131,7 +134,7 @@ class AggTradesDecoder[T](ABC):
     @final
     def decode(
         self, raw_data: memoryview
-    ) -> Iterator[tuple[float, float, int, int]] | None:
+    ) -> Iterator[tuple[float, float, int, int, int]] | None:
         try:
             msg = self.decoder.decode(raw_data)
             return self.decode_agg_trade(msg)
@@ -141,7 +144,7 @@ class AggTradesDecoder[T](ABC):
     @abstractmethod
     def decode_agg_trade(
         self, msg: T
-    ) -> Iterator[tuple[float, float, int, int]]: ...
+    ) -> Iterator[tuple[float, float, int, int, int]]: ...
 
 
 @final

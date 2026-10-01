@@ -23,7 +23,8 @@ class Order(Base):
     encoder: OrderEncoder[Any] = field(init=False)
     loop: asyncio.AbstractEventLoop = field(init=False)
 
-    def __post_init__(self) -> None:
+    @override
+    def post_init(self) -> None:
         Base.__post_init__(self)
 
         self.price_mult = self.manager.cfgCoin.price_mult

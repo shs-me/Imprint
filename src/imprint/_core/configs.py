@@ -219,12 +219,12 @@ class Metrics(SharedMemorySegments):
 @dataclass(slots=True)
 class RingBuf:
     data_size: int = 256
-    data_header_size: int = 1
     cell_amount: int = 100
     count_writer: int = 1
     count_reader: int = 1
     cast_to_int64: bool = False
 
+    data_header_size: int = field(init=False)
     safe_lag: int = field(init=False)
 
     reader_id: Segment = field(init=False)
@@ -238,6 +238,7 @@ class RingBuf:
     data_header_buf: memoryview = field(init=False)
 
     def __post_init__(self) -> None:
+        self.data_header_size = 8 if self.data_size >= 256 else 1
         self.safe_lag = int(self.cell_amount * 0.9)
 
         self.reader_id = Segment(self.count_reader * INT64)
@@ -292,17 +293,19 @@ class RingBuf:
         self.rid_buf[0] = new_cell if new_cell < self.cell_amount else 0
         return raw_data
 
+    def set_data(self, raw_data: bytes | memoryview) -> None:
+        start: int = self.get_cell()
+        lrd: int = len(raw_data)
+        self.data_buf[start : start + lrd] = raw_data
+        self.set_cell(len_data=lrd)
+
 
 # - Log Stream -
 @dataclass(slots=True)
 class LogStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
-            data_size=1024,
-            data_header_size=8,
-            cell_amount=100,
-            count_reader=10,
-            count_writer=10,
+            data_size=1024, cell_amount=100, count_reader=10, count_writer=10
         ),
         init=False,
     )
@@ -313,10 +316,7 @@ class LogStream(SharedMemorySegments):
 class SignalStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
-            data_size=(6 * 8),
-            data_header_size=1,
-            cell_amount=1000,
-            cast_to_int64=True,
+            data_size=(6 * 8), cell_amount=1000, cast_to_int64=True
         ),
         init=False,
     )
@@ -346,7 +346,6 @@ class UserDataStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
             data_size=(c.TP_ConstantCount * 8),
-            data_header_size=1,
             cell_amount=1000,
             cast_to_int64=True,
         ),
@@ -379,10 +378,7 @@ class UserDataStream(SharedMemorySegments):
 class OrderStream(SharedMemorySegments):
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
-            data_size=(5 * 8),
-            data_header_size=1,
-            cell_amount=1000,
-            cast_to_int64=True,
+            data_size=(5 * 8), cell_amount=1000, cast_to_int64=True
         ),
         init=False,
     )
@@ -417,17 +413,10 @@ class MarketDataStream(SharedMemorySegments):
     def child_post_init(self) -> None:
         self.ring_buf = RingBuf(
             data_size=self.data_size,
-            data_header_size=1,
             cell_amount=10_000,
             count_reader=self.count_reader,
             cast_to_int64=self.cast_to_int64,
         )
-
-    def set_data_in_live(self, raw_data: bytes | memoryview) -> None:
-        start: int = self.ring_buf.get_cell()
-        lrd: int = len(raw_data)
-        self.ring_buf.data_buf[start : start + lrd] = raw_data
-        self.ring_buf.set_cell(len_data=lrd)
 
     def set_data_in_backtest(
         self, nPrice: int, nQty: int, timestamp: int, is_sell: int
@@ -438,3 +427,20 @@ class MarketDataStream(SharedMemorySegments):
         self.ring_buf.data_buf[start + 2] = timestamp
         self.ring_buf.data_buf[start + 3] = is_sell
         self.ring_buf.set_cell(len_data=4)
+
+
+@dataclass(slots=True)
+class MarketDataGapStream(SharedMemorySegments):
+    gap_first_id: Segment = field(
+        default_factory=lambda: Segment(INT64), init=False
+    )
+    gap_last_id: Segment = field(
+        default_factory=lambda: Segment(INT64), init=False
+    )
+    have_gap: Segment = field(
+        default_factory=lambda: Segment(UBYTE), init=False
+    )
+    ring_buf: RingBuf = field(
+        default_factory=lambda: RingBuf(data_size=256 * 1000, cell_amount=5),
+        init=False,
+    )

@@ -18,8 +18,9 @@ class UserData(Base):
     base_uri: str = field(init=False)
     keep_task: asyncio.Task[None] | None = field(default=None, init=False)
 
-    def __post_init__(self) -> None:
-        Base.__post_init__(self)
+    @override
+    def post_init(self) -> None:
+        Base.post_init(self)
 
         m_name: str = self.manager.cfgSetup.user_stream_decoder_module
         c_name: str = self.manager.cfgSetup.user_stream_decoder_class_name

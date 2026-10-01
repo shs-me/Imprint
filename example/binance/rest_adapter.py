@@ -113,6 +113,15 @@ class BinanceFuturesREST(ExchangeREST):
         return tick_size, lot_size, min_order_size
 
     @override
+    async def get_agg_trades(self, first_id: int, last_id: int) -> bytes:
+        params: dict[str, Any] = self._signed_params(
+            {"symbol": self.symbol, "firstId": first_id, "lastId": last_id}
+        )
+        return await self.send_async(
+            "GET", "/fapi/v1/aggTrades", params=params, response_type=bytes
+        )
+
+    @override
     def get_balance(self, asset: str = "USDT") -> float:
         params: dict[str, Any] = self._signed_params()
         balances: list[FutureBalance] = self.send_sync(

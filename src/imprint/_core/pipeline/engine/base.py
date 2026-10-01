@@ -36,7 +36,7 @@ class Base(ABC):
         self.time_start_analyze = cfgMetrics.time_start_reading.view.cast("q")
         self.engine_complete = cfgMetrics.engine_complete.view
 
-        self.agg_trades = np.ndarray((1000, 4), dtype=int64)
+        self.agg_trades = np.ndarray((60_000, 4), dtype=int64)
         self.at_max_row = self.agg_trades.shape[0]
         self.at_rid, self.at_wid = 0, 0
 

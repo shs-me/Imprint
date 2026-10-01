@@ -53,6 +53,8 @@ class Base(ABC):
         Process status codes and health buffers.
     cfgMarketDataStream : cfg.MarketDataStream
         Shared memory layouts for market data streams.
+    cfgMarketDataGapStream : cfg.MarketDataGapStream
+        Shared memory layouts for market data gap streams.
     cfgUserDataStream : cfg.UserDataStream
         Shared memory layouts for user data streams.
     cfgOrderStream : cfg.OrderStream
@@ -84,6 +86,7 @@ class Base(ABC):
     cfgFootprint: cfg.Footprint = field(init=False)
     cfgMetrics: cfg.Metrics = field(init=False)
     cfgMarketDataStream: cfg.MarketDataStream = field(init=False)
+    cfgMarketDataGapStream: cfg.MarketDataGapStream = field(init=False)
     cfgUserDataStream: cfg.UserDataStream = field(init=False)
     cfgOrderStream: cfg.OrderStream = field(init=False)
     cfgSignalStream: cfg.SignalStream = field(init=False)

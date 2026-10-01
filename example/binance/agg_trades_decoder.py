@@ -12,6 +12,7 @@ class BinanceAggTrade(Struct):
     q: str
     T: int
     m: bool
+    a: int
 
 
 @dataclass(slots=True)
@@ -19,5 +20,5 @@ class BinanceAggTradesDecoder(AggTradesDecoder[BinanceAggTrade]):
     @override
     def decode_agg_trade(
         self, msg: BinanceAggTrade
-    ) -> Iterator[tuple[float, float, int, int]]:
-        yield float(msg.p), float(msg.q), msg.T, 1 if msg.m else 0
+    ) -> Iterator[tuple[float, float, int, int, int]]:
+        yield float(msg.p), float(msg.q), msg.T, 1 if msg.m else 0, msg.a

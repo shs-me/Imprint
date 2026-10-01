@@ -1,8 +1,10 @@
 import importlib
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from typing import override
 
+from imprint._core.configs import RingBuf
 from imprint._core.footprint import SyncWithExecution
 from imprint._core.pipeline.engine.base import Base
 from imprint._core.settings import StatusCodes as scs
@@ -24,6 +26,12 @@ class Live(Base):
     engine_event: Event
 
     decoder: AggTradesDecoder[None] = field(init=False)
+    gap_stream: RingBuf = field(init=False)
+    have_gap: memoryview = field(init=False)
+    gap_first_id: memoryview = field(init=False)
+    gap_last_id: memoryview = field(init=False)
+
+    wid_offset: int = field(default=0, init=False)
     pass_lag: int = field(default=0, init=False)
     pass_lag_limit: int = field(default=2, init=False)
 
@@ -40,30 +48,63 @@ class Live(Base):
         )
         self.decoder = decoder_type()
 
+        mdgs = self.manager.cfgMarketDataGapStream
+        self.gap_stream = mdgs.ring_buf
+        self.have_gap = mdgs.have_gap.view
+        self.gap_first_id = mdgs.gap_first_id.view.cast("q")
+        self.gap_last_id = mdgs.gap_last_id.view.cast("q")
+
     @override
     def alarm_clock(self) -> None:
         self.engine_event.wait(0.1)
 
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
+        if self.gap_stream.wid_buf[0] != self.gap_stream.rid_buf[0]:
+            trades = self.decoder.decode(self.gap_stream.get_data())
+            self.processing_trades(trades)
+
         trades = self.decoder.decode(raw_data[:])
+        self.processing_trades(trades)
+
+    def processing_trades(
+        self, trades: Iterator[tuple[float, float, int, int, int]] | None
+    ) -> None:
         if trades is None:
             self.manager.dump_exc()
             return self.manager.set_proc_sc(
                 scs.DECODE_ERROR, wait_main_task=True
             )
-        for p, q, t, m in trades:
-            self.agg_trades[self.at_wid, 0] = round(
-                p * self.algorithm._engine.fp.con.price_mult
-            )
-            self.agg_trades[self.at_wid, 1] = round(
-                q * self.algorithm._engine.fp.con.qty_mult
-            )
-            self.agg_trades[self.at_wid, 2] = t
-            self.agg_trades[self.at_wid, 3] = m
-            self.at_wid: int = (
-                self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0
-            )
+
+        for p, q, t, m, a in trades:
+            if not self.gap_first_id[0]:
+                self.gap_first_id[0] = a - 1
+
+            diff = a - self.gap_first_id[0]
+            if diff == 1:
+                self.gap_first_id[0] = a
+                self.set_data(p, q, t, m, a)
+                nid = self.at_wid + self.wid_offset + 1
+                self.at_wid: int = nid if (nid < self.at_max_row) else 0
+
+            elif diff > 1:
+                self.gap_last_id[0] = max(self.gap_last_id[0], a)
+                if not self.have_gap[0]:
+                    self.have_gap[0] = 1
+
+                self.wid_offset = max(self.wid_offset, diff)
+                self.set_data(p, q, t, m, a)
+
+    def set_data(self, p: float, q: float, t: int, m: int, a: int) -> None:
+        con = self.algorithm._engine.fp.con
+        # - - -
+        nid: int = (a - self.gap_first_id[0]) + self.at_wid
+        row: int = nid if (nid < self.at_max_row) else (nid - self.at_max_row)
+
+        self.agg_trades[row, 0] = round(p * con.price_mult)
+        self.agg_trades[row, 1] = round(q * con.qty_mult)
+        self.agg_trades[row, 2] = t
+        self.agg_trades[row, 3] = m
 
     @override
     def post_update(self) -> None:
