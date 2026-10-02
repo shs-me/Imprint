@@ -3,15 +3,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final
 
-import numpy as np
-from numpy import int64
-from numpy.typing import NDArray
-
 from imprint._core import constant as c
 from imprint._core.configs import MarketDataStream
 from imprint._core.footprint.engine import FootprintEngine
 from imprint._core.ipc import NodeManager, node_handler
 from imprint._core.settings import StatusCodes as scs
+from imprint._core.utils.base import TradesArray
 
 
 @dataclass(slots=True)
@@ -24,7 +21,9 @@ class Base(ABC):
     time_start_analyze: memoryview = field(init=False)
     engine_complete: memoryview = field(init=False)
 
-    agg_trades: NDArray[int64] = field(init=False)
+    agg_trades: TradesArray = field(
+        default_factory=lambda: TradesArray(60_000, 4), init=False
+    )
     at_max_row: int = field(init=False)
     at_rid: int = field(init=False)
     at_wid: int = field(init=False)
@@ -36,18 +35,12 @@ class Base(ABC):
         self.time_start_analyze = cfgMetrics.time_start_reading.view.cast("q")
         self.engine_complete = cfgMetrics.engine_complete.view
 
-        self.agg_trades = np.ndarray((60_000, 4), dtype=int64)
         self.at_max_row = self.agg_trades.shape[0]
         self.at_rid, self.at_wid = 0, 0
 
     @final
     @node_handler()
     def run(self) -> None:
-        nPrice: int64
-        nQty: int64
-        timestamp: int64
-        is_sell: int64
-
         _, fp_engine = self.__mds.ring_buf, self.algorithm._engine
         # - - -
         while True:
@@ -71,30 +64,29 @@ class Base(ABC):
 
             if _.wid_buf[0] != _.rid_buf[0]:
                 self.set_trade_data(_.get_data())
-                while self.at_rid != self.at_wid:
-                    nPrice, nQty, timestamp, is_sell = self.agg_trades[
-                        self.at_rid, :
-                    ]
-                    new_rid = self.at_rid + 1
-                    self.at_rid = new_rid if new_rid < self.at_max_row else 0
 
+            while self.at_rid != self.at_wid:
+                nPrice, nQty, timestamp, is_sell = self.agg_trades[
+                    self.at_rid, :
+                ]
+                new_rid = self.at_rid + 1
+                self.at_rid = new_rid if new_rid < self.at_max_row else 0
+
+                fp_engine.update_footprint(nPrice, nQty, timestamp, is_sell)
+
+                if self.is_bbox_mode(_.wid_buf, _.rid_buf):
+                    continue
+
+                self.time_start_analyze[0] = time.perf_counter_ns()
+
+                fp_engine.analyze_footprint()
+
+                if fp_engine.re_init & c.RIF_session:
                     fp_engine.update_footprint(nPrice, nQty, timestamp, is_sell)
+                    if not self.is_bbox_mode(_.wid_buf, _.rid_buf):
+                        fp_engine.analyze_footprint()
 
-                    if self.is_bbox_mode(_.wid_buf, _.rid_buf):
-                        continue
-
-                    self.time_start_analyze[0] = time.perf_counter_ns()
-
-                    fp_engine.analyze_footprint()
-
-                    if fp_engine.re_init & c.RIF_session:
-                        fp_engine.update_footprint(
-                            nPrice, nQty, timestamp, is_sell
-                        )
-                        if not self.is_bbox_mode(_.wid_buf, _.rid_buf):
-                            fp_engine.analyze_footprint()
-
-                    self.post_update()
+                self.post_update()
 
     @final
     def __complete(self, wid: memoryview, rid: memoryview) -> bool:

@@ -12,6 +12,7 @@ class BybitAggTrade(Struct):
     v: str
     T: int
     S: str
+    a: int
 
 
 class BybitTradeMsg(Struct):
@@ -24,7 +25,7 @@ class BybitAggTradesDecoder(AggTradesDecoder[BybitTradeMsg]):
     @override
     def decode_agg_trade(
         self, msg: BybitTradeMsg
-    ) -> Iterator[tuple[float, float, int, int]]:
+    ) -> Iterator[tuple[float, float, int, int, int]]:
         for t in msg.data:
             is_sell = 1 if (t.S.upper() == "SELL") else 0
-            yield float(t.p), float(t.v), t.T, is_sell
+            yield float(t.p), float(t.v), t.T, is_sell, t.a

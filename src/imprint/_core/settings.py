@@ -58,6 +58,7 @@ class StatusCodes(IntEnum):
     FP_RE_INIT = "FP re-initialized"
     ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
     BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"
+    BIG_GAP = "Big Gap, gap > buffer capacity"
     DATA_PREPARED = "Trades data, prepared"
     LOSS_MORE_LIMIT = "Balance >= max loss limit"
     QTY_LESS_LIMIT = "Nominal qty <= min order size"

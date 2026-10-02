@@ -25,7 +25,7 @@ class Order(Base):
 
     @override
     def post_init(self) -> None:
-        Base.__post_init__(self)
+        Base.post_init(self)
 
         self.price_mult = self.manager.cfgCoin.price_mult
         self.price_prec = self.manager.cfgCoin.price_prec

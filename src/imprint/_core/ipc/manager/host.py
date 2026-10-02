@@ -144,6 +144,11 @@ class Host(Base):
             self.logger(scs.FP_RE_INIT.label, LogLevel.SUCCESS, p_name)
             self.clear_proc_sc(scs.FP_RE_INIT, p_id)
 
+        if sc & scs.BIG_GAP:
+            self.logger(scs.BIG_GAP.label, LogLevel.ERROR, p_name)
+            self.close_procs = True
+            self.clear_proc_sc(scs.BIG_GAP, p_id)
+
         if sc & scs.ANALYSIS_LAG_MORE_SAFE_LAG:
             self.logger(
                 scs.ANALYSIS_LAG_MORE_SAFE_LAG.label, LogLevel.WARNING, p_name

@@ -114,9 +114,11 @@ class BinanceFuturesREST(ExchangeREST):
 
     @override
     async def get_agg_trades(self, first_id: int, last_id: int) -> bytes:
-        params: dict[str, Any] = self._signed_params(
-            {"symbol": self.symbol, "firstId": first_id, "lastId": last_id}
-        )
+        params: dict[str, Any] = {
+            "symbol": self.symbol,
+            "fromId": first_id,
+            "limit": (last_id - first_id),
+        }
         return await self.send_async(
             "GET", "/fapi/v1/aggTrades", params=params, response_type=bytes
         )

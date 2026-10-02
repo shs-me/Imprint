@@ -67,3 +67,17 @@ class VarArray(np.ndarray):
     def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
         if obj is None:
             return
+
+
+@final
+class TradesArray(np.ndarray):
+    def __new__(cls, rows: int, cols: int) -> TradesArray:
+        power_two = 1 << (rows).bit_length()
+        obj = super().__new__(cls, shape=(power_two, cols), dtype=int64)
+        obj.fill(0)
+        return obj
+
+    @override
+    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
+        if obj is None:
+            return

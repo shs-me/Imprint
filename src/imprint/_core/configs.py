@@ -11,7 +11,6 @@ from imprint._core.utils.base_adapters import BalanceData, OrderData
 PERCENT: int = 10_000
 
 OFFSET: int = 0
-UBYTE: int = 1
 INT64: int = 8
 FLOAT64: int = 8
 
@@ -211,7 +210,7 @@ class Metrics(SharedMemorySegments):
         self.main_status = Segment(self.count_procs * INT64)
         self.time_start_reading = Segment(INT64)
         self.trade_read_time = Segment(INT64)
-        self.engine_complete = Segment(UBYTE)
+        self.engine_complete = Segment(INT64)
 
 
 # - - Base Ring Buf For All Streams - -
@@ -224,7 +223,7 @@ class RingBuf:
     count_reader: int = 1
     cast_to_int64: bool = False
 
-    data_header_size: int = field(init=False)
+    data_header_size: int = field(default=8, init=False)
     safe_lag: int = field(init=False)
 
     reader_id: Segment = field(init=False)
@@ -238,7 +237,6 @@ class RingBuf:
     data_header_buf: memoryview = field(init=False)
 
     def __post_init__(self) -> None:
-        self.data_header_size = 8 if self.data_size >= 256 else 1
         self.safe_lag = int(self.cell_amount * 0.9)
 
         self.reader_id = Segment(self.count_reader * INT64)
@@ -257,10 +255,7 @@ class RingBuf:
         else:
             self.data_buf = self.data.view
 
-        if self.data_header_size == 8:
-            self.data_header_buf = self.data_header.view.cast("q")
-        else:
-            self.data_header_buf = self.data_header.view
+        self.data_header_buf = self.data_header.view.cast("q")
 
         self.wid_buf = self.writer_id.view.cast("q")
         self.rid_buf = self.reader_id.view.cast("q")
@@ -438,9 +433,9 @@ class MarketDataGapStream(SharedMemorySegments):
         default_factory=lambda: Segment(INT64), init=False
     )
     have_gap: Segment = field(
-        default_factory=lambda: Segment(UBYTE), init=False
+        default_factory=lambda: Segment(INT64), init=False
     )
     ring_buf: RingBuf = field(
-        default_factory=lambda: RingBuf(data_size=256 * 1000, cell_amount=5),
+        default_factory=lambda: RingBuf(data_size=256 * 1000, cell_amount=6),
         init=False,
     )
