@@ -2,7 +2,7 @@ import importlib
 from multiprocessing.synchronize import Event
 from typing import Any
 
-from imprint._core.footprint import FootprintEngine
+from imprint._core.footprint import StrategyEngine
 from imprint._core.ipc import NodeManager, supervisor
 
 __all__ = ["run_engine"]
@@ -17,7 +17,7 @@ def run_engine(
     m_name: str = manager.cfgSetup.algorithm_module
     c_name: str = manager.cfgSetup.algorithm_class_name
 
-    engine_type: type[FootprintEngine] = getattr(
+    engine_type: type[StrategyEngine] = getattr(
         importlib.import_module(m_name), c_name
     )
 
@@ -30,8 +30,8 @@ def run_engine(
 
         sync = SyncViaEvent(manager=manager, execution_event=execution_event)
 
-    engine: FootprintEngine = engine_type(manager, sync)
-    manager.set_log(f"{engine.__class__.__name__} used as FootprintEngine")
+    engine: StrategyEngine = engine_type(manager, sync)
+    manager.set_log(f"{engine.__class__.__name__} used as StrategyEngine")
 
     if manager.cfgSetup.backtesting:
         from imprint._core.pipeline.engine.backtest import (

@@ -7,7 +7,7 @@ from numpy import int64
 
 from imprint._core import constant as c
 from imprint._core.configs import SignalStream
-from imprint._core.footprint.engine.reader import Reader as FootprintEngine
+from imprint._core.footprint.engine.reader import FootprintEngine
 from imprint._core.footprint.models import Footprint
 from imprint._core.ipc import NodeManager
 from imprint._core.types import AlgorithmProtocol
@@ -169,3 +169,7 @@ class Router(AlgorithmProtocol, ABC):
             sl_dev=sl_dev,
             pass_lag=pass_lag,
         )
+
+
+@dataclass(slots=True)
+class StrategyEngine(Router, ABC): ...

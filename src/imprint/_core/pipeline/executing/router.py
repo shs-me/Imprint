@@ -81,3 +81,7 @@ class Router(ExecutionProtocol, ABC):
         nQty: int,
         nCommission: int,
     ) -> None: ...
+
+
+@dataclass(slots=True)
+class ExecutionEngine(Router, ABC): ...

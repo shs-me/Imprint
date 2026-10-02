@@ -4,11 +4,11 @@ from typing import override
 from numpy import int64
 
 from imprint import constant as c
-from imprint.configs import FootprintEngine
+from imprint.configs import StrategyEngine
 
 
 @dataclass(slots=True)
-class IntraDay(FootprintEngine):
+class IntraDay(StrategyEngine):
     ma_volume_period: int = field(default=50, init=False)
     ma_avg_trade_size_period: int = field(default=50, init=False)
     big_cluster_mult: float = field(default=0.7, init=False)

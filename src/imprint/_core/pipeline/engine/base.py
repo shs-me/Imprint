@@ -5,7 +5,7 @@ from typing import final
 
 from imprint._core import constant as c
 from imprint._core.configs import MarketDataStream
-from imprint._core.footprint.engine import FootprintEngine
+from imprint._core.footprint.engine import StrategyEngine
 from imprint._core.ipc import NodeManager, node_handler
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.utils.base import TradesArray
@@ -14,7 +14,7 @@ from imprint._core.utils.base import TradesArray
 @dataclass(slots=True)
 class Base(ABC):
     manager: NodeManager
-    algorithm: FootprintEngine
+    algorithm: StrategyEngine
 
     __mds: MarketDataStream = field(init=False)
 

@@ -1,7 +1,9 @@
-from imprint._core.footprint.engine.router import Router as FootprintEngine
-from imprint._core.footprint.engine.router import SyncWithExecution
+from imprint._core.footprint.engine.router import (
+    StrategyEngine,
+    SyncWithExecution,
+)
 
 __all__ = [
-    "FootprintEngine",
+    "StrategyEngine",
     "SyncWithExecution",
 ]

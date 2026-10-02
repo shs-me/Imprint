@@ -7,7 +7,6 @@ from typing import override
 from msgspec import Raw, Struct
 from websockets import ClientConnection
 
-from example.binance.rest_adapter import BinanceFuturesREST
 from imprint._core import constant as c
 from imprint._core.utils.base_adapters import (
     BalanceData,
@@ -15,6 +14,7 @@ from imprint._core.utils.base_adapters import (
     UserStreamDecoder,
 )
 from imprint._core.utils.base_rest import RestResponseError
+from imprint.adapters.binance.rest_adapter import BinanceFuturesREST
 
 
 class OrderUpdateData(Struct):

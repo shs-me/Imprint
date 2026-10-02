@@ -33,9 +33,7 @@ class MarketDataStream(Base):
     max_data_row: int = field(init=False)
 
     @override
-    def __post_init__(self) -> None:
-        Base.__post_init__(self)
-
+    def post_init(self) -> None:
         self.symbol = self.manager.cfgCoin.symbol
         self.start_date = self.manager.cfgSetup.backtest_start_date
         self.end_date = self.manager.cfgSetup.backtest_end_date

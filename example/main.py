@@ -1,12 +1,12 @@
 from example.algorithm import IntraDay
-from example.binance import (
+from example.execution import HedgeExecution
+from imprint import Imprint, pct, tf
+from imprint.adapters.binance import (
     BinanceAggTradesDecoder,
     BinanceFuturesREST,
     BinanceOrderEncoder,
     BinanceUserStreamDecoder,
 )
-from example.execution import HedgeExecution
-from imprint import Imprint, pct, tf
 from imprint.configs import (
     Account,
     Backtest,

@@ -3,11 +3,11 @@ from dataclasses import dataclass
 from typing import override
 
 from imprint import constant as c
-from imprint.configs import BaseExecution
+from imprint.configs import ExecutionEngine
 
 
 @dataclass(slots=True)
-class HedgeExecution(BaseExecution):
+class HedgeExecution(ExecutionEngine):
     @override
     def on_signal(
         self,

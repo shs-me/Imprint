@@ -1,6 +1,6 @@
-from imprint._core.footprint.engine import FootprintEngine, SyncWithExecution
+from imprint._core.footprint.engine import StrategyEngine, SyncWithExecution
 
 __all__ = [
-    "FootprintEngine",
+    "StrategyEngine",
     "SyncWithExecution",
 ]

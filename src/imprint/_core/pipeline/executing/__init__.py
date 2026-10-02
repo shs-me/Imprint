@@ -3,9 +3,12 @@ from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
 from imprint._core.ipc import NodeManager, supervisor
-from imprint._core.pipeline.executing.router import Router as BaseExecution
+from imprint._core.pipeline.executing.router import ExecutionEngine
 
-__all__ = ["BaseExecution", "run_executing"]
+__all__ = [
+    "ExecutionEngine",
+    "run_executing",
+]
 
 
 @supervisor()
@@ -17,10 +20,10 @@ def run_executing(
     m_name = manager.cfgSetup.execution_module
     c_name = manager.cfgSetup.execution_class_name
 
-    execution: type[BaseExecution] = getattr(
+    execution: type[ExecutionEngine] = getattr(
         importlib.import_module(m_name), c_name
     )
-    manager.set_log(f"{execution.__name__} used as BaseExecution")
+    manager.set_log(f"{execution.__name__} used as ExecutionEngine")
     agent = execution(
         _manager=manager, _execution_event=execution_event, _wss_sem=wss_sem
     )

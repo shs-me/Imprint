@@ -4,7 +4,7 @@ from typing import override
 from msgspec import Struct
 from websockets import ClientConnection
 
-from example.binance.rest_adapter import BinanceFuturesREST
+from imprint.adapters.binance.rest_adapter import BinanceFuturesREST
 from imprint.configs import OrderEncoder
 
 

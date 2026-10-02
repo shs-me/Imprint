@@ -7,8 +7,8 @@ from imprint._core.configs import (
     Footprint,
     RiskManagement,
 )
-from imprint._core.footprint import FootprintEngine
-from imprint._core.pipeline.executing import BaseExecution
+from imprint._core.footprint import StrategyEngine
+from imprint._core.pipeline.executing import ExecutionEngine
 from imprint._core.utils import (
     AggTradesDecoder,
     BalanceData,
@@ -23,16 +23,16 @@ __all__ = [
     "AggTradesDecoder",
     "Backtest",
     "BalanceData",
-    "BaseExecution",
     "Connector",
     "ExchangeREST",
+    "ExecutionEngine",
     "Footprint",
-    "FootprintEngine",
     "Live",
     "OrderData",
     "OrderEncoder",
     "RiskManagement",
     "Strategy",
+    "StrategyEngine",
     "UserStreamDecoder",
 ]
 
@@ -61,6 +61,6 @@ class Live:
 @final
 @dataclass(slots=True)
 class Strategy:
-    algorithm: type[FootprintEngine]
+    algorithm: type[StrategyEngine]
     footprint: Footprint
     risk_management: RiskManagement

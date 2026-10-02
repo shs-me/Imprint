@@ -109,6 +109,11 @@ class Reader(w.Writer):
         self.__set_last_trade_time()
 
 
+@final
+@dataclass(slots=True)
+class FootprintEngine(Reader): ...  # pyright: ignore[reportUninitializedInstanceVariable]
+
+
 @njit(cache=True)
 def _update_clusters_states(
     idYmin: int64,

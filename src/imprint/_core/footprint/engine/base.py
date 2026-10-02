@@ -9,10 +9,11 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
-from imprint._core.footprint.models import Converter, Footprint, FPArray
+from imprint._core.footprint.models import Converter, Footprint
 from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.types import AlgorithmProtocol
+from imprint._core.utils import FPArray
 
 
 @dataclass(slots=True)
