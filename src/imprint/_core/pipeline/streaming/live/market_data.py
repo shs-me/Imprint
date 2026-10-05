@@ -11,6 +11,33 @@ from imprint._core.settings import StatusCodes as scs
 
 @dataclass(slots=True)
 class MarketData(Base):
+    """Streaming market data processor managing order book updates and gap recovery.
+
+    Parameters
+    ----------
+    engine_event : Event
+        Multiprocessing synchronization event signaled when new data is written
+        to the ring buffer.
+
+    Attributes
+    ----------
+    have_gap : memoryview
+        Single-element shared memory boolean flag indicating whether a sequence
+        gap has been detected.
+    first_gap_id : memoryview
+        Single-element shared memory 64-bit integer specifying the starting trade
+        ID of the missing sequence.
+    last_gap_id : memoryview
+        Single-element shared memory 64-bit integer specifying the ending trade
+        ID of the missing sequence.
+    gap_task : asyncio.Task[None] | None
+        Background asynchronous task responsible for monitoring and recovering
+        sequence gaps.
+    sem : asyncio.Semaphore
+        Concurrency limiter restricting simultaneous REST gap recovery requests
+        to a maximum of 5.
+    """
+
     engine_event: Event
 
     have_gap: memoryview = field(init=False)
@@ -24,6 +51,7 @@ class MarketData(Base):
 
     @override
     def post_init(self) -> None:
+        """Initialize shared memory views and base configuration."""
         Base.post_init(self)
 
         self.have_gap = self.mdgs.have_gap.view
@@ -32,6 +60,7 @@ class MarketData(Base):
 
     @override
     async def on_pre_connect(self) -> None:
+        """Spawn the gap monitoring background task prior to establishing connection."""
         if self.gap_task is None:
             self.gap_task = asyncio.create_task(self.monitor_gap())
 
@@ -40,6 +69,18 @@ class MarketData(Base):
 
     @override
     async def in_connection(self, ws: ClientConnection) -> None:
+        """Receive incoming WebSocket frames and write them to the shared ring buffer.
+
+        Parameters
+        ----------
+        ws : ClientConnection
+            Active WebSocket connection instance.
+
+        Raises
+        ------
+        RuntimeError
+            Terminates process status code if raw data size exceeds the buffer limit.
+        """
         _ = self.mds.ring_buf
         # - - -
         raw_data: bytes = await ws.recv(decode=False)
@@ -58,34 +99,39 @@ class MarketData(Base):
             self.engine_event.set()
 
     async def monitor_gap(self) -> None:
+        """Monitor shared memory for sequence gaps and fetch missing trades via REST."""
+        wid, rid = self.mdgs.ring_buf.wid_buf, self.mdgs.ring_buf.rid_buf
+        #  - - -
         try:
-            wid, rid = self.mdgs.ring_buf.wid_buf, self.mdgs.ring_buf.rid_buf
-            #  - - -
             while True:
-                while not self.have_gap[0]:
-                    await asyncio.sleep(0.01)
+                try:
+                    while not self.have_gap[0]:
+                        await asyncio.sleep(0.01)
 
-                while wid[0] != rid[0]:
-                    await asyncio.sleep(0.01)
+                    while wid[0] != rid[0]:
+                        await asyncio.sleep(0.01)
 
-                first_id: int = self.first_gap_id[0]
-                last_gap_id: int = self.last_gap_id[0]
+                    first_id: int = self.first_gap_id[0]
+                    last_gap_id: int = self.last_gap_id[0]
 
-                if (last_gap_id - first_id) <= 1000:
-                    await self.gap_request(first_id, last_gap_id, self.sem)
-                else:
-                    async with asyncio.TaskGroup() as tg:
-                        curr_first = first_id
-                        while curr_first < last_gap_id:
-                            curr_last = min(curr_first + 1000, last_gap_id)
-                            tg.create_task(
-                                self.gap_request(
-                                    curr_first, curr_last, self.sem
+                    if (last_gap_id - first_id) <= 1000:
+                        await self.gap_request(first_id, last_gap_id, self.sem)
+                    else:
+                        async with asyncio.TaskGroup() as tg:
+                            curr_first = first_id
+                            while curr_first < last_gap_id:
+                                curr_last = min(curr_first + 1000, last_gap_id)
+                                tg.create_task(
+                                    self.gap_request(
+                                        curr_first, curr_last, self.sem
+                                    )
                                 )
-                            )
-                            curr_first = curr_last
+                                curr_first = curr_last
 
-                self.have_gap[0] = 0
+                    self.have_gap[0] = 0
+
+                finally:
+                    ...
 
         except Exception as e:
             self.manager.dump_exc(True)
@@ -96,6 +142,22 @@ class MarketData(Base):
     async def gap_request(
         self, first_id: int, last_id: int, sem: asyncio.Semaphore
     ) -> None:
+        """Fetch missing aggregate trades within a trade ID range and populate the ring buffer.
+
+        Parameters
+        ----------
+        first_id : int
+            Starting trade identifier of the gap range (inclusive).
+        last_id : int
+            Ending trade identifier of the gap range (inclusive).
+        sem : asyncio.Semaphore
+            Concurrency semaphore to rate-limit REST requests.
+
+        Raises
+        ------
+        RuntimeError
+            Terminates process status code if fetched raw data exceeds buffer size.
+        """
         _ = self.mdgs.ring_buf
         # - - -
         async with sem:

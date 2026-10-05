@@ -17,7 +17,7 @@ from imprint._core.configs import RingBuf, Segment
 
 @dataclass(slots=True)
 class Base(ABC):
-    """Base manager binding shared memory slice references to configuration objects.
+    """Abstract manager binding shared memory slice references to configuration objects.
 
     Provides core routines to scan system configuration classes, resolve their
     SharedMemory slice specifications, and dynamically bind sliced memoryviews
@@ -68,9 +68,9 @@ class Base(ABC):
     _general_event : Event
         General process synchronization event.
     _procs_status : memoryview
-        Process-level status integer array (cast to int64/'q').
+        Process-level status integer array cast to signed 64-bit integers ('q').
     _main_status : memoryview
-        Host-level process status integer array (cast to int64/'q').
+        Host-level process status integer array cast to signed 64-bit integers ('q').
     """
 
     _segments: dict[str, slice]
@@ -98,12 +98,18 @@ class Base(ABC):
     _procs_status: memoryview = field(init=False)
     _main_status: memoryview = field(init=False)
 
+    @final
     def __post_init__(self) -> None:
         """Initialize configurations, synchronize attributes, and cast status buffer views."""
         self.__init_attributes(self._configs, self._main_tools)
 
         self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
         self._main_status = self.cfgMetrics.main_status.view.cast("q")
+
+        self.post_init()
+
+    def post_init(self) -> None:
+        """Execute subclass-specific post-initialization logic."""
 
     @final
     def __init_attributes(
@@ -118,7 +124,7 @@ class Base(ABC):
         configs : list[cfg.Configuration]
             List of configuration items containing data structure fields.
         main_tools : list[Event | Semaphore]
-            Multi-processing sync instances.
+            Multi-processing synchronization instances.
         """
         objs: list[cfg.Configuration | Event | Semaphore] = configs + main_tools
         for obj in objs:
@@ -139,7 +145,7 @@ class Base(ABC):
         Parameters
         ----------
         cfg : cfg.SharedMemorySegments
-            The segment configurations to associate with target memory slices.
+            Segment configurations to associate with target memory slices.
         """
         buf: memoryview = self._shm_buf[self._segments[cfg.__class__.__name__]]
         for attr_name in cfg.__slots__:

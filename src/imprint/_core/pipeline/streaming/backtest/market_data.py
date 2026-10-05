@@ -1,3 +1,5 @@
+"""Market data streaming module for backtesting pipeline."""
+
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -16,6 +18,38 @@ from imprint._core.settings import StatusCodes as scs
 
 @dataclass(slots=True)
 class MarketDataStream(Base):
+    """Streams historical aggregated trade data for backtesting execution.
+
+    Attributes
+    ----------
+    symbol : str
+        Target trading pair symbol (e.g., ``"BTCUSDT"``).
+    start_date : str
+        ISO 8601 formatted start date for the backtest window (``"YYYY-MM-DD"``).
+    end_date : str
+        ISO 8601 formatted end date for the backtest window (``"YYYY-MM-DD"``).
+    datadir : str
+        Filesystem directory containing raw market data archives.
+    type_data : str
+        Classification type of the market data stream.
+    data_path : str
+        Filesystem path to the compressed NumPy archive file for the symbol.
+    data_manifest_path : str
+        Filesystem path to the date manifest text file indexing available daily partitions.
+    data_paths : list[str]
+        Ordered list of ISO 8601 date strings corresponding to active trading days within the backtest range.
+    data_path_id : int
+        Index of the currently loaded partition within ``data_paths``.
+    data : ndarray of shape (N, 4)
+        Loaded trade array for the current daily partition, containing price, quantity, timestamp, and side flags.
+    dataz : NpzFile
+        Loaded NumPy compressed archive file handle containing multi-day market data arrays.
+    read_row : int
+        Current row pointer offset within the active ``data`` array.
+    max_data_row : int
+        Total number of trade rows in the active ``data`` partition.
+    """
+
     symbol: str = field(init=False)
     start_date: str = field(init=False)
     end_date: str = field(init=False)
@@ -34,6 +68,7 @@ class MarketDataStream(Base):
 
     @override
     def post_init(self) -> None:
+        """Initialize stream paths, manifest configuration, and initial dataset partitions."""
         self.symbol = self.manager.cfgCoin.symbol
         self.start_date = self.manager.cfgSetup.backtest_start_date
         self.end_date = self.manager.cfgSetup.backtest_end_date
@@ -49,6 +84,18 @@ class MarketDataStream(Base):
         self.change_data()
 
     def get_data_paths(self) -> list[str]:
+        """Parse the manifest file and filter available daily data partitions by the backtest date range.
+
+        Returns
+        -------
+        list[str]
+            Sorted list of ISO 8601 date strings falling inclusively between ``start_date`` and ``end_date``.
+
+        Raises
+        ------
+        FileNotFoundError
+            If ``data_manifest_path`` does not exist on the filesystem.
+        """
         with open(self.data_manifest_path) as f:
             dates_str: str = f.read()
 
@@ -64,6 +111,7 @@ class MarketDataStream(Base):
 
     @node_handler()
     def run(self) -> None:
+        """Execute the streaming loop, dispatching historical trades sequentially to the backtest buffer."""
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -99,10 +147,18 @@ class MarketDataStream(Base):
                 self.read_row += 1
 
     def change_data(self) -> None:
+        """Advance to the next daily data partition and load its trade array into memory."""
         self.data = self.dataz[self.data_paths[self.data_path_id]]
         self.data_path_id += 1
         self.max_data_row = self.data.shape[0]
         self.read_row = 0
 
     def complete(self) -> bool:
+        """Determine whether all scheduled data partitions have been fully processed.
+
+        Returns
+        -------
+        bool
+            True if all date paths have been consumed, otherwise False.
+        """
         return self.data_path_id >= len(self.data_paths)

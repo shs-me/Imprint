@@ -1,8 +1,8 @@
 """Shared memory allocator and process client manager.
 
-This module provides the central IPC Dispatcher that dynamically analyzes configurations,
-allocates shared memory, handles memory layout segments, and instantiates the correct
-manager interface (Host or Node) based on the running process's role.
+Coordinates the central IPC Dispatcher that dynamically analyzes configurations,
+allocates shared memory blocks, handles memory layout segments, and instantiates
+process-specific manager interfaces (Host or Node).
 """
 
 import inspect
@@ -21,19 +21,19 @@ from imprint._core.settings import KwgsKeys as kk
 
 @dataclass(slots=True)
 class Dispatcher:
-    """IPC resource allocator instantiating SharedMemory blocks and manager interfaces.
+    """Allocate IPC resources, manage SharedMemory blocks, and instantiate manager interfaces.
 
-    The Dispatcher coordinates the setup and alignment of IPC resources. For the main
-    orchestrator process, it calculates segment layouts and initiates the SharedMemory block.
-    For worker processes, it attaches to the existing SharedMemory block and returns
-    specialized Node managers mapping their specific process IDs.
+    Coordinates the setup and alignment of inter-process communication resources.
+    For the main orchestrator process, calculates segment layouts and initiates
+    the shared memory block. For worker processes, attaches to existing shared
+    memory and provides specialized Node managers.
 
     Parameters
     ----------
     is_main : bool
         True if this process is the main orchestrator (Host), False if it is a worker (Node).
     kwg : dict[str, Any]
-        Arguments dictionary containing configuration objects, status parameters,
+        Keyword arguments dictionary containing configuration objects, status parameters,
         process identities, and shared synchronization tools.
 
     Attributes
@@ -51,7 +51,7 @@ class Dispatcher:
     shm_buf: memoryview = field(init=False)
 
     def run_client(self, func: FunctionType) -> None:
-        """Initialize shared memory resources and execute the target process function with an assigned Manager.
+        """Initialize shared memory resources and execute target function with an assigned manager.
 
         Parameters
         ----------
@@ -67,10 +67,10 @@ class Dispatcher:
         func(manager=self.manager_init(), **self.kwg)
 
     def configurations_init(self) -> None:
-        """Scan configuration module classes, calculate shared memory offsets, and create IPC sync tools.
+        """Scan configuration classes, calculate shared memory offsets, and create IPC synchronization tools.
 
-        This method inspects the `configs` module for subclasses of `Configuration` and
-        `SharedMemorySegments`. It calculates cumulative size requirements to derive memory slice
+        Inspects the `configs` module for subclasses of `Configuration` and
+        `SharedMemorySegments`. Computes cumulative size requirements to derive memory slice
         offsets, updates keyword arguments, and initializes inter-process synchronization
         objects (Event, Semaphore).
         """
@@ -96,11 +96,11 @@ class Dispatcher:
         self.kwg[kk.MainTools.name] = [Event(), Semaphore(0)]
 
     def shm_init(self) -> tuple[SharedMemory, memoryview] | None:
-        """Allocate new SharedMemory block for main process or attach to existing segment for workers.
+        """Allocate a new SharedMemory block for the main process or attach to an existing segment for workers.
 
         Returns
         -------
-        tuple[SharedMemory, memoryview] or None
+        tuple[SharedMemory, memoryview] | None
             A tuple of the SharedMemory block and its associated memoryview block, or None.
         """
         if self.is_main:
@@ -120,11 +120,11 @@ class Dispatcher:
                 self.shm_buf = self.shm.buf
 
     def manager_init(self) -> HostManager | NodeManager:
-        """Instantiate MainManager or NodeManager instance matching process identity.
+        """Instantiate HostManager or NodeManager matching the current process identity.
 
         Returns
         -------
-        HostManager or NodeManager
+        HostManager | NodeManager
             The instantiated manager object tailored to either the host's or worker's
             operational requirements.
         """

@@ -13,6 +13,24 @@ from imprint._core.account.base import Base
 
 @dataclass(slots=True)
 class Account(Base, ABC):
+    """Abstract base account managing balances, commissions, and order history logs.
+
+    Attributes
+    ----------
+    takerNcommission : int
+        Fixed taker commission rate in exchange units.
+    makerNcommission : int
+        Fixed maker commission rate in exchange units.
+    orders_history : ndarray of shape (N, TP_ConstantCount)
+        Preallocated contiguous array tracking historical order events and metrics.
+    ohWid : memoryview
+        Single-element integer memoryview acting as an append-only row cursor for ``orders_history``.
+    oh_rows : int
+        Allocation chunk size for resizing ``orders_history`` when capacity is exceeded.
+    oh_cols : int
+        Number of feature columns per order history record (matches ``TP_ConstantCount``).
+    """
+
     takerNcommission: int = field(init=False)
     makerNcommission: int = field(init=False)
 
@@ -38,6 +56,17 @@ class Account(Base, ABC):
 
     @final
     def lock_balance(self, nPrice: int, nQty: int, order_param: int) -> None:
+        """Lock required margin for active limit orders based on side and position flags.
+
+        Parameters
+        ----------
+        nPrice : int
+            Normalized order limit price. Must be strictly positive.
+        nQty : int
+            Normalized order quantity. Must be strictly positive.
+        order_param : int
+            Bitmask containing order flags (e.g., ``OF_LONG``, ``OF_BUY``, ``OF_LIMIT``).
+        """
         is_long: bool = bool(order_param & c.OF_LONG)
         is_buy: bool = bool(order_param & c.OF_BUY)
         if ((is_buy and is_long) or (not is_long and not is_buy)) and bool(
@@ -55,7 +84,8 @@ class Account(Base, ABC):
         self.post_lock_balance()
 
     @abstractmethod
-    def post_lock_balance(self) -> None: ...
+    def post_lock_balance(self) -> None:
+        """Execute account-specific post-processing logic after margin locking."""
 
     @final
     def update_orders_history(
@@ -72,6 +102,33 @@ class Account(Base, ABC):
         planned_tp: int = 0,
         planned_sl: int = 0,
     ) -> None:
+        """Record an order event into the history log buffer, resizing dynamically if full.
+
+        Parameters
+        ----------
+        timestamp : int
+            Epoch timestamp of the order event in microseconds.
+        order_param : int
+            Bitmask describing order properties and flags.
+        order_id : int
+            Unique exchange-assigned order identifier.
+        client_order_id : int
+            Client-assigned order identifier.
+        nPrice : int
+            Normalized execution or placement price.
+        nQty : int
+            Normalized order quantity.
+        nCommission : int
+            Normalized commission assessed for the order execution in exchange units.
+        nMAE : int, default=0
+            Maximum Adverse Excursion in normalized price units.
+        nMFE : int, default=0
+            Maximum Favorable Excursion in normalized price units.
+        planned_tp : int, default=0
+            Planned take-profit target price level in normalized price units.
+        planned_sl : int, default=0
+            Planned stop-loss trigger price level in normalized price units.
+        """
         ohWid, oh = self.ohWid, self.orders_history
         # - - -
         oh[ohWid[0], c.TP_timestamp] = timestamp
@@ -95,8 +152,7 @@ class Account(Base, ABC):
 
     @final
     def save_orders_history(self) -> None:
-        """Flushes non-zero order history logs to disk."""
-
+        """Flush active non-zero order history logs to disk via NumPy binary format."""
         np.save(
             c.ORDERS_HISTORY_DATA_PATH,
             self.orders_history[: self.ohWid[0], :],
@@ -112,5 +168,27 @@ def to_nMargin(
     qty_mult: int,
     scale_mult: int,
 ) -> int:
+    """Compute required normalized margin for an open position or order.
+
+    Parameters
+    ----------
+    nPrice : int
+        Normalized asset price. Must be strictly positive.
+    nQty : int
+        Normalized asset quantity. Must be strictly positive.
+    leverage : int
+        Account leverage multiplier. Must be strictly positive.
+    price_mult : int
+        Scaling factor used to denormalize price. Must be strictly positive.
+    qty_mult : int
+        Scaling factor used to denormalize quantity. Must be strictly positive.
+    scale_mult : int
+        Scaling factor used to re-normalize the resulting margin value. Must be strictly positive.
+
+    Returns
+    -------
+    int
+        Rounded normalized margin requirement in integer units.
+    """
     margin: float = ((nQty / qty_mult) * (nPrice / price_mult)) / leverage
     return round(margin * scale_mult)

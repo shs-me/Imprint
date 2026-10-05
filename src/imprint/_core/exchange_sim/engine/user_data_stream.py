@@ -11,6 +11,22 @@ from imprint._core.exchange_sim.engine.order_stream import Order
 
 @dataclass(slots=True)
 class UserData(Order, ABC):
+    """Represents a user data stream order handler managing ring buffer allocations.
+
+    Attributes
+    ----------
+    uds_data_buf : memoryview
+        Shared memory buffer storing serialized user data items.
+    uds_data_size : int
+        Capacity of each slot in the user data ring buffer in bytes.
+    uds_data_header_buf : memoryview
+        Header buffer tracking payload lengths per cell slot.
+    uds_wid_buf : memoryview
+        Write index buffer pointing to the current active cell slot.
+    uds_cell_amount : int
+        Total number of cells allocated in the ring buffer.
+    """
+
     uds_data_buf: memoryview = field(init=False)
     uds_data_size: int = field(init=False)
     uds_data_header_buf: memoryview = field(init=False)
@@ -38,6 +54,23 @@ def set_user_data(
     uds_wid_buf: memoryview,
     uds_cell_amount: int,
 ) -> None:
+    """Write user data array into the active ring buffer cell and advance the write index.
+
+    Parameters
+    ----------
+    data : ndarray of shape (N,), dtype=int64
+        Source integer payload to write into the user data stream buffer.
+    uds_data_buf : memoryview
+        Shared memory buffer storing serialized user data items.
+    uds_data_buf_size : int
+        Maximum element capacity per buffer cell slot.
+    uds_data_header_buf : memoryview
+        Header buffer tracking payload lengths per cell slot, updated with ``len(data)``.
+    uds_wid_buf : memoryview
+        Write index buffer containing the current target cell index at position ``0``.
+    uds_cell_amount : int
+        Total number of cells in the ring buffer. Used to wrap around the write index.
+    """
     cell: int = uds_wid_buf[0]
     start: int = cell * uds_data_buf_size
 

@@ -13,6 +13,29 @@ from imprint._core.utils import OrderEncoder
 
 @dataclass(slots=True)
 class Order(Base):
+    """Manages outbound order placement and cancellation requests via WebSocket connection.
+
+    Parameters
+    ----------
+    wss_sem : Semaphore
+        Multiprocessing semaphore controlling order rate-limiting or concurrency.
+
+    Attributes
+    ----------
+    price_mult : int
+        Multiplier applied to convert float prices into normalized fixed-point integers.
+    price_prec : int
+        Decimal precision places for rounding prices.
+    qty_prec : int
+        Decimal precision places for rounding quantities.
+    qty_mult : int
+        Multiplier applied to convert float quantities into normalized fixed-point integers.
+    encoder : OrderEncoder[Any]
+        Exchange-specific protocol encoder formatting order payloads.
+    loop : asyncio.AbstractEventLoop
+        Active asynchronous event loop.
+    """
+
     wss_sem: Semaphore
 
     price_mult: int = field(init=False)
@@ -25,6 +48,7 @@ class Order(Base):
 
     @override
     def post_init(self) -> None:
+        """Initialize coin precision parameters, order encoder, and event loop references."""
         Base.post_init(self)
 
         self.price_mult = self.manager.cfgCoin.price_mult
@@ -45,14 +69,29 @@ class Order(Base):
         self.loop = asyncio.get_event_loop()
 
     @override
-    async def on_pre_connect(self) -> None: ...
+    async def on_pre_connect(self) -> None:
+        """Perform preliminary asynchronous actions prior to establishing WebSocket connection."""
 
     @override
     async def on_connection(self, ws: ClientConnection) -> None:
+        """Execute post-connection protocol initialization on the active WebSocket link.
+
+        Parameters
+        ----------
+        ws : ClientConnection
+            Active WebSocket client connection instance.
+        """
         await self.encoder.on_connection(ws)
 
     @override
     async def in_connection(self, ws: ClientConnection) -> None:
+        """Poll the order ring buffer and transmit encoded orders over the WebSocket link.
+
+        Parameters
+        ----------
+        ws : ClientConnection
+            Active WebSocket client connection instance.
+        """
         _ = self.os.ring_buf
         # - - -
         await self.loop.run_in_executor(None, self.wss_sem.acquire)
@@ -61,6 +100,13 @@ class Order(Base):
             await ws.send(payload, text=True)
 
     def to_payload(self) -> bytes:
+        """Retrieve order parameters from the ring buffer and encode into wire format.
+
+        Returns
+        -------
+        bytes
+            Encoded binary or text payload representing the order request.
+        """
         timestamp, order_param, client_order_id, nPrice, nQty = (
             self.os.ring_buf.get_data()
         )

@@ -15,6 +15,22 @@ from imprint._core.settings import StatusCodes as scs
 
 @dataclass(slots=True)
 class Order(Account, ABC):
+    """Represent an active order stream manager handling internal order books and execution logs.
+
+    Attributes
+    ----------
+    executed_orders : ndarray of shape (1000, TP_ConstantCount)
+        Ring buffer or log storing executed order entries.
+    eoRow : memoryview of shape (1,), dtype=q
+        Current write head index within ``executed_orders``.
+    order_book : ndarray of shape (active_order_limit, OB_ConstantCount)
+        Active order book ledger.
+    order_id : memoryview of shape (1,), dtype=q
+        Monotonically increasing integer identifier assigned to successive orders.
+    obRow : memoryview of shape (1,), dtype=q
+        Current write head / row cursor within ``order_book``.
+    """
+
     __order_book_row: int = field(init=False)
 
     __os: OrderStream = field(init=False)
@@ -38,6 +54,7 @@ class Order(Account, ABC):
 
     @override
     def __post_init__(self) -> None:
+        """Initialize order book structures, row pointers, and execution buffers."""
         Account.__post_init__(self)
 
         cfgAC = self.manager.cfgAccount
@@ -55,10 +72,12 @@ class Order(Account, ABC):
     @final
     @override
     def post_lock_balance(self) -> None:
+        """Process balance locks and synchronize the internal order book."""
         self.__update_order_book()
 
     @final
     def __update_order_book(self) -> None:
+        """Pull order data from the ring buffer and append it to the order book and execution logs."""
         timestamp, order_param, client_order_id, nPrice, nQty = (
             self.__os.ring_buf.get_data()
         )
@@ -93,6 +112,16 @@ class Order(Account, ABC):
 
 @njit(cache=True)
 def compact_order_book(obRow: memoryview, ob: NDArray[int64]) -> None:
+    """Compact the order book in-place by removing canceled or filled orders.
+
+    Parameters
+    ----------
+    obRow : memoryview of shape (1,), dtype=q
+        Mutable scalar memoryview containing the current active row count of the order book.
+        Decremented in-place as rows are compacted.
+    ob : ndarray of shape (N, OB_ConstantCount)
+        Active order book matrix to be compacted in-place.
+    """
     row: int = 0
     while row < obRow[0]:
         if ob[row, c.OB_orderParam] & (c.OF_CANCELED | c.OF_FILLED):

@@ -6,6 +6,6 @@
 .ruff_cache
 .coverage
 __pycache__/
+ai-tmp/
 data
 logs
-ai-temp.py

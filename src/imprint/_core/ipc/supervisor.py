@@ -1,6 +1,6 @@
-"""Module providing process orchestration and supervisor decorator.
+"""Process orchestration and supervisor decorator.
 
-This module contains a decorator to wrap worker process entry point functions,
+Provides a decorator to wrap worker process entry point functions,
 automating shared memory allocations, dispatching manager bindings, and ensuring
 correct process-level resource cleanup on exit.
 """
@@ -17,15 +17,15 @@ R = TypeVar("R")
 
 
 def supervisor(is_main: bool = False):
-    """Decorator wrapping worker process main functions with Dispatcher IPC initialization and cleanup.
+    """Wrap worker process main functions with Dispatcher IPC initialization and cleanup.
 
-    This decorator manages the lifecycle of the `Dispatcher` for a process, handles
+    Manages the lifecycle of the `Dispatcher` for a process, handles
     garbage collection cycles, and coordinates SharedMemory block attachment or unlinking
     at termination.
 
     Parameters
     ----------
-    is_main : bool, default False
+    is_main : bool, default=False
         True if decorating the main orchestrator/host process entry point. If True,
         responsible for configuration scanning, SharedMemory allocation, and
         final segment unlinking.

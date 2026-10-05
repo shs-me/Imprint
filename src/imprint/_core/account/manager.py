@@ -11,36 +11,15 @@ from imprint._core.settings import PositionFSM
 class Manager(RiskManagement):
     """Account manager combining balance properties, risk management, and position FSM tracking.
 
-    This class serves as the final unified 'Account' interface, aggregating core account configuration,
-    risk/sizing logic, and active position lifecycle tracking.
+    Aggregates account configuration, risk/sizing logic, and active position lifecycle
+    tracking via bitmask finite state machines.
 
-    Parameters
+    Attributes
     ----------
-    manager : NodeManager
-        IPC node manager instance containing account and coin configurations.
-
-    Attributes (from Base Balance View)
-    ----------------------------------
-    price_prec / qty_prec : int
-        Price and quantity decimal precision.
-    scale_mult : int
-        Multiplier for scaling floating-point account balances to integer fixed-point units.
-    leverage : int
-        Account leverage multiplier.
-    nBalance / availableNbalance / dynamicNbalance : memoryview
-        Shared memory views holding current balances as int64.
-
-    Attributes (from Risk Management)
-    --------------------------------
-    time_for_expired_signal : int
-        Maximum allowed time window in milliseconds for signal execution.
-
-    Attributes (Position Tracking)
-    -----------------------------
     long : PositionFSM
-        Current state flags for long positions.
+        Current state bitmask flags for long positions.
     short : PositionFSM
-        Current state flags for short positions.
+        Current state bitmask flags for short positions.
     """
 
     __long_fsm: PositionFSM = field(
@@ -123,7 +102,7 @@ class Manager(RiskManagement):
         Parameters
         ----------
         order_param : int
-            Order flag bitmask containing side (LONG/SHORT) and direction (BUY/SELL).
+            Bitmask containing order side (`c.OF_LONG`) and direction (`c.OF_BUY`).
 
         Returns
         -------

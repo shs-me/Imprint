@@ -6,7 +6,7 @@ interprets incoming status codes, manages logs across worker streams, and coordi
 
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import override
 
 from loguru import logger
@@ -19,17 +19,16 @@ from imprint._core.types import ProcsData
 
 @dataclass(slots=True)
 class Host(Base):
-    """Central status manager monitoring worker process health and handling process status codes.
-
-    The Host lives inside the orchestrator process, waiting on worker process signaling semaphores.
-    It reads/clears status codes, pulls ring-buffered logs, and executes high-level process lifecycle actions.
+    """Supervise worker process health and handle process status codes.
 
     Attributes
     ----------
     with_execution : bool
         Whether order execution is active in this session.
-    startDate : date
-        UTC date of initialization, used to schedule periodic garbage collection.
+    last_gc_time : float
+        Epoch timestamp of the last executed garbage collection run.
+    gc_timer : int
+        Interval in seconds between periodic garbage collection triggers, default is 1800 seconds.
     time_format : str
         The logging timestamp format, adjusted automatically if backtesting is active.
     close_procs : bool
@@ -37,23 +36,22 @@ class Host(Base):
     close_core : bool
         Flag indicating that the Host orchestration loop should stop.
     procs : dict[int, ProcsData]
-        Tracking dictionary mapping process IDs to their respective metadata (e.g. names, processes).
+        Tracking dictionary mapping process IDs to their respective metadata.
     """
 
     with_execution: bool = field(init=False)
-    startDate: date = field(init=False)
+    last_gc_time: float = field(default_factory=lambda: time.time(), init=False)
+    gc_timer: int = field(default=60 * 30, init=False)
     time_format: str = field(init=False)
     close_procs: bool = field(default=False, init=False)
     close_core: bool = field(default=False, init=False)
     procs: dict[int, ProcsData] = field(init=False)
 
     @override
-    def __post_init__(self) -> None:
-        """Initialize operational boundaries, dates, and timestamp formatting structures."""
-        Base.__post_init__(self)
+    def post_init(self) -> None:
+        """Initialize operational boundaries, execution flags, and timestamp formatting structures."""
 
         self.with_execution = self.cfgSetup.execution
-        self.startDate = datetime.now(tz=UTC).date()
         self.time_format = (
             "%H:%M:%S.%f"
             if self.cfgSetup.backtesting
@@ -61,31 +59,33 @@ class Host(Base):
         )
 
     def run(self, procs: dict[int, ProcsData]) -> None:
-        """Primary supervisor loop waiting on process semaphores and handling status code events.
+        """Run supervisor loop waiting on process semaphores and handling status code events.
 
         Parameters
         ----------
         procs : dict[int, ProcsData]
-            Dictionary of monitored worker process structures, mapping keys like
-            ProcsIds to process objects.
+            Dictionary of monitored worker process structures, mapping process IDs
+            to process metadata dictionaries.
         """
         self.procs = procs
         # - - -
         while True:
             if bool(len(procs)):
                 self._sc_sem.acquire(timeout=30)
-
-                if datetime.now(tz=UTC).date() > self.startDate:
-                    self.set_task_sc_to_proc(scs.GC_COLLECT)
-                    self.startDate = datetime.now(tz=UTC).date()
-
+                self.garbage_collect()
                 self.check_process_status_code()
                 if not self.close_core:
                     continue
             return
 
+    def garbage_collect(self) -> None:
+        """Trigger garbage collection on worker processes periodically based on elapsed time."""
+        if (now := time.time()) > (self.last_gc_time + self.gc_timer):
+            self.set_task_sc_to_proc(scs.GC_COLLECT)
+            self.last_gc_time = now
+
     def check_process_status_code(self) -> None:
-        """Check status buffers for each monitored worker and handle outstanding code changes."""
+        """Examine status buffers for each monitored worker and handle outstanding code changes."""
         if self._main_status[ProcsIds.streaming]:
             self.check_data_streaming_proc()
             self._main_status[ProcsIds.streaming] -= 1
@@ -191,7 +191,7 @@ class Host(Base):
         sc : int
             The raw process status code bitmask.
         proc_id : int
-            The ID of the reporting process.
+            Unique identifier of the reporting process.
         proc_name : str
             Plaintext name of the reporting process.
         """
@@ -250,7 +250,7 @@ class Host(Base):
         Returns
         -------
         tuple of (int, str, int, int)
-            A tuple containing (process_id, process_name, task_id, status_code).
+            A tuple containing ``(process_id, process_name, task_id, status_code)``.
         """
         p_id: int = proc
         p_name: str = self.procs[p_id]["proc_name"]
@@ -258,14 +258,16 @@ class Host(Base):
         p_sc: int = self._procs_status[p_id]
         return p_id, p_name, p_task_id, p_sc
 
-    def set_task_sc_to_proc(self, code: scs, task_id: int | None = None):
+    def set_task_sc_to_proc(
+        self, code: scs, task_id: int | None = None
+    ) -> None:
         """Dispatch task status code to specified task slot or all active processes.
 
         Parameters
         ----------
         code : StatusCodes
             The status code mask to apply.
-        task_id : int or None, default None
+        task_id : int | None, default=None
             Specific task ID to apply status to. If None, targets all active processes.
         """
         for v in self.procs.values():
@@ -289,7 +291,7 @@ class Host(Base):
 
         Parameters
         ----------
-        code : StatusCodes or int
+        code : StatusCodes | int
             The bits/code to strip out of the status block.
         proc_id : int
             The process identifier to target.
@@ -344,8 +346,6 @@ class Host(Base):
     def get_log(self, proc_id: int) -> list[tuple[int, str]]:
         """Retrieve and decode log status message for specified process ID.
 
-        Pulls and decodes all written logs from the process's dedicated ring buffer slots.
-
         Parameters
         ----------
         proc_id : int
@@ -354,7 +354,7 @@ class Host(Base):
         Returns
         -------
         list of tuple of (int, str)
-            List of logs formatted as (milliseconds_timestamp, plaintext_log).
+            List of logs formatted as ``(timestamp_milliseconds, plaintext_log)``.
         """
         _ = self._log_stream.ring_buf
 
@@ -390,9 +390,9 @@ class Host(Base):
             The log payload to write.
         level : LogLevel
             The custom log severity level.
-        proc_name : str, default "HOST"
+        proc_name : str, default="HOST"
             Name of the originating process context.
-        timestamp : int or None, default None
+        timestamp : int | None, default=None
             Optional millisecond timestamp for the log source event.
         """
         t = timestamp / 1000 if timestamp else time.time()

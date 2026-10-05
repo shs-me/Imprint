@@ -5,29 +5,62 @@ from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
 
 @verify(CONTINUOUS, UNIQUE)
 class ProcsIds(IntEnum):
-    streaming, engine, executing = 0, auto(), auto()
+    """Process identifiers for the system architecture."""
+
+    streaming = 0
+    engine = auto()
+    executing = auto()
 
 
 class KwgsKeys(IntEnum):
     """Key identifiers for inter-process parameter dictionaries."""
 
-    Configs, Segments, MainTools = auto(), auto(), auto()
-    ShmName, ShmSize = auto(), auto()
+    Configs = auto()
+    Segments = auto()
+    MainTools = auto()
+    ShmName = auto()
+    ShmSize = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
 class LogLevel(IntEnum):
-    INFO, SUCCESS, WARNING, ERROR, CRITICAL = 0, auto(), auto(), auto(), auto()
+    """Severity levels for system logging and diagnostics."""
+
+    INFO = 0
+    SUCCESS = auto()
+    WARNING = auto()
+    ERROR = auto()
+    CRITICAL = auto()
 
 
 class StatusCodes(IntEnum):
     """Process status codes and bitmask enumeration.
-    64-bit status code flags representing process lifecycle states, pipeline warnings, and errors."""
+
+    64-bit status code flags representing process lifecycle states, pipeline
+    warnings, and errors.
+    """
 
     label: str  # pyright: ignore[reportUninitializedInstanceVariable]
 
     def __new__(cls, sc_label: str):
-        """Dynamically constructs single-bit bitmask flag integer for each status enum entry."""
+        """Dynamically construct single-bit bitmask flag integer for each status enum entry.
+
+        Parameters
+        ----------
+        sc_label : str
+            Human-readable description corresponding to the status flag.
+
+        Returns
+        -------
+        StatusCodes
+            Instantiated enum member with an auto-assigned bitmask integer value.
+
+        Raises
+        ------
+        ValueError
+            If the number of enum members reaches or exceeds 64, overflowing the
+            64-bit integer limit.
+        """
 
         if len(cls.__members__) >= 64:
             raise ValueError("StatusCodes >= 64, but type: int64")
@@ -80,14 +113,23 @@ class Timeframe(IntEnum):
 class OrderBook(IntEnum):
     """Index mapping for internal order book array columns."""
 
-    timestamp, orderParam, clientOrderID = 0, auto(), auto()
-    nPrice, nQty = auto(), auto()
+    timestamp = 0
+    orderParam = auto()
+    clientOrderID = auto()
+    nPrice = auto()
+    nQty = auto()
     ConstantCount = auto()
 
 
 @verify(CONTINUOUS, UNIQUE)
 class EquityHeaders(IntEnum):
-    Timestamp, Open, High, Low, Close = 0, auto(), auto(), auto(), auto()
+    """Index mapping for equity candlestick array columns."""
+
+    Timestamp = 0
+    Open = auto()
+    High = auto()
+    Low = auto()
+    Close = auto()
     ConstantCount = auto()
 
 
@@ -95,9 +137,17 @@ class EquityHeaders(IntEnum):
 class TradeParam(IntEnum):
     """Index mapping for trade execution record array columns."""
 
-    nPrice, nQty, timestamp, order_param = 0, auto(), auto(), auto()
-    nCommission, order_id, client_order_id = auto(), auto(), auto()
-    nMAE, nMFE, planned_tp, planned_sl = auto(), auto(), auto(), auto()
+    nPrice = 0
+    nQty = auto()
+    timestamp = auto()
+    order_param = auto()
+    nCommission = auto()
+    order_id = auto()
+    client_order_id = auto()
+    nMAE = auto()
+    nMFE = auto()
+    planned_tp = auto()
+    planned_sl = auto()
     ConstantCount = auto()
 
 
@@ -106,16 +156,31 @@ class BarHeaders(IntEnum):
     """Index mapping for Bar Header array columns."""
 
     # Footprint Writer
-    Open, High, Low, Close = 0, auto(), auto(), auto()
-    Volume, Delta, CVD = auto(), auto(), auto()
-    VWAP, VWAP_UPPER_BAND, VWAP_LOWER_BAND = auto(), auto(), auto()
-    OpenTime, LastTradeTime = auto(), auto()
+    Open = 0
+    High = auto()
+    Low = auto()
+    Close = auto()
+    Volume = auto()
+    Delta = auto()
+    CVD = auto()
+    VWAP = auto()
+    VWAP_UPPER_BAND = auto()
+    VWAP_LOWER_BAND = auto()
+    OpenTime = auto()
+    LastTradeTime = auto()
     CountTrade = auto()
     # Footprint Reader
-    ATR, PARK = auto(), auto()
-    MA_VOL, MA_COUNT_TRADE, MA_ATS = auto(), auto(), auto()
-    POC, VAH, VAL = auto(), auto(), auto()
-    POC_FP, VAH_FP, VAL_FP = auto(), auto(), auto()
+    ATR = auto()
+    PARK = auto()
+    MA_VOL = auto()
+    MA_COUNT_TRADE = auto()
+    MA_ATS = auto()
+    POC = auto()
+    VAH = auto()
+    VAL = auto()
+    POC_FP = auto()
+    VAH_FP = auto()
+    VAL_FP = auto()
     ConstantCount = auto()
 
 
@@ -124,19 +189,33 @@ class StateFlags(IntFlag):
 
     # Footprint States
     # Footprint: RealTime
-    BID_DELTA_DOMINATION_FP, ASK_DELTA_DOMINATION_FP = auto(), auto()
+    BID_DELTA_DOMINATION_FP = auto()
+    ASK_DELTA_DOMINATION_FP = auto()
     # Footprint: Static
-    VWAP_FP, UPPER_BAND_FP, LOWER_BAND_FP = auto(), auto(), auto()
-    POC_FP, VAL_FP, VAH_FP = auto(), auto(), auto()
+    VWAP_FP = auto()
+    UPPER_BAND_FP = auto()
+    LOWER_BAND_FP = auto()
+    POC_FP = auto()
+    VAL_FP = auto()
+    VAH_FP = auto()
     # Bar States
-    OPEN, CLOSE, HIGH, LOW = auto(), auto(), auto(), auto()
+    OPEN = auto()
+    CLOSE = auto()
+    HIGH = auto()
+    LOW = auto()
     # Bar: Indicators
-    POC_BAR, VAL_BAR, VAH_BAR = auto(), auto(), auto()
+    POC_BAR = auto()
+    VAL_BAR = auto()
+    VAH_BAR = auto()
     # Bar: Context
-    UNFINISHED_AUCTION, FINISHED_AUCTION = auto(), auto()
-    ABSORPTION, EXHAUSTION = auto(), auto()
+    UNFINISHED_AUCTION = auto()
+    FINISHED_AUCTION = auto()
+    ABSORPTION = auto()
+    EXHAUSTION = auto()
     # Bid/Ask States
-    DELTA_DOMINATION, ZERO_PRINT, IMBALANCE = auto(), auto(), auto()
+    DELTA_DOMINATION = auto()
+    ZERO_PRINT = auto()
+    IMBALANCE = auto()
     # Cluster States
     BIG_CLUSTER = auto()
 
@@ -145,19 +224,35 @@ class OrderFlag(IntFlag):
     """Bitmask flags specifying order side, type, status, and position parameters."""
 
     # Position Side
-    LONG, SHORT = auto(), auto()
+    LONG = auto()
+    SHORT = auto()
     # Side
-    BUY, SELL = auto(), auto()
+    BUY = auto()
+    SELL = auto()
     # Type
-    LIMIT, MARKET = auto(), auto()
-    MARKET_TRIGGER, LIMIT_TRIGGER = auto(), auto()
+    LIMIT = auto()
+    MARKET = auto()
+    MARKET_TRIGGER = auto()
+    LIMIT_TRIGGER = auto()
     # Status
-    NEW, CANCEL, FILLED, CANCELED = auto(), auto(), auto(), auto()
+    NEW = auto()
+    CANCEL = auto()
+    FILLED = auto()
+    CANCELED = auto()
 
 
 class ReInitFlag(IntFlag):
-    session, idx, idy = auto(), auto(), auto()
+    """Bitmask flags specifying re-initialization scopes for pipeline state."""
+
+    session = auto()
+    idx = auto()
+    idy = auto()
 
 
 class PositionFSM(IntFlag):
-    PENDING, OPEN, CLOSE, EMPTY = auto(), auto(), auto(), auto()
+    """Finite state machine bitmask flags for trading position lifecycle states."""
+
+    PENDING = auto()
+    OPEN = auto()
+    CLOSE = auto()
+    EMPTY = auto()

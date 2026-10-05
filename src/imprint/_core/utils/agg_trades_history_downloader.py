@@ -13,11 +13,47 @@ from imprint._core import constant as c
 from imprint._core.utils.base_rest import BaseREST, RestError
 
 
-class DownloadError(Exception): ...
+class DownloadError(Exception):
+    """Raised when historical agg trades download or extraction fails repeatedly."""
 
 
 @dataclass(slots=True)
 class DownloadAggTradesHistory(BaseREST):
+    """Download historical Binance aggregated trades ZIP archives and store as compressed `.npz` arrays.
+
+    Parameters
+    ----------
+    symbol : str
+        Trading pair symbol in uppercase (e.g., ``"BTCUSDT"``).
+    start_date_str : str
+        Start date in ISO 8601 format (``"YYYY-MM-DD"``).
+    end_date_str : str
+        End date in ISO 8601 format (``"YYYY-MM-DD"``).
+    price_mult : int
+        Scaling factor multiplier applied to floating-point prices to store as integer representation.
+    qty_mult : int
+        Scaling factor multiplier applied to floating-point quantities to store as integer representation.
+
+    Attributes
+    ----------
+    cur_date : date
+        Current date being processed in the iteration loop.
+    start_date : date
+        Parsed start date of the download window.
+    end_date : date
+        Parsed end date of the download window (capped at yesterday if in the future).
+    date_str : str
+        ISO 8601 string representation of the current date being processed.
+    data_dir : str
+        Filesystem directory path where downloaded archives and manifests are stored.
+    data_path : str
+        Filesystem path to the target compressed `.npz` archive file.
+    data_manifest_path : str
+        Filesystem path to the tracking manifest text file recording downloaded dates.
+    agg_trades_dtype : numpy.dtype
+        Structured NumPy dtype definition for parsing raw CSV rows.
+    """
+
     symbol: str
     start_date_str: str
     end_date_str: str
@@ -45,6 +81,7 @@ class DownloadAggTradesHistory(BaseREST):
     )
 
     def __post_init__(self) -> None:
+        """Initialize REST timeouts, date bounds, and filesystem manifest paths."""
         self.connect_timeout: float | None = 10.0
         self.read_timeout: float | None = None
         self.write_timeout: float | None = None
@@ -68,7 +105,13 @@ class DownloadAggTradesHistory(BaseREST):
         os.makedirs(self.data_dir, exist_ok=True)
 
     def download(self) -> None:
-        """Downloads historical archives and converts them to binary .npy format."""
+        """Download missing historical daily ZIP archives, extract CSVs, and convert to `.npz` arrays.
+
+        Raises
+        ------
+        DownloadError
+            If downloading a specific daily archive fails three consecutive times.
+        """
         manifest: str = self.data_manifest
         counter: int = 0
         log_base_url: bool = False
@@ -118,6 +161,15 @@ class DownloadAggTradesHistory(BaseREST):
             self.log(f"Downloaded days: {downloaded_days}")
 
     def _extract_zip(self, zip_path: str, target_csv: str) -> None:
+        """Extract the first archived CSV file from a ZIP bundle and remove the ZIP archive.
+
+        Parameters
+        ----------
+        zip_path : str
+            Filesystem path to the downloaded ZIP archive.
+        target_csv : str
+            Filesystem destination path for the extracted CSV file.
+        """
         with zipfile.ZipFile(zip_path, "r") as z:
             extracted_name = z.namelist()[0]
             z.extract(extracted_name, self.data_dir)
@@ -127,6 +179,13 @@ class DownloadAggTradesHistory(BaseREST):
             os.remove(zip_path)
 
     def _convert_csv_to_npy(self, csv_path: str) -> None:
+        """Parse raw CSV trade records, apply scaling factors, and append to the compressed `.npz` store.
+
+        Parameters
+        ----------
+        csv_path : str
+            Filesystem path to the extracted CSV trades file.
+        """
         arr: NDArray[void] = np.genfromtxt(
             csv_path,
             usecols=(1, 2, 5, 6),
@@ -158,6 +217,7 @@ class DownloadAggTradesHistory(BaseREST):
 
     @property
     def data_manifest(self) -> str:
+        """str: Content of the download tracking manifest file listing completed dates."""
         try:
             with open(self.data_manifest_path, mode="r") as f:
                 return f.read()

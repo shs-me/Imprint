@@ -18,7 +18,34 @@ from imprint._core.types import ProcsData
 
 @dataclass(slots=True)
 class MainAgent:
-    """Process coordinator responsible for instantiating IPC tools and launching daemon processes."""
+    """Process coordinator responsible for instantiating IPC tools and launching daemon processes.
+
+    Parameters
+    ----------
+    manager : HostManager
+        Active IPC host manager providing logging, state coordination, and configuration.
+    base_kwargs : dict[str, Any]
+        Base keyword arguments passed to all spawned child worker processes.
+
+    Attributes
+    ----------
+    manager : HostManager
+        Active IPC host manager.
+    base_kwargs : dict[str, Any]
+        Base keyword arguments shared across processes.
+    procs : dict[int, ProcsData]
+        Mapping of process identifiers to process metadata and instances.
+    is_backtesting : bool
+        Flag indicating whether the runtime is operating in backtesting mode.
+    with_execution : bool
+        Flag indicating whether live or simulated execution is enabled.
+    wss_sem : multiprocessing.synchronize.Semaphore
+        Semaphore controlling WebSocket synchronization flow.
+    engine_event : multiprocessing.synchronize.Event
+        Event flag signaling engine state changes or synchronization boundaries.
+    execution_event : multiprocessing.synchronize.Event
+        Event flag signaling execution state transitions.
+    """
 
     manager: HostManager
     base_kwargs: dict[str, Any]
@@ -39,7 +66,11 @@ class MainAgent:
         self.execution_event = Event()
 
     def run_core_engine(self) -> None:
-        """Creates required output directories, spawns worker processes, and starts the MainManager loop."""
+        """Create required output directories, spawn worker processes, and start the MainManager loop.
+
+        Initiates local filesystem structures, starts configured child processes,
+        and hands control over to the IPC host manager main loop.
+        """
 
         self.manager.logger("Init started.", LogLevel.INFO)
         try:
@@ -55,13 +86,19 @@ class MainAgent:
             self.manager.logger("Close the core.\n", LogLevel.INFO)
 
     def check_dirs(self) -> None:
-        """Ensures required working directories (data, logs, dump) exist on local disk."""
+        """Ensure required working directories (data, logs, dump) exist on local disk."""
 
         for dir in DIRS_LIST:
             os.makedirs(dir, exist_ok=True)
 
     def run_procs(self) -> bool:
-        """Spawns configured worker processes and applies initial execution flags."""
+        """Spawn configured worker processes and apply initial execution flags.
+
+        Returns
+        -------
+        bool
+            True if all worker processes successfully spawned and initialized; False otherwise.
+        """
 
         procs_data: list[tuple[FunctionType, int]] = self.get_procs_funcs()
         procs_funcs: list[FunctionType] = [f for f, _ in procs_data]
@@ -84,6 +121,13 @@ class MainAgent:
         return True
 
     def get_procs_funcs(self) -> list[tuple[FunctionType, int]]:
+        """Retrieve the mapping of worker target functions and their corresponding process IDs.
+
+        Returns
+        -------
+        list[tuple[FunctionType, int]]
+            Collection of tuples containing the target callable and its process identifier.
+        """
         funcs: list[tuple[FunctionType, int]] = []
         funcs.append((run_streaming, ProcsIds.streaming))
         funcs.append((run_engine, ProcsIds.engine))
@@ -95,6 +139,22 @@ class MainAgent:
     def get_kwargs_for_func(
         self, func: FunctionType, proc_id: int, task_id: int
     ) -> dict[str, Any] | None:
+        """Inspect target function signature and construct the keyword argument dictionary.
+
+        Parameters
+        ----------
+        func : FunctionType
+            Target worker function to inspect.
+        proc_id : int
+            Unique process identifier from ProcsIds.
+        task_id : int
+            Assigned task identifier associated with the process.
+
+        Returns
+        -------
+        dict[str, Any] | None
+            Constructed keyword argument mapping, or None if required arguments are missing.
+        """
         sig: inspect.Signature = inspect.signature(func)
         proc_name: str = func.__name__.split("_")[1].capitalize()
         kwargs: dict[str, Any] = {}
@@ -122,6 +182,15 @@ class MainAgent:
         return kwargs
 
     def run_proc(self, func: FunctionType, kwargs: dict[str, Any]) -> None:
+        """Spawn a daemon multiprocessing Process for the given worker function and arguments.
+
+        Parameters
+        ----------
+        func : FunctionType
+            Target worker function executed as the process entry point.
+        kwargs : dict[str, Any]
+            Keyword arguments passed to the worker target function.
+        """
         name: str = self.procs[kwargs["proc_id"]]["proc_name"]
         proc: Process = Process(
             target=func,
@@ -138,7 +207,14 @@ class MainAgent:
 
 @supervisor(is_main=True)
 def run(**kwargs: Any) -> None:
-    """Supervisor-wrapped entry point for spawning the core multiprocessing architecture."""
+    """Supervisor-wrapped entry point for spawning the core multiprocessing architecture.
+
+    Parameters
+    ----------
+    **kwargs : Any
+        Arbitrary keyword arguments including the required ``manager`` HostManager instance
+        and core configuration settings.
+    """
 
     manager: HostManager = kwargs.pop("manager")
     state = MainAgent(manager, kwargs)

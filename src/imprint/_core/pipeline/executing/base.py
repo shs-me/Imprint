@@ -13,6 +13,31 @@ from imprint._core.types import ExecutionProtocol
 
 @dataclass(slots=True)
 class Base(ABC):
+    """Executes pipeline steps, managing node signals, user data buffers, and order flows.
+
+    Parameters
+    ----------
+    manager : NodeManager
+        Manager coordinating process states, tasks, and communication streams.
+    executor : ExecutionProtocol
+        Protocol implementation handling orders, signals, and execution callbacks.
+
+    Attributes
+    ----------
+    manager : NodeManager
+        Manager coordinating process states, tasks, and communication streams.
+    executor : ExecutionProtocol
+        Protocol implementation handling orders, signals, and execution callbacks.
+    count_open_positions : memoryview
+        Memory-mapped 64-bit signed integer tracking the count of currently open positions.
+    trade_read_time : memoryview
+        Memory view pointing to trade read time metrics.
+    readed_timestamp : int
+        Timestamp of the last read operation, defaulting to 0.
+    account : Account
+        Account state and balance risk management handler.
+    """
+
     manager: NodeManager
     executor: ExecutionProtocol
 
@@ -31,6 +56,7 @@ class Base(ABC):
 
     @final
     def __post_init__(self) -> None:
+        """Initialize pipeline streams, metrics views, and account instance."""
         self.__ss = self.manager.cfgSignalStream
         self.__uds = self.manager.cfgUserDataStream
         self.__os = self.manager.cfgOrderStream
@@ -40,14 +66,14 @@ class Base(ABC):
         self.__engine_complete = cfgMetrics.engine_complete.view
 
         self.account = Account(self.manager)
-        self.child_post_init()
+        self.post_init()
 
-    @abstractmethod
-    def child_post_init(self) -> None: ...
+    def post_init(self) -> None: ...
 
     @final
     @node_handler()
     def run(self) -> None:
+        """Execute the main processing loop handling tasks, signals, and user data."""
         u, s = self.__uds.ring_buf, self.__ss.ring_buf
         while True:
             if self.manager.have_status():
@@ -73,6 +99,14 @@ class Base(ABC):
 
     @final
     def __complete(self) -> bool:
+        """Check whether execution engine is complete and ring buffers are fully drained.
+
+        Returns
+        -------
+        bool
+            True if engine completion flag is set and both signal and user data
+            write/read pointers are aligned.
+        """
         u, s = self.__uds.ring_buf, self.__ss.ring_buf
         return (
             (self.__engine_complete[0] == 1)
@@ -82,10 +116,12 @@ class Base(ABC):
 
     @final
     def __final_actions(self) -> None:
+        """Execute final cleanup actions upon completion."""
         self.post_final_action()
 
     @abstractmethod
-    def post_final_action(self) -> None: ...
+    def post_final_action(self) -> None:
+        """Execute subclass-specific actions upon pipeline completion."""
 
     @abstractmethod
     def alarm_clock(
@@ -94,12 +130,26 @@ class Base(ABC):
         RB_1: memoryview,
         WB_2: memoryview,
         RB_2: memoryview,
-    ) -> None: ...
+    ) -> None:
+        """Handle timeout or periodic alarm events using ring buffer pointers.
+
+        Parameters
+        ----------
+        WB_1 : memoryview
+            Write pointer buffer for the signal stream ring buffer.
+        RB_1 : memoryview
+            Read pointer buffer for the signal stream ring buffer.
+        WB_2 : memoryview
+            Write pointer buffer for the user data stream ring buffer.
+        RB_2 : memoryview
+            Read pointer buffer for the user data stream ring buffer.
+        """
 
     @final
     def __check_signal_buf(
         self,
     ) -> None:
+        """Read and process incoming trading signals from the signal ring buffer."""
         signal_id, nPrice, timestamp, order_param, tp_dev, sl_dev = (
             self.__ss.ring_buf.get_data()
         )
@@ -143,16 +193,31 @@ class Base(ABC):
             )
 
     @abstractmethod
-    def pre_execute_signal_action(self, time_get_signal: int) -> None: ...
+    def pre_execute_signal_action(self, time_get_signal: int) -> None:
+        """Execute subclass-specific logic prior to signal processing.
+
+        Parameters
+        ----------
+        time_get_signal : int
+            Timestamp when the signal was received, in microseconds or milliseconds.
+        """
 
     @final
     def _check_user_data_buf(self) -> None:
+        """Drain and process all available items in the user data ring buffer."""
         _ = self.__uds.ring_buf
         while _.wid_buf[0] != _.rid_buf[0]:
             self.preppare_user_data(_.get_data())
 
     @abstractmethod
-    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None: ...
+    def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+        """Process a raw user data buffer retrieved from the ring buffer.
+
+        Parameters
+        ----------
+        user_data_raw_buf : memoryview
+            Raw byte memory view containing user data payload.
+        """
 
     @final
     def on_order_update(
@@ -165,6 +230,25 @@ class Base(ABC):
         nQty: int,
         nCommission: int,
     ) -> None:
+        """Handle incoming order update events and update position FSM states.
+
+        Parameters
+        ----------
+        timestamp : int
+            Timestamp of the order update event.
+        order_param : int
+            Bitfield flags containing order parameters and status flags.
+        order_id : int
+            Unique exchange-assigned order identifier.
+        client_order_id : int
+            Unique client-assigned order identifier.
+        nPrice : int
+            Normalized order price.
+        nQty : int
+            Normalized order quantity.
+        nCommission : int
+            Normalized commission fee associated with the order.
+        """
         is_long: bool = bool(order_param & c.OF_LONG)
         is_buy: bool = bool(order_param & c.OF_BUY)
         is_open: bool = (is_long and is_buy) or (not is_long and not is_buy)
@@ -215,6 +299,17 @@ class Base(ABC):
     def on_balance_update(
         self, nBalance: int, lockedNbalance: int, availableNbalance: int
     ) -> None:
+        """Update account balance and locked/available balance metrics.
+
+        Parameters
+        ----------
+        nBalance : int
+            Normalized total account balance.
+        lockedNbalance : int
+            Normalized locked balance in open orders or positions.
+        availableNbalance : int
+            Normalized available balance for new trades.
+        """
         self.account.nBalance[0] = nBalance
         self.account.lockedNbalance[0] = lockedNbalance
         self.account.availableNbalance[0] = availableNbalance
@@ -227,6 +322,21 @@ class Base(ABC):
         nPrice: int,
         nQty: int,
     ) -> None:
+        """Publish a new order instruction to the order stream.
+
+        Parameters
+        ----------
+        timestamp : int
+            Timestamp when the order request was generated.
+        order_param : int
+            Bitfield flags specifying order type, side, and characteristics.
+        client_order_id : int
+            Unique client-assigned order identifier.
+        nPrice : int
+            Normalized limit or stop price.
+        nQty : int
+            Normalized order quantity.
+        """
         self.__os.set_data(
             timestamp=timestamp,
             order_param=order_param,

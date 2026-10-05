@@ -13,9 +13,7 @@ from imprint._core import configs as cfg
 @final
 @dataclass(slots=True)
 class Converter:
-    """
-    Convert price, quantity, timestamp, and grid coordinates between raw numerical
-    values and Footprint matrix indices.
+    """Convert price, quantity, timestamp, and grid coordinates between raw values and Footprint matrix indices.
 
     Parameters
     ----------
@@ -41,14 +39,14 @@ class Converter:
     qty_mult : int
         Multiplier used to convert quantities to fixed-point integers.
     timeframe : str
-        Human-readable timeframe name (e.g. 'H1').
+        Human-readable timeframe name (e.g., ``'H1'``).
     chart_range : int
         Number of days mapped in the chart range.
     tims : int
         Timeframe duration in milliseconds.
     step_tick : int
         Number of ticks aggregated per footprint row.
-    fp_rows : int64
+    fp_rows : memoryview
         Total number of row indices along the Y-axis.
     fp_cols : int
         Total number of column indices along the X-axis.
@@ -61,20 +59,20 @@ class Converter:
     bar_count : int
         Number of bars represented in a single chart cycle.
     scale : int
-        Price step scaled by price multiplier (`tick_size * step_tick * price_mult`).
-    center : int64
+        Price step scaled by price multiplier (``tick_size * step_tick * price_mult``).
+    center : memoryview
         Row index of the Y-axis origin (center row).
-    baseNprice : int64
+    baseNprice : memoryview
         Scaled base price corresponding to the initial session baseline.
-    baseTimestamp : int64
-        Base timestamp for the first bar in the current active session.
+    baseTimestamp : memoryview
+        Base timestamp in milliseconds for the first bar in the current active session.
     """
 
     cfgCoin: cfg.Coin
     cfgFP: cfg.Footprint
     total_backtest_days: int = 0
-    total_bar_count: int = field(init=False)
 
+    total_bar_count: int = field(init=False)
     tick_size: str = field(init=False)
     price_prec: int = field(init=False)
     price_mult: int = field(init=False)
@@ -84,18 +82,26 @@ class Converter:
     chart_range: int = field(init=False)
     tims: int = field(init=False)
     step_tick: int = field(init=False)
-    fp_rows: int64 = field(init=False)
+    fp_rows: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
     fp_cols: int = field(init=False)
     idxVP: int = field(init=False)
     idxDP: int = field(init=False)
     fp_panel_cols: int = field(init=False)
     bar_count: int = field(init=False)
     scale: int = field(init=False)
-    center: int64 = field(init=False)
-    baseNprice: int64 = field(init=False)
-    baseTimestamp: int64 = field(init=False)
+    center: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    baseNprice: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    baseTimestamp: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
-    _first_base_timestamp: int64 = field(default=int64(0), init=False)
+    _first_base_timestamp: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         self.tick_size = self.cfgCoin.tick_size
@@ -108,7 +114,7 @@ class Converter:
         self.tims = self.cfgFP.timeframe
         self.chart_range = self.cfgFP.chart_range
         self.step_tick = self.cfgFP.step_tick
-        self.fp_rows = int64(self.cfgFP.fp_rows)
+        self.fp_rows[0] = self.cfgFP.fp_rows
         self.fp_cols = self.cfgFP.fp_cols
         self.fp_panel_cols = self.cfgFP.fp_panel_cols
         self.bar_count = self.cfgFP.bar_count
@@ -127,27 +133,25 @@ class Converter:
             self.total_bar_count = self.bar_count
 
     def init_session(self, nPrice: int64, timestamp: int64) -> None:
-        """
-        Calibrate converter base price, base timestamp, and grid center origin offset.
+        """Calibrate converter base price, base timestamp, and grid center origin offset.
 
         Parameters
         ----------
         nPrice : int64
-            Initial fixed-point price used to establish baseline grid level.
+            Initial fixed-point price integer used to establish baseline grid level.
         timestamp : int64
-            Initial trade timestamp in milliseconds.
+            Initial trade execution timestamp in milliseconds.
         """
 
-        self.baseNprice = (nPrice // self.scale) * self.scale
-        self.baseTimestamp = timestamp - (timestamp % self.tims)
+        self.baseNprice[0] = int((nPrice // self.scale) * self.scale)
+        self.baseTimestamp[0] = int(timestamp - (timestamp % self.tims))
         if not self._first_base_timestamp:
-            self._first_base_timestamp = self.baseTimestamp
+            self._first_base_timestamp = self.baseTimestamp[0]
 
-        self.center = self.fp_rows // 2
+        self.center[0] = self.fp_rows[0] // 2
 
     def to_idy(self, nPrice: int64) -> int64 | None:
-        """
-        Map fixed-point price to Footprint grid Y-axis row index.
+        """Map fixed-point price to Footprint grid Y-axis row index.
 
         Parameters
         ----------
@@ -156,8 +160,8 @@ class Converter:
 
         Returns
         -------
-        int64 or None
-            Grid row index `idy`, or `None` if `nPrice` falls outside grid bounds.
+        int64 | None
+            Grid row index ``idy``, or ``None`` if ``nPrice`` falls outside grid bounds.
         """
 
         idy: int64 = to_idy(
@@ -166,20 +170,19 @@ class Converter:
         return idy if (idy >= 0) else None
 
     def to_idx(self, timestamp: int64, is_sell: int64) -> int64 | None:
-        """
-        Map trade timestamp and side flag to Footprint grid X-axis column index.
+        """Map trade timestamp and side flag to Footprint grid X-axis column index.
 
         Parameters
         ----------
         timestamp : int64
             Trade execution timestamp in milliseconds.
         is_sell : int64
-            Trade side flag (1 for sell/bid, 0 for buy/ask).
+            Trade side flag (``1`` for sell/bid side, ``0`` for buy/ask side).
 
         Returns
         -------
-        int64 or None
-            Grid column index `idx`, or `None` if timestamp falls outside grid bounds.
+        int64 | None
+            Grid column index ``idx``, or ``None`` if timestamp falls outside grid bounds.
         """
 
         idx: int64 = to_idx(
@@ -187,26 +190,24 @@ class Converter:
         )
         return idx if (idx >= 0) else None
 
-    def to_nPrice(self, value: int | int64) -> int64:
-        """
-        Convert grid Y-axis row index to fixed-point price integer.
+    def to_nPrice(self, value: int | int64) -> int | int64:
+        """Convert grid Y-axis row index to fixed-point price integer.
 
         Parameters
         ----------
-        value : int or int64
-            Footprint grid row index `idy`.
+        value : int | int64
+            Footprint grid row index ``idy``.
 
         Returns
         -------
-        int64
+        int | int64
             Corresponding fixed-point price integer.
         """
 
-        return (self.center - value) * self.scale + self.baseNprice
+        return (self.center[0] - value) * self.scale + self.baseNprice[0]
 
     def to_nQty(self, qty: float) -> int:
-        """
-        Convert floating-point quantity to scaled fixed-point integer.
+        """Convert floating-point quantity to scaled fixed-point integer.
 
         Parameters
         ----------
@@ -222,52 +223,49 @@ class Converter:
         return round(qty * self.qty_mult)
 
     def to_price(self, nPrice: int | int64) -> float | float64:
-        """
-        Convert fixed-point price integer to floating-point representation.
+        """Convert fixed-point price integer to floating-point representation.
 
         Parameters
         ----------
-        nPrice : int or int64
+        nPrice : int | int64
             Fixed-point price integer.
 
         Returns
         -------
-        float or float64
+        float | float64
             Floating-point market price.
         """
 
         return nPrice / self.price_mult
 
     def to_qty(self, nQty: int | int64) -> float | float64:
-        """
-        Convert scaled fixed-point quantity integer to floating-point representation.
+        """Convert scaled fixed-point quantity integer to floating-point representation.
 
         Parameters
         ----------
-        nQty : int or int64
+        nQty : int | int64
             Scaled fixed-point quantity integer.
 
         Returns
         -------
-        float or float64
+        float | float64
             Floating-point trade quantity.
         """
 
         return nQty / self.qty_mult
 
     def to_strftime(self, timestamp_ms: int | int64) -> str:
-        """
-        Format millisecond UTC timestamp as ISO-8601 date string.
+        """Format millisecond UTC timestamp as ISO-8601 date string.
 
         Parameters
         ----------
-        timestamp_ms : int or int64
+        timestamp_ms : int | int64
             Timestamp in milliseconds.
 
         Returns
         -------
         str
-            Formatted UTC date string (`YYYY-MM-DD`).
+            Formatted UTC date string in ``YYYY-MM-DD`` format.
         """
 
         return datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).strftime(
@@ -275,12 +273,11 @@ class Converter:
         )
 
     def get_price(self, idy: int | int64) -> float:
-        """
-        Retrieve rounded floating-point price for given row index Y.
+        """Retrieve rounded floating-point price for given row index Y.
 
         Parameters
         ----------
-        idy : int or int64
+        idy : int | int64
             Footprint grid row index.
 
         Returns
@@ -296,58 +293,58 @@ class Converter:
     @overload
     def get_time(self, idx: int, strftime: bool = True) -> str: ...
     def get_time(self, idx: int | int64, strftime: bool = False):
-        """
-        Retrieve timestamp or formatted date string corresponding to bar column index X.
+        """Retrieve timestamp or formatted date string corresponding to bar column index X.
 
         Parameters
         ----------
-        idx : int or int64
+        idx : int | int64
             Footprint grid column index.
         strftime : bool, default=False
-            If True, returns ISO date string; otherwise returns timestamp in ms.
+            If ``True``, returns ISO date string; otherwise returns timestamp in milliseconds.
 
         Returns
         -------
-        int64 or str
-            Millisecond timestamp integer or ISO date string (`YYYY-MM-DD`).
+        int64 | str
+            Millisecond timestamp integer or ISO date string in ``YYYY-MM-DD`` format.
         """
 
-        timestamp: int64 = (idx & ~1) // 2 * self.tims + self.baseTimestamp
+        timestamp: int | int64 = (
+            idx & ~1
+        ) // 2 * self.tims + self.baseTimestamp[0]
         return self.to_strftime(timestamp) if strftime else timestamp
 
 
 @njit(cache=True)
 def to_idy(
     nPrice: int64,
-    baseNprice: int64,
+    baseNprice: memoryview,
     scale: int | int64,
-    center: int64,
-    fp_rows: int64,
+    center: memoryview,
+    fp_rows: memoryview,
 ) -> int64:
-    """
-    Map fixed-point price to Footprint grid Y-axis row index.
+    """Map fixed-point price to Footprint grid Y-axis row index.
 
     Parameters
     ----------
     nPrice : int64
         Target fixed-point price integer.
-    baseNprice : int64
+    baseNprice : memoryview
         Session base price integer at grid center.
-    scale : int
+    scale : int | int64
         Scaled price tick step per row.
-    center : int64
+    center : memoryview
         Row index corresponding to origin center offset.
-    fp_rows : int64
+    fp_rows : memoryview
         Total number of rows in the footprint matrix.
 
     Returns
     -------
     int64
-        Grid row index `idy` (0 <= idy < fp_rows), or -1 if out of bounds.
+        Grid row index ``idy`` satisfying ``0 <= idy < fp_rows``, or ``-1`` if out of bounds.
     """
 
-    idy: int64 = (baseNprice - nPrice) // scale + center
-    if 0 <= idy < fp_rows:
+    idy: int64 = (baseNprice[0] - nPrice) // scale + center[0]
+    if 0 <= idy < fp_rows[0]:
         return idy
     else:
         return int64(-1)
@@ -357,33 +354,34 @@ def to_idy(
 def to_idx(
     timestamp: int64,
     is_sell: int64,
-    baseTimestamp: int64,
+    baseTimestamp: memoryview,
     tims: int | int64,
     fp_cols: int | int64,
 ) -> int64:
-    """
-    Map trade timestamp and order side to Footprint grid X-axis column index.
+    """Map trade timestamp and order side to Footprint grid X-axis column index.
 
     Parameters
     ----------
     timestamp : int64
         Trade timestamp in milliseconds.
     is_sell : int64
-        Trade side flag (1 for sell/bid side, 0 for buy/ask side).
-    baseTimestamp : int64
+        Trade side flag (``1`` for sell/bid side, ``0`` for buy/ask side).
+    baseTimestamp : memoryview
         Session base timestamp in milliseconds.
-    tims : int
+    tims : int | int64
         Timeframe duration in milliseconds.
-    fp_cols : int
+    fp_cols : int | int64
         Total number of trade columns in the footprint matrix.
 
     Returns
     -------
     int64
-        Grid column index `idx` (0 <= idx < fp_cols), or -1 if out of bounds.
+        Grid column index ``idx`` satisfying ``0 <= idx < fp_cols``, or ``-1`` if out of bounds.
     """
 
-    idx: int64 = (timestamp - baseTimestamp) // tims * 2 + (0 if is_sell else 1)
+    idx: int64 = (timestamp - baseTimestamp[0]) // tims * 2 + (
+        0 if is_sell else 1
+    )
     if 0 <= idx < fp_cols:
         return idx
     else:

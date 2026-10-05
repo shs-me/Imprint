@@ -117,7 +117,7 @@ class BinanceFuturesREST(ExchangeREST):
         params: dict[str, Any] = {
             "symbol": self.symbol,
             "fromId": first_id,
-            "limit": (last_id - first_id),
+            "limit": (last_id - first_id) + 1,
         }
         return await self.send_async(
             "GET", "/fapi/v1/aggTrades", params=params, response_type=bytes

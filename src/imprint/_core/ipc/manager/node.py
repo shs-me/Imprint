@@ -1,6 +1,6 @@
 """Worker process IPC manager and signaling node.
 
-This module provides status reporting, ring-buffered logging, task-status bitmask
+Provides status reporting, ring-buffered logging, task-status bitmask
 manipulation, exception dumps, and error decorator routines tailored for worker processes.
 """
 
@@ -18,7 +18,7 @@ from imprint._core.utils.exc_dumper import DumpException
 
 @dataclass(slots=True)
 class Node(Base):
-    """Manager instance dedicated to individual worker process status tracking and IPC signaling.
+    """Manage individual worker process status tracking and IPC signaling.
 
     Coordinates task synchronization, error logging dumps, and sets localized status code
     bitmask flags mapped to specific shared memory offsets.
@@ -26,9 +26,9 @@ class Node(Base):
     Parameters
     ----------
     _proc_id : int
-        Process identifier for process status tracking.
+        Process identifier index in the shared process status array.
     _task_id : int
-        Task identifier for scheduling status and commands.
+        Task identifier index in the shared task status array.
 
     Attributes
     ----------
@@ -54,10 +54,8 @@ class Node(Base):
     )
 
     @override
-    def __post_init__(self) -> None:
-        """Bind process task and status memory views matching worker ID."""
-        Base.__post_init__(self)
-
+    def post_init(self) -> None:
+        """Bind process task and status memory views matching worker identifier index."""
         self.__proc_status = self._procs_status[
             self._proc_id : self._proc_id + 1
         ]
@@ -66,7 +64,7 @@ class Node(Base):
         ]
 
     def set_log(self, log: str) -> None:
-        """Write a formatted process status log message to the shared memory log buffer.
+        """Write a formatted process status log message to the shared memory ring buffer.
 
         Encodes, timestamps, and inserts log entries inside the shared ring buffer,
         raising warning codes if overflows or sizing issues occur.
@@ -74,7 +72,7 @@ class Node(Base):
         Parameters
         ----------
         log : str
-            Plaintext log string to encode and send to the Host process.
+            Plaintext log string to encode and transmit to the host process.
         """
         _ = self._log_stream.ring_buf
         lag: int = (
@@ -89,7 +87,7 @@ class Node(Base):
         b_log = log.encode()
 
         if (len(b_log) + 8) > _.data_size:
-            self.set_proc_sc(scs.BIG_LOG_SIZE, wait_main_task=False)
+            return self.set_proc_sc(scs.BIG_LOG_SIZE, wait_main_task=False)
 
         cell: int = _.wid_buf[self._proc_id]
         need_cell: int = (self._proc_id * _.cell_amount) + cell
@@ -109,7 +107,7 @@ class Node(Base):
         -------
         bool
             True if status code or task code signals are present, ignoring plain
-            non-blocking HAVE_LOG states.
+            non-blocking ``HAVE_LOG`` states.
         """
         return (
             (self.__proc_status[0] != 0) or (self.__task_status[0] != 0)
@@ -165,7 +163,7 @@ class Node(Base):
         Parameters
         ----------
         code : StatusCodes or int
-            The status code bits to apply to the status view.
+            The status code bitmask bits to apply to the status view.
         wait_main_task : bool
             Whether the node should wait for the host before clearing the state.
         """
@@ -190,8 +188,8 @@ class Node(Base):
 
         Parameters
         ----------
-        set_status_error : bool, default False
-            If True, registers an `ERROR` status code back to the Host.
+        set_status_error : bool, default=False
+            If True, registers an ``ERROR`` status code back to the host process.
         """
         self.__dumper.dump_exception()
         if set_status_error:
@@ -202,8 +200,8 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def node_handler():
-    """Decorator to catch exceptions inside Node tasks and dump traceback details automatically.
+def node_handler() -> Callable[[Callable[P, R]], Callable[P, R | None]]:
+    """Catch exceptions inside Node tasks and dump traceback details automatically.
 
     Returns
     -------

@@ -14,10 +14,28 @@ from imprint._core.exchange_sim.account.position import Position
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
 
-@dataclass
+@dataclass(slots=True)
 class Manager(Position, ABC):
-    latency: int = field(init=False)
+    """Manages trading account state, position metrics, and historical equity tracking.
 
+    Attributes
+    ----------
+    latency : int
+        Order routing and execution latency in milliseconds.
+    timeframe : int
+        Bar duration in milliseconds.
+    bar_count : int
+        Total number of OHLCV bars allocated across the backtest duration.
+    equity_history : ndarray of shape (bar_count, 5)
+        Time-series array storing historical equity OHLC records where columns
+        represent timestamp (EquityT), open (EquityO), high (EquityH),
+        low (EquityL), and close (EquityC).
+    base_timestamp : memoryview
+        Single-element 64-bit signed integer memoryview caching the anchor timestamp
+        of the initial trading bar in milliseconds epoch time.
+    """
+
+    latency: int = field(init=False)
     timeframe: int = field(init=False)
     bar_count: int = field(init=False)
     equity_history: NDArray[int64] = field(init=False)
@@ -27,6 +45,7 @@ class Manager(Position, ABC):
 
     @override
     def __post_init__(self) -> None:
+        """Initialize position parameters, timeframe configurations, and preallocate equity history buffers."""
         Position.__post_init__(self)
 
         cfgAC = self.manager.cfgAccount
@@ -51,6 +70,7 @@ class Manager(Position, ABC):
 
     @final
     def dump_equity_history(self) -> None:
+        """Serialize and persist the accumulated equity history array to disk."""
         np.save(c.EQUITY_HISTORY_DATA_PATH, self.equity_history)
 
 
@@ -62,6 +82,28 @@ def update_equity_ohlc(
     base_timestamp: memoryview,
     timeframe: int,
 ) -> None:
+    """Update historical equity OHLC bars given a new trade timestamp and equity value.
+
+    Parameters
+    ----------
+    trade_timestamp : int
+        Execution timestamp of the current trade in milliseconds.
+    current_equity : int
+        Account equity value at the time of the trade.
+    equity_history : ndarray of shape (N, 5)
+        Preallocated history buffer modified in-place where columns store
+        timestamp, open, high, low, and close values respectively.
+    base_timestamp : memoryview
+        Mutable single-element 64-bit integer buffer storing the anchor epoch timestamp
+        for the first bar. Initialized to zero on first write.
+    timeframe : int
+        Duration of each individual OHLC bar in milliseconds. Must be strictly positive.
+
+    Notes
+    -----
+    Performs in-place updates on ``equity_history`` and handles gap-filling for unpopulated
+    intermediate bars by carrying forward the previous close value.
+    """
     ce, eh = current_equity, equity_history
     # - - -
     if base_timestamp[0] == 0:

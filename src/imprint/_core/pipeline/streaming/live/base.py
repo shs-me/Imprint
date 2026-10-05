@@ -15,6 +15,28 @@ from imprint._core.utils.base_adapters import ExchangeREST
 
 @dataclass(slots=True)
 class Base(GlobalBase, ABC):
+    """Abstract base class for live WebSocket streaming pipeline components.
+
+    Manages persistent WebSocket connections, automated reconnection logic, heartbeat
+    ping intervals, and exception counters.
+
+    Parameters
+    ----------
+    rest : ExchangeREST
+        REST API client adapter for exchange interaction.
+    url : str
+        Target WebSocket endpoint URL for the live stream connection.
+
+    Attributes
+    ----------
+    rest : ExchangeREST
+        REST API client adapter for exchange interaction.
+    url : str
+        Target WebSocket endpoint URL for the live stream connection.
+    exc_counter : Counter[str]
+        Running tally of encountered connection exceptions grouped by exception class name.
+    """
+
     rest: ExchangeREST
     url: str
 
@@ -22,6 +44,11 @@ class Base(GlobalBase, ABC):
 
     @final
     async def run(self) -> None:
+        """Execute the primary asynchronous WebSocket connection and message processing loop.
+
+        Handles automatic reconnections on transient dropouts, heartbeat timeouts,
+        protocol errors, and fatal configuration or handshake rejections.
+        """
         try:
             while True:
                 try:
@@ -40,9 +67,16 @@ class Base(GlobalBase, ABC):
                             while True:
                                 await self.in_connection(ws)
 
-                        except MsgspecError:
-                            await ws.close()
-                            self.manager.dump_exc()
+                        except MsgspecError as e:
+                            self.manager.set_log(
+                                f"{self.stream} msgspec error: {e}."
+                            )
+                            return self.manager.dump_exc()
+
+                except ws_exc.ConnectionClosedOK:
+                    self.manager.set_log(
+                        f"{self.stream} {ws_exc.ConnectionClosedOK.__name__}"
+                    )
 
                 except ws_exc.ConnectionClosedError as e:
                     self.exc_counter[ws_exc.ConnectionClosedError.__name__] += 1
@@ -74,11 +108,6 @@ class Base(GlobalBase, ABC):
                         f"{self.stream} WS Invalid state: {e}. Reconnecting..."
                     )
 
-        except ws_exc.ConnectionClosedOK:
-            self.manager.set_log(
-                f"{self.stream} {ws_exc.ConnectionClosedOK.__name__}"
-            )
-
         except (ws_exc.InvalidURI, ws_exc.InvalidProxy) as e:
             self.manager.set_log(f"{self.stream} Fatal WS Config Error: {e}")
             self.manager.dump_exc(True)
@@ -103,15 +132,37 @@ class Base(GlobalBase, ABC):
             self.manager.set_log(f"{self.stream} WS stream cancelled.")
 
     @abstractmethod
-    async def on_pre_connect(self) -> None: ...
+    async def on_pre_connect(self) -> None:
+        """Execute asynchronous preparation logic prior to establishing a WebSocket connection."""
 
     @abstractmethod
-    async def on_connection(self, ws: ClientConnection) -> None: ...
+    async def on_connection(self, ws: ClientConnection) -> None:
+        """Execute initialization actions immediately after a WebSocket connection is established.
+
+        Parameters
+        ----------
+        ws : ClientConnection
+            Active WebSocket client connection instance.
+        """
 
     @abstractmethod
-    async def in_connection(self, ws: ClientConnection) -> None: ...
+    async def in_connection(self, ws: ClientConnection) -> None:
+        """Process incoming messages and events within an active WebSocket session.
+
+        Parameters
+        ----------
+        ws : ClientConnection
+            Active WebSocket client connection instance.
+        """
 
     @final
     @property
     def stream(self) -> str:
+        """Get the standardized log prefix string for the stream class.
+
+        Returns
+        -------
+        str
+            Formatted stream identifier prefix.
+        """
         return self.__class__.__name__ + " -"

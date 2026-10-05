@@ -7,7 +7,7 @@ from imprint._core.ipc import NodeManager
 
 @dataclass(slots=True)
 class Base:
-    """Base account class initializing scaling multipliers, precision, and balance views.
+    """Bind account balance settings, pricing/quantity scale factors, and memory buffers.
 
     Parameters
     ----------
@@ -17,27 +17,27 @@ class Base:
     Attributes
     ----------
     price_prec : int
-        Price decimal precision.
+        Decimal precision for asset prices.
     qty_prec : int
-        Quantity decimal precision.
+        Decimal precision for asset quantities.
     price_mult : int
         Multiplier for scaling floating-point prices to integer fixed-point units.
     qty_mult : int
         Multiplier for scaling floating-point quantities to integer fixed-point units.
     scale_prec : int
-        Account balance scaling precision.
+        Decimal precision for account balances.
     scale_mult : int
         Multiplier for scaling floating-point account balances to integer fixed-point units.
     leverage : int
-        Account leverage multiplier.
+        Account leverage multiplier applied to order margins.
     start_balance : float
         Initial account balance in floating-point currency units.
     startNbalance : int
         Initial account balance in scaled integer fixed-point units.
     nBalance : memoryview
-        Shared memory buffer view holding current balance as int64.
+        Shared memory buffer view holding current account balance as int64.
     lockedNbalance : memoryview
-        Shared memory buffer view holding current locked balance as int64.
+        Shared memory buffer view holding current locked margin balance as int64.
     availableNbalance : memoryview
         Shared memory buffer view holding current available balance as int64.
     dynamicNbalance : memoryview
@@ -71,7 +71,7 @@ class Base:
     )
 
     def __post_init__(self) -> None:
-        """Initialize precision parameters, balance multipliers, and memory buffers."""
+        """Initialize precision parameters, balance multipliers, and shared memory buffers."""
         cfgCoin = self.manager.cfgCoin
         self.price_prec = cfgCoin.price_prec
         self.qty_prec = cfgCoin.qty_prec

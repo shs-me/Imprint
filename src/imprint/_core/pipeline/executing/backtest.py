@@ -9,10 +9,26 @@ from imprint._core.pipeline.executing.base import Base
 
 @dataclass(slots=True)
 class Backtest(Base):
+    """Executes backtesting simulation pipelines, coordinating exchange state and order lifecycles.
+
+    Parameters
+    ----------
+    manager : NodeManager
+        Manager coordinating process states, tasks, and communication streams.
+    executor : ExecutionProtocol
+        Protocol implementation handling orders, signals, and execution callbacks.
+
+    Attributes
+    ----------
+    exchange_sim : ExchangeSim
+        Simulation engine modeling order matching, latency, and account balances.
+    """
+
     exchange_sim: ExchangeSim = field(init=False)
 
     @override
-    def child_post_init(self) -> None:
+    def post_init(self) -> None:
+        """Initialize simulation exchange state and sync account balances."""
         self.exchange_sim = ExchangeSim(self.manager)
 
         self.account.nBalance = self.exchange_sim.nBalance
@@ -27,6 +43,19 @@ class Backtest(Base):
         WB_2: memoryview,
         RB_2: memoryview,
     ) -> None:
+        """Advance exchange simulation or yield execution thread based on stream read times.
+
+        Parameters
+        ----------
+        WB_1 : memoryview
+            Write pointer buffer for the signal stream ring buffer.
+        RB_1 : memoryview
+            Read pointer buffer for the signal stream ring buffer.
+        WB_2 : memoryview
+            Write pointer buffer for the user data stream ring buffer.
+        RB_2 : memoryview
+            Read pointer buffer for the user data stream ring buffer.
+        """
         if self.trade_read_time[0] > self.exchange_sim.trade_read_time[0]:
             if (WB_1[0] != RB_1[0]) or (WB_2[0] != RB_2[0]):
                 return
@@ -36,6 +65,13 @@ class Backtest(Base):
 
     @override
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
+        """Advance exchange simulation up to the signal timestamp and drain user data buffers.
+
+        Parameters
+        ----------
+        time_get_signal : int
+            Target timestamp in microseconds up to which simulation must progress.
+        """
         while self.exchange_sim.trade_read_time[0] != time_get_signal:
             self.exchange_sim.start(time_get_signal)
             self._check_user_data_buf()
@@ -51,6 +87,21 @@ class Backtest(Base):
         nPrice: int,
         nQty: int,
     ) -> None:
+        """Submit an order with simulated exchange latency and lock corresponding balances.
+
+        Parameters
+        ----------
+        timestamp : int
+            Generation timestamp of the order request.
+        order_param : int
+            Bitfield flags specifying order side, type, and parameters.
+        client_order_id : int
+            Unique client-assigned identifier for the order.
+        nPrice : int
+            Normalized order price.
+        nQty : int
+            Normalized order quantity.
+        """
         timestamp = timestamp + self.exchange_sim.latency
         Base.send_order(
             self, timestamp, order_param, client_order_id, nPrice, nQty
@@ -59,6 +110,13 @@ class Backtest(Base):
 
     @override
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
+        """Process raw user data payloads, updating order history and triggering callbacks.
+
+        Parameters
+        ----------
+        user_data_raw_buf : memoryview
+            Memory view containing raw user data fields from the ring buffer.
+        """
         timestamp: int = user_data_raw_buf[c.TP_timestamp]
         order_param: int = user_data_raw_buf[c.TP_order_param]
         order_id: int = user_data_raw_buf[c.TP_order_id]
@@ -99,6 +157,7 @@ class Backtest(Base):
 
     @override
     def post_final_action(self) -> None:
+        """Finalize simulation execution, drain remaining buffers, and log metrics."""
         _ = self.exchange_sim
         # - - -
         while _.trade_read_time[0] != self.trade_read_time[0]:
