@@ -4,11 +4,7 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
-from imprint._core.exchange_sim.account.position import (
-    to_long_nPnl,
-    to_short_nPnl,
-    update_position,
-)
+from imprint._core.exchange_sim.account.position import JitPosition
 from imprint._vis.settings import CloseTrades, OpenTrades
 
 
@@ -30,6 +26,26 @@ def analyze_orders_history(
     long_mfe: memoryview = memoryview(bytearray(8)).cast("q")
     short_mae: memoryview = memoryview(bytearray(8)).cast("q")
     short_mfe: memoryview = memoryview(bytearray(8)).cast("q")
+
+    pos = JitPosition(
+        price_mult=price_mult,
+        qty_mult=qty_mult,
+        scale_mult=scale_mult,
+        leverage=leverage,
+        nBalance=nBalance,
+        lockedNbalance=lockedNbalance,
+        longNqty=longNqty,
+        longEntryNprice=longEntryNprice,
+        shortNqty=shortNqty,
+        shortEntryNprice=shortEntryNprice,
+        long_mae=long_mae,
+        long_mfe=long_mfe,
+        short_mae=short_mae,
+        short_mfe=short_mfe,
+        unrealizedNpnl=memoryview(bytearray(8)).cast("q"),
+        longUnrealizedNpnl=memoryview(bytearray(8)).cast("q"),
+        shortUnrealizedNpnl=memoryview(bytearray(8)).cast("q"),
+    )
 
     trades_close: list[CloseTrades] = []
     trades_open: list[OpenTrades] = []
@@ -63,27 +79,8 @@ def analyze_orders_history(
             price: float = nPrice / price_mult
             qty: float = nQty / qty_mult
             if is_open:
-                update_position(
-                    nPrice=nPrice,
-                    nQty=nQty,
-                    is_long=is_long,
-                    is_open=is_open,
-                    is_maker=is_maker,
-                    nCommission=nCommission,
-                    price_mult=price_mult,
-                    qty_mult=qty_mult,
-                    scale_mult=scale_mult,
-                    leverage=leverage,
-                    nBalance=nBalance,
-                    lockedNbalance=lockedNbalance,
-                    longNqty=longNqty,
-                    longEntryNprice=longEntryNprice,
-                    shortNqty=shortNqty,
-                    shortEntryNprice=shortEntryNprice,
-                    long_mae=long_mae,
-                    long_mfe=long_mfe,
-                    short_mae=short_mae,
-                    short_mfe=short_mfe,
+                pos.update_position(
+                    nPrice, nQty, is_long, is_open, is_maker, nCommission
                 )
                 trades_open.append(
                     {
@@ -96,23 +93,9 @@ def analyze_orders_history(
                 )
             else:
                 if is_long:
-                    nPnl = to_long_nPnl(
-                        closeNprice=nPrice,
-                        entryNprice=longEntryNprice[0],
-                        nQty=nQty,
-                        price_mult=price_mult,
-                        qty_mult=qty_mult,
-                        scale_mult=scale_mult,
-                    )
+                    nPnl = pos.to_long_nPnl(nPrice, longEntryNprice[0], nQty)
                 else:
-                    nPnl = to_short_nPnl(
-                        closeNprice=nPrice,
-                        entryNprice=shortEntryNprice[0],
-                        nQty=nQty,
-                        price_mult=price_mult,
-                        qty_mult=qty_mult,
-                        scale_mult=scale_mult,
-                    )
+                    nPnl = pos.to_short_nPnl(nPrice, shortEntryNprice[0], nQty)
 
                 pnl: float = nPnl / scale_mult
 
@@ -133,27 +116,8 @@ def analyze_orders_history(
                 mfe_pct: float = abs(mfe / (entry_p * qty) * 100.0)
 
                 all_pnls.append(pnl)
-                update_position(
-                    nPrice=nPrice,
-                    nQty=nQty,
-                    is_long=is_long,
-                    is_open=is_open,
-                    is_maker=is_maker,
-                    nCommission=nCommission,
-                    price_mult=price_mult,
-                    qty_mult=qty_mult,
-                    scale_mult=scale_mult,
-                    leverage=leverage,
-                    nBalance=nBalance,
-                    lockedNbalance=lockedNbalance,
-                    longNqty=longNqty,
-                    longEntryNprice=longEntryNprice,
-                    shortNqty=shortNqty,
-                    shortEntryNprice=shortEntryNprice,
-                    long_mae=long_mae,
-                    long_mfe=long_mfe,
-                    short_mae=short_mae,
-                    short_mfe=short_mfe,
+                pos.update_position(
+                    nPrice, nQty, is_long, is_open, is_maker, nCommission
                 )
                 trades_close.append(
                     {

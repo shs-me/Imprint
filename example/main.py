@@ -35,7 +35,7 @@ if __name__ == "__main__":
                 ),
                 lot_size="0.001",
                 backtest_start_date="2026-01-01",
-                backtest_end_date="2026-01-01",
+                backtest_end_date="2026-01-07",
             ),
             Live(
                 leverage=20,
@@ -71,4 +71,4 @@ if __name__ == "__main__":
         with_execution=True,
     )
     imp.run_core()
-    imp.run_vis()
+    # imp.run_vis()

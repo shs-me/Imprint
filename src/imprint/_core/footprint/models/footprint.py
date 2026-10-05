@@ -19,6 +19,7 @@ from imprint._core.utils.base import DPArray, VPArray
 @dataclass(slots=True)
 class Footprint(Chart):
     con: Converter
+    last_idx: memoryview
 
     base: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
     state: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
@@ -29,7 +30,6 @@ class Footprint(Chart):
     vp: VolumeProfile[Footprint] = field(init=False)
     dp: DeltaProfile[Footprint] = field(init=False)
 
-    last_idx: int = field(default=0, init=False)
     __plike: PriceLike[Footprint] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -57,7 +57,7 @@ class Footprint(Chart):
 
     @property
     def last_bar(self) -> int:
-        return (self.last_idx & ~1) // 2
+        return (self.last_idx[0] & ~1) // 2
 
     @property
     def vwap(self) -> PriceLike[Footprint]:

@@ -13,6 +13,35 @@ from imprint._core.utils.base import TradesArray
 
 @dataclass(slots=True)
 class Base(ABC):
+    """Abstract base engine for processing market data ticks and executing strategies.
+
+    Parameters
+    ----------
+    manager : NodeManager
+        Inter-process communication and configuration manager for the engine node.
+    algorithm : StrategyEngine
+        Active strategy container holding the footprint engine and synchronization state.
+
+    Attributes
+    ----------
+    manager : NodeManager
+        Inter-process communication and configuration manager for the engine node.
+    algorithm : StrategyEngine
+        Active strategy container holding the footprint engine and synchronization state.
+    time_start_analyze : memoryview
+        Shared memory view storing the timestamp when analysis starts, cast as 64-bit integer (`q`).
+    engine_complete : memoryview
+        Shared memory view indicating engine completion status flag.
+    agg_trades : TradesArray
+        Contiguous buffer array storing aggregated trades data.
+    at_max_row : int
+        Maximum capacity (row count) of the aggregated trades buffer.
+    at_rid : int
+        Current read index within the aggregated trades buffer.
+    at_wid : int
+        Current write index within the aggregated trades buffer.
+    """
+
     manager: NodeManager
     algorithm: StrategyEngine
 
@@ -28,7 +57,9 @@ class Base(ABC):
     at_rid: int = field(init=False)
     at_wid: int = field(init=False)
 
+    @final
     def __post_init__(self) -> None:
+        """Initialize core engine metrics, memory views, and index bounds."""
         self.__mds = self.manager.cfgMarketDataStream
 
         cfgMetrics = self.manager.cfgMetrics
@@ -38,9 +69,18 @@ class Base(ABC):
         self.at_max_row = self.agg_trades.shape[0]
         self.at_rid, self.at_wid = 0, 0
 
+        self.post_init()
+
+    def post_init(self) -> None: ...
+
     @final
     @node_handler()
     def run(self) -> None:
+        """Run the main processing loop for market data ticks and analysis.
+
+        Polls tasks from the process manager, reads incoming trade data from ring buffers,
+        and dispatches updates to the footprint engine.
+        """
         _, fp_engine = self.__mds.ring_buf, self.algorithm._engine
         # - - -
         while True:
@@ -90,14 +130,33 @@ class Base(ABC):
 
     @final
     def __complete(self, wid: memoryview, rid: memoryview) -> bool:
-        return (wid[0] == rid[0]) and self.algorithm._engine._bbox_is_readed()
+        """Verify whether all buffered market data and trades have been fully processed.
+
+        Parameters
+        ----------
+        wid : memoryview
+            Write index buffer for the market data stream.
+        rid : memoryview
+            Read index buffer for the market data stream.
+
+        Returns
+        -------
+        bool
+            True if buffers are caught up, trade queues are empty, and bounding box is read.
+        """
+        return (
+            (wid[0] == rid[0])
+            and (self.at_wid == self.at_rid)
+            and self.algorithm._engine.bbox_is_read()
+        )
 
     @final
     def __final_actions(self) -> None:
+        """Execute final cleanup, metric updates, and logging upon completion."""
         if self.manager.cfgSetup.backtesting:
             self.algorithm._engine.final_analyze()
             self.algorithm._engine.save_footprint_headers(
-                self.algorithm.last_idx[0]
+                self.algorithm._engine.lidx[0]
             )
 
         self.post_final_action()
@@ -108,19 +167,43 @@ class Base(ABC):
         )
 
     @abstractmethod
-    def post_final_action(self) -> None: ...
+    def post_final_action(self) -> None:
+        """Execute subclass-specific actions upon engine completion."""
 
     @abstractmethod
-    def alarm_clock(self) -> None: ...
+    def alarm_clock(self) -> None:
+        """Handle idling or waiting behavior when input buffers are empty."""
 
     @abstractmethod
-    def set_trade_data(self, raw_data: memoryview) -> None: ...
+    def set_trade_data(self, raw_data: memoryview) -> None:
+        """Decode and write raw trade data into the internal trade buffers.
+
+        Parameters
+        ----------
+        raw_data : memoryview
+            Raw binary trade payload from the data stream ring buffer.
+        """
 
     @final
     def is_bbox_mode(self, wid: memoryview, rid: memoryview) -> bool:
+        """Determine whether the engine is operating in bounding box (non-tick-by-tick) mode.
+
+        Parameters
+        ----------
+        wid : memoryview
+            Write index buffer for the market data stream.
+        rid : memoryview
+            Read index buffer for the market data stream.
+
+        Returns
+        -------
+        bool
+            True if analysis is in bounding box mode and session re-initialization is inactive.
+        """
         return (
             (not self.algorithm.tick_by_tick_analyze) and (wid[0] != rid[0])
-        ) and (not (self.algorithm._engine.re_init & c.RIF_session))
+        ) and (self.algorithm._engine.is_bbox_mode())
 
     @abstractmethod
-    def post_update(self) -> None: ...
+    def post_update(self) -> None:
+        """Perform subclass-specific operations after each trade tick update cycle."""
