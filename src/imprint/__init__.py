@@ -1,3 +1,5 @@
+"""Imprint algorithmic trading and footprint charting framework."""
+
 from imprint import adapters, configs
 from imprint._boot.router import Imprint
 from imprint._core import constant

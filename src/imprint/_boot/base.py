@@ -13,6 +13,31 @@ from imprint._core.utils.exc_dumper import error_handler
 
 @dataclass(slots=True)
 class Base(ABC):
+    """Provide common initialization, logging, and core execution lifecycle for trading run modes.
+
+    Parameters
+    ----------
+    symbol : str
+        Target trading pair symbol (e.g., ``"BTCUSDT"``).
+    strategy : imprint.configs.Strategy
+        Trading strategy configuration containing algorithm, risk management, and footprint parameters.
+    execution : type[imprint.configs.ExecutionEngine]
+        Execution engine class handling order routing and position management.
+    with_execution : bool
+        Flag indicating whether live/backtest execution is enabled.
+
+    Attributes
+    ----------
+    symbol : str
+        Target trading pair symbol.
+    strategy : imprint.configs.Strategy
+        Trading strategy configuration.
+    execution : type[imprint.configs.ExecutionEngine]
+        Execution engine class.
+    with_execution : bool
+        Flag indicating if execution is enabled.
+    """
+
     symbol: str
     strategy: cfg.Strategy
     execution: type[cfg.ExecutionEngine]
@@ -29,6 +54,13 @@ class Base(ABC):
 
     @final
     def __post_init__(self) -> None:
+        """Initialize logger, build configuration objects, and execute subclass post-initialization.
+
+        Raises
+        ------
+        Exception
+            Propagates any unhandled exception encountered during core execution or initialization.
+        """
         self.__init_logger()
 
         logger.info(f"Initialization {self.__class__.__name__} mode, started.")
@@ -62,6 +94,7 @@ class Base(ABC):
 
     @final
     def __init_logger(self) -> None:
+        """Configure loguru logging sinks for API, core engine, and visualization modules."""
 
         import imprint._boot as iboot
         import imprint._core as icore
@@ -102,11 +135,20 @@ class Base(ABC):
         )
 
     @abstractmethod
-    def _post_init(self) -> bool: ...
+    def _post_init(self) -> bool:
+        """Execute mode-specific post-initialization routines and resource setup.
+
+        Returns
+        -------
+        bool
+            True if initialization succeeds; False otherwise.
+        """
+        ...
 
     @final
     @error_handler()
     def run_core(self) -> None:
+        """Execute the core trading engine lifecycle if initialization completed successfully."""
         if self._init_complete:
             from imprint._core.main import run
 

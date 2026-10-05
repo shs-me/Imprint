@@ -19,12 +19,37 @@ from imprint._vis.main import Render
 
 @dataclass(slots=True)
 class Backtest(Base):
+    """Manage historical backtesting initialization, data downloading, and visualization rendering.
+
+    Parameters
+    ----------
+    run_mode : imprint.configs.Backtest
+        Backtest configuration parameters including start/end dates, tick size, lot size, and account settings.
+
+    Attributes
+    ----------
+    run_mode : imprint.configs.Backtest
+        Backtest configuration parameters.
+    """
+
     run_mode: cfg.Backtest
 
     _prefix_core_log_format: str = field(default="{elapsed} ", init=False)
 
     @override
     def _post_init(self) -> bool:
+        """Download historical aggregated trades data and initialize backtest market data stream and coin parameters.
+
+        Returns
+        -------
+        bool
+            True if historical data download and initialization succeed; False if DownloadError occurs.
+
+        Raises
+        ------
+        DownloadError
+            Caught internally if historical market data retrieval fails from remote repositories.
+        """
         self._args.append(
             _MDS(
                 data_size=32,
@@ -60,6 +85,13 @@ class Backtest(Base):
 
     @error_handler()
     def run_vis(self, auto_open: bool = True) -> None:
+        """Render interactive HTML charts and analytical visualizations from backtest simulation outputs.
+
+        Parameters
+        ----------
+        auto_open : bool, default=True
+            Whether to automatically open the generated visualization HTML file in the default web browser.
+        """
         if self._init_complete and self.with_execution:
             logger.info("Visualization, started.")
             Render(
@@ -82,4 +114,5 @@ class Backtest(Base):
 
 @final
 @dataclass(slots=True)
-class BacktestEngine(Backtest): ...  # pyright: ignore[reportUninitializedInstanceVariable]
+class BacktestEngine(Backtest):  # pyright: ignore[reportUninitializedInstanceVariable]
+    """Concrete backtest execution engine instance."""

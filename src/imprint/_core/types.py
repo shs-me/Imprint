@@ -3,24 +3,25 @@ from typing import Any, Protocol, TypedDict, overload
 
 
 class AlgorithmProtocol(Protocol):
-    """Protocol defining the core algorithm execution and event callback interface.
+    """Define the core algorithm execution and event callback interface.
 
     Attributes
     ----------
     tick_by_tick_analyze : bool
         Flag indicating whether to perform tick-by-tick analysis.
     atr_period : int
-        Period length for Average True Range calculations.
+        Period length for Average True Range calculations. Must be positive.
     park_period : int
-        Period length for Parkinson volatility calculations.
+        Period length for Parkinson volatility calculations. Must be positive.
     ma_volume_period : int
-        Period length for moving average volume smoothing.
+        Period length for moving average volume smoothing. Must be positive.
     ma_count_trade_period : int
-        Period length for moving average trade count calculations.
+        Period length for moving average trade count calculations. Must be positive.
     ma_avg_trade_size_period : int
-        Period length for moving average average trade size calculations.
+        Period length for moving average average trade size calculations. Must be positive.
     big_cluster_mult : float
-        Multiplier threshold for identifying significant volume clusters.
+        Multiplier threshold for identifying significant volume clusters. Must be
+        greater than or equal to 1.0.
     """
 
     tick_by_tick_analyze: bool
@@ -38,22 +39,31 @@ class AlgorithmProtocol(Protocol):
 
         Parameters
         ----------
-        idYmin : int64
+        idYmin : int
             Minimum price index bounding the active update region.
-        idYmax : int64
-            Maximum price index bounding the active update region.
-        idxBid : int
-            Current bid price level index.
-        idxAsk : int
-            Current ask price level index.
+        idYmax : int
+            Maximum price index bounding the active update region. Must be
+            greater than or equal to ``idYmin``.
+        idx : int
+            Current price level index.
+        lidx : int
+            Last active price level index.
         """
 
     def on_bar_close(self, idx: int, lidx: int) -> None:
-        """Handle completion and closure of the current time bar."""
+        """Handle completion and closure of the current time bar.
+
+        Parameters
+        ----------
+        idx : int
+            Terminal price level index at bar close.
+        lidx : int
+            Terminal last price level index at bar close.
+        """
 
 
 class ExecutionProtocol(Protocol):
-    """Protocol defining trade execution callback interfaces for order lifecycle events."""
+    """Define trade execution callback interfaces for order lifecycle events."""
 
     def on_signal(
         self,
@@ -74,11 +84,11 @@ class ExecutionProtocol(Protocol):
         time_get_signal : int
             Epoch timestamp in milliseconds when the signal was generated.
         order_param : int
-            Bitmask or integer parameter flags governing order execution.
+            Bitmask parameter flags governing order execution.
         nPrice : int
-            Scaled integer price value for the target order.
+            Scaled integer price value for the target order. Must be positive.
         nQty : int
-            Order quantity in base units.
+            Order quantity in base units. Must be positive.
         tp_dev : int
             Take-profit deviation offset in price ticks.
         sl_dev : int
@@ -112,11 +122,11 @@ class ExecutionProtocol(Protocol):
         client_order_id : int
             Client-assigned unique order identifier.
         nPrice : int
-            Scaled integer execution price.
+            Scaled integer execution price. Must be positive.
         nQty : int
-            Executed quantity in base units.
+            Executed quantity in base units. Must be positive.
         nCommission : int
-            Scaled integer commission fee assessed for the fill.
+            Scaled integer commission fee assessed for the fill. Must be non-negative.
         """
         ...
 
@@ -146,17 +156,17 @@ class ExecutionProtocol(Protocol):
         client_order_id : int
             Client-assigned unique order identifier.
         nPrice : int
-            Scaled integer price of the canceled order.
+            Scaled integer price of the canceled order. Must be positive.
         nQty : int
-            Unexecuted quantity canceled in base units.
+            Unexecuted quantity canceled in base units. Must be positive.
         nCommission : int
-            Commission fee associated with the order state, if applicable.
+            Commission fee associated with the order state, if applicable. Must be non-negative.
         """
         ...
 
 
 class LoggerProtocol(Protocol):
-    """Protocol defining structured logging callback interfaces with overloaded signatures."""
+    """Define structured logging callback interfaces with overloaded signatures."""
 
     @overload
     def info(__self, __message: str, *args: Any, **kwargs: Any) -> None: ...  # noqa: PYI063
@@ -177,7 +187,7 @@ class LoggerProtocol(Protocol):
 
 
 class SendOrderMethodSignature(Protocol):
-    """Callable protocol signature for transmitting new order requests."""
+    """Define callable signature for transmitting new order requests."""
 
     def __call__(
         self,
@@ -194,19 +204,19 @@ class SendOrderMethodSignature(Protocol):
         timestamp : int
             Epoch timestamp in milliseconds when the order request was dispatched.
         order_param : int
-            Bitmask or integer parameter flags governing order routing and execution.
+            Bitmask parameter flags governing order routing and execution.
         client_order_id : int
             Client-assigned unique order identifier.
         nPrice : int
-            Scaled integer target price.
+            Scaled integer target price. Must be positive.
         nQty : int
-            Order quantity in base units.
+            Order quantity in base units. Must be positive.
         """
         ...
 
 
 class SetLogMethodSignature(Protocol):
-    """Callable protocol signature for logging log messages."""
+    """Define callable signature for logging messages."""
 
     def __call__(self, log: str) -> None:
         """Record a log message string.
@@ -220,7 +230,21 @@ class SetLogMethodSignature(Protocol):
 
 
 class DumpMSG(TypedDict):
-    """Typed dictionary representing serialized debugging or error dump messages."""
+    """Represent serialized debugging or error dump messages.
+
+    Attributes
+    ----------
+    timestamp : str
+        ISO-8601 formatted timestamp string representing when the dump was created.
+    type : str
+        Classification category of the dump or error event.
+    message : str
+        Primary description or payload of the error message.
+    traceback : list[str]
+        Stack trace lines captured at the point of exception or dump.
+    locals : dict[str, Any]
+        Local variable namespace and inspection state dictionary.
+    """
 
     timestamp: str
     type: str
@@ -230,7 +254,17 @@ class DumpMSG(TypedDict):
 
 
 class ProcsData(TypedDict):
-    """Typed dictionary representing managed worker process state and metadata."""
+    """Represent managed worker process state and metadata.
+
+    Attributes
+    ----------
+    proc_name : str
+        Descriptive name or label identifying the worker process.
+    task_id : int
+        Unique integer identifier associated with the task assignment.
+    proc : Process
+        Underlying multiprocessing Process instance handle.
+    """
 
     proc_name: str
     task_id: int

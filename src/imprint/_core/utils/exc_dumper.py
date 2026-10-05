@@ -14,10 +14,22 @@ from imprint._core.types import DumpMSG
 
 
 class DebugEncoder(json.JSONEncoder):
-    """Custom JSON encoder handling set, range, datetime, and non-serializable objects."""
+    """Serialize non-standard Python objects into JSON-compatible representations."""
 
     @override
-    def default(self, o: Any):
+    def default(self, o: Any) -> Any:
+        """Convert unsupported types (sets, ranges, datetimes, objects) to JSON primitives.
+
+        Parameters
+        ----------
+        o : Any
+            Object instance encountered during JSON serialization.
+
+        Returns
+        -------
+        Any
+            JSON-serializable representation (list, ISO 8601 string, or type description).
+        """
         if isinstance(o, (set, range)):
             return list(o)  # pyright: ignore[reportUnknownArgumentType]
         if isinstance(o, datetime):
@@ -30,6 +42,20 @@ class DebugEncoder(json.JSONEncoder):
 @final
 @dataclass(slots=True)
 class DumpException:
+    """Capture, format, and persist active exception context and frame locals to disk.
+
+    Attributes
+    ----------
+    exc_type : type[BaseException] | None
+        Captured exception class or None if no active exception exists.
+    exc_value : BaseException | None
+        Captured exception instance or None if no active exception exists.
+    exc_tb : TracebackType | None
+        Captured traceback object or None if no active exception exists.
+    dump_msg : DumpMSG
+        Structured dictionary containing timestamp, error type, message, traceback lines, and local variables.
+    """
+
     exc_type: type[BaseException] | None = field(default=None, init=False)
     exc_value: BaseException | None = field(default=None, init=False)
     exc_tb: TracebackType | None = field(default=None, init=False)
@@ -45,6 +71,13 @@ class DumpException:
     )
 
     def dump_exception(self) -> None:
+        """Extract exception details and append formatted JSON payload to the exception dump file.
+
+        Raises
+        ------
+        OSError
+            If writing to ``c.EXC_DUMP_PATH`` fails due to I/O or permission errors.
+        """
         self._get_exc_info()
         self._create_dump_msg()
         try:
@@ -64,9 +97,11 @@ class DumpException:
             )
 
     def _get_exc_info(self) -> None:
+        """Retrieve current exception information from the active execution context."""
         self.exc_type, self.exc_value, self.exc_tb = sys.exc_info()
 
     def _create_dump_msg(self) -> None:
+        """Populate dump message dictionary with timestamp, formatted traceback, and deepest frame locals."""
         self.dump_msg["timestamp"] = datetime.now(tz=UTC).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
@@ -95,6 +130,20 @@ class DumpException:
                     )
 
     def _process_value(self, val: Any, max_len: int = 100) -> Any:
+        """Sanitize and format a local variable value for JSON serialization.
+
+        Parameters
+        ----------
+        val : Any
+            Raw local variable object from stack frame.
+        max_len : int, default=100
+            Maximum character length allowed for string and byte previews before truncation.
+
+        Returns
+        -------
+        Any
+            Truncated string, structured metadata dictionary, or serialized representation.
+        """
         if isinstance(val, memoryview):
             return {
                 "type": "memoryview",
@@ -146,7 +195,15 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def error_handler():
+def error_handler() -> Callable[[Callable[P, R]], Callable[P, R | None]]:
+    """Catch unhandled exceptions in decorated functions, dump exception context, and return None.
+
+    Returns
+    -------
+    Callable[[Callable[P, R]], Callable[P, R | None]]
+        Decorator function wrapping target callables with an exception-handling try/except block.
+    """
+
     def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:

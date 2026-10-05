@@ -239,14 +239,14 @@ class Router(AlgorithmProtocol, ABC):
 
         Parameters
         ----------
-        idYmin : int64
+        idYmin : int
             Minimum price index bounding the active update region.
-        idYmax : int64
+        idYmax : int
             Maximum price index bounding the active update region.
-        idxBid : int
-            Current bid price level index.
-        idxAsk : int
-            Current ask price level index.
+        idx : int
+            Current bar index.
+        lidx : int
+            Last processed bar index.
         """
 
     @override

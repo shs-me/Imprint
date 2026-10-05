@@ -18,6 +18,41 @@ from imprint._core.utils.base import DPArray, VPArray
 @final
 @dataclass(slots=True)
 class Footprint(Chart):
+    """Represents a complete order flow footprint chart containing bars, profiles, and trade data.
+
+    Parameters
+    ----------
+    con : Converter
+        Converter instance handling coordinate mapping between price levels and indices.
+    last_idx : memoryview
+        Memory view buffer storing the index of the latest active bar.
+
+    Attributes
+    ----------
+    base : FPArray
+        Underlying multi-dimensional array storing base footprint data.
+    state : FPArray
+        Underlying multi-dimensional array storing state flags and metadata.
+    ctrade : FPArray
+        Underlying multi-dimensional array storing cumulative trade information.
+    headers : ndarray of shape (total_bar_count, BH_ConstantCount)
+        Two-dimensional integer array storing bar header metrics and metadata.
+    bar : Bar
+        Bar iteration and inspection helper interface.
+    vp : VolumeProfile[Footprint]
+        Chart-level volume profile analytics interface.
+    dp : DeltaProfile[Footprint]
+        Chart-level delta profile analytics interface.
+    last_bar : int, read-only
+        Index of the most recent active bar.
+    vwap : PriceLike[Footprint], read-only
+        Volume-Weighted Average Price of the last bar.
+    vwap_up_band : PriceLike[Footprint], read-only
+        Upper VWAP band price of the last bar.
+    vwap_low_band : PriceLike[Footprint], read-only
+        Lower VWAP band price of the last bar.
+    """
+
     con: Converter
     last_idx: memoryview
 
@@ -46,6 +81,17 @@ class Footprint(Chart):
     def _re_init_arr(  # pyright: ignore[reportUnusedFunction]
         self, base: FPArray, state: FPArray | None, ctrade: FPArray | None
     ) -> None:
+        """Reinitialize chart array buffers and propagate updates to volume and delta profiles.
+
+        Parameters
+        ----------
+        base : FPArray
+            New base footprint array buffer.
+        state : FPArray | None
+            New state array buffer, or None to retain existing state.
+        ctrade : FPArray | None
+            New cumulative trade array buffer, or None to retain existing ctrade.
+        """
         self.base = base
         if state is not None:
             self.state = state
@@ -74,6 +120,27 @@ class Footprint(Chart):
 
 @dataclass(slots=True)
 class VolumeProfile[T]:
+    """Manages volume profile analytics across price levels for a footprint chart.
+
+    Parameters
+    ----------
+    _fp : Footprint
+        Parent footprint chart instance.
+
+    Attributes
+    ----------
+    base : VPArray
+        Volume profile base view extracted from footprint data.
+    state : VPArray
+        Volume profile state view extracted from footprint data.
+    poc : PriceLike[T], read-only
+        Point of Control (POC) price level with the highest volume in the last bar.
+    vah : PriceLike[T], read-only
+        Value Area High (VAH) price level for the last bar.
+    val : PriceLike[T], read-only
+        Value Area Low (VAL) price level for the last bar.
+    """
+
     _fp: Footprint
 
     _plike: PriceLike[T] = field(init=False)
@@ -84,6 +151,7 @@ class VolumeProfile[T]:
         self._plike = PriceLike(self._fp.con, Qty(self._fp))
 
     def _re_init_arr(self) -> None:
+        """Rebind volume profile array views to updated parent footprint arrays."""
         self.base = cast(VPArray, self._fp.base[:, self._fp.con.idxVP])
         self.state = cast(VPArray, self._fp.state[:, self._fp.con.idxVP])
 
@@ -102,12 +170,28 @@ class VolumeProfile[T]:
 
 @dataclass(slots=True)
 class DeltaProfile[T]:
+    """Manages delta profile analytics across price levels for a footprint chart.
+
+    Parameters
+    ----------
+    _fp : Footprint
+        Parent footprint chart instance.
+
+    Attributes
+    ----------
+    base : DPArray
+        Delta profile base view extracted from footprint data.
+    state : DPArray
+        Delta profile state view extracted from footprint data.
+    """
+
     _fp: Footprint
 
     base: DPArray = field(init=False)
     state: DPArray = field(init=False)
 
     def _re_init_arr(self) -> None:
+        """Rebind delta profile array views to updated parent footprint arrays."""
         self.base = cast(DPArray, self._fp.base[:, self._fp.con.idxDP])
         self.state = cast(DPArray, self._fp.state[:, self._fp.con.idxDP])
 
@@ -115,10 +199,41 @@ class DeltaProfile[T]:
 @final
 @dataclass(slots=True)
 class Qty[T](QtyLike[T]):
+    """Provides volume, delta, bid, and ask quantities at specific price level indices for a footprint.
+
+    Parameters
+    ----------
+    _fp : Footprint
+        Parent footprint chart instance.
+
+    Attributes
+    ----------
+    delta : int64, read-only
+        Net delta (ask volume minus bid volume or profile delta) at the configured price index.
+    sum : int64, read-only
+        Total volume (sum of bid and ask) at the configured price index.
+    bid : int64, read-only
+        Estimated or derived bid volume at the configured price index.
+    ask : int64, read-only
+        Estimated or derived ask volume at the configured price index.
+    """
+
     _fp: Footprint
 
     @override
     def __getitem__(self, idy: int64) -> Qty[T]:
+        """Configure the target price level index for quantity queries.
+
+        Parameters
+        ----------
+        idy : int64
+            Price level index coordinate.
+
+        Returns
+        -------
+        Qty[T]
+            The current instance configured with the specified index.
+        """
         self._idy = idy
         return self
 

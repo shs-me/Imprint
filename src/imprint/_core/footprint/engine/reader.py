@@ -42,7 +42,7 @@ class Reader(w.Writer):
         Parameters
         ----------
         nPrice : int64
-            Total number of price levels allocated in the footprint matrix buffer.
+            Total number of price levels allocated in the footprint matrix buffer. Must be strictly positive.
         """
         w.Writer.child_init_array(self, nPrice)
 
@@ -121,7 +121,7 @@ class Reader(w.Writer):
     def final_analyze(self) -> None:
         """Run terminal analyses on the current active bar upon session termination.
 
-        Forces the active bar closure routines, updates indicators, and notifies
+        Forces active bar closure routines, updates indicators, and notifies
         the algorithm state machines.
         """
         self.analyzer.analyze_closed_bar(self.fp.base, self.fp.state)
@@ -142,6 +142,43 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
 
 @jitclass(spec)  # pyright: ignore[reportCallIssue, reportUntypedClassDecorator]
 class JitFootprintAnalyzer:
+    """Numba JIT-compiled engine responsible for numerical footprint analysis.
+
+    Parameters
+    ----------
+    storage : JitStorage
+        Underlying memory buffer and header repository storing raw and analyzed state.
+    atr_period : int
+        Lookback window for Average True Range calculation.
+    park_period : int
+        Lookback window for Parkinson volatility computation.
+    ma_vol_period : int
+        Moving average period for volume smoothing.
+    ma_ats_period : int
+        Moving average period for average trade size smoothing.
+    ma_count_trade_period : int
+        Moving average period for trade count smoothing.
+    big_cluster_mult : int
+        Multiplicative threshold factor scaled by 10,000 for detecting big clusters.
+
+    Attributes
+    ----------
+    storage : JitStorage
+        Underlying memory buffer and header repository storing raw and analyzed state.
+    atr_period : int
+        Lookback window for Average True Range calculation.
+    park_period : int
+        Lookback window for Parkinson volatility computation.
+    ma_vol_period : int
+        Moving average period for volume smoothing.
+    ma_ats_period : int
+        Moving average period for average trade size smoothing.
+    ma_count_trade_period : int
+        Moving average period for trade count smoothing.
+    big_cluster_mult : int
+        Multiplicative threshold factor scaled by 10,000 for detecting big clusters.
+    """
+
     def __init__(
         self,
         storage: JitStorage,
@@ -161,15 +198,14 @@ class JitFootprintAnalyzer:
         self.big_cluster_mult: int = big_cluster_mult
 
     def analyze_bar(self, fp: FPArray, fp_state: FPArray) -> None:
-        """
-        Update microstructural states, OHLC flags, imbalance, and bar Value Area for active bar.
+        """Update microstructural states, OHLC flags, imbalance, and bar Value Area.
 
         Parameters
         ----------
         fp : FPArray
-            2D footprint base array.
+            2D footprint base array of shape ``(N, M)`` representing volume profile matrix.
         fp_state : FPArray
-            2D footprint state bitmask array.
+            2D footprint state bitmask array of shape ``(N, M)`` for tracking features and flags.
         """
         _ = self.storage
         # - - -
@@ -210,16 +246,31 @@ class JitFootprintAnalyzer:
 
         idYmin, idYmax = _.idYmin[0], _.idYmax[0]
 
-        state1 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
-        fp_state[idYmin:idYmax, _.idxDP] &= ~(state1)
+        state1 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
+        state2 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
+        fp_state[high_idy : low_idy + 1, idXbid] &= ~(state1 | state2)
+
+        fp_state[open_idy, idXbid] |= c.SF_OPEN
+        fp_state[high_idy, idXbid] |= c.SF_HIGH
+        fp_state[low_idy, idXbid] |= c.SF_LOW
+        fp_state[close_idy, idXbid] |= c.SF_CLOSE
+
+        fp_state[(high_idy + poc), idXbid] |= c.SF_POC_BAR
+        fp_state[(high_idy + vah), idXbid] |= c.SF_VAH_BAR
+        fp_state[(high_idy + val), idXbid] |= c.SF_VAL_BAR
+
+        state3 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
+        fp_state[idYmin:idYmax, idXbid : idXask + 1] &= ~state3
+
+        state4 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
+        fp_state[idYmin:idYmax, _.idxDP] &= ~(state4)
 
         ma_vol: int64 | int = (
             _.headers[bwo - 1, c.BH_MA_VOL] if (bwo - 1) > 0 else 0
         )
-        if ma_vol:
-            vol: int64 = int64(ma_vol * (self.big_cluster_mult / 10_000))
-
-            for idy in range(idYmin, idYmax):
+        vol: int64 = int64(ma_vol * (self.big_cluster_mult / 10_000))
+        for idy in range(idYmin, idYmax):
+            if ma_vol:
                 fp_state[idy, _.idxDP] |= (
                     c.SF_BID_DELTA_DOMINATION_FP
                     if (fp[idy, _.idxDP] < 0)
@@ -232,23 +283,6 @@ class JitFootprintAnalyzer:
                     ):
                         fp_state[idy, idx] |= c.SF_BIG_CLUSTER
 
-        state2 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
-        state3 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
-        fp_state[high_idy : low_idy + 1, idXbid] &= ~(state2 | state3)
-
-        fp_state[open_idy, idXbid] |= c.SF_OPEN
-        fp_state[high_idy, idXbid] |= c.SF_HIGH
-        fp_state[low_idy, idXbid] |= c.SF_LOW
-        fp_state[close_idy, idXbid] |= c.SF_CLOSE
-
-        fp_state[(high_idy + poc), idXbid] |= c.SF_POC_BAR
-        fp_state[(high_idy + vah), idXbid] |= c.SF_VAH_BAR
-        fp_state[(high_idy + val), idXbid] |= c.SF_VAL_BAR
-
-        state1 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
-        fp_state[idYmin:idYmax, idXbid : idXask + 1] &= ~state1
-
-        for idy in range(idYmin, idYmax):
             bid_val, ask_val = fp[idy, idXbid], fp[idy, idXask]
 
             if (ask_val > 0) and (bid_val == 0):
@@ -280,8 +314,7 @@ class JitFootprintAnalyzer:
                     fp_state[ymax, idXbid] &= ~(c.SF_IMBALANCE)
 
     def analyze_closed_bar(self, fp: FPArray, fp_state: FPArray) -> None:
-        """
-        Calculate indicator states and footprint flags upon bar closure.
+        """Calculate indicator states and footprint flags upon bar closure.
 
         Computes ATR, Parkinson Volatility, VWAP bands, Point of Control (POC),
         Value Area (VAH/VAL), and auction state flags on bar close.
@@ -289,9 +322,9 @@ class JitFootprintAnalyzer:
         Parameters
         ----------
         fp : FPArray
-            2D array storing base footprint volume profile matrix.
+            2D array of shape ``(N, M)`` storing base footprint volume profile matrix.
         fp_state : FPArray
-            2D array storing footprint bitmask flags.
+            2D array of shape ``(N, M)`` storing footprint bitmask flags.
         """
         _ = self.storage
         # - - -
@@ -427,8 +460,7 @@ class FootprintEngine(Reader): ...  # pyright: ignore[reportUninitializedInstanc
 def calc_value_area(
     vp_slice: NDArray[int64], center_idx: intp
 ) -> tuple[intp, intp]:
-    """
-    Compute Value Area High (VAH) and Value Area Low (VAL) bounds covering 70% of total volume.
+    """Compute Value Area High (VAH) and Value Area Low (VAL) bounds covering 70% of total volume.
 
     Parameters
     ----------
@@ -439,8 +471,8 @@ def calc_value_area(
 
     Returns
     -------
-    tuple of (intp, intp)
-        Tuple containing `(vah_idx, val_idx)` relative to `vp_slice`.
+    tuple[intp, intp]
+        Tuple containing ``(vah_idx, val_idx)`` relative to ``vp_slice``.
     """
 
     target_vol: float = np.sum(vp_slice) * 0.70

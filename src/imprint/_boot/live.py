@@ -11,6 +11,19 @@ from imprint._core.utils.base_adapters import ApiNotFoundError
 
 @dataclass(slots=True)
 class Live(Base):
+    """Manage live trading session initialization, REST exchange connectivity, and account synchronization.
+
+    Parameters
+    ----------
+    run_mode : imprint.configs.Live
+        Live trading configuration containing exchange REST client, decoders, encoders, and leverage settings.
+
+    Attributes
+    ----------
+    run_mode : imprint.configs.Live
+        Live trading configuration parameters.
+    """
+
     run_mode: cfg.Live
 
     _prefix_core_log_format: str = field(default="", init=False)
@@ -18,6 +31,18 @@ class Live(Base):
 
     @override
     def _post_init(self) -> bool:
+        """Initialize live data streams, REST connection endpoints, exchange limits, leverage, and initial account balance.
+
+        Returns
+        -------
+        bool
+            True if all exchange connection checks, tick/lot sizes, and balances are successfully verified; False otherwise.
+
+        Raises
+        ------
+        ApiNotFoundError
+            Caught internally if API or secret keys are missing from environment variables during execution mode.
+        """
         self._args.append(_MDS(count_reader=1))
         self._args.append(self.run_mode.connector)
 
@@ -107,4 +132,5 @@ class Live(Base):
 
 @final
 @dataclass(slots=True)
-class LiveEngine(Live): ...  # pyright: ignore[reportUninitializedInstanceVariable]
+class LiveEngine(Live):  # pyright: ignore[reportUninitializedInstanceVariable]
+    """Concrete live trading engine instance."""

@@ -35,9 +35,9 @@ class Writer(Base, ABC):
     Attributes
     ----------
     counter_ticks : int
-        Running total of successfully processed ticks since initialization.
+        Running total of successfully processed trades since session initialization.
     updater : JitFootprintUpdate
-        Delegated JIT-compiled engine that manages matrix and header updates.
+        Delegated JIT-compiled engine managing matrix and header updates.
     """
 
     counter_ticks: int = field(default=0, init=False)
@@ -47,12 +47,12 @@ class Writer(Base, ABC):
 
     @override
     def child_init_array(self, nPrice: int64) -> None:
-        """Initialize arrays for footprint metadata and update engines.
+        """Initialize metadata tracking arrays and JIT update engines.
 
         Parameters
         ----------
         nPrice : int64
-            Fixed-point price integer of the session reference.
+            Fixed-point reference price integer of the active session.
         """
         if not (self.re_init & c.RIF_idy):
             self.__meta_data = np.zeros(
@@ -64,12 +64,12 @@ class Writer(Base, ABC):
 
     @override
     def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        """Reset metadata workspace when re-initializing index systems.
+        """Reset internal metadata workspace upon index system re-initialization.
 
         Parameters
         ----------
         nPrice : int64
-            Fixed-point price integer of the session reference.
+            Fixed-point reference price integer of the active session.
         timestamp : int64
             Reset epoch timestamp in milliseconds.
         """
@@ -79,18 +79,18 @@ class Writer(Base, ABC):
     def update_footprint(
         self, nPrice: int64, nQty: int64, timestamp: int64, is_sell: int64
     ) -> None:
-        """Process an incoming trade tick and update corresponding footprint profile.
+        """Process an incoming trade tick and update the corresponding footprint profile.
 
         Parameters
         ----------
         nPrice : int64
-            Fixed-point price integer of incoming trade.
+            Fixed-point price integer of the incoming trade.
         nQty : int64
-            Scaled fixed-point quantity integer of incoming trade.
+            Scaled fixed-point quantity integer of the incoming trade.
         timestamp : int64
             Trade execution timestamp in milliseconds.
         is_sell : int64
-            Trade direction flag (1 for sell/bid side, 0 for buy/ask side).
+            Trade direction flag (``1`` for sell/bid side, ``0`` for buy/ask side).
         """
         if self.re_init & (c.RIF_session):
             self.init_session(nPrice, timestamp)
@@ -111,12 +111,12 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
 
 @jitclass(spec)  # pyright: ignore[reportCallIssue, reportUntypedClassDecorator]
 class JitFootprintUpdate:
-    """JIT-compiled update engine for footprint matrix data and bar headers.
+    """Execute JIT-compiled updates for footprint matrices, bar headers, and VWAP statistics.
 
     Parameters
     ----------
     meta_data : ndarray of shape (2, BHM_ConstantCount)
-        Shared workspace holding tracking accumulators like VWAP statistics.
+        Shared workspace holding tracking accumulators such as VWAP statistics.
     storage : JitStorage
         Underlying compiled state containing grid boundaries, bar headers,
         and dimension definitions.
@@ -124,7 +124,7 @@ class JitFootprintUpdate:
     Attributes
     ----------
     meta_data : ndarray of shape (2, BHM_ConstantCount)
-        Shared workspace holding tracking accumulators like VWAP statistics.
+        Shared workspace holding tracking accumulators such as VWAP statistics.
     storage : JitStorage
         Underlying compiled state containing grid boundaries, bar headers,
         and dimension definitions.
@@ -145,28 +145,28 @@ class JitFootprintUpdate:
         footprint: FPArray,
         ctrade: FPArray,
     ) -> int | None:
-        """Update footprint volume matrix, bar headers, VWAP statistics, and bounding box.
+        """Update footprint volume matrix, bar headers, VWAP statistics, and bounding boxes.
 
         Parameters
         ----------
         nPrice : int64
-            Fixed-point price integer of incoming trade.
+            Fixed-point price integer of the incoming trade.
         nQty : int64
-            Scaled fixed-point quantity integer of incoming trade.
+            Scaled fixed-point quantity integer of the incoming trade.
         timestamp : int64
             Trade execution timestamp in milliseconds.
         is_sell : int64
-            Trade direction flag (1 for sell/bid side, 0 for buy/ask side).
-        footprint : FPArray
+            Trade direction flag (``1`` for sell/bid side, ``0`` for buy/ask side).
+        footprint : ndarray of shape (fp_rows, fp_cols)
             2D footprint array storing volume profiles per price level and bar column.
-        ctrade : FPArray
-            2D footprint array storing count trades profiles per price level and bar column.
+        ctrade : ndarray of shape (fp_rows, fp_cols)
+            2D footprint array storing trade count profiles per price level and bar column.
 
         Returns
         -------
         int | None
-            Bitmask integer containing re-initialization flags (`RIF_*`) if trade falls outside grid boundaries,
-            or None when update succeeds.
+            Bitmask integer containing re-initialization flags (``RIF_*``) if the trade falls
+            outside grid boundaries, or ``None`` when the update succeeds.
         """
         _ = self.storage
         # - - -
@@ -230,14 +230,14 @@ class JitFootprintUpdate:
         _.idYmax[0] = (int(idy) + 1) if (_.idYmax[0] <= idy) else _.idYmax[0]
 
     def _update_missing_bars(self, bar: int64, ho: int) -> None:
-        """Fill values for gaps of unpopulated bars between active trades.
+        """Fill values for unpopulated bar gaps between active trades.
 
         Parameters
         ----------
         bar : int64
             Index of the active bar being updated.
         ho : int
-            Offset parameter of headers layout within the tracking array.
+            Offset parameter of the headers layout within the tracking array.
         """
         _ = self.storage
         # - - -
@@ -259,14 +259,14 @@ class JitFootprintUpdate:
             prev_bar += 1
 
     def _update_cvd(self, bar: int64, bwo: int64) -> None:
-        """Calculate Cumulative Volume Delta for the current bar.
+        """Calculate Cumulative Volume Delta (CVD) for the current bar.
 
         Parameters
         ----------
         bar : int64
             Index of the active bar being updated.
         bwo : int64
-            Calculated target row/index index within headers tracking array.
+            Calculated target row index within the headers tracking array.
         """
         _ = self.storage
         # - - -
@@ -285,11 +285,11 @@ class JitFootprintUpdate:
         Parameters
         ----------
         nPrice : int64
-            Fixed-point price integer of incoming trade.
+            Fixed-point price integer of the incoming trade.
         nQty : int64
-            Scaled fixed-point quantity integer of incoming trade.
+            Scaled fixed-point quantity integer of the incoming trade.
         bwo : int64
-            Calculated target row/index index within headers tracking array.
+            Calculated target row index within the headers tracking array.
         """
         _ = self.storage
         # - - -

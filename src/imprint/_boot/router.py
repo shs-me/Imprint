@@ -9,6 +9,8 @@ RUN_MODES = cfg.Backtest | cfg.Live
 
 @final
 class Imprint:
+    """Route instantiation to either BacktestEngine or LiveEngine based on the provided run mode configuration."""
+
     @overload
     def __new__(
         cls,
@@ -36,6 +38,26 @@ class Imprint:
         execution: type[cfg.ExecutionEngine],
         with_execution: bool,
     ):
+        """Initialize and return a concrete BacktestEngine or LiveEngine instance.
+
+        Parameters
+        ----------
+        run_mode : imprint.configs.Backtest | imprint.configs.Live | tuple[type[imprint.configs.Backtest | imprint.configs.Live], imprint.configs.Backtest, imprint.configs.Live]
+            Run mode configuration object or a tuple containing active engine type and configurations.
+        symbol : str
+            Target trading pair symbol (e.g., ``"BTCUSDT"``).
+        strategy : imprint.configs.Strategy
+            Trading strategy configuration containing algorithm, risk management, and footprint parameters.
+        execution : type[imprint.configs.ExecutionEngine]
+            Execution engine class handling order routing and position management.
+        with_execution : bool
+            Flag indicating whether execution is enabled.
+
+        Returns
+        -------
+        BacktestEngine | LiveEngine
+            Instantiated concrete engine corresponding to the selected run mode.
+        """
         if isinstance(run_mode, tuple):
             if run_mode[0] is cfg.Backtest:
                 engine, mode = BacktestEngine, run_mode[1]
