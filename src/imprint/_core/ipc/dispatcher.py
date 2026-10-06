@@ -5,6 +5,7 @@ allocates shared memory blocks, handles memory layout segments, and instantiates
 process-specific manager interfaces (Host or Node).
 """
 
+import gc
 import inspect
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -64,7 +65,12 @@ class Dispatcher:
 
         self.shm_init()
 
-        func(manager=self.manager_init(), **self.kwg)
+        manager = self.manager_init()
+        gc.collect()
+        gc.disable()
+        func(manager=manager, **self.kwg)
+        gc.collect()
+        gc.enable()
 
     def configurations_init(self) -> None:
         """Scan configuration classes, calculate shared memory offsets, and create IPC synchronization tools.
@@ -75,7 +81,8 @@ class Dispatcher:
         objects (Event, Semaphore).
         """
         offset: int = 0
-        self.kwg[kk.Configs.name], self.kwg[kk.Segments.name] = [], {}
+        self.kwg[kk.Configs.name], self.kwg[kk.SegmentConfigs.name] = [], []
+        self.kwg[kk.Segments.name] = {}
         for name, obj in inspect.getmembers(configs, inspect.isclass):
             if (
                 issubclass(obj, Configuration)
@@ -85,12 +92,13 @@ class Dispatcher:
                 c_obj: Configuration = (
                     self.kwg.pop(name) if name in self.kwg else obj()
                 )
-                self.kwg[kk.Configs.name].append(c_obj)
                 if isinstance(c_obj, SharedMemorySegments):
+                    self.kwg[kk.SegmentConfigs.name].append(c_obj)
                     self.kwg[kk.Segments.name][name] = slice(
-                        offset,
-                        (offset := (offset + c_obj.shm_size)),
+                        offset, (offset := (offset + c_obj.shm_size))
                     )
+                else:
+                    self.kwg[kk.Configs.name].append(c_obj)
 
         self.kwg[kk.Segments.name][kk.ShmSize.name] = offset
         self.kwg[kk.MainTools.name] = [Event(), Semaphore(0)]
@@ -128,22 +136,25 @@ class Dispatcher:
             The instantiated manager object tailored to either the host's or worker's
             operational requirements.
         """
-        segments = deepcopy(self.kwg[kk.Segments.name])
         configs = deepcopy(self.kwg[kk.Configs.name])
+        segment_configs = deepcopy(self.kwg[kk.SegmentConfigs.name])
+        segments = deepcopy(self.kwg[kk.Segments.name])
         if self.is_main:
             manager = HostManager(
+                _configs=configs,
+                _segment_configs=segment_configs,
                 _segments=segments,
                 _shm_buf=self.shm_buf,
-                _configs=configs,
                 _main_tools=self.kwg[kk.MainTools.name],
             )
         else:
             manager = NodeManager(
-                _proc_id=self.kwg["proc_id"],
-                _task_id=self.kwg["task_id"],
+                _configs=configs,
+                _segment_configs=segment_configs,
                 _segments=segments,
                 _shm_buf=self.shm_buf,
-                _configs=configs,
                 _main_tools=self.kwg[kk.MainTools.name],
+                _proc_id=self.kwg["proc_id"],
+                _task_id=self.kwg["task_id"],
             )
         return manager

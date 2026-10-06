@@ -17,15 +17,7 @@ class SyncViaSpinLock(SyncWithExecution):
 
 @dataclass(slots=True)
 class Backtest(Base):
-    """Backtesting execution engine processing historical market data ticks.
-
-    Parameters
-    ----------
-    manager : NodeManager
-        Inter-process communication and configuration manager for the engine node.
-    algorithm : StrategyEngine
-        Active strategy container holding the footprint engine and synchronization state.
-    """
+    """Backtesting execution engine processing historical market data ticks."""
 
     @override
     def alarm_clock(self) -> None:

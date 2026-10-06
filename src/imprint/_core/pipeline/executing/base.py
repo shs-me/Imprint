@@ -4,7 +4,6 @@ from typing import final
 
 from imprint._core import constant as c
 from imprint._core.account import Account
-from imprint._core.configs import OrderStream, SignalStream, UserDataStream
 from imprint._core.ipc import NodeManager, node_handler
 from imprint._core.settings import PositionFSM
 from imprint._core.settings import StatusCodes as scs
@@ -19,7 +18,7 @@ class Base(ABC):
     ----------
     manager : NodeManager
         Manager coordinating process states, tasks, and communication streams.
-    executor : ExecutionProtocol
+    engine : ExecutionProtocol
         Protocol implementation handling orders, signals, and execution callbacks.
 
     Attributes
@@ -39,42 +38,33 @@ class Base(ABC):
     """
 
     manager: NodeManager
-    executor: ExecutionProtocol
+    strategy: ExecutionProtocol
 
-    __ss: SignalStream = field(init=False)
-    __uds: UserDataStream = field(init=False)
-    __os: OrderStream = field(init=False)
-
+    trade_read_time: memoryview = field(init=False)
     __engine_complete: memoryview = field(init=False)
+    account: Account = field(init=False)
 
+    readed_timestamp: int = field(default=0, init=False)
     count_open_positions: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    trade_read_time: memoryview = field(init=False)
-    readed_timestamp: int = field(default=0, init=False)
-    account: Account = field(init=False)
 
-    @final
     def __post_init__(self) -> None:
         """Initialize pipeline streams, metrics views, and account instance."""
-        self.__ss = self.manager.cfgSignalStream
-        self.__uds = self.manager.cfgUserDataStream
-        self.__os = self.manager.cfgOrderStream
-
         cfgMetrics = self.manager.cfgMetrics
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
         self.__engine_complete = cfgMetrics.engine_complete.view
 
-        self.account = Account(self.manager)
-        self.post_init()
-
-    def post_init(self) -> None: ...
+        self.account = Account()
 
     @final
     @node_handler()
     def run(self) -> None:
         """Execute the main processing loop handling tasks, signals, and user data."""
-        u, s = self.__uds.ring_buf, self.__ss.ring_buf
+        u = self.manager.cfgUserDataStream.ring_buf
+        s = self.manager.cfgSignalStream.ring_buf
+        # - - -
+        self.post_init()
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -97,6 +87,9 @@ class Base(ABC):
             elif u.wid_buf[0] != u.rid_buf[0]:
                 self._check_user_data_buf()
 
+    def post_init(self) -> None:
+        self.account.post_init(self.manager)
+
     @final
     def __complete(self) -> bool:
         """Check whether execution engine is complete and ring buffers are fully drained.
@@ -107,7 +100,9 @@ class Base(ABC):
             True if engine completion flag is set and both signal and user data
             write/read pointers are aligned.
         """
-        u, s = self.__uds.ring_buf, self.__ss.ring_buf
+        u = self.manager.cfgUserDataStream.ring_buf
+        s = self.manager.cfgSignalStream.ring_buf
+        # - - -
         return (
             (self.__engine_complete[0] == 1)
             and (s.wid_buf[0] == s.rid_buf[0])
@@ -151,7 +146,7 @@ class Base(ABC):
     ) -> None:
         """Read and process incoming trading signals from the signal ring buffer."""
         signal_id, nPrice, timestamp, order_param, tp_dev, sl_dev = (
-            self.__ss.ring_buf.get_data()
+            self.manager.cfgSignalStream.ring_buf.get_data()
         )
         self._check_user_data_buf()
         self.pre_execute_signal_action(timestamp)
@@ -170,7 +165,7 @@ class Base(ABC):
                     nQty: int = self.account.entryNqtyWithLeverage(
                         nPrice, nominalNqty
                     )
-                    self.executor.on_signal(
+                    self.strategy.on_signal(
                         signal_id=signal_id,
                         time_get_signal=timestamp,
                         order_param=order_param,
@@ -205,7 +200,8 @@ class Base(ABC):
     @final
     def _check_user_data_buf(self) -> None:
         """Drain and process all available items in the user data ring buffer."""
-        _ = self.__uds.ring_buf
+        _ = self.manager.cfgUserDataStream.ring_buf
+        # - - -
         while _.wid_buf[0] != _.rid_buf[0]:
             self.preppare_user_data(_.get_data())
 
@@ -266,7 +262,7 @@ class Base(ABC):
                 else:
                     self.account.short = PositionFSM.CLOSE
 
-            self.executor.on_filled_order(
+            self.strategy.on_filled_order(
                 timestamp=timestamp,
                 is_long=is_long,
                 is_buy=is_buy,
@@ -284,7 +280,7 @@ class Base(ABC):
                 else:
                     self.account.short = PositionFSM.EMPTY
 
-            self.executor.on_canceled_order(
+            self.strategy.on_canceled_order(
                 timestamp=timestamp,
                 is_long=is_long,
                 is_buy=is_buy,
@@ -337,7 +333,7 @@ class Base(ABC):
         nQty : int
             Normalized order quantity.
         """
-        self.__os.set_data(
+        self.manager.cfgOrderStream.set_data(
             timestamp=timestamp,
             order_param=order_param,
             client_order_id=client_order_id,

@@ -9,11 +9,6 @@ from imprint._core.ipc import NodeManager
 class Base:
     """Bind account balance settings, pricing/quantity scale factors, and memory buffers.
 
-    Parameters
-    ----------
-    manager : NodeManager
-        IPC node manager instance containing account and coin configurations.
-
     Attributes
     ----------
     price_prec : int
@@ -44,8 +39,6 @@ class Base:
         Shared memory buffer view holding current equity/dynamic balance as int64.
     """
 
-    manager: NodeManager
-
     price_prec: int = field(init=False)
     qty_prec: int = field(init=False)
     price_mult: int = field(init=False)
@@ -70,15 +63,15 @@ class Base:
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
 
-    def __post_init__(self) -> None:
+    def post_init(self, manager: NodeManager) -> None:
         """Initialize precision parameters, balance multipliers, and shared memory buffers."""
-        cfgCoin = self.manager.cfgCoin
+        cfgCoin = manager.cfgCoin
         self.price_prec = cfgCoin.price_prec
         self.qty_prec = cfgCoin.qty_prec
         self.price_mult = cfgCoin.price_mult
         self.qty_mult = cfgCoin.qty_mult
 
-        cfgAC = self.manager.cfgAccount
+        cfgAC = manager.cfgAccount
         self.scale_prec = cfgAC.scale_prec
         self.scale_mult = cfgAC.scale_mult
         self.leverage = cfgAC.leverage

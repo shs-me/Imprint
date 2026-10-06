@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, final, override
+from typing import Literal, final, override
 
 import numpy as np
 from numpy import float64, int64
@@ -10,9 +10,6 @@ from imprint._core import constant as c
 from imprint._core.footprint.models.base import Chart, PriceLike, QtyLike
 from imprint._core.utils import FPArray
 from imprint._core.utils.base import DPArray, VPArray
-
-if TYPE_CHECKING:
-    from imprint._core.typing import T_ASK, T_BID
 
 PARK_FACTOR: int = 1.0 / (4.0 * np.log(2.0))
 
@@ -26,23 +23,23 @@ class Bar:
     ----------
     _fp : Chart
         Parent chart instance containing header data and array buffers.
+    idXbid : int | int64
+        Raw bar index identifier.
 
     Attributes
     ----------
+    _fp : Chart
+        Parent chart instance containing header data and array buffers.
+    idXbid : int | int64
+        Even-aligned index pointing to the bid column.
+    bar_id : int | int64
+        Calculated header row ID for the bar.
     ind : Indicators[Bar]
         Indicator metrics interface for the active bar.
     vp : VolumeProfile[Bar]
         Volume profile analytics interface for the active bar.
     dp : DeltaProfile[Bar]
         Delta profile analytics interface for the active bar.
-    idx : int | int64
-        Raw bar index identifier.
-    idXbid : int | int64
-        Even-aligned index pointing to the bid column.
-    bar_id : int | int64
-        Calculated header row ID for the bar.
-    bar_side : T_BID | T_ASK
-        Side indicator (0 for bid, 1 for ask).
     base : FPArray, read-only
         Sliced base array view restricted to the price range and columns of the active bar.
     state : FPArray, read-only
@@ -52,39 +49,20 @@ class Bar:
     """
 
     _fp: Chart
+    idXbid: int | int64
+
+    bar_id: int | int64 = field(default=0, init=False)
 
     ind: Indicators[Bar] = field(init=False)
     vp: VolumeProfile[Bar] = field(init=False)
     dp: DeltaProfile[Bar] = field(init=False)
 
-    idx: int | int64 = field(default=0, init=False)
-    idXbid: int | int64 = field(default=0, init=False)
-    bar_id: int | int64 = field(default=0, init=False)
-    bar_side: T_BID | T_ASK = field(default=0, init=False)
-
     def __post_init__(self) -> None:
+        self.bar_id = self._fp.headers_offset[0] + (self.idXbid // 2)
+
         self.ind = Indicators(self)
         self.vp = VolumeProfile(self)
         self.dp = DeltaProfile(self)
-
-    def __getitem__(self, idx: int | int64) -> Bar:
-        """Select a bar by its index and compute alignment coordinates and headers.
-
-        Parameters
-        ----------
-        idx : int | int64
-            Bar index identifier.
-
-        Returns
-        -------
-        Bar
-            The configured bar instance.
-        """
-        self.idx = idx
-        self.idXbid = self.idx & ~1
-        self.bar_id = self._fp.headers_offset[0] + (self.idXbid // 2)
-        self.bar_side = 1 if self.idx != self.idXbid else 0
-        return self
 
     def _get_header(self, header: int) -> int64:
         return self._fp.headers[self.bar_id, header]
@@ -413,9 +391,8 @@ class Qty[T](QtyLike[T]):
         self._idy = idy
         return self
 
-    @property
-    def volume(self) -> int64:
-        return self._bar._fp.base[self._idy, self._bar.idx]
+    def volume(self, side: Literal[0, 1]) -> int64:
+        return self._bar._fp.base[self._idy, side]
 
     @property
     def delta(self) -> int64:

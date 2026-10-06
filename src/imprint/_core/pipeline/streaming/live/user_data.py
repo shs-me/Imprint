@@ -35,18 +35,12 @@ class UserData(Base):
     base_uri: str = field(init=False)
     keep_task: asyncio.Task[None] | None = field(default=None, init=False)
 
-    @override
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Initialize the user stream decoder module with coin and account scaling parameters."""
-        Base.post_init(self)
-
         m_name: str = self.manager.cfgSetup.user_stream_decoder_module
         c_name: str = self.manager.cfgSetup.user_stream_decoder_class_name
         decoder_type: type[UserStreamDecoder[Any, Any]] = getattr(
             importlib.import_module(m_name), c_name
-        )
-        self.manager.set_log(
-            f"{decoder_type.__name__} used as {UserStreamDecoder.__name__}"
         )
         self.decoder = decoder_type(
             rest=self.rest,
@@ -54,6 +48,9 @@ class UserData(Base):
             price_mult=self.manager.cfgCoin.price_mult,
             qty_mult=self.manager.cfgCoin.qty_mult,
             scale_mult=self.manager.cfgAccount.scale_mult,
+        )
+        self.manager.set_log(
+            f"{decoder_type.__name__} used as {UserStreamDecoder.__name__}"
         )
         self.base_uri = self.url
 
@@ -82,12 +79,14 @@ class UserData(Base):
         ws : ClientConnection
             Active WebSocket client connection instance.
         """
+        _ = self.manager.cfgUserDataStream
+        # - - -
         raw_data: bytes = await ws.recv(decode=False)
         for data in self.decoder.decode(raw_data):
-            while self.uds.ring_buf.lag_not_is_safe():
+            while _.ring_buf.lag_not_is_safe():
                 await asyncio.sleep(0.001)
 
-            self.uds.set_data_in_live(data)
+            _.set_data_in_live(data)
 
         if self.execution_event.is_set() is False:
             self.execution_event.set()

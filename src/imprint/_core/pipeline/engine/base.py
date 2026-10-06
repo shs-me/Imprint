@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from typing import final
 
 from imprint._core import constant as c
-from imprint._core.configs import MarketDataStream
 from imprint._core.footprint.engine import StrategyEngine
+from imprint._core.footprint.engine.reader import FootprintEngine
 from imprint._core.ipc import NodeManager, node_handler
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.utils.base import TradesArray
@@ -43,9 +43,8 @@ class Base(ABC):
     """
 
     manager: NodeManager
-    algorithm: StrategyEngine
-
-    __mds: MarketDataStream = field(init=False)
+    strategy: StrategyEngine
+    engine: FootprintEngine
 
     time_start_analyze: memoryview = field(init=False)
     engine_complete: memoryview = field(init=False)
@@ -54,24 +53,15 @@ class Base(ABC):
         default_factory=lambda: TradesArray(60_000, 4), init=False
     )
     at_max_row: int = field(init=False)
-    at_rid: int = field(init=False)
-    at_wid: int = field(init=False)
+    at_rid: int = field(default=0, init=False)
+    at_wid: int = field(default=0, init=False)
 
-    @final
     def __post_init__(self) -> None:
-        """Initialize core engine metrics, memory views, and index bounds."""
-        self.__mds = self.manager.cfgMarketDataStream
-
         cfgMetrics = self.manager.cfgMetrics
         self.time_start_analyze = cfgMetrics.time_start_reading.view.cast("q")
         self.engine_complete = cfgMetrics.engine_complete.view
 
         self.at_max_row = self.agg_trades.shape[0]
-        self.at_rid, self.at_wid = 0, 0
-
-        self.post_init()
-
-    def post_init(self) -> None: ...
 
     @final
     @node_handler()
@@ -81,8 +71,9 @@ class Base(ABC):
         Polls tasks from the process manager, reads incoming trade data from ring buffers,
         and dispatches updates to the footprint engine.
         """
-        _, fp_engine = self.__mds.ring_buf, self.algorithm._engine
+        _ = self.manager.cfgMarketDataStream.ring_buf
         # - - -
+        self.post_init()
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -112,21 +103,27 @@ class Base(ABC):
                 new_rid = self.at_rid + 1
                 self.at_rid = new_rid if new_rid < self.at_max_row else 0
 
-                fp_engine.update_footprint(nPrice, nQty, timestamp, is_sell)
+                self.engine.update_footprint(nPrice, nQty, timestamp, is_sell)
 
                 if self.is_bbox_mode(_.wid_buf, _.rid_buf):
                     continue
 
                 self.time_start_analyze[0] = time.perf_counter_ns()
 
-                fp_engine.analyze_footprint()
+                self.engine.analyze_footprint()
 
-                if fp_engine.re_init & c.RIF_session:
-                    fp_engine.update_footprint(nPrice, nQty, timestamp, is_sell)
+                if self.engine.re_init & c.RIF_session:
+                    self.engine.update_footprint(
+                        nPrice, nQty, timestamp, is_sell
+                    )
                     if not self.is_bbox_mode(_.wid_buf, _.rid_buf):
-                        fp_engine.analyze_footprint()
+                        self.engine.analyze_footprint()
 
                 self.post_update()
+
+    def post_init(self) -> None:
+        self.engine.post_init()
+        self.strategy.fp = self.engine.fp
 
     @final
     def __complete(self, wid: memoryview, rid: memoryview) -> bool:
@@ -147,23 +144,21 @@ class Base(ABC):
         return (
             (wid[0] == rid[0])
             and (self.at_wid == self.at_rid)
-            and self.algorithm._engine.bbox_is_read()
+            and self.engine.bbox_is_read()
         )
 
     @final
     def __final_actions(self) -> None:
         """Execute final cleanup, metric updates, and logging upon completion."""
         if self.manager.cfgSetup.backtesting:
-            self.algorithm._engine.final_analyze()
-            self.algorithm._engine.save_footprint_headers(
-                self.algorithm._engine.lidx[0]
-            )
+            self.engine.final_analyze()
+            self.engine.save_footprint_headers(self.engine.lidx[0])
 
         self.post_final_action()
         self.engine_complete[0] = 1
         self.manager.set_log(
-            f"Count prepped ticks: {self.algorithm._engine.counter_ticks} "
-            + f"Count signals: {self.algorithm._sync._count_send_signal}"
+            f"Count prepped ticks: {self.engine.counter_ticks} "
+            + f"Count signals: {self.strategy._sync._count_send_signal}"
         )
 
     @abstractmethod
@@ -201,8 +196,8 @@ class Base(ABC):
             True if analysis is in bounding box mode and session re-initialization is inactive.
         """
         return (
-            (not self.algorithm.tick_by_tick_analyze) and (wid[0] != rid[0])
-        ) and (self.algorithm._engine.is_bbox_mode())
+            (not self.strategy.tick_by_tick_analyze) and (wid[0] != rid[0])
+        ) and (self.engine.is_bbox_mode())
 
     @abstractmethod
     def post_update(self) -> None:

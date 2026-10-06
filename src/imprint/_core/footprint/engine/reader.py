@@ -49,14 +49,12 @@ class Reader(w.Writer):
         if not (self.re_init & c.RIF_idy):
             self.analyzer = JitFootprintAnalyzer(
                 storage=self.storage,
-                atr_period=self.algorithm.atr_period,
-                park_period=self.algorithm.park_period,
-                ma_vol_period=self.algorithm.ma_volume_period,
-                ma_ats_period=self.algorithm.ma_avg_trade_size_period,
-                ma_count_trade_period=self.algorithm.ma_count_trade_period,
-                big_cluster_mult=round(
-                    self.algorithm.big_cluster_mult * 10_000
-                ),
+                atr_period=self.strategy.atr_period,
+                park_period=self.strategy.park_period,
+                ma_vol_period=self.strategy.ma_volume_period,
+                ma_ats_period=self.strategy.ma_avg_trade_size_period,
+                ma_count_trade_period=self.strategy.ma_count_trade_period,
+                big_cluster_mult=round(self.strategy.big_cluster_mult * 10_000),
             )
 
     @final
@@ -71,7 +69,7 @@ class Reader(w.Writer):
         idx, lidx = self.idx[0], self.lidx[0]
         if not self.bbox_is_read():
             self.analyzer.analyze_bar(self.fp.base, self.fp.state)
-            self.algorithm.on_bar_update(
+            self.strategy.on_bar_update(
                 self.idYmin[0], self.idYmax[0], idx, lidx
             )
 
@@ -79,7 +77,7 @@ class Reader(w.Writer):
 
         if (self.re_init & c.RIF_idx) or ((idx & ~1) > lidx):
             self.analyzer.analyze_closed_bar(self.fp.base, self.fp.state)
-            self.algorithm.on_bar_close(idx, lidx)
+            self.strategy.on_bar_close(idx, lidx)
             if (idx & ~1) > lidx:
                 self.lidx[0] = idx & ~1
 
@@ -108,13 +106,15 @@ class Reader(w.Writer):
             True if tick-by-tick real-time analysis is disabled and no re-initialization
             session or bar bounds are requested.
         """
-        return (not self.algorithm.tick_by_tick_analyze) and (
-            not (self.re_init & c.RIF_session)
+        return (
+            (not self.strategy.tick_by_tick_analyze)
+            and (not (self.re_init & c.RIF_session))
+            and (not ((self.idx[0] & ~1) > self.lidx[0]))
         )
 
     @final
     def __set_last_trade_time(self) -> None:
-        if time := self.fp.bar[self.idx[0]].ind.last_trade_time:
+        if time := self.fp[self.idx[0]].ind.last_trade_time:
             self.trade_read_time[0] = int(time)
 
     @final
@@ -125,7 +125,7 @@ class Reader(w.Writer):
         the algorithm state machines.
         """
         self.analyzer.analyze_closed_bar(self.fp.base, self.fp.state)
-        self.algorithm.on_bar_close(self.idx[0], self.lidx[0])
+        self.strategy.on_bar_close(self.idx[0], self.lidx[0])
         self.__set_last_trade_time()
 
 

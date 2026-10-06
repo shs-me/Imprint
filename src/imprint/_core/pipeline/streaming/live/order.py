@@ -46,11 +46,8 @@ class Order(Base):
     encoder: OrderEncoder[Any] = field(init=False)
     loop: asyncio.AbstractEventLoop = field(init=False)
 
-    @override
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Initialize coin precision parameters, order encoder, and event loop references."""
-        Base.post_init(self)
-
         self.price_mult = self.manager.cfgCoin.price_mult
         self.price_prec = self.manager.cfgCoin.price_prec
         self.qty_mult = self.manager.cfgCoin.qty_mult
@@ -64,7 +61,9 @@ class Order(Base):
         self.manager.set_log(
             f"{encoder_type.__name__} used as {OrderEncoder.__name__}"
         )
-        self.encoder = encoder_type(symbol=self.symbol, rest=self.rest)
+        self.encoder = encoder_type(
+            symbol=self.manager.cfgCoin.symbol, rest=self.rest
+        )
 
         self.loop = asyncio.get_event_loop()
 
@@ -92,7 +91,7 @@ class Order(Base):
         ws : ClientConnection
             Active WebSocket client connection instance.
         """
-        _ = self.os.ring_buf
+        _ = self.manager.cfgOrderStream.ring_buf
         # - - -
         await self.loop.run_in_executor(None, self.wss_sem.acquire)
         if _.wid_buf[0] != _.rid_buf[0]:
@@ -107,9 +106,9 @@ class Order(Base):
         bytes
             Encoded binary or text payload representing the order request.
         """
-        timestamp, order_param, client_order_id, nPrice, nQty = (
-            self.os.ring_buf.get_data()
-        )
+        _ = self.manager.cfgOrderStream.ring_buf
+        # - - -
+        timestamp, order_param, client_order_id, nPrice, nQty = _.get_data()
 
         is_long: bool = bool(order_param & c.OF_LONG)
         is_buy: bool = bool(order_param & c.OF_BUY)

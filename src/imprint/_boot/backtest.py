@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import final, override
 
 from loguru import logger
@@ -33,8 +33,6 @@ class Backtest(Base):
     """
 
     run_mode: cfg.Backtest
-
-    _prefix_core_log_format: str = field(default="{elapsed} ", init=False)
 
     @override
     def _post_init(self) -> bool:

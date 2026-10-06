@@ -27,7 +27,7 @@ class IntraDay(StrategyEngine):
         if (self.idx_use == idXbid) and (self.idy_use == idYmin):
             return
 
-        bar = self.fp.bar[idx]
+        bar = self.fp[idx]
         idy = idYmin - bar.ind.high.id
 
         bid, ask = bar.base[idy, :]
@@ -37,7 +37,7 @@ class IntraDay(StrategyEngine):
         if ask_state & c.SF_BIG_CLUSTER:
             self.idx_use, self.idy_use = idXbid, idYmin
             if ask_state & c.SF_IMBALANCE and (
-                (self.fp.bar[(idx & ~1) - 2].ind.ma_avg_trade_size * 10)
+                (self.fp[(idx & ~1) - 2].ind.ma_avg_trade_size * 10)
                 < (ask // ask_ctrade)
             ):
                 self.send_signal(False, True, True, idYmin)

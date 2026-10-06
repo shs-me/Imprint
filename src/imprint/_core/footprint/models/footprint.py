@@ -5,7 +5,6 @@ from typing import cast, final, override
 
 import numpy as np
 from numpy import int64
-from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.footprint.models.bar import Bar
@@ -29,16 +28,8 @@ class Footprint(Chart):
 
     Attributes
     ----------
-    base : FPArray
-        Underlying multi-dimensional array storing base footprint data.
-    state : FPArray
-        Underlying multi-dimensional array storing state flags and metadata.
-    ctrade : FPArray
-        Underlying multi-dimensional array storing cumulative trade information.
-    headers : ndarray of shape (total_bar_count, BH_ConstantCount)
-        Two-dimensional integer array storing bar header metrics and metadata.
-    bar : Bar
-        Bar iteration and inspection helper interface.
+    headers_offset : memoryview
+        Memory view buffer for tracking bar offset indices.
     vp : VolumeProfile[Footprint]
         Chart-level volume profile analytics interface.
     dp : DeltaProfile[Footprint]
@@ -56,27 +47,42 @@ class Footprint(Chart):
     con: Converter
     last_idx: memoryview
 
-    base: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
-    state: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
-    ctrade: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
-
-    headers: NDArray[int64] = field(init=False)
-    bar: Bar = field(init=False)
+    headers_offset: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
     vp: VolumeProfile[Footprint] = field(init=False)
     dp: DeltaProfile[Footprint] = field(init=False)
 
+    __bars: list[Bar] = field(init=False)
     __plike: PriceLike[Footprint] = field(init=False)
 
     def __post_init__(self) -> None:
-        self.headers = np.zeros(
-            shape=(self.con.total_bar_count, c.BH_ConstantCount), dtype=int64
-        )
-        self.headers_offset = memoryview(bytearray(8)).cast("q")
-
-        self.bar = Bar(self)
         self.vp = VolumeProfile(self)
         self.dp = DeltaProfile(self)
         self.__plike = PriceLike(self.con, Qty(self))
+
+    def post_init(self) -> None:
+        self.headers = np.zeros(
+            shape=(self.con.total_bar_count, c.BH_ConstantCount), dtype=int64
+        )
+        self.__bars = [
+            Bar(self, idXbid) for idXbid in range(0, self.con.fp_cols, 2)
+        ]
+
+    def __getitem__(self, idx: int | int64) -> Bar:
+        """Select a bar by its index
+
+        Parameters
+        ----------
+        idx : int | int64
+            Bar index identifier.
+
+        Returns
+        -------
+        Bar
+            The configured bar instance.
+        """
+        return self.__bars[(idx & ~1) // 2]
 
     def _re_init_arr(  # pyright: ignore[reportUnusedFunction]
         self, base: FPArray, state: FPArray | None, ctrade: FPArray | None

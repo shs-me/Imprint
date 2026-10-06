@@ -4,11 +4,9 @@ from dataclasses import dataclass, field
 from typing import final, override
 
 from imprint._core import constant as c
-from imprint._core.configs import SignalStream
-from imprint._core.footprint.engine.reader import FootprintEngine
 from imprint._core.footprint.models import Footprint
 from imprint._core.ipc import NodeManager
-from imprint._core.types import AlgorithmProtocol
+from imprint._core.types import StrategyProtocol
 
 
 @dataclass(slots=True)
@@ -39,24 +37,28 @@ class SyncWithExecution(ABC):
     manager: NodeManager
 
     time_start_reading: memoryview = field(init=False)
-    safe_lag: int = field(init=False)
-    __ss: SignalStream = field(init=False)
     _signal_id: int = field(default=0, init=False)
     _count_send_signal: int = field(default=0, init=False)
-    base_tp_dev: int = field(default=0, init=False)
-    base_sl_dev: int = field(default=0, init=False)
 
     @final
     def __post_init__(self) -> None:
         cfgMetrics = self.manager.cfgMetrics
         self.time_start_reading = cfgMetrics.time_start_reading.view.cast("q")
 
-        cfgRM = self.manager.cfgRiskManagement
-        self.base_tp_dev = cfgRM.tp_dev.fixed
-        self.base_sl_dev = cfgRM.sl_dev.fixed
-        self.safe_lag = cfgRM.pass_signal_if_analysis_time_big
+    @final
+    @property
+    def base_tp_dev(self) -> int:
+        return self.manager.cfgRiskManagement.tp_dev.fixed
 
-        self.__ss = self.manager.cfgSignalStream
+    @final
+    @property
+    def base_sl_dev(self) -> int:
+        return self.manager.cfgRiskManagement.sl_dev.fixed
+
+    @final
+    @property
+    def safe_lag(self) -> int:
+        return self.manager.cfgRiskManagement.pass_signal_if_analysis_time_big
 
     @final
     @property
@@ -114,11 +116,12 @@ class SyncWithExecution(ABC):
             Assigned signal identifier if published successfully, or None if dropped
             due to safe lag threshold violations.
         """
-        s = self.__ss.ring_buf
+        _ = self.manager.cfgSignalStream
+        # - - -
         if not pass_lag and (not self.lag_is_safe()):
             return
 
-        if s.lag_not_is_safe():
+        if _.ring_buf.lag_not_is_safe():
             return
 
         order_param = 0
@@ -127,7 +130,7 @@ class SyncWithExecution(ABC):
         order_param |= c.OF_MARKET if is_market else c.OF_LIMIT
         order_param |= c.OF_NEW
 
-        self.__ss.set_data(
+        _.set_data(
             signal_id=self.signal_id,
             nPrice=nPrice,
             timestamp=timestamp,
@@ -163,7 +166,7 @@ class SyncWithExecution(ABC):
 
 
 @dataclass(slots=True)
-class Router(AlgorithmProtocol, ABC):
+class StrategyEngine(StrategyProtocol, ABC):
     """Abstract base algorithm router driving footprint processing and signal routing.
 
     Subclasses implement analytical hooks for order book cluster adjustments,
@@ -171,10 +174,10 @@ class Router(AlgorithmProtocol, ABC):
 
     Parameters
     ----------
-    _manager : NodeManager
-        Shared IPC node manager controlling process topology and IPC configurations.
     _sync : SyncWithExecution
         Synchronization mechanism for dispatching trading signals to execution.
+    is_backtest : bool
+        Flag indicating if the engine is running in backtesting mode.
 
     Attributes
     ----------
@@ -192,16 +195,12 @@ class Router(AlgorithmProtocol, ABC):
         Period length for moving average average trade size calculations.
     big_cluster_mult : float
         Multiplier threshold for detecting anomalous volume clusters.
-    is_backtest : bool
-        Flag indicating if the engine is running in backtesting mode.
-    last_idx : memoryview
-        Read-only 64-bit integer buffer view of the current bar index.
     fp : Footprint
         Footprint data model instance containing market microstructure matrices.
     """
 
-    _manager: NodeManager
     _sync: SyncWithExecution
+    is_backtest: bool
 
     tick_by_tick_analyze: bool = field(default=True, init=False)
     atr_period: int = field(default=14, init=False)
@@ -211,16 +210,10 @@ class Router(AlgorithmProtocol, ABC):
     ma_avg_trade_size_period: int = field(default=21, init=False)
     big_cluster_mult: float = field(default=0.33, init=False)
 
-    is_backtest: bool = field(init=False)
     fp: Footprint = field(init=False)
-    _engine: FootprintEngine = field(init=False)
 
     @final
     def __post_init__(self) -> None:
-        self._engine = FootprintEngine(self._manager, self)
-        self.is_backtest = self._manager.cfgSetup.backtesting
-        self.fp = self._engine.fp
-
         if self.on_bar_update.__module__ != __name__:
             self.tick_by_tick_analyze = True
         else:
@@ -297,9 +290,9 @@ class Router(AlgorithmProtocol, ABC):
             by lag constraints.
         """
         nPrice = int(self.fp.con.to_nPrice(idy))
-        idx = idx if (idx is not None) else self._engine.lidx[0]
+        idx = idx if (idx is not None) else self.fp.last_idx[0]
         timestamp = round(
-            self.fp.bar[idx].ind.last_trade_time
+            self.fp[idx].ind.last_trade_time
             if self.is_backtest
             else time.time() * 1000
         )
@@ -313,8 +306,3 @@ class Router(AlgorithmProtocol, ABC):
             sl_dev=sl_dev,
             pass_lag=pass_lag,
         )
-
-
-@dataclass(slots=True)
-class StrategyEngine(Router, ABC):
-    """Base class for strategy implementations with footprint router integration."""

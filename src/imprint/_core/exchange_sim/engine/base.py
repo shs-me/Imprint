@@ -19,6 +19,7 @@ from imprint._core.exchange_sim.engine.matching_engine import (
     MatchingEngine,
 )
 from imprint._core.exchange_sim.engine.user_data_stream import set_user_data
+from imprint._core.ipc import NodeManager
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -41,32 +42,32 @@ class Base(MatchingEngine):
     _engine: JitExchangeEngine = field(init=False)
 
     @override
-    def __post_init__(self) -> None:
-        """Initialize matching engine base state and instantiate the JIT-compiled exchange engine."""
-        MatchingEngine.__post_init__(self)
+    def post_init(self, manager: NodeManager) -> None:
+        MatchingEngine.post_init(self, manager)
 
-        mds = self.manager.cfgMarketDataStream.ring_buf
-        self._engine = JitExchangeEngine(
-            matching_engine=self.matching_engine,
-            position=self.position,
-            availableNbalance=self.availableNbalance,
-            dynamicNbalance=self.dynamicNbalance,
-            trade_read_time=self.trade_read_time,
-            base_timestamp=self.base_timestamp,
-            mds_data_size=mds.data_size,
-            mds_data_buf=mds.data_buf,
-            mds_rid_buf=mds.rid_buf,
-            mds_cell_amount=mds.cell_amount,
-            uds_data_size=self.uds_data_size,
-            uds_data_buf=self.uds_data_buf,
-            uds_data_header_buf=self.uds_data_header_buf,
-            uds_wid_buf=self.uds_wid_buf,
-            uds_cell_amount=self.uds_cell_amount,
-            makerNcommission=self.makerNcommission,
-            takerNcommission=self.takerNcommission,
-            timeframe=self.timeframe,
-            equity_history=self.equity_history,
-        )
+        if not hasattr(self, "_engine"):
+            mds = self.manager.cfgMarketDataStream.ring_buf
+            self._engine = JitExchangeEngine(
+                matching_engine=self.matching_engine,
+                position=self.position,
+                availableNbalance=self.availableNbalance,
+                dynamicNbalance=self.dynamicNbalance,
+                trade_read_time=self.trade_read_time,
+                base_timestamp=self.base_timestamp,
+                mds_data_size=mds.data_size,
+                mds_data_buf=mds.data_buf,
+                mds_rid_buf=mds.rid_buf,
+                mds_cell_amount=mds.cell_amount,
+                uds_data_size=self.uds_data_size,
+                uds_data_buf=self.uds_data_buf,
+                uds_data_header_buf=self.uds_data_header_buf,
+                uds_wid_buf=self.uds_wid_buf,
+                uds_cell_amount=self.uds_cell_amount,
+                makerNcommission=self.makerNcommission,
+                takerNcommission=self.takerNcommission,
+                timeframe=self.timeframe,
+                equity_history=self.equity_history,
+            )
 
     def final_action(self) -> None:
         """Dump equity history and save orders history to persistent storage."""

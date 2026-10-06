@@ -12,6 +12,7 @@ from numba.experimental import (
 from numpy import int64
 
 from imprint._core.exchange_sim.account.base import Account, to_nMargin
+from imprint._core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -81,28 +82,29 @@ class Position(Account, ABC):
     position: JitPosition = field(init=False)
 
     @override
-    def __post_init__(self) -> None:
-        Account.__post_init__(self)
+    def post_init(self, manager: NodeManager) -> None:
+        Account.post_init(self, manager)
 
-        self.position = JitPosition(
-            price_mult=self.price_mult,
-            qty_mult=self.qty_mult,
-            scale_mult=self.scale_mult,
-            leverage=self.leverage,
-            nBalance=self.nBalance,
-            lockedNbalance=self.lockedNbalance,
-            longNqty=self.longNqty,
-            longEntryNprice=self.longEntryNprice,
-            shortNqty=self.shortNqty,
-            shortEntryNprice=self.shortEntryNprice,
-            long_mae=self.long_mae,
-            long_mfe=self.long_mfe,
-            short_mae=self.short_mae,
-            short_mfe=self.short_mfe,
-            unrealizedNpnl=self.unrealizedNpnl,
-            longUnrealizedNpnl=self.longUnrealizedNpnl,
-            shortUnrealizedNpnl=self.shortUnrealizedNpnl,
-        )
+        if not hasattr(self, "position"):
+            self.position = JitPosition(
+                price_mult=self.price_mult,
+                qty_mult=self.qty_mult,
+                scale_mult=self.scale_mult,
+                leverage=self.leverage,
+                nBalance=self.nBalance,
+                lockedNbalance=self.lockedNbalance,
+                longNqty=self.longNqty,
+                longEntryNprice=self.longEntryNprice,
+                shortNqty=self.shortNqty,
+                shortEntryNprice=self.shortEntryNprice,
+                long_mae=self.long_mae,
+                long_mfe=self.long_mfe,
+                short_mae=self.short_mae,
+                short_mfe=self.short_mfe,
+                unrealizedNpnl=self.unrealizedNpnl,
+                longUnrealizedNpnl=self.longUnrealizedNpnl,
+                shortUnrealizedNpnl=self.shortUnrealizedNpnl,
+            )
 
 
 spec = [

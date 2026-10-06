@@ -35,10 +35,6 @@ class MainAgent:
         Base keyword arguments shared across processes.
     procs : dict[int, ProcsData]
         Mapping of process identifiers to process metadata and instances.
-    is_backtesting : bool
-        Flag indicating whether the runtime is operating in backtesting mode.
-    with_execution : bool
-        Flag indicating whether live or simulated execution is enabled.
     wss_sem : multiprocessing.synchronize.Semaphore
         Semaphore controlling WebSocket synchronization flow.
     engine_event : multiprocessing.synchronize.Event
@@ -51,19 +47,9 @@ class MainAgent:
     base_kwargs: dict[str, Any]
     procs: dict[int, ProcsData] = field(default_factory=dict, init=False)
 
-    is_backtesting: bool = field(init=False)
-    with_execution: bool = field(init=False)
-    wss_sem: SemT = field(init=False)
-    engine_event: EventT = field(init=False)
-    execution_event: EventT = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.is_backtesting = self.manager.cfgSetup.backtesting
-        self.with_execution = self.manager.cfgSetup.execution
-
-        self.wss_sem = Semaphore(0)
-        self.engine_event = Event()
-        self.execution_event = Event()
+    wss_sem: SemT = field(default_factory=lambda: Semaphore(0), init=False)
+    engine_event: EventT = field(default_factory=lambda: Event(), init=False)
+    execution_event: EventT = field(default_factory=lambda: Event(), init=False)
 
     def run_core_engine(self) -> None:
         """Create required output directories, spawn worker processes, and start the MainManager loop.
@@ -131,7 +117,7 @@ class MainAgent:
         funcs: list[tuple[FunctionType, int]] = []
         funcs.append((run_streaming, ProcsIds.streaming))
         funcs.append((run_engine, ProcsIds.engine))
-        if self.with_execution:
+        if self.manager.cfgSetup.execution:
             funcs.append((run_executing, ProcsIds.executing))
 
         return funcs

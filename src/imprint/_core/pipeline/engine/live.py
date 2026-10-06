@@ -101,8 +101,10 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
     pass_lag_limit: int = field(default=2, init=False)
 
     @override
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Initialize decoders, gap stream buffers, and tracking masks."""
+        Base.__post_init__(self)
+
         m_name: str = self.manager.cfgSetup.agg_trades_decoder_module
         c_name: str = self.manager.cfgSetup.agg_trades_decoder_class_name
         decoder_type: type[AggTradesDecoder[None]] = getattr(
@@ -174,7 +176,7 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
             )
 
         mask = self.mask
-        con = self.algorithm._engine.fp.con
+        con = self.engine.fp.con
 
         for p, q, t, m, a in trades:
             if self.head_id == 0:
@@ -218,7 +220,7 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
     @override
     def post_update(self) -> None:
         """Monitor analysis lag tolerances and clear engine execution events."""
-        if not self.algorithm._sync.lag_is_safe():
+        if not self.strategy._sync.lag_is_safe():
             self.pass_lag += 1
             if self.pass_lag >= self.pass_lag_limit:
                 self.manager.set_proc_sc(
@@ -231,4 +233,4 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
     @override
     def post_final_action(self) -> None:
         """Synchronize execution state upon final engine completion."""
-        self.algorithm._sync.sync_with_execution()
+        self.strategy._sync.sync_with_execution()

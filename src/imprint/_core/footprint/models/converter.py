@@ -15,15 +15,6 @@ from imprint._core import configs as cfg
 class Converter:
     """Convert price, quantity, timestamp, and grid coordinates between raw values and Footprint matrix indices.
 
-    Parameters
-    ----------
-    cfgCoin : cfg.Coin
-        Symbol parameters including tick size, lot size, and scale multipliers.
-    cfgFP : cfg.Footprint
-        Footprint chart configuration settings.
-    total_backtest_days : int, default=0
-        Total duration of backtesting in days. If zero, default bar count is used.
-
     Attributes
     ----------
     total_bar_count : int
@@ -68,10 +59,6 @@ class Converter:
         Base timestamp in milliseconds for the first bar in the current active session.
     """
 
-    cfgCoin: cfg.Coin
-    cfgFP: cfg.Footprint
-    total_backtest_days: int = 0
-
     total_bar_count: int = field(init=False)
     tick_size: str = field(init=False)
     price_prec: int = field(init=False)
@@ -103,31 +90,36 @@ class Converter:
 
     _first_base_timestamp: int = field(default=0, init=False)
 
-    def __post_init__(self) -> None:
-        self.tick_size = self.cfgCoin.tick_size
-        self.price_prec = self.cfgCoin.price_prec
-        self.price_mult = self.cfgCoin.price_mult
-        self.qty_prec = self.cfgCoin.qty_prec
-        self.qty_mult = self.cfgCoin.qty_mult
+    def post_init(
+        self,
+        cfgCoin: cfg.Coin,
+        cfgFP: cfg.Footprint,
+        total_backtest_days: int,
+    ) -> None:
+        self.tick_size = cfgCoin.tick_size
+        self.price_prec = cfgCoin.price_prec
+        self.price_mult = cfgCoin.price_mult
+        self.qty_prec = cfgCoin.qty_prec
+        self.qty_mult = cfgCoin.qty_mult
 
-        self.timeframe = self.cfgFP.timeframe.name
-        self.tims = self.cfgFP.timeframe
-        self.chart_range = self.cfgFP.chart_range
-        self.step_tick = self.cfgFP.step_tick
-        self.fp_rows[0] = self.cfgFP.fp_rows
-        self.fp_cols = self.cfgFP.fp_cols
-        self.fp_panel_cols = self.cfgFP.fp_panel_cols
-        self.bar_count = self.cfgFP.bar_count
-        self.idxVP = self.cfgFP.colVP
-        self.idxDP = self.cfgFP.colDP
+        self.timeframe = cfgFP.timeframe.name
+        self.tims = cfgFP.timeframe
+        self.chart_range = cfgFP.chart_range
+        self.step_tick = cfgFP.step_tick
+        self.fp_rows[0] = cfgFP.fp_rows
+        self.fp_cols = cfgFP.fp_cols
+        self.fp_panel_cols = cfgFP.fp_panel_cols
+        self.bar_count = cfgFP.bar_count
+        self.idxVP = cfgFP.colVP
+        self.idxDP = cfgFP.colDP
 
         self.scale = round(
             (float(self.tick_size) * self.step_tick) * self.price_mult
         )
 
-        if self.total_backtest_days:
+        if total_backtest_days:
             self.total_bar_count = (
-                self.total_backtest_days * 24 * 60 * 60 * 1000
+                total_backtest_days * 24 * 60 * 60 * 1000
             ) // self.tims
         else:
             self.total_bar_count = self.bar_count

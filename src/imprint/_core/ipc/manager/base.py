@@ -73,9 +73,10 @@ class Base(ABC):
         Host-level process status integer array cast to signed 64-bit integers ('q').
     """
 
+    _configs: list[cfg.Configuration]
+    _segment_configs: list[cfg.SharedMemorySegments]
     _segments: dict[str, slice]
     _shm_buf: memoryview
-    _configs: list[cfg.Configuration]
     _main_tools: list[Event | Semaphore]
 
     cfgSetup: cfg.Setup = field(init=False)
@@ -101,7 +102,7 @@ class Base(ABC):
     @final
     def __post_init__(self) -> None:
         """Initialize configurations, synchronize attributes, and cast status buffer views."""
-        self.__init_attributes(self._configs, self._main_tools)
+        self.__init_attributes()
 
         self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
         self._main_status = self.cfgMetrics.main_status.view.cast("q")
@@ -112,21 +113,12 @@ class Base(ABC):
         """Execute subclass-specific post-initialization logic."""
 
     @final
-    def __init_attributes(
-        self,
-        configs: list[cfg.Configuration],
-        main_tools: list[Event | Semaphore],
-    ) -> None:
-        """Identify, filter, and bind configuration components to Base attributes.
+    def __init_attributes(self) -> None:
+        """Identify, filter, and bind configuration components to Base attributes."""
 
-        Parameters
-        ----------
-        configs : list[cfg.Configuration]
-            List of configuration items containing data structure fields.
-        main_tools : list[Event | Semaphore]
-            Multi-processing synchronization instances.
-        """
-        objs: list[cfg.Configuration | Event | Semaphore] = configs + main_tools
+        objs: list[cfg.Configuration | Event | Semaphore] = (
+            self._configs + self._segment_configs + self._main_tools
+        )
         for obj in objs:
             for attr_name, attr_type in Base.__annotations__.items():
                 if issubclass(attr_type.__class__, GenericAlias):
@@ -162,3 +154,14 @@ class Base(ABC):
                             ]
 
                 attr_val.post_init()
+
+    @final
+    def _change_configs(self) -> None:
+        for obj in self._configs:
+            for attr_name, attr_type in Base.__annotations__.items():
+                if issubclass(attr_type.__class__, GenericAlias):
+                    continue
+
+                if isinstance(obj, attr_type):
+                    setattr(self, attr_name, obj)
+                    break

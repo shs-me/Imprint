@@ -1,5 +1,7 @@
 from typing import final, overload
 
+from loguru import logger
+
 import imprint.configs as cfg
 from imprint._boot.backtest import BacktestEngine
 from imprint._boot.live import Live as LiveEngine
@@ -58,6 +60,9 @@ class Imprint:
         BacktestEngine | LiveEngine
             Instantiated concrete engine corresponding to the selected run mode.
         """
+
+        cls._init_logger()
+
         if isinstance(run_mode, tuple):
             if run_mode[0] is cfg.Backtest:
                 engine, mode = BacktestEngine, run_mode[1]
@@ -75,4 +80,44 @@ class Imprint:
             strategy=strategy,
             execution=execution,
             with_execution=with_execution,
+        )
+
+    @staticmethod
+    def _init_logger() -> None:
+
+        import imprint._boot as iboot
+        import imprint._core as icore
+        import imprint._vis as ivis
+        from imprint._core.constant import (
+            API_LOG_PATH,
+            CORE_LOG_PATH,
+            VISUALIZATION_LOG_PATH,
+        )
+
+        logger.remove()
+        logger.add(
+            API_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | Imprint | {message}",
+            filter=lambda r: r["name"].startswith(iboot.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
+        logger.add(
+            CORE_LOG_PATH,
+            format=(
+                "{elapsed} | {extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
+            ),
+            filter=lambda r: r["name"].startswith(icore.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
+        logger.add(
+            VISUALIZATION_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
+            filter=lambda r: r["name"].startswith(ivis.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
         )

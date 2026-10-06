@@ -5,7 +5,6 @@ automating shared memory allocations, dispatching manager bindings, and ensuring
 correct process-level resource cleanup on exit.
 """
 
-import gc
 from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, TypeVar
@@ -19,8 +18,7 @@ R = TypeVar("R")
 def supervisor(is_main: bool = False):
     """Wrap worker process main functions with Dispatcher IPC initialization and cleanup.
 
-    Manages the lifecycle of the `Dispatcher` for a process, handles
-    garbage collection cycles, and coordinates SharedMemory block attachment or unlinking
+    Manages the lifecycle of the `Dispatcher` for a process and coordinates SharedMemory block attachment or unlinking
     at termination.
 
     Parameters
@@ -46,12 +44,7 @@ def supervisor(is_main: bool = False):
 
                 dp: Dispatcher = Dispatcher(is_main=is_main, kwg=kwargs)
 
-                gc.collect()
-                gc.disable()
-
                 dp.run_client(func)
-
-                gc.collect()
 
                 dp.shm_buf.release()
                 dp.shm.close()

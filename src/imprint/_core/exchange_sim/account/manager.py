@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.exchange_sim.account.position import Position
+from imprint._core.ipc import NodeManager
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -44,21 +45,21 @@ class Manager(Position, ABC):
     )
 
     @override
-    def __post_init__(self) -> None:
+    def post_init(self, manager: NodeManager) -> None:
         """Initialize position parameters, timeframe configurations, and preallocate equity history buffers."""
-        Position.__post_init__(self)
+        Position.post_init(self, manager)
 
-        cfgAC = self.manager.cfgAccount
+        cfgAC = manager.cfgAccount
         self.latency = cfgAC.latency_ms
 
-        cfgFP = self.manager.cfgFootprint
+        cfgFP = manager.cfgFootprint
         self.timeframe = int(cfgFP.timeframe)
 
         start_dt: datetime = datetime.fromisoformat(
-            self.manager.cfgSetup.backtest_start_date
+            manager.cfgSetup.backtest_start_date
         )
         end_dt: datetime = datetime.fromisoformat(
-            self.manager.cfgSetup.backtest_end_date
+            manager.cfgSetup.backtest_end_date
         )
         total_days: int = max(1, (end_dt - start_dt).days + 1)
 

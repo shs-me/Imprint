@@ -48,7 +48,6 @@ class Base(ABC):
     _setup_core: _Setup = field(init=False)
     _account: cfg.Account = field(init=False)
     _init_complete: bool = field(init=False)
-    _prefix_core_log_format: str = field(init=False)
     _args: list[_Cfg] = field(init=False)
     _kwargs: dict[str, _Cfg] = field(init=False)
 
@@ -61,7 +60,6 @@ class Base(ABC):
         Exception
             Propagates any unhandled exception encountered during core execution or initialization.
         """
-        self.__init_logger()
 
         logger.info(f"Initialization {self.__class__.__name__} mode, started.")
 
@@ -92,48 +90,6 @@ class Base(ABC):
         for obj in self._args:
             self._kwargs[obj.__class__.__name__] = obj
 
-    @final
-    def __init_logger(self) -> None:
-        """Configure loguru logging sinks for API, core engine, and visualization modules."""
-
-        import imprint._boot as iboot
-        import imprint._core as icore
-        import imprint._vis as ivis
-        from imprint._core.constant import (
-            API_LOG_PATH,
-            CORE_LOG_PATH,
-            VISUALIZATION_LOG_PATH,
-        )
-
-        logger.remove()
-        logger.add(
-            API_LOG_PATH,
-            format="{time:YY:MM:DD-HH:mm:ss} | {level} | Imprint | {message}",
-            filter=lambda r: r["name"].startswith(iboot.__name__),  # pyright: ignore[reportOptionalMemberAccess]
-            rotation="10 MB",
-            colorize=True,
-            enqueue=True,
-        )
-        logger.add(
-            CORE_LOG_PATH,
-            format=(
-                self._prefix_core_log_format
-                + "{extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
-            ),
-            filter=lambda r: r["name"].startswith(icore.__name__),  # pyright: ignore[reportOptionalMemberAccess]
-            rotation="10 MB",
-            colorize=True,
-            enqueue=True,
-        )
-        logger.add(
-            VISUALIZATION_LOG_PATH,
-            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
-            filter=lambda r: r["name"].startswith(ivis.__name__),  # pyright: ignore[reportOptionalMemberAccess]
-            rotation="10 MB",
-            colorize=True,
-            enqueue=True,
-        )
-
     @abstractmethod
     def _post_init(self) -> bool:
         """Execute mode-specific post-initialization routines and resource setup.
@@ -143,7 +99,6 @@ class Base(ABC):
         bool
             True if initialization succeeds; False otherwise.
         """
-        ...
 
     @final
     @error_handler()

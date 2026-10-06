@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.account.base import Base
+from imprint._core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -47,10 +48,10 @@ class Account(Base, ABC):
     oh_cols: int = field(default=c.TP_ConstantCount, init=False)
 
     @override
-    def __post_init__(self) -> None:
-        Base.__post_init__(self)
+    def post_init(self, manager: NodeManager) -> None:
+        Base.post_init(self, manager)
 
-        cfgAC = self.manager.cfgAccount
+        cfgAC = manager.cfgAccount
         self.takerNcommission = cfgAC.taker_commission.fixed
         self.makerNcommission = cfgAC.maker_commission.fixed
 

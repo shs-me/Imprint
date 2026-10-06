@@ -2,7 +2,7 @@ from multiprocessing import Process
 from typing import Any, Protocol, TypedDict, overload
 
 
-class AlgorithmProtocol(Protocol):
+class StrategyProtocol(Protocol):
     """Define the core algorithm execution and event callback interface.
 
     Attributes

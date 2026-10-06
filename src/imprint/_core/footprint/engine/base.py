@@ -19,7 +19,7 @@ from imprint._core import constant as c
 from imprint._core.footprint.models import Converter, Footprint
 from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
-from imprint._core.types import AlgorithmProtocol
+from imprint._core.types import StrategyProtocol
 from imprint._core.utils import FPArray
 
 
@@ -32,7 +32,7 @@ class Base(ABC):
     manager : NodeManager
         Coordinator managing inter-process communication, configuration states,
         and process status codes.
-    algorithm : AlgorithmProtocol
+    strategy : StrategyProtocol
         Trading or calculation algorithm execution protocol attached to the engine.
 
     Attributes
@@ -40,7 +40,7 @@ class Base(ABC):
     manager : NodeManager
         Coordinator managing inter-process communication, configuration states,
         and process status codes.
-    algorithm : AlgorithmProtocol
+    strategy : StrategyProtocol
         Trading or calculation algorithm execution protocol attached to the engine.
     re_init : int
         Bitmask governing re-initialization flags (session, index, and array states).
@@ -65,7 +65,7 @@ class Base(ABC):
     """
 
     manager: NodeManager
-    algorithm: AlgorithmProtocol
+    strategy: StrategyProtocol
 
     __init_arrays: bool = field(default=True, init=False)
     __base_fp_dump_path: str = field(init=False)
@@ -89,9 +89,7 @@ class Base(ABC):
     with_ctrade: bool = field(init=False)
     storage: JitStorage = field(init=False)
 
-    @final
     def __post_init__(self) -> None:
-        """Initialize footprint engine configurations, directories, and data structures."""
         cfgFP = self.manager.cfgFootprint
         self.with_state = cfgFP.state
         self.with_ctrade = cfgFP.ctrade
@@ -104,25 +102,27 @@ class Base(ABC):
         cfgMetrics = self.manager.cfgMetrics
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
 
+    def post_init(self) -> None:
         cfgSetup = self.manager.cfgSetup
         if cfgSetup.backtesting:
             start_dt: date = date.fromisoformat(cfgSetup.backtest_start_date)
             end_dt: date = date.fromisoformat(cfgSetup.backtest_end_date)
             total_days: int = max(1, (end_dt - start_dt).days + 1)
-            self.fp = Footprint(
-                Converter(
-                    cfgCoin=cfgCoin, cfgFP=cfgFP, total_backtest_days=total_days
-                ),
-                self.lidx,
-            )
         else:
-            self.fp = Footprint(
-                Converter(cfgCoin=cfgCoin, cfgFP=cfgFP), self.lidx
-            )
+            total_days = 0
 
-        self.post_init()
+        if hasattr(self, "fp"):
+            con = self.fp.con
+        else:
+            con = Converter()
+            self.fp = Footprint(con, self.lidx)
 
-    def post_init(self) -> None: ...
+        con.post_init(
+            cfgCoin=self.manager.cfgCoin,
+            cfgFP=self.manager.cfgFootprint,
+            total_backtest_days=total_days,
+        )
+        self.fp.post_init()
 
     @final
     def init_session(self, nPrice: int64, timestamp: int64) -> None:

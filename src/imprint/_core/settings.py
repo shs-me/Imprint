@@ -16,6 +16,7 @@ class KwgsKeys(IntEnum):
     """Key identifiers for inter-process parameter dictionaries."""
 
     Configs = auto()
+    SegmentConfigs = auto()
     Segments = auto()
     MainTools = auto()
     ShmName = auto()

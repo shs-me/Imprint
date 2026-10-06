@@ -1,7 +1,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import final
 
 from msgspec import MsgspecError
@@ -9,12 +9,12 @@ from websockets import ClientConnection
 from websockets import exceptions as ws_exc
 from websockets.asyncio.client import connect
 
-from imprint._core.pipeline.streaming.base import Base as GlobalBase
+from imprint._core.ipc import NodeManager
 from imprint._core.utils.base_adapters import ExchangeREST
 
 
 @dataclass(slots=True)
-class Base(GlobalBase, ABC):
+class Base(ABC):
     """Abstract base class for live WebSocket streaming pipeline components.
 
     Manages persistent WebSocket connections, automated reconnection logic, heartbeat
@@ -37,10 +37,9 @@ class Base(GlobalBase, ABC):
         Running tally of encountered connection exceptions grouped by exception class name.
     """
 
+    manager: NodeManager
     rest: ExchangeREST
     url: str
-
-    exc_counter: Counter[str] = field(default_factory=Counter, init=False)
 
     @final
     async def run(self) -> None:
@@ -50,6 +49,7 @@ class Base(GlobalBase, ABC):
         protocol errors, and fatal configuration or handshake rejections.
         """
         try:
+            exc_counter: Counter[str] = Counter()
             while True:
                 try:
                     await self.on_pre_connect()
@@ -79,31 +79,31 @@ class Base(GlobalBase, ABC):
                     )
 
                 except ws_exc.ConnectionClosedError as e:
-                    self.exc_counter[ws_exc.ConnectionClosedError.__name__] += 1
+                    exc_counter[ws_exc.ConnectionClosedError.__name__] += 1
                     self.manager.set_log(
                         f"{self.stream} WS Connection closed with error: {e}. Reconnecting..."
                     )
 
                 except TimeoutError:
-                    self.exc_counter[TimeoutError.__name__] += 1
+                    exc_counter[TimeoutError.__name__] += 1
                     self.manager.set_log(
                         f"{self.stream} WS Ping timeout (no heartbeat from server). Reconnecting..."
                     )
 
                 except ws_exc.ProtocolError as e:
-                    self.exc_counter[ws_exc.ProtocolError.__name__] += 1
+                    exc_counter[ws_exc.ProtocolError.__name__] += 1
                     self.manager.set_log(
                         f"{self.stream} WS Protocol error: {e}. Reconnecting..."
                     )
 
                 except ws_exc.PayloadTooBig as e:
-                    self.exc_counter[ws_exc.PayloadTooBig.__name__] += 1
+                    exc_counter[ws_exc.PayloadTooBig.__name__] += 1
                     self.manager.set_log(
                         f"{self.stream} WS Payload too big: {e}. Reconnecting..."
                     )
 
                 except ws_exc.InvalidState as e:
-                    self.exc_counter[ws_exc.InvalidState.__name__] += 1
+                    exc_counter[ws_exc.InvalidState.__name__] += 1
                     self.manager.set_log(
                         f"{self.stream} WS Invalid state: {e}. Reconnecting..."
                     )

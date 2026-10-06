@@ -1,9 +1,8 @@
-import importlib
 from multiprocessing.synchronize import Event
 from typing import Any
 
-from imprint._core.footprint import StrategyEngine
 from imprint._core.ipc import NodeManager, supervisor
+from imprint._core.pipeline.engine.router import EngineRouter
 
 __all__ = ["run_engine"]
 
@@ -35,43 +34,13 @@ def run_engine(
     ------
     KeyError
         If ``'manager'`` is missing from ``kwargs``.
-    AttributeError
-        If the specified ``algorithm_class_name`` is not found in the resolved module.
-    ModuleNotFoundError
-        If the configured ``algorithm_module`` cannot be imported.
     """
+
     manager: NodeManager = kwargs["manager"]
 
-    m_name: str = manager.cfgSetup.algorithm_module
-    c_name: str = manager.cfgSetup.algorithm_class_name
-
-    engine_type: type[StrategyEngine] = getattr(
-        importlib.import_module(m_name), c_name
+    router: EngineRouter = EngineRouter(
+        manager=manager,
+        engine_event=engine_event,
+        execution_event=execution_event,
     )
-
-    if manager.cfgSetup.backtesting:
-        from imprint._core.pipeline.engine.backtest import SyncViaSpinLock
-
-        sync = SyncViaSpinLock(manager=manager)
-    else:
-        from imprint._core.pipeline.engine.live import SyncViaEvent
-
-        sync = SyncViaEvent(manager=manager, execution_event=execution_event)
-
-    engine: StrategyEngine = engine_type(manager, sync)
-
-    if manager.cfgSetup.backtesting:
-        from imprint._core.pipeline.engine.backtest import (
-            Backtest as BacktestAgent,
-        )
-
-        agent = BacktestAgent(manager=manager, algorithm=engine)
-    else:
-        from imprint._core.pipeline.engine.live import Live as LiveAgent
-
-        agent = LiveAgent(
-            manager=manager, algorithm=engine, engine_event=engine_event
-        )
-
-    manager.set_log(f"{engine.__class__.__name__} used as StrategyEngine")
-    agent.run()
+    router.run()

@@ -29,7 +29,12 @@ class Backtest(Base):
     @override
     def post_init(self) -> None:
         """Initialize simulation exchange state and sync account balances."""
-        self.exchange_sim = ExchangeSim(self.manager)
+        Base.post_init(self)
+
+        if not hasattr(self, "exchange_sim"):
+            self.exchange_sim = ExchangeSim()
+
+        self.exchange_sim.post_init(self.manager)
 
         self.account.nBalance = self.exchange_sim.nBalance
         self.account.lockedNbalance = self.exchange_sim.lockedNbalance

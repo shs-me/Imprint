@@ -26,7 +26,6 @@ class Live(Base):
 
     run_mode: cfg.Live
 
-    _prefix_core_log_format: str = field(default="", init=False)
     _rest: cfg.ExchangeREST = field(init=False)
 
     @override

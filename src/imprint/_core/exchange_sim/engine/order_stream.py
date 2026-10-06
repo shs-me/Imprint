@@ -8,8 +8,8 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core import constant as c
-from imprint._core.configs import OrderStream
 from imprint._core.exchange_sim.account import Account
+from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
 
 
@@ -31,9 +31,7 @@ class Order(Account, ABC):
         Current write head / row cursor within ``order_book``.
     """
 
-    __order_book_row: int = field(init=False)
-
-    __os: OrderStream = field(init=False)
+    manager: NodeManager = field(init=False)
 
     executed_orders: NDArray[int64] = field(
         default_factory=lambda: np.zeros(
@@ -44,7 +42,12 @@ class Order(Account, ABC):
     eoRow: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    order_book: NDArray[int64] = field(init=False)
+    order_book: NDArray[int64] = field(
+        default_factory=lambda: np.zeros(
+            (1000, c.OB_ConstantCount), dtype=int64
+        ),
+        init=False,
+    )
     order_id: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
@@ -53,21 +56,10 @@ class Order(Account, ABC):
     )
 
     @override
-    def __post_init__(self) -> None:
-        """Initialize order book structures, row pointers, and execution buffers."""
-        Account.__post_init__(self)
+    def post_init(self, manager: NodeManager) -> None:
+        Account.post_init(self, manager)
 
-        cfgAC = self.manager.cfgAccount
-        self.__order_book_row = cfgAC.active_order_limit
-
-        self.__os = self.manager.cfgOrderStream
-
-        self.executed_orders = np.zeros(
-            (1000, c.TP_ConstantCount), dtype=np.int64
-        )
-        self.order_book = np.zeros(
-            (self.__order_book_row, c.OB_ConstantCount), dtype=int64
-        )
+        self.manager = manager
 
     @final
     @override
@@ -79,7 +71,7 @@ class Order(Account, ABC):
     def __update_order_book(self) -> None:
         """Pull order data from the ring buffer and append it to the order book and execution logs."""
         timestamp, order_param, client_order_id, nPrice, nQty = (
-            self.__os.ring_buf.get_data()
+            self.manager.cfgOrderStream.ring_buf.get_data()
         )
 
         if self.obRow[0] >= self.order_book.shape[0]:

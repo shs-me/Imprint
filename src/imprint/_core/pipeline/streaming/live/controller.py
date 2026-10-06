@@ -101,7 +101,6 @@ class Controller:
                     )
 
                 if task & scs.COMPLETE:
-                    self.market_data_stream.final_actions()
                     return self.manager.set_proc_sc(
                         scs.COMPLETE, wait_main_task=False
                     )

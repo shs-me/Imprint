@@ -1,9 +1,9 @@
-import importlib
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
 from imprint._core.ipc import NodeManager, supervisor
-from imprint._core.pipeline.executing.router import ExecutionEngine
+from imprint._core.pipeline.executing.router import ExecutingRouter
+from imprint._core.pipeline.executing.strategy import ExecutionEngine
 
 __all__ = [
     "ExecutionEngine",
@@ -37,21 +37,12 @@ def run_executing(
     ------
     KeyError
         If ``'manager'`` is missing from ``kwargs``.
-    AttributeError
-        If the specified ``execution_class_name`` is not found in the resolved module.
-    ModuleNotFoundError
-        If the configured ``execution_module`` cannot be imported.
     """
     manager: NodeManager = kwargs["manager"]
 
-    m_name = manager.cfgSetup.execution_module
-    c_name = manager.cfgSetup.execution_class_name
-
-    execution: type[ExecutionEngine] = getattr(
-        importlib.import_module(m_name), c_name
+    router: ExecutingRouter = ExecutingRouter(
+        manager=manager,
+        execution_event=execution_event,
+        wss_sem=wss_sem,
     )
-    agent = execution(
-        _manager=manager, _execution_event=execution_event, _wss_sem=wss_sem
-    )
-    manager.set_log(f"{execution.__name__} used as ExecutionEngine")
-    agent._executer.run()
+    router.run()

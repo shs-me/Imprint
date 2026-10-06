@@ -1,14 +1,16 @@
 import asyncio
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
-from typing import override
+from typing import final, override
 
 from websockets import ClientConnection
 
+from imprint._core.configs import MarketDataGapStream
 from imprint._core.pipeline.streaming.live.base import Base
 from imprint._core.settings import StatusCodes as scs
 
 
+@final
 @dataclass(slots=True)
 class MarketData(Base):
     """Streaming market data processor managing order book updates and gap recovery.
@@ -40,20 +42,17 @@ class MarketData(Base):
 
     engine_event: Event
 
+    mdgs: MarketDataGapStream = field(init=False)
     have_gap: memoryview = field(init=False)
     first_gap_id: memoryview = field(init=False)
     last_gap_id: memoryview = field(init=False)
 
+    sem: asyncio.Semaphore | None = field(default=None, init=False)
     gap_task: asyncio.Task[None] | None = field(default=None, init=False)
-    sem: asyncio.Semaphore = field(
-        default_factory=lambda: asyncio.Semaphore(5), init=False
-    )
 
-    @override
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Initialize shared memory views and base configuration."""
-        Base.post_init(self)
-
+        self.mdgs = self.manager.cfgMarketDataGapStream
         self.have_gap = self.mdgs.have_gap.view
         self.first_gap_id = self.mdgs.gap_first_id.view.cast("q")
         self.last_gap_id = self.mdgs.gap_last_id.view.cast("q")
@@ -81,7 +80,7 @@ class MarketData(Base):
         RuntimeError
             Terminates process status code if raw data size exceeds the buffer limit.
         """
-        _ = self.mds.ring_buf
+        _ = self.manager.cfgMarketDataStream.ring_buf
         # - - -
         raw_data: bytes = await ws.recv(decode=False)
 
@@ -103,6 +102,9 @@ class MarketData(Base):
         wid, rid = self.mdgs.ring_buf.wid_buf, self.mdgs.ring_buf.rid_buf
         #  - - -
         try:
+            if self.sem is None:
+                self.sem = asyncio.Semaphore(5)
+
             while True:
                 try:
                     while not self.have_gap[0]:

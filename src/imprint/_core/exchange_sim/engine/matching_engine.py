@@ -17,6 +17,7 @@ from numpy.typing import NDArray
 from imprint._core import constant as c
 from imprint._core.exchange_sim.engine.order_stream import compact_order_book
 from imprint._core.exchange_sim.engine.user_data_stream import UserData
+from imprint._core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -36,21 +37,21 @@ class MatchingEngine(UserData, ABC):
     matching_engine: JitMatchingEngine = field(init=False)
 
     @override
-    def __post_init__(self) -> None:
-        """Initialize matching engine parameters and instantiate the JIT engine."""
-        UserData.__post_init__(self)
+    def post_init(self, manager: NodeManager) -> None:
+        UserData.post_init(self, manager)
 
-        cfgAC = self.manager.cfgAccount
+        cfgAC = manager.cfgAccount
         self.slippage = cfgAC.slippage.fixed
 
-        self.matching_engine = JitMatchingEngine(
-            order_book=self.order_book,
-            order_id_buf=self.order_id,
-            obRow=self.obRow,
-            executed_orders=self.executed_orders,
-            eoRow=self.eoRow,
-            slippage=self.slippage,
-        )
+        if not hasattr(self, "matching_engine"):
+            self.matching_engine = JitMatchingEngine(
+                order_book=self.order_book,
+                order_id_buf=self.order_id,
+                obRow=self.obRow,
+                executed_orders=self.executed_orders,
+                eoRow=self.eoRow,
+                slippage=self.slippage,
+            )
 
 
 spec = [
