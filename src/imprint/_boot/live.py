@@ -4,7 +4,7 @@ from typing import final, override
 from loguru import logger
 
 import imprint.configs as cfg
-from imprint._boot.base import Base
+from imprint._boot.base import Base, InitFailed
 from imprint._core.configs import MarketDataStream as _MDS
 from imprint._core.utils.base_adapters import ApiNotFoundError
 
@@ -26,10 +26,11 @@ class Live(Base):
 
     run_mode: cfg.Live
 
+    _account: cfg.Account = field(init=False)
     _rest: cfg.ExchangeREST = field(init=False)
 
     @override
-    def _post_init(self) -> bool:
+    def _post_init(self) -> None:
         """Initialize live data streams, REST connection endpoints, exchange limits, leverage, and initial account balance.
 
         Returns
@@ -42,68 +43,49 @@ class Live(Base):
         ApiNotFoundError
             Caught internally if API or secret keys are missing from environment variables during execution mode.
         """
-        self._args.append(_MDS(count_reader=1))
-        self._args.append(self.run_mode.connector)
+        _ = self.run_mode
+        # - - -
+        self._segments.append(_MDS(count_reader=1))
+        self._other_configs.append([_.connector])
+        self._account = cfg.Account(leverage=_.leverage)
+        self._other_configs.append([self._account])
 
-        self._setup_core.agg_trades_decoder_module = (
-            self.run_mode.agg_trades_decoder.__module__
-        )
-        self._setup_core.agg_trades_decoder_class_name = (
-            self.run_mode.agg_trades_decoder.__name__
-        )
-        self._setup_core.user_stream_decoder_module = (
-            self.run_mode.user_stream_decoder.__module__
-        )
-        self._setup_core.user_stream_decoder_class_name = (
-            self.run_mode.user_stream_decoder.__name__
-        )
-        self._setup_core.order_encoder_module = (
-            self.run_mode.order_encoder.__module__
-        )
-        self._setup_core.order_encoder_class_name = (
-            self.run_mode.order_encoder.__name__
-        )
-        self._setup_core.exchange_rest_module = (
-            self.run_mode.exchange_rest.__module__
-        )
-        self._setup_core.exchange_rest_class_name = (
-            self.run_mode.exchange_rest.__name__
-        )
-        self._setup_core.backtesting = False
+        setup = self._setups[0]
+        setup.agg_trades_decoder_module = _.agg_trades_decoder.__module__
+        setup.agg_trades_decoder_class_name = _.agg_trades_decoder.__name__
+        setup.user_stream_decoder_module = _.user_stream_decoder.__module__
+        setup.user_stream_decoder_class_name = _.user_stream_decoder.__name__
+        setup.order_encoder_module = _.order_encoder.__module__
+        setup.order_encoder_class_name = _.order_encoder.__name__
+        setup.exchange_rest_module = _.exchange_rest.__module__
+        setup.exchange_rest_class_name = _.exchange_rest.__name__
+        setup.backtesting = False
 
-        self._account: cfg.Account = cfg.Account(
-            leverage=self.run_mode.leverage
-        )
+        coin = self._coins[0]
+        self._rest = _.exchange_rest(logger=logger, symbol=coin.symbol)
+        self._rest.base_url = _.connector.base_rest_url
 
-        self._rest = self.run_mode.exchange_rest(
-            logger=logger, symbol=self.symbol
-        )
-        self._rest.base_url = self.run_mode.connector.base_rest_url
-
-        self._coin.tick_size = self._rest.tick_size
-        if not self._coin.tick_size:
-            logger.error(
-                f"Init data, failed. Tick size({self._coin.tick_size}) is not valid"
+        coin.tick_size = self._rest.tick_size
+        if not coin.tick_size:
+            raise InitFailed(
+                f"Init, failed. Tick size({coin.tick_size}) is not valid"
             )
-            return False
         else:
-            logger.info(f"Tick size: {self._coin.tick_size}")
+            logger.info(f"Tick size: {coin.tick_size}")
 
-        self._coin.lot_size = self._rest.lot_size
-        if not self._coin.lot_size:
-            logger.error(
-                f"Init data, failed. Lot size({self._coin.lot_size}) is not valid"
+        coin.lot_size = self._rest.lot_size
+        if not coin.lot_size:
+            raise InitFailed(
+                f"Init, failed. Lot size({coin.lot_size}) is not valid"
             )
-            return False
         else:
-            logger.info(f"Lot size: {self._coin.lot_size}")
+            logger.info(f"Lot size: {coin.lot_size}")
 
         self._account.min_order_size = self._rest.min_order_size
         if not self._account.min_order_size:
-            logger.error(
-                f"Init data, failed. Min order size({self._account.min_order_size}) is not valid"
+            raise InitFailed(
+                f"Init, failed. Min order size({self._account.min_order_size}) is not valid"
             )
-            return False
         else:
             logger.info(
                 f"Min nominal order size: {self._account.min_order_size}"
@@ -115,18 +97,14 @@ class Live(Base):
                 logger.info(f"Leverage: {self._account.leverage}")
                 self._account.balance = self._rest.get_balance()
                 if not self._account.balance:
-                    logger.error(
-                        f"Init data, failed. Balance({self._account.balance}) is not valid"
+                    raise InitFailed(
+                        f"Init, failed. Balance({self._account.balance}) is not valid"
                     )
-                    return False
                 else:
                     logger.info(f"Balance: {self._account.balance}")
 
-            except ApiNotFoundError:
-                logger.error("API/SECRET key doest exists in env")
-                return False
-
-        return True
+            except ApiNotFoundError as exc:
+                raise InitFailed("API/SECRET key doest exists in env") from exc
 
 
 @final

@@ -9,7 +9,6 @@ from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.account.base import Base
-from imprint._core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -48,12 +47,19 @@ class Account(Base, ABC):
     oh_cols: int = field(default=c.TP_ConstantCount, init=False)
 
     @override
-    def post_init(self, manager: NodeManager) -> None:
-        Base.post_init(self, manager)
+    def post_init(self) -> None:
+        Base.post_init(self)
 
-        cfgAC = manager.cfgAccount
+        cfgAC = self.manager.cfgAccount
         self.takerNcommission = cfgAC.taker_commission.fixed
         self.makerNcommission = cfgAC.maker_commission.fixed
+
+    @override
+    def reset(self) -> None:
+        Base.reset(self)
+
+        self.orders_history.fill(0)
+        self.ohWid[0] = 0
 
     @final
     def lock_balance(self, nPrice: int, nQty: int, order_param: int) -> None:

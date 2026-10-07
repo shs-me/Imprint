@@ -1,14 +1,24 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import final
+from itertools import zip_longest
+from typing import Any, final
 
 from loguru import logger
 
 import imprint.configs as cfg
-from imprint._core.configs import Coin as _Coin
-from imprint._core.configs import Configuration as _Cfg
-from imprint._core.configs import Setup as _Setup
+from imprint._core.configs import (
+    Coin,
+    Configuration,
+    Setup,
+    SharedMemorySegments,
+)
+from imprint._core.settings import KwgsKeys
 from imprint._core.utils.exc_dumper import error_handler
+
+
+class InitFailed(Exception): ...
 
 
 @dataclass(slots=True)
@@ -38,60 +48,111 @@ class Base(ABC):
         Flag indicating if execution is enabled.
     """
 
-    symbol: str
     strategy: cfg.Strategy
-    execution: type[cfg.ExecutionEngine]
-
+    symbol: str | tuple[str]
     with_execution: bool
 
-    _coin: _Coin = field(init=False)
-    _setup_core: _Setup = field(init=False)
-    _account: cfg.Account = field(init=False)
+    _coins: list[Coin] = field(init=False)
+    _setups: list[Setup] = field(init=False)
+    _footprints: list[cfg.Footprint] = field(init=False)
+    _risk_managements: list[cfg.RiskManagement] = field(init=False)
+    _other_configs: list[Sequence[Configuration]] = field(init=False)
+
+    _segments: list[SharedMemorySegments] = field(init=False)
+    _configs: list[list[Configuration]] = field(init=False)
+    _kwargs: dict[str, list[list[Configuration]] | SharedMemorySegments] = (
+        field(init=False)
+    )
     _init_complete: bool = field(init=False)
-    _args: list[_Cfg] = field(init=False)
-    _kwargs: dict[str, _Cfg] = field(init=False)
 
     @final
     def __post_init__(self) -> None:
-        """Initialize logger, build configuration objects, and execute subclass post-initialization.
-
-        Raises
-        ------
-        Exception
-            Propagates any unhandled exception encountered during core execution or initialization.
-        """
-
         logger.info(f"Initialization {self.__class__.__name__} mode, started.")
 
-        self._args = [self.strategy.risk_management, self.strategy.footprint]
-        self._coin = _Coin(symbol=self.symbol)
-        self._setup_core = _Setup(
-            algorithm_module=self.strategy.algorithm.__module__,
-            algorithm_class_name=self.strategy.algorithm.__name__,
-        )
-
-        if self.with_execution:
-            self._setup_core.execution = True
-            self._setup_core.execution_module = self.execution.__module__
-            self._setup_core.execution_class_name = self.execution.__name__
-        else:
-            self._setup_core.execution = False
-
-        self._init_complete = self._post_init()
-
-        logger.info(
-            f"Init, {'completed' if self._init_complete else 'failed'}.\n"
-        )
-        self._args.append(self._coin)
-        self._args.append(self._account)
-        self._args.append(self._setup_core)
-
+        self._coins = []
+        self._setups = []
+        self._footprints = []
+        self._risk_managements = []
+        self._other_configs = []
+        self._segments = []
+        self._configs = []
         self._kwargs = {}
-        for obj in self._args:
+
+        symbols = self.to_list(self.symbol, "")
+        algorithms = self.to_list(self.strategy.algorithm, cfg.StrategyEngine)
+        executions = self.to_list(self.strategy.execution, cfg.ExecutionEngine)
+        footprints = self.to_list(self.strategy.footprint, cfg.Footprint())
+        risk_managements = self.to_list(
+            self.strategy.risk_management, cfg.RiskManagement()
+        )
+        try:
+            for sym, algo, exec, fp, rm in zip_longest(
+                symbols,
+                algorithms,
+                executions,
+                footprints,
+                risk_managements,
+                fillvalue=None,
+            ):
+                if sym:
+                    coin = deepcopy(self._coins[-1]) if self._coins else Coin()
+                    coin.symbol = sym
+                    self._coins.append(coin)
+
+                if algo or exec:
+                    setup = (
+                        deepcopy(self._setups[-1]) if self._setups else Setup()
+                    )
+                    if algo:
+                        setup.algorithm_module = algo.__module__
+                        setup.algorithm_class_name = algo.__name__
+                    if exec:
+                        setup.execution_module = exec.__module__
+                        setup.execution_class_name = exec.__name__
+
+                    if self.with_execution:
+                        setup.execution = True
+                    else:
+                        setup.execution = False
+
+                    self._setups.append(setup)
+
+                if fp:
+                    self._footprints.append(fp)
+
+                if rm:
+                    self._risk_managements.append(rm)
+
+            self._post_init()
+
+        except InitFailed as e:
+            return logger.info(f"Init, failed: {e}.\n")
+
+        for configs in zip_longest(
+            self._coins,
+            self._setups,
+            self._footprints,
+            self._risk_managements,
+            *self._other_configs,
+            fillvalue=None,
+        ):
+            self._configs.append(
+                [config for config in configs if config is not None]
+            )
+
+        self._kwargs[KwgsKeys.Configs.name] = self._configs
+
+        for obj in self._segments:
             self._kwargs[obj.__class__.__name__] = obj
 
+        self._init_complete = True
+        logger.info("Init, completed.\n")
+
+    def to_list[T](self, obj: Any, _response_type: T, /) -> list[T]:
+        return list(obj) if isinstance(obj, (tuple, list)) else [obj]  # pyright: ignore[reportUnknownArgumentType]
+
     @abstractmethod
-    def _post_init(self) -> bool:
+    def _post_init(self) -> None:
         """Execute mode-specific post-initialization routines and resource setup.
 
         Returns

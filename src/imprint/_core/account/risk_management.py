@@ -6,7 +6,6 @@ from typing import final, override
 
 from imprint._core import constant as c
 from imprint._core.account.base import Base
-from imprint._core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -32,14 +31,14 @@ class RiskManagement(Base, ABC):
     __sl_offset_for_order_id: int = field(default=2_000_000_000, init=False)
 
     @override
-    def post_init(self, manager: NodeManager) -> None:
+    def post_init(self) -> None:
         """Initialize risk thresholds, order sizing limits, and signal timers."""
-        Base.post_init(self, manager)
+        Base.post_init(self)
 
-        cfgAC = manager.cfgAccount
+        cfgAC = self.manager.cfgAccount
         self.__min_order_size = round(cfgAC.min_order_size * self.scale_mult)
 
-        cfgRM = manager.cfgRiskManagement
+        cfgRM = self.manager.cfgRiskManagement
         self.__entry_qty = cfgRM.entry_qty.fixed
         self.__max_lock_balance = cfgRM.max_lock_balance.fixed
         self.__max_loss_balance = cfgRM.max_loss_balance.fixed

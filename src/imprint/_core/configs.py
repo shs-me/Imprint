@@ -4,7 +4,7 @@ This module provides configuration classes, memory segment representations, and
 inter-process communication (IPC) ring buffers used across the trading engine.
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final, override
 
@@ -350,7 +350,7 @@ class Footprint(Configuration):
 
 # - - - Configs For IPC - - -
 @dataclass(slots=True)
-class SharedMemorySegments(Configuration, ABC):
+class SharedMemorySegments(ABC):
     """Abstract base class for shared memory segment container configurations.
 
     Attributes
@@ -368,6 +368,9 @@ class SharedMemorySegments(Configuration, ABC):
 
     def child_post_init(self) -> None:
         """Perform subclass-specific initialization for shared memory segments."""
+
+    @abstractmethod
+    def reset(self) -> None: ...
 
     @final
     def __get_need_shm_size(self) -> int:
@@ -433,6 +436,12 @@ class Metrics(SharedMemorySegments):
         self.time_start_reading = Segment(INT64)
         self.trade_read_time = Segment(INT64)
         self.engine_complete = Segment(INT64)
+
+    @override
+    def reset(self) -> None:
+        self.time_start_reading.view.cast("q")[0] = 0
+        self.trade_read_time.view.cast("q")[0] = 0
+        self.engine_complete.view.cast("q")[0] = 0
 
 
 # - - Base Ring Buf For All Streams - -
@@ -532,6 +541,9 @@ class RingBuf:
         self.wid_buf = self.writer_id.view.cast("q")
         self.rid_buf = self.reader_id.view.cast("q")
 
+    def reset(self) -> None:
+        self.wid_buf[0], self.rid_buf[0] = 0, 0
+
     def lag_not_is_safe(self) -> bool:
         """Check whether any reader lags behind the writer beyond the safe threshold.
 
@@ -620,6 +632,10 @@ class LogStream(SharedMemorySegments):
         init=False,
     )
 
+    @override
+    def reset(self) -> None:
+        self.ring_buf.reset()
+
 
 # - Signal Stream -
 @dataclass(slots=True)
@@ -638,6 +654,10 @@ class SignalStream(SharedMemorySegments):
         ),
         init=False,
     )
+
+    @override
+    def reset(self) -> None:
+        self.ring_buf.reset()
 
     def set_data(
         self,
@@ -695,6 +715,10 @@ class UserDataStream(SharedMemorySegments):
         init=False,
     )
 
+    @override
+    def reset(self) -> None:
+        self.ring_buf.reset()
+
     def set_data_in_live(self, data: OrderData | BalanceData) -> None:
         """Write live order or balance update data into the user data ring buffer.
 
@@ -740,6 +764,10 @@ class OrderStream(SharedMemorySegments):
         ),
         init=False,
     )
+
+    @override
+    def reset(self) -> None:
+        self.ring_buf.reset()
 
     def set_data(
         self,
@@ -806,6 +834,10 @@ class MarketDataStream(SharedMemorySegments):
     ring_buf: RingBuf = field(init=False)
 
     @override
+    def reset(self) -> None:
+        self.ring_buf.reset()
+
+    @override
     def child_post_init(self) -> None:
         self.ring_buf = RingBuf(
             data_size=self.data_size,
@@ -867,3 +899,7 @@ class MarketDataGapStream(SharedMemorySegments):
         default_factory=lambda: RingBuf(data_size=256 * 1000, cell_amount=6),
         init=False,
     )
+
+    @override
+    def reset(self) -> None:
+        self.ring_buf.reset()

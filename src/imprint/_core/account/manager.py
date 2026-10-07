@@ -1,6 +1,7 @@
 """Position state tracking and averaging evaluation manager."""
 
 from dataclasses import dataclass, field
+from typing import override
 
 from imprint._core import constant as c
 from imprint._core.account.risk_management import RiskManagement
@@ -34,6 +35,12 @@ class Manager(RiskManagement):
         ),
         init=False,
     )
+
+    @override
+    def reset(self) -> None:
+        RiskManagement.reset(self)
+
+        self.long, self.short = PositionFSM.EMPTY, PositionFSM.EMPTY
 
     @property
     def long(self) -> PositionFSM:

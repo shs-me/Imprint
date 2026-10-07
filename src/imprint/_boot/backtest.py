@@ -1,10 +1,13 @@
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
+from itertools import zip_longest
 from typing import final, override
 
 from loguru import logger
 
 import imprint.configs as cfg
-from imprint._boot.base import Base
+from imprint._boot.base import Base, InitFailed
+from imprint._core.configs import Account
 from imprint._core.configs import MarketDataStream as _MDS
 from imprint._core.constant import (
     EQUITY_HISTORY_DATA_PATH,
@@ -34,8 +37,10 @@ class Backtest(Base):
 
     run_mode: cfg.Backtest
 
+    _account: list[Account] = field(init=False)
+
     @override
-    def _post_init(self) -> bool:
+    def _post_init(self) -> None:
         """Download historical aggregated trades data and initialize backtest market data stream and coin parameters.
 
         Returns
@@ -48,7 +53,7 @@ class Backtest(Base):
         DownloadError
             Caught internally if historical market data retrieval fails from remote repositories.
         """
-        self._args.append(
+        self._segments.append(
             _MDS(
                 data_size=32,
                 cast_to_int64=True,
@@ -56,30 +61,61 @@ class Backtest(Base):
             )
         )
 
-        self._setup_core.backtest_start_date = self.run_mode.backtest_start_date
-        self._setup_core.backtest_end_date = self.run_mode.backtest_end_date
-        self._setup_core.backtesting = True
+        self._account = self.to_list(self.run_mode.account, Account())
+        self._other_configs.append(self._account)
 
-        self._account: cfg.Account = self.run_mode.account
+        tick_sizes = self.to_list(self.run_mode.tick_size, "")
+        lot_sizes = self.to_list(self.run_mode.lot_size, "")
+        start_dates = self.to_list(self.run_mode.backtest_start_date, "")
+        end_dates = self.to_list(self.run_mode.backtest_end_date, "")
 
-        self._coin.tick_size = self.run_mode.tick_size
-        self._coin.lot_size = self.run_mode.lot_size
+        idx = 0
+        for ts, ls, sd, ed in zip_longest(
+            tick_sizes, lot_sizes, start_dates, end_dates, fillvalue=None
+        ):
+            if ts or ls:
+                if not (coin := self.list_get(self._coins, idx)):
+                    coin = deepcopy(self._coins[-1])
+
+                if ts:
+                    coin.tick_size = ts
+                if ls:
+                    coin.lot_size = ls
+
+            if sd or ed:
+                if not (setup := self.list_get(self._setups, idx)):
+                    setup = deepcopy(self._setups[-1])
+
+                if sd:
+                    setup.backtest_start_date = sd
+                if ed:
+                    setup.backtest_end_date = ed
 
         try:
-            DownloadAggTradesHistory(
-                logger=logger,
-                symbol=self.symbol,
-                start_date_str=self.run_mode.backtest_start_date,
-                end_date_str=self.run_mode.backtest_end_date,
-                price_mult=self._coin.price_mult,
-                qty_mult=self._coin.qty_mult,
-            ).download()
+            downloader = DownloadAggTradesHistory(logger=logger)
+            for coin, setup in zip_longest(
+                self._coins, self._setups, fillvalue=None
+            ):
+                if not coin:
+                    coin = self._coins[-1]
+                if not setup:
+                    setup = self._setups[-1]
 
+                downloader.download(
+                    symbol=coin.symbol,
+                    start_date_str=setup.backtest_start_date,
+                    end_date_str=setup.backtest_end_date,
+                    price_mult=coin.price_mult,
+                    qty_mult=coin.qty_mult,
+                )
         except DownloadError as e:
-            logger.error(f"Init data, failed: {e}")
-            return False
+            raise InitFailed(f"Download agg trades data, failed: {e}") from e
 
-        return True
+    def list_get[T](self, arr: list[T], index: int) -> T | None:
+        try:
+            return arr[index]
+        except IndexError:
+            return None
 
     @error_handler()
     def run_vis(self, auto_open: bool = True) -> None:
@@ -92,19 +128,21 @@ class Backtest(Base):
         """
         if self._init_complete and self.with_execution:
             logger.info("Visualization, started.")
+            c, s, a = self._coins[-1], self._setups[-1], self._account[-1]
+
             Render(
                 footprint_headers_path=FOOTPRINT_HEADERS_DATA_PATH,
-                symbol=self._coin.symbol,
-                start_date_str=self.run_mode.backtest_start_date,
-                end_date_str=self.run_mode.backtest_end_date,
+                symbol=c.symbol,
+                start_date_str=s.backtest_start_date,
+                end_date_str=s.backtest_end_date,
                 equity_history_path=EQUITY_HISTORY_DATA_PATH,
                 orders_history_path=ORDERS_HISTORY_DATA_PATH,
-                start_balance=self.run_mode.account.balance,
-                price_mult=self._coin.price_mult,
-                qty_mult=self._coin.qty_mult,
-                scale_mult=self.run_mode.account.scale_mult,
-                leverage=self.run_mode.account.leverage,
-                timeframe=self.strategy.footprint.timeframe,
+                start_balance=a.balance,
+                price_mult=c.price_mult,
+                qty_mult=c.qty_mult,
+                scale_mult=a.scale_mult,
+                leverage=a.leverage,
+                timeframe=self._footprints[-1].timeframe,
                 auto_open=auto_open,
             )
             logger.info("Visualization, closed.\n")

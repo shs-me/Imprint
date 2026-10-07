@@ -27,14 +27,20 @@ class Backtest(Base):
     exchange_sim: ExchangeSim = field(init=False)
 
     @override
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Initialize simulation exchange state and sync account balances."""
-        Base.post_init(self)
+        Base.__post_init__(self)
 
-        if not hasattr(self, "exchange_sim"):
-            self.exchange_sim = ExchangeSim()
+        self.exchange_sim = ExchangeSim(self.manager)
+        self.account.nBalance = self.exchange_sim.nBalance
+        self.account.lockedNbalance = self.exchange_sim.lockedNbalance
+        self.account.availableNbalance = self.exchange_sim.availableNbalance
 
-        self.exchange_sim.post_init(self.manager)
+    @override
+    def reset(self) -> None:
+        Base.reset(self)
+
+        self.exchange_sim.reset()
 
         self.account.nBalance = self.exchange_sim.nBalance
         self.account.lockedNbalance = self.exchange_sim.lockedNbalance

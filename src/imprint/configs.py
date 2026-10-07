@@ -71,11 +71,11 @@ class Backtest:
         Simulation end timestamp.
     """
 
-    account: Account
-    tick_size: str = "0.01"
-    lot_size: str = "0.001"
-    backtest_start_date: str = "2026-01-01"
-    backtest_end_date: str = "2026-01-01"
+    account: Account | tuple[Account]
+    tick_size: str | tuple[str]
+    lot_size: str | tuple[str]
+    backtest_start_date: str | tuple[str]
+    backtest_end_date: str | tuple[str]
 
 
 @final
@@ -146,6 +146,7 @@ class Strategy:
         Risk management rules.
     """
 
-    algorithm: type[StrategyEngine]
-    footprint: Footprint
-    risk_management: RiskManagement
+    algorithm: type[StrategyEngine] | tuple[type[StrategyEngine]]
+    execution: type[ExecutionEngine] | tuple[type[ExecutionEngine]]
+    footprint: Footprint | tuple[Footprint]
+    risk_management: RiskManagement | tuple[RiskManagement]

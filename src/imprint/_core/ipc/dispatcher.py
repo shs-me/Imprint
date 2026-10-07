@@ -15,7 +15,7 @@ from types import FunctionType
 from typing import Any
 
 from imprint._core import configs
-from imprint._core.configs import Configuration, SharedMemorySegments
+from imprint._core.configs import SharedMemorySegments
 from imprint._core.ipc.manager import HostManager, NodeManager
 from imprint._core.settings import KwgsKeys as kk
 
@@ -61,7 +61,7 @@ class Dispatcher:
             Receives the instantiated manager (HostManager or NodeManager) as a keyword argument.
         """
         if self.is_main:
-            self.configurations_init()
+            self.shm_segments_init()
 
         self.shm_init()
 
@@ -72,7 +72,7 @@ class Dispatcher:
         gc.collect()
         gc.enable()
 
-    def configurations_init(self) -> None:
+    def shm_segments_init(self) -> None:
         """Scan configuration classes, calculate shared memory offsets, and create IPC synchronization tools.
 
         Inspects the `configs` module for subclasses of `Configuration` and
@@ -81,24 +81,18 @@ class Dispatcher:
         objects (Event, Semaphore).
         """
         offset: int = 0
-        self.kwg[kk.Configs.name], self.kwg[kk.SegmentConfigs.name] = [], []
-        self.kwg[kk.Segments.name] = {}
+        self.kwg[kk.SegmentConfigs.name], self.kwg[kk.Segments.name] = [], {}
         for name, obj in inspect.getmembers(configs, inspect.isclass):
-            if (
-                issubclass(obj, Configuration)
-                and (obj is not Configuration)
-                and (obj is not SharedMemorySegments)
+            if issubclass(obj, SharedMemorySegments) and (
+                obj is not SharedMemorySegments
             ):
-                c_obj: Configuration = (
+                c_obj: SharedMemorySegments = (
                     self.kwg.pop(name) if name in self.kwg else obj()
                 )
-                if isinstance(c_obj, SharedMemorySegments):
-                    self.kwg[kk.SegmentConfigs.name].append(c_obj)
-                    self.kwg[kk.Segments.name][name] = slice(
-                        offset, (offset := (offset + c_obj.shm_size))
-                    )
-                else:
-                    self.kwg[kk.Configs.name].append(c_obj)
+                self.kwg[kk.SegmentConfigs.name].append(c_obj)
+                self.kwg[kk.Segments.name][name] = slice(
+                    offset, (offset := (offset + c_obj.shm_size))
+                )
 
         self.kwg[kk.Segments.name][kk.ShmSize.name] = offset
         self.kwg[kk.MainTools.name] = [Event(), Semaphore(0)]

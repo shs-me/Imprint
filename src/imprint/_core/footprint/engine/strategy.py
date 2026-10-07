@@ -45,6 +45,9 @@ class SyncWithExecution(ABC):
         cfgMetrics = self.manager.cfgMetrics
         self.time_start_reading = cfgMetrics.time_start_reading.view.cast("q")
 
+    def post_init(self) -> None:
+        self._signal_id, self._count_send_signal = 0, 0
+
     @final
     @property
     def base_tp_dev(self) -> int:
@@ -306,3 +309,7 @@ class StrategyEngine(StrategyProtocol, ABC):
             sl_dev=sl_dev,
             pass_lag=pass_lag,
         )
+
+    @override
+    def reset(self) -> None:
+        self._sync.post_init()

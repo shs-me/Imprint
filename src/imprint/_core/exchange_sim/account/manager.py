@@ -10,7 +10,6 @@ from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.exchange_sim.account.position import Position
-from imprint._core.ipc import NodeManager
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -45,22 +44,21 @@ class Manager(Position, ABC):
     )
 
     @override
-    def post_init(self, manager: NodeManager) -> None:
+    def post_init(self) -> None:
         """Initialize position parameters, timeframe configurations, and preallocate equity history buffers."""
-        Position.post_init(self, manager)
+        Position.post_init(self)
 
-        cfgAC = manager.cfgAccount
+        cfgAC = self.manager.cfgAccount
         self.latency = cfgAC.latency_ms
 
-        cfgFP = manager.cfgFootprint
+        cfgFP = self.manager.cfgFootprint
         self.timeframe = int(cfgFP.timeframe)
 
+        cfgSetup = self.manager.cfgSetup
         start_dt: datetime = datetime.fromisoformat(
-            manager.cfgSetup.backtest_start_date
+            cfgSetup.backtest_start_date
         )
-        end_dt: datetime = datetime.fromisoformat(
-            manager.cfgSetup.backtest_end_date
-        )
+        end_dt: datetime = datetime.fromisoformat(cfgSetup.backtest_end_date)
         total_days: int = max(1, (end_dt - start_dt).days + 1)
 
         self.bar_count = (total_days * 24 * 60 * 60 * 1000) // self.timeframe
@@ -68,6 +66,11 @@ class Manager(Position, ABC):
         self.equity_history = np.zeros(
             (self.bar_count, EquityC + 1), dtype=int64
         )
+
+    @override
+    def reset(self) -> None:
+        Position.reset(self)
+        self.base_timestamp[0] = 0
 
     @final
     def dump_equity_history(self) -> None:

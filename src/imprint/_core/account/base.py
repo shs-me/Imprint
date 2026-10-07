@@ -39,6 +39,8 @@ class Base:
         Shared memory buffer view holding current equity/dynamic balance as int64.
     """
 
+    manager: NodeManager
+
     price_prec: int = field(init=False)
     qty_prec: int = field(init=False)
     price_mult: int = field(init=False)
@@ -63,15 +65,18 @@ class Base:
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
 
-    def post_init(self, manager: NodeManager) -> None:
+    def __post_init__(self) -> None:
+        self.post_init()
+
+    def post_init(self) -> None:
         """Initialize precision parameters, balance multipliers, and shared memory buffers."""
-        cfgCoin = manager.cfgCoin
+        cfgCoin = self.manager.cfgCoin
         self.price_prec = cfgCoin.price_prec
         self.qty_prec = cfgCoin.qty_prec
         self.price_mult = cfgCoin.price_mult
         self.qty_mult = cfgCoin.qty_mult
 
-        cfgAC = manager.cfgAccount
+        cfgAC = self.manager.cfgAccount
         self.scale_prec = cfgAC.scale_prec
         self.scale_mult = cfgAC.scale_mult
         self.leverage = cfgAC.leverage
@@ -79,6 +84,9 @@ class Base:
 
         self.startNbalance = round(cfgAC.balance * self.scale_mult)
 
+    def reset(self) -> None:
+        self.post_init()
         self.nBalance[0] = self.startNbalance
+        self.lockedNbalance[0] = 0
         self.availableNbalance[0] = self.startNbalance
         self.dynamicNbalance[0] = self.startNbalance

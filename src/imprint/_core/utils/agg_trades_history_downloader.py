@@ -54,12 +54,11 @@ class DownloadAggTradesHistory(BaseREST):
         Structured NumPy dtype definition for parsing raw CSV rows.
     """
 
-    symbol: str
-    start_date_str: str
-    end_date_str: str
-    price_mult: int
-    qty_mult: int
-
+    symbol: str = field(init=False)
+    start_date_str: str = field(init=False)
+    end_date_str: str = field(init=False)
+    price_mult: int = field(init=False)
+    qty_mult: int = field(init=False)
     cur_date: date = field(init=False)
     start_date: date = field(init=False)
     end_date: date = field(init=False)
@@ -87,24 +86,16 @@ class DownloadAggTradesHistory(BaseREST):
         self.write_timeout: float | None = None
         self.pool_timeout: float | None = None
 
-        self.base_url: str = f"{c.BASE_UM_AGGTRADES_DAILY_URL}/{self.symbol}"
-
-        self.start_date = date.fromisoformat(self.start_date_str)
-        self.end_date = date.fromisoformat(self.end_date_str)
-
-        if self.end_date >= (today := datetime.now(tz=UTC).date()):
-            self.end_date = today - timedelta(days=1)
-
-        self.cur_date = self.start_date
         self.data_dir = c.AGG_TRADES_DATA_PATH
-        data_path: list[str] = [
-            p for p in os.listdir(self.data_dir) if p == f"{self.symbol}.npz"
-        ]
-        self.data_path = f"{self.data_dir}/{data_path[0]}" if data_path else ""
-        self.data_manifest_path = f"{self.data_dir}/{self.symbol}_manifest.txt"
-        os.makedirs(self.data_dir, exist_ok=True)
 
-    def download(self) -> None:
+    def download(
+        self,
+        symbol: str,
+        start_date_str: str,
+        end_date_str: str,
+        price_mult: int,
+        qty_mult: int,
+    ) -> None:
         """Download missing historical daily ZIP archives, extract CSVs, and convert to `.npz` arrays.
 
         Raises
@@ -112,6 +103,14 @@ class DownloadAggTradesHistory(BaseREST):
         DownloadError
             If downloading a specific daily archive fails three consecutive times.
         """
+        self.symbol = symbol
+        self.start_date_str = start_date_str
+        self.end_date_str = end_date_str
+        self.price_mult = price_mult
+        self.qty_mult = qty_mult
+
+        self._init_session()
+
         manifest: str = self.data_manifest
         counter: int = 0
         log_base_url: bool = False
@@ -159,6 +158,25 @@ class DownloadAggTradesHistory(BaseREST):
 
         if downloaded_days:
             self.log(f"Downloaded days: {downloaded_days}")
+
+    def _init_session(
+        self,
+    ) -> None:
+        self.base_url: str = f"{c.BASE_UM_AGGTRADES_DAILY_URL}/{self.symbol}"
+
+        self.start_date = date.fromisoformat(self.start_date_str)
+        self.end_date = date.fromisoformat(self.end_date_str)
+
+        if self.end_date >= (today := datetime.now(tz=UTC).date()):
+            self.end_date = today - timedelta(days=1)
+
+        self.cur_date = self.start_date
+        data_path: list[str] = [
+            p for p in os.listdir(self.data_dir) if p == f"{self.symbol}.npz"
+        ]
+        self.data_path = f"{self.data_dir}/{data_path[0]}" if data_path else ""
+        self.data_manifest_path = f"{self.data_dir}/{self.symbol}_manifest.txt"
+        os.makedirs(self.data_dir, exist_ok=True)
 
     def _extract_zip(self, zip_path: str, target_csv: str) -> None:
         """Extract the first archived CSV file from a ZIP bundle and remove the ZIP archive.

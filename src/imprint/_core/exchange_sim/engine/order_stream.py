@@ -9,7 +9,6 @@ from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.exchange_sim.account import Account
-from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
 
 
@@ -30,8 +29,6 @@ class Order(Account, ABC):
     obRow : memoryview of shape (1,), dtype=q
         Current write head / row cursor within ``order_book``.
     """
-
-    manager: NodeManager = field(init=False)
 
     executed_orders: NDArray[int64] = field(
         default_factory=lambda: np.zeros(
@@ -56,10 +53,12 @@ class Order(Account, ABC):
     )
 
     @override
-    def post_init(self, manager: NodeManager) -> None:
-        Account.post_init(self, manager)
+    def reset(self) -> None:
+        Account.reset(self)
 
-        self.manager = manager
+        self.executed_orders.fill(0)
+        self.order_book.fill(0)
+        self.eoRow[0], self.obRow[0], self.order_id[0] = 0, 0, 0
 
     @final
     @override

@@ -45,6 +45,15 @@ class MarketDataStream:
     read_row: int = field(default=0, init=False)
     max_data_row: int = field(init=False)
 
+    def __post_init__(self) -> None:
+        self.post_init()
+
+    def post_init(self) -> None:
+        self.dataz = np.load(f"{AGG_TRADES_DATA_PATH}/{self.symbol}.npz")
+        self.data_path_id, self.max_data_row, self.read_row = 0, 0, 0
+        self.data_paths = self.get_data_paths()
+        self.change_data()
+
     @property
     def symbol(self) -> str:
         return self.manager.cfgCoin.symbol
@@ -54,7 +63,6 @@ class MarketDataStream:
         """Execute the streaming loop, dispatching historical trades sequentially to the backtest buffer."""
         _ = self.manager.cfgMarketDataStream
         # - - -
-        self.post_init()
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -88,11 +96,8 @@ class MarketDataStream:
                 )
                 self.read_row += 1
 
-    def post_init(self) -> None:
-        self.dataz = np.load(f"{AGG_TRADES_DATA_PATH}/{self.symbol}.npz")
-        self.data_path_id, self.max_data_row, self.read_row = 0, 0, 0
-        self.data_paths = self.get_data_paths()
-        self.change_data()
+    def reset(self) -> None:
+        self.post_init()
 
     def get_data_paths(self) -> list[str]:
         """Parse the manifest file and filter available daily data partitions by the backtest date range.

@@ -46,6 +46,12 @@ class Writer(Base, ABC):
     updater: JitFootprintUpdate = field(init=False)
 
     @override
+    def reset(self) -> None:
+        Base.reset(self)
+
+        self.counter_ticks = 0
+
+    @override
     def child_init_array(self, nPrice: int64) -> None:
         """Initialize metadata tracking arrays and JIT update engines.
 

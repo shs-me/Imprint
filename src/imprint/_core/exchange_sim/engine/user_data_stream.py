@@ -7,7 +7,6 @@ from numpy import int64
 from numpy.typing import NDArray
 
 from imprint._core.exchange_sim.engine.order_stream import Order
-from imprint._core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -35,10 +34,10 @@ class UserData(Order, ABC):
     uds_cell_amount: int = field(init=False)
 
     @override
-    def post_init(self, manager: NodeManager) -> None:
-        Order.post_init(self, manager)
+    def __post_init__(self) -> None:
+        Order.__post_init__(self)
 
-        uds = manager.cfgUserDataStream.ring_buf
+        uds = self.manager.cfgUserDataStream.ring_buf
         self.uds_data_buf = uds.data_buf
         self.uds_data_size = uds.data_size
         self.uds_data_header_buf = uds.data_header_buf

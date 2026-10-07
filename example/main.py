@@ -33,6 +33,7 @@ if __name__ == "__main__":
                     scale_prec=15,
                     active_order_limit=1000,
                 ),
+                tick_size="0.01",
                 lot_size="0.001",
                 backtest_start_date="2026-01-01",
                 backtest_end_date="2026-01-01",
@@ -51,9 +52,9 @@ if __name__ == "__main__":
                 exchange_rest=BinanceFuturesREST,
             ),
         ),
-        symbol="DASHUSDT",
         strategy=Strategy(
             algorithm=IntraDay,
+            execution=HedgeExecution,
             footprint=Footprint(
                 timeframe=tf.M1, step_tick=5, state=True, ctrade=True
             ),
@@ -67,7 +68,7 @@ if __name__ == "__main__":
                 pass_execute_signal_if_timer_ms_exepired=1000,
             ),
         ),
-        execution=HedgeExecution,
+        symbol="DASHUSDT",
         with_execution=True,
     )
     imp.run_core()

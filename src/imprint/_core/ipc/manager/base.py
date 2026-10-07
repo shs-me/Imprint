@@ -11,8 +11,8 @@ from multiprocessing.synchronize import Event, Semaphore
 from types import GenericAlias
 from typing import final
 
-from imprint._core import configs as cfg
-from imprint._core.configs import RingBuf, Segment
+import imprint._core.configs as cfg
+from imprint._core.configs import RingBuf, Segment, SharedMemorySegments
 
 
 @dataclass(slots=True)
@@ -73,7 +73,7 @@ class Base(ABC):
         Host-level process status integer array cast to signed 64-bit integers ('q').
     """
 
-    _configs: list[cfg.Configuration]
+    _configs: list[list[cfg.Configuration]]
     _segment_configs: list[cfg.SharedMemorySegments]
     _segments: dict[str, slice]
     _shm_buf: memoryview
@@ -99,9 +99,13 @@ class Base(ABC):
     _procs_status: memoryview = field(init=False)
     _main_status: memoryview = field(init=False)
 
+    _count_configs: int = field(default=0, init=False)
+    _config_idx: int = field(default=0, init=False)
+
     @final
     def __post_init__(self) -> None:
         """Initialize configurations, synchronize attributes, and cast status buffer views."""
+        self._count_configs = len(self._configs)
         self.__init_attributes()
 
         self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
@@ -116,9 +120,11 @@ class Base(ABC):
     def __init_attributes(self) -> None:
         """Identify, filter, and bind configuration components to Base attributes."""
 
-        objs: list[cfg.Configuration | Event | Semaphore] = (
-            self._configs + self._segment_configs + self._main_tools
-        )
+        configs = self._configs[self._config_idx]
+        self._config_idx += 1
+        objs: list[
+            cfg.Configuration | cfg.SharedMemorySegments | Event | Semaphore
+        ] = configs + self._segment_configs + self._main_tools
         for obj in objs:
             for attr_name, attr_type in Base.__annotations__.items():
                 if issubclass(attr_type.__class__, GenericAlias):
@@ -157,7 +163,8 @@ class Base(ABC):
 
     @final
     def _change_configs(self) -> None:
-        for obj in self._configs:
+        configs = self._configs[self._config_idx]
+        for obj in configs:
             for attr_name, attr_type in Base.__annotations__.items():
                 if issubclass(attr_type.__class__, GenericAlias):
                     continue
@@ -165,3 +172,11 @@ class Base(ABC):
                 if isinstance(obj, attr_type):
                     setattr(self, attr_name, obj)
                     break
+
+    def _reset(self) -> None:
+        for attr_name, attr_type in Base.__annotations__.items():
+            if issubclass(attr_type.__class__, GenericAlias):
+                continue
+
+            if isinstance(attr_type, SharedMemorySegments):
+                getattr(self, attr_name).reset()

@@ -61,6 +61,8 @@ class StrategyProtocol(Protocol):
             Terminal last price level index at bar close.
         """
 
+    def reset(self) -> None: ...
+
 
 class ExecutionProtocol(Protocol):
     """Define trade execution callback interfaces for order lifecycle events."""
@@ -163,6 +165,8 @@ class ExecutionProtocol(Protocol):
             Commission fee associated with the order state, if applicable. Must be non-negative.
         """
         ...
+
+    def reset(self) -> None: ...
 
 
 class LoggerProtocol(Protocol):

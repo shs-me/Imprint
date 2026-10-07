@@ -91,10 +91,7 @@ class Converter:
     _first_base_timestamp: int = field(default=0, init=False)
 
     def post_init(
-        self,
-        cfgCoin: cfg.Coin,
-        cfgFP: cfg.Footprint,
-        total_backtest_days: int,
+        self, cfgCoin: cfg.Coin, cfgFP: cfg.Footprint, total_backtest_days: int
     ) -> None:
         self.tick_size = cfgCoin.tick_size
         self.price_prec = cfgCoin.price_prec

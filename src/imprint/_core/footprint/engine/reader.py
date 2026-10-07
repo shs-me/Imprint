@@ -34,6 +34,21 @@ class Reader(w.Writer):
 
     analyzer: JitFootprintAnalyzer = field(init=False)
 
+    def reset(self) -> None:
+        w.Writer.reset(self)
+
+        if hasattr(self, "analyzer"):
+            self.analyzer.atr_period = self.strategy.atr_period
+            self.analyzer.park_period = self.strategy.park_period
+            self.analyzer.ma_vol_period = self.strategy.ma_volume_period
+            self.analyzer.ma_ats_period = self.strategy.ma_avg_trade_size_period
+            self.analyzer.ma_count_trade_period = (
+                self.strategy.ma_count_trade_period
+            )
+            self.analyzer.big_cluster_mult = round(
+                self.strategy.big_cluster_mult * 10_000
+            )
+
     @final
     @override
     def child_init_array(self, nPrice: int64) -> None:

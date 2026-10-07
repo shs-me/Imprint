@@ -55,7 +55,7 @@ class Base(ABC):
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
         self.__engine_complete = cfgMetrics.engine_complete.view
 
-        self.account = Account()
+        self.account = Account(self.manager)
 
     @final
     @node_handler()
@@ -64,7 +64,6 @@ class Base(ABC):
         u = self.manager.cfgUserDataStream.ring_buf
         s = self.manager.cfgSignalStream.ring_buf
         # - - -
-        self.post_init()
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -87,8 +86,9 @@ class Base(ABC):
             elif u.wid_buf[0] != u.rid_buf[0]:
                 self._check_user_data_buf()
 
-    def post_init(self) -> None:
-        self.account.post_init(self.manager)
+    def reset(self) -> None:
+        self.readed_timestamp, self.count_open_positions[0] = 0, 0
+        self.account.reset()
 
     @final
     def __complete(self) -> bool:

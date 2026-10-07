@@ -12,7 +12,6 @@ from numba.experimental import (
 from numpy import int64
 
 from imprint._core.exchange_sim.account.base import Account, to_nMargin
-from imprint._core.ipc import NodeManager
 
 
 @dataclass(slots=True)
@@ -81,30 +80,50 @@ class Position(Account, ABC):
 
     position: JitPosition = field(init=False)
 
-    @override
-    def post_init(self, manager: NodeManager) -> None:
-        Account.post_init(self, manager)
+    def __post_init__(self) -> None:
+        Account.__post_init__(self)
 
-        if not hasattr(self, "position"):
-            self.position = JitPosition(
-                price_mult=self.price_mult,
-                qty_mult=self.qty_mult,
-                scale_mult=self.scale_mult,
-                leverage=self.leverage,
-                nBalance=self.nBalance,
-                lockedNbalance=self.lockedNbalance,
-                longNqty=self.longNqty,
-                longEntryNprice=self.longEntryNprice,
-                shortNqty=self.shortNqty,
-                shortEntryNprice=self.shortEntryNprice,
-                long_mae=self.long_mae,
-                long_mfe=self.long_mfe,
-                short_mae=self.short_mae,
-                short_mfe=self.short_mfe,
-                unrealizedNpnl=self.unrealizedNpnl,
-                longUnrealizedNpnl=self.longUnrealizedNpnl,
-                shortUnrealizedNpnl=self.shortUnrealizedNpnl,
-            )
+        self.position = JitPosition(
+            price_mult=self.price_mult,
+            qty_mult=self.qty_mult,
+            scale_mult=self.scale_mult,
+            leverage=self.leverage,
+            nBalance=self.nBalance,
+            lockedNbalance=self.lockedNbalance,
+            longNqty=self.longNqty,
+            longEntryNprice=self.longEntryNprice,
+            shortNqty=self.shortNqty,
+            shortEntryNprice=self.shortEntryNprice,
+            long_mae=self.long_mae,
+            long_mfe=self.long_mfe,
+            short_mae=self.short_mae,
+            short_mfe=self.short_mfe,
+            unrealizedNpnl=self.unrealizedNpnl,
+            longUnrealizedNpnl=self.longUnrealizedNpnl,
+            shortUnrealizedNpnl=self.shortUnrealizedNpnl,
+        )
+
+        print(self.position)
+
+    @override
+    def post_init(self) -> None:
+        Account.post_init(self)
+
+        self.position.price_mult = self.price_mult
+        self.position.qty_mult = self.qty_mult
+        self.position.scale_mult = self.scale_mult
+        self.position.leverage = self.leverage
+        self.position.nBalance = self.nBalance
+
+    @override
+    def reset(self) -> None:
+        Account.reset(self)
+
+        self.longNqty[0], self.longEntryNprice[0], self.shortNqty[0] = 0, 0, 0
+        self.shortEntryNprice[0], self.unrealizedNpnl[0] = 0, 0
+        self.longUnrealizedNpnl[0], self.shortUnrealizedNpnl[0] = 0, 0
+        self.long_mae[0], self.long_mfe[0] = 0, 0
+        self.short_mae[0], self.short_mfe[0] = 0, 0
 
 
 spec = [

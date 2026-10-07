@@ -62,6 +62,7 @@ class Base(ABC):
         self.engine_complete = cfgMetrics.engine_complete.view
 
         self.at_max_row = self.agg_trades.shape[0]
+        self.strategy.fp = self.engine.fp
 
     @final
     @node_handler()
@@ -73,7 +74,6 @@ class Base(ABC):
         """
         _ = self.manager.cfgMarketDataStream.ring_buf
         # - - -
-        self.post_init()
         while True:
             if self.manager.have_status():
                 task: int = self.manager.check_base_task()
@@ -121,9 +121,9 @@ class Base(ABC):
 
                 self.post_update()
 
-    def post_init(self) -> None:
+    def reset(self) -> None:
+        self.at_rid, self.at_wid = 0, 0
         self.engine.post_init()
-        self.strategy.fp = self.engine.fp
 
     @final
     def __complete(self, wid: memoryview, rid: memoryview) -> bool:

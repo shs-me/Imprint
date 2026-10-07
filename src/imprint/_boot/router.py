@@ -16,28 +16,33 @@ class Imprint:
     @overload
     def __new__(
         cls,
+        run_mode: cfg.Backtest,
+        strategy: cfg.Strategy,
+        symbol: str | tuple[str],
+        with_execution: bool,
+    ) -> BacktestEngine: ...
+    @overload
+    def __new__(
+        cls,
         run_mode: cfg.Backtest
         | tuple[type[cfg.Backtest], cfg.Backtest, cfg.Live],
-        symbol: str,
         strategy: cfg.Strategy,
-        execution: type[cfg.ExecutionEngine],
+        symbol: str,
         with_execution: bool,
     ) -> BacktestEngine: ...
     @overload
     def __new__(
         cls,
         run_mode: cfg.Live | tuple[type[cfg.Live], cfg.Backtest, cfg.Live],
-        symbol: str,
         strategy: cfg.Strategy,
-        execution: type[cfg.ExecutionEngine],
+        symbol: str,
         with_execution: bool,
     ) -> LiveEngine: ...
     def __new__(
         cls,
         run_mode: RUN_MODES | tuple[type[RUN_MODES], cfg.Backtest, cfg.Live],
-        symbol: str,
         strategy: cfg.Strategy,
-        execution: type[cfg.ExecutionEngine],
+        symbol: str | tuple[str],
         with_execution: bool,
     ):
         """Initialize and return a concrete BacktestEngine or LiveEngine instance.
@@ -76,9 +81,8 @@ class Imprint:
 
         return engine(
             run_mode=mode,  # pyright: ignore[reportArgumentType]
-            symbol=symbol,
             strategy=strategy,
-            execution=execution,
+            symbol=symbol,
             with_execution=with_execution,
         )
 

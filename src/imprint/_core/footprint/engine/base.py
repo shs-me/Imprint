@@ -67,11 +67,11 @@ class Base(ABC):
     manager: NodeManager
     strategy: StrategyProtocol
 
-    __init_arrays: bool = field(default=True, init=False)
+    trade_read_time: memoryview = field(init=False)
     __base_fp_dump_path: str = field(init=False)
 
+    __init_arrays: bool = field(default=True, init=False)
     re_init: int = field(default=c.RIF_session | c.RIF_idx, init=False)
-    trade_read_time: memoryview = field(init=False)
     idYmin: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
@@ -90,6 +90,11 @@ class Base(ABC):
     storage: JitStorage = field(init=False)
 
     def __post_init__(self) -> None:
+        cfgMetrics = self.manager.cfgMetrics
+        self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
+        self.post_init()
+
+    def post_init(self) -> None:
         cfgFP = self.manager.cfgFootprint
         self.with_state = cfgFP.state
         self.with_ctrade = cfgFP.ctrade
@@ -98,11 +103,6 @@ class Base(ABC):
         self.__base_fp_dump_path = (
             f"{c.FOOTPRINT_HEADERS_DATA_PATH}/{cfgCoin.symbol.upper()}"
         )
-
-        cfgMetrics = self.manager.cfgMetrics
-        self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
-
-    def post_init(self) -> None:
         cfgSetup = self.manager.cfgSetup
         if cfgSetup.backtesting:
             start_dt: date = date.fromisoformat(cfgSetup.backtest_start_date)
@@ -123,6 +123,28 @@ class Base(ABC):
             total_backtest_days=total_days,
         )
         self.fp.post_init()
+
+        if hasattr(self, "storage"):
+            self.storage.headers = self.fp.headers
+            self.storage.fp_cols = con.fp_cols
+            self.storage.idxVP = con.idxVP
+            self.storage.idxDP = con.idxDP
+            self.storage.tims = con.tims
+            self.storage.scale = con.scale
+            self.storage.step_tick = con.step_tick
+            self.storage.price_mult = con.price_mult
+            self.storage.price_prec = con.price_prec
+            self.storage.qty_mult = con.qty_mult
+            self.storage.qty_prec = con.qty_prec
+            self.storage.with_state = self.with_state
+            self.storage.with_ctrade = self.with_ctrade
+
+        self.strategy.reset()
+
+    def reset(self) -> None:
+        self.re_init = c.RIF_session | c.RIF_idx
+        self.idYmin[0], self.idYmax[0], self.idx[0], self.lidx[0] = 0, 0, 0, 0
+        self.post_init()
 
     @final
     def init_session(self, nPrice: int64, timestamp: int64) -> None:
