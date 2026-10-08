@@ -16,18 +16,10 @@ class Imprint:
     @overload
     def __new__(
         cls,
-        run_mode: cfg.Backtest,
-        strategy: cfg.Strategy,
-        symbol: str | tuple[str],
-        with_execution: bool,
-    ) -> BacktestEngine: ...
-    @overload
-    def __new__(
-        cls,
         run_mode: cfg.Backtest
         | tuple[type[cfg.Backtest], cfg.Backtest, cfg.Live],
         strategy: cfg.Strategy,
-        symbol: str,
+        symbol: str | list[str],
         with_execution: bool,
     ) -> BacktestEngine: ...
     @overload
@@ -42,7 +34,7 @@ class Imprint:
         cls,
         run_mode: RUN_MODES | tuple[type[RUN_MODES], cfg.Backtest, cfg.Live],
         strategy: cfg.Strategy,
-        symbol: str | tuple[str],
+        symbol: str | list[str],
         with_execution: bool,
     ):
         """Initialize and return a concrete BacktestEngine or LiveEngine instance.

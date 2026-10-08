@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field
 from datetime import date
 from typing import final
@@ -85,24 +85,48 @@ class Base(ABC):
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
     fp: Footprint = field(init=False)
-    with_state: bool = field(init=False)
-    with_ctrade: bool = field(init=False)
     storage: JitStorage = field(init=False)
 
     def __post_init__(self) -> None:
         cfgMetrics = self.manager.cfgMetrics
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
-        self.post_init()
 
-    def post_init(self) -> None:
-        cfgFP = self.manager.cfgFootprint
-        self.with_state = cfgFP.state
-        self.with_ctrade = cfgFP.ctrade
+        self.fp = Footprint(Converter(), self.lidx)
+        self.storage = JitStorage(
+            headers=self.fp.headers,
+            headers_offset=self.fp.headers_offset,
+            idYmin=self.idYmin,
+            idYmax=self.idYmax,
+            idx=self.idx,
+            lidx=self.lidx,
+            baseTimestamp=self.fp.con.baseTimestamp,
+            baseNprice=self.fp.con.baseNprice,
+            center=self.fp.con.center,
+            fp_rows=self.fp.con.fp_rows,
+            fp_cols=self.fp.con.fp_cols,
+            idxVP=self.fp.con.idxVP,
+            idxDP=self.fp.con.idxDP,
+            tims=self.fp.con.tims,
+            scale=self.fp.con.scale,
+            step_tick=self.fp.con.step_tick,
+            price_mult=self.fp.con.price_mult,
+            price_prec=self.fp.con.price_prec,
+            qty_mult=self.fp.con.qty_mult,
+            qty_prec=self.fp.con.qty_prec,
+            with_state=self.fp.con.with_state,
+            with_ctrade=self.fp.con.with_ctrade,
+        )
+        self.init()
+
+    @final
+    def init(self) -> None:
+        self.__init_arrays = True
 
         cfgCoin = self.manager.cfgCoin
         self.__base_fp_dump_path = (
             f"{c.FOOTPRINT_HEADERS_DATA_PATH}/{cfgCoin.symbol.upper()}"
         )
+
         cfgSetup = self.manager.cfgSetup
         if cfgSetup.backtesting:
             start_dt: date = date.fromisoformat(cfgSetup.backtest_start_date)
@@ -111,40 +135,19 @@ class Base(ABC):
         else:
             total_days = 0
 
-        if hasattr(self, "fp"):
-            con = self.fp.con
-        else:
-            con = Converter()
-            self.fp = Footprint(con, self.lidx)
-
-        con.post_init(
+        self.fp.con.post_init(
             cfgCoin=self.manager.cfgCoin,
             cfgFP=self.manager.cfgFootprint,
             total_backtest_days=total_days,
         )
         self.fp.post_init()
-
-        if hasattr(self, "storage"):
-            self.storage.headers = self.fp.headers
-            self.storage.fp_cols = con.fp_cols
-            self.storage.idxVP = con.idxVP
-            self.storage.idxDP = con.idxDP
-            self.storage.tims = con.tims
-            self.storage.scale = con.scale
-            self.storage.step_tick = con.step_tick
-            self.storage.price_mult = con.price_mult
-            self.storage.price_prec = con.price_prec
-            self.storage.qty_mult = con.qty_mult
-            self.storage.qty_prec = con.qty_prec
-            self.storage.with_state = self.with_state
-            self.storage.with_ctrade = self.with_ctrade
-
+        self.storage.headers = self.fp.headers
         self.strategy.reset()
 
     def reset(self) -> None:
+        self.init()
         self.re_init = c.RIF_session | c.RIF_idx
         self.idYmin[0], self.idYmax[0], self.idx[0], self.lidx[0] = 0, 0, 0, 0
-        self.post_init()
 
     @final
     def init_session(self, nPrice: int64, timestamp: int64) -> None:
@@ -158,28 +161,27 @@ class Base(ABC):
             Unix timestamp in microseconds marking the beginning of the session.
         """
         if self.__init_arrays:
-            self.__init_array(nPrice=nPrice)
+            self.init_array(nPrice=nPrice)
             self.__init_arrays = False
 
         if self.re_init & c.RIF_idx:
             self.manager.set_proc_sc(
                 code=scs.FP_IDX_FILLED, wait_main_task=False
             )
-            self.__init_idx(nPrice, timestamp)
+            self.init_idx(nPrice, timestamp)
             self.re_init &= ~(c.RIF_idx)
 
         if self.re_init & c.RIF_idy:
             self.manager.set_proc_sc(
                 code=scs.FP_IDY_FILLED, wait_main_task=False
             )
-            self.__init_idy(nPrice)
+            self.init_idy(nPrice)
             self.re_init &= ~(c.RIF_idy)
 
         self.re_init &= ~(c.RIF_session)
         self.manager.set_proc_sc(scs.FP_RE_INIT, wait_main_task=False)
 
-    @final
-    def __init_idx(self, nPrice: int64, timestamp: int64) -> None:
+    def init_idx(self, nPrice: int64, timestamp: int64) -> None:
         """Reset footprint base, state, and trade arrays, and advance header offsets.
 
         Parameters
@@ -190,13 +192,13 @@ class Base(ABC):
             Unix timestamp in microseconds for session initialization.
         """
         self.fp.base.fill(0)
-        if self.with_state:
+        if self.fp.con.with_state:
             self.fp.state.fill(0)
-        if self.with_ctrade:
+        if self.fp.con.with_ctrade:
             self.fp.ctrade.fill(0)
 
         if self.fp.con._first_base_timestamp:
-            new_offset = self.fp.headers_offset[0] + (self.fp.con.bar_count)
+            new_offset = self.fp.headers_offset[0] + (self.fp.con.bar_count[0])
             if self.fp.headers.shape[0] <= new_offset:
                 self.fp.headers_offset[0] = 0
                 self.fp.headers.fill(0)
@@ -207,22 +209,8 @@ class Base(ABC):
         self.idx[0], self.lidx[0] = 0, 0
 
         self.fp.con.init_session(nPrice=nPrice, timestamp=timestamp)
-        self.child_init_idx(nPrice, timestamp)
 
-    @abstractmethod
-    def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        """Execute child-specific index initialization logic.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Number of price levels for index reset bounds.
-        timestamp : int64
-            Unix timestamp in microseconds for session initialization.
-        """
-
-    @final
-    def __init_idy(self, nPrice: int64) -> None:
+    def init_idy(self, nPrice: int64) -> None:
         """Re-initialize underlying data arrays based on price scaling changes.
 
         Parameters
@@ -230,10 +218,9 @@ class Base(ABC):
         nPrice : int64
             Updated number of price levels.
         """
-        self.__init_array(nPrice=nPrice)
+        self.init_array(nPrice=nPrice)
 
-    @final
-    def __init_array(self, nPrice: int64) -> None:
+    def init_array(self, nPrice: int64) -> None:
         """Allocate or pad footprint base, state, and cumulative trade arrays.
 
         Parameters
@@ -244,40 +231,17 @@ class Base(ABC):
         con = self.fp.con
         # - - -
         if not (self.re_init & c.RIF_idy):
-            con.fp_rows[0] = int(2 * (nPrice * 20 // 100 // con.scale))
-            rows, cols = con.fp_rows[0], con.fp_panel_cols
+            con.fp_rows[0] = int(2 * (nPrice * 20 // 100 // con.scale[0]))
+            rows, cols = con.fp_rows[0], con.fp_panel_cols[0]
             self.fp._re_init_arr(
                 base=FPArray(rows, cols),
-                state=(FPArray(rows, cols) if self.with_state else None),
-                ctrade=(FPArray(rows, cols) if self.with_ctrade else None),
+                state=(FPArray(rows, cols) if con.with_state[0] else None),
+                ctrade=(FPArray(rows, cols) if con.with_ctrade[0] else None),
             )
             self.idYmin[0], self.idYmax[0] = rows, 0
-            self.storage = JitStorage(
-                headers=self.fp.headers,
-                headers_offset=self.fp.headers_offset,
-                idYmin=self.idYmin,
-                idYmax=self.idYmax,
-                idx=self.idx,
-                lidx=self.lidx,
-                baseTimestamp=con.baseTimestamp,
-                baseNprice=con.baseNprice,
-                center=con.center,
-                fp_rows=con.fp_rows,
-                fp_cols=con.fp_cols,
-                idxVP=con.idxVP,
-                idxDP=con.idxDP,
-                tims=con.tims,
-                scale=con.scale,
-                step_tick=con.step_tick,
-                price_mult=con.price_mult,
-                price_prec=con.price_prec,
-                qty_mult=con.qty_mult,
-                qty_prec=con.qty_prec,
-                with_state=self.with_state,
-                with_ctrade=self.with_ctrade,
-            )
+
         else:
-            need_rows: int64 = nPrice * 20 // 100 // con.scale
+            need_rows: int64 = nPrice * 20 // 100 // con.scale[0]
             con.fp_rows[0] = int(con.fp_rows[0] + need_rows)
 
             if nPrice > con.baseNprice[0]:
@@ -290,28 +254,16 @@ class Base(ABC):
                 base=self.fp.base.padding(int(before), int(after)),
                 state=(
                     self.fp.state.padding(int(before), int(after))
-                    if self.with_state
+                    if con.with_state[0]
                     else None
                 ),
                 ctrade=(
                     self.fp.ctrade.padding(int(before), int(after))
-                    if self.with_ctrade
+                    if con.with_ctrade[0]
                     else None
                 ),
             )
             self.idYmin[0], self.idYmax[0] = con.fp_rows[0], 0
-
-        self.child_init_array(nPrice)
-
-    @abstractmethod
-    def child_init_array(self, nPrice: int64) -> None:
-        """Execute child-specific array initialization logic.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Number of price levels.
-        """
 
     @final
     def save_footprint_headers(self, last_idx: int) -> None:
@@ -377,19 +329,18 @@ spec = [
     ("baseNprice", types.MemoryView(nb.int64, 1, "C")),
     ("center", types.MemoryView(nb.int64, 1, "C")),
     ("fp_rows", types.MemoryView(nb.int64, 1, "C")),
-    ("fp_cols", nb.int64),
-    ("idxVP", nb.int64),
-    ("idxDP", nb.int64),
-    ("tims", nb.int64),
-    ("scale", nb.int64),
-    ("step_tick", nb.int64),
-    ("price_mult", nb.int64),
-    ("price_prec", nb.int64),
-    ("qty_mult", nb.int64),
-    ("qty_prec", nb.int64),
-    ("qty_prec", nb.int64),
-    ("with_state", nb.int64),
-    ("with_ctrade", nb.int64),
+    ("fp_cols", types.MemoryView(nb.int64, 1, "C")),
+    ("idxVP", types.MemoryView(nb.int64, 1, "C")),
+    ("idxDP", types.MemoryView(nb.int64, 1, "C")),
+    ("tims", types.MemoryView(nb.int64, 1, "C")),
+    ("scale", types.MemoryView(nb.int64, 1, "C")),
+    ("step_tick", types.MemoryView(nb.int64, 1, "C")),
+    ("price_mult", types.MemoryView(nb.int64, 1, "C")),
+    ("price_prec", types.MemoryView(nb.int64, 1, "C")),
+    ("qty_mult", types.MemoryView(nb.int64, 1, "C")),
+    ("qty_prec", types.MemoryView(nb.int64, 1, "C")),
+    ("with_state", types.MemoryView(nb.int64, 1, "C")),
+    ("with_ctrade", types.MemoryView(nb.int64, 1, "C")),
 ]
 
 
@@ -504,18 +455,18 @@ class JitStorage:
         baseNprice: memoryview,
         center: memoryview,
         fp_rows: memoryview,
-        fp_cols: int,
-        idxVP: int,
-        idxDP: int,
-        tims: int,
-        scale: int,
-        step_tick: int,
-        price_mult: int,
-        price_prec: int,
-        qty_mult: int,
-        qty_prec: int,
-        with_state: int,
-        with_ctrade: int,
+        fp_cols: memoryview,
+        idxVP: memoryview,
+        idxDP: memoryview,
+        tims: memoryview,
+        scale: memoryview,
+        step_tick: memoryview,
+        price_mult: memoryview,
+        price_prec: memoryview,
+        qty_mult: memoryview,
+        qty_prec: memoryview,
+        with_state: memoryview,
+        with_ctrade: memoryview,
     ) -> None:
         self.headers: NDArray[int64] = headers
         self.headers_offset: memoryview = headers_offset
@@ -527,15 +478,15 @@ class JitStorage:
         self.baseNprice: memoryview = baseNprice
         self.center: memoryview = center
         self.fp_rows: memoryview = fp_rows
-        self.fp_cols: int = fp_cols
-        self.idxVP: int = idxVP
-        self.idxDP: int = idxDP
-        self.tims: int = tims
-        self.scale: int = scale
-        self.step_tick: int = step_tick
-        self.price_mult: int = price_mult
-        self.price_prec: int = price_prec
-        self.qty_mult: int = qty_mult
-        self.qty_prec: int = qty_prec
-        self.with_state: int = with_state
-        self.with_ctrade: int = with_ctrade
+        self.fp_cols: memoryview = fp_cols
+        self.idxVP: memoryview = idxVP
+        self.idxDP: memoryview = idxDP
+        self.tims: memoryview = tims
+        self.scale: memoryview = scale
+        self.step_tick: memoryview = step_tick
+        self.price_mult: memoryview = price_mult
+        self.price_prec: memoryview = price_prec
+        self.qty_mult: memoryview = qty_mult
+        self.qty_prec: memoryview = qty_prec
+        self.with_state: memoryview = with_state
+        self.with_ctrade: memoryview = with_ctrade

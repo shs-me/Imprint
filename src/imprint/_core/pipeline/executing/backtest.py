@@ -42,10 +42,6 @@ class Backtest(Base):
 
         self.exchange_sim.reset()
 
-        self.account.nBalance = self.exchange_sim.nBalance
-        self.account.lockedNbalance = self.exchange_sim.lockedNbalance
-        self.account.availableNbalance = self.exchange_sim.availableNbalance
-
     @override
     def alarm_clock(
         self,
@@ -113,7 +109,7 @@ class Backtest(Base):
         nQty : int
             Normalized order quantity.
         """
-        timestamp = timestamp + self.exchange_sim.latency
+        timestamp = timestamp + self.exchange_sim.latency[0]
         Base.send_order(
             self, timestamp, order_param, client_order_id, nPrice, nQty
         )
@@ -177,13 +173,13 @@ class Backtest(Base):
 
         _.final_action()
         self.manager.set_log(
-            f"Balance: {_.nBalance[0] / _.scale_mult} \n"
-            + f"Locked Balance: {_.lockedNbalance[0] / _.scale_mult} \n"
-            + f"Unrealized PNL: {_.unrealizedNpnl[0] / _.scale_mult} \n"
-            + f"Long Unrealized PNL: {_.longUnrealizedNpnl[0] / _.scale_mult} \n"
-            + f"Short Unrealized PNL: {_.shortUnrealizedNpnl[0] / _.scale_mult} \n"
-            + f"Long Open Qty: {_.longNqty[0] / _.qty_mult} \n"
-            + f"Short Open Qty: {_.shortNqty[0] / _.qty_mult} \n"
+            f"Balance: {_.nBalance[0] / _.scale_mult[0]} \n"
+            + f"Locked Balance: {_.lockedNbalance[0] / _.scale_mult[0]} \n"
+            + f"Unrealized PNL: {_.unrealizedNpnl[0] / _.scale_mult[0]} \n"
+            + f"Long Unrealized PNL: {_.longUnrealizedNpnl[0] / _.scale_mult[0]} \n"
+            + f"Short Unrealized PNL: {_.shortUnrealizedNpnl[0] / _.scale_mult[0]} \n"
+            + f"Long Open Qty: {_.longNqty[0] / _.qty_mult[0]} \n"
+            + f"Short Open Qty: {_.shortNqty[0] / _.qty_mult[0]} \n"
             + f"Count Orders in History: {_.ohWid[0]} \n"
             + f"Count Active Orders: {_.obRow[0]} \n"
             + f"Count Open Positions: {self.count_open_positions[0]}"

@@ -31,8 +31,12 @@ class Account(Base, ABC):
         Number of feature columns per order history record (matches ``TP_ConstantCount``).
     """
 
-    takerNcommission: int = field(init=False)
-    makerNcommission: int = field(init=False)
+    takerNcommission: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    makerNcommission: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
     orders_history: NDArray[int64] = field(
         default_factory=lambda: np.zeros(
@@ -47,12 +51,12 @@ class Account(Base, ABC):
     oh_cols: int = field(default=c.TP_ConstantCount, init=False)
 
     @override
-    def post_init(self) -> None:
-        Base.post_init(self)
+    def init(self) -> None:
+        Base.init(self)
 
         cfgAC = self.manager.cfgAccount
-        self.takerNcommission = cfgAC.taker_commission.fixed
-        self.makerNcommission = cfgAC.maker_commission.fixed
+        self.takerNcommission[0] = cfgAC.taker_commission.fixed
+        self.makerNcommission[0] = cfgAC.maker_commission.fixed
 
     @override
     def reset(self) -> None:
@@ -80,12 +84,12 @@ class Account(Base, ABC):
             order_param & c.OF_LIMIT
         ):
             self.lockedNbalance[0] += to_nMargin(
-                nPrice,
-                nQty,
-                self.leverage,
-                self.price_mult,
-                self.qty_mult,
-                self.scale_mult,
+                nPrice=nPrice,
+                nQty=nQty,
+                leverage=self.leverage[0],
+                price_mult=self.price_mult[0],
+                qty_mult=self.qty_mult[0],
+                scale_mult=self.scale_mult[0],
             )
 
         self.post_lock_balance()

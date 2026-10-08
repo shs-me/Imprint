@@ -197,8 +197,8 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
                 self.mid_id = a
 
             row = a & mask
-            self.agg_trades[row, 0] = round(p * con.price_mult)
-            self.agg_trades[row, 1] = round(q * con.qty_mult)
+            self.agg_trades[row, 0] = round(p * con.price_mult[0])
+            self.agg_trades[row, 1] = round(q * con.qty_mult[0])
             self.agg_trades[row, 2] = t
             self.agg_trades[row, 3] = m
             self.filled[row] = True

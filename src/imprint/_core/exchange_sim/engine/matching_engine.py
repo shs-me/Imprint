@@ -31,8 +31,9 @@ class MatchingEngine(UserData, ABC):
         JIT-compiled high-performance matching engine instance.
     """
 
-    slippage: int = field(init=False)
-
+    slippage: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
     matching_engine: JitMatchingEngine = field(init=False)
 
     @override
@@ -49,13 +50,11 @@ class MatchingEngine(UserData, ABC):
         )
 
     @override
-    def post_init(self) -> None:
-        UserData.post_init(self)
+    def init(self) -> None:
+        UserData.init(self)
 
         cfgAC = self.manager.cfgAccount
-        self.slippage = cfgAC.slippage.fixed
-
-        self.matching_engine.slippage = self.slippage
+        self.slippage[0] = cfgAC.slippage.fixed
 
 
 spec = [
@@ -64,7 +63,7 @@ spec = [
     ("obRow", types.MemoryView(nb.int64, 1, "C")),
     ("executed_orders", types.Array(nb.int64, 2, "C")),
     ("eoRow", types.MemoryView(nb.int64, 1, "C")),
-    ("slippage", nb.int64),
+    ("slippage", types.MemoryView(nb.int64, 1, "C")),
 ]
 
 
@@ -110,14 +109,14 @@ class JitMatchingEngine:
         obRow: memoryview,
         executed_orders: NDArray[int64],
         eoRow: memoryview,
-        slippage: int,
+        slippage: memoryview,
     ) -> None:
         self.order_book: NDArray[int64] = order_book
         self.order_id_buf: memoryview = order_id_buf
         self.obRow: memoryview = obRow
         self.executed_orders: NDArray[int64] = executed_orders
         self.eoRow: memoryview = eoRow
-        self.slippage: int = slippage
+        self.slippage: memoryview = slippage
 
     def matching(self, trade_timestamp: int, trade_nPrice: int) -> bool:
         """Process incoming trade ticks against active order book entries.
@@ -269,7 +268,7 @@ class JitMatchingEngine:
         int
             Slippage-adjusted normalized price.
         """
-        slipageTicks = nPrice * self.slippage // 10_000
+        slipageTicks = nPrice * self.slippage[0] // 10_000
         return nPrice + (slipageTicks if is_buy else -slipageTicks)
 
     def _processing_cancel_order(

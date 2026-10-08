@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import cast, final
 
+import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
@@ -36,7 +37,9 @@ class Chart(ABC):
     base: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
     state: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
     ctrade: FPArray = field(default_factory=lambda: FPArray(0, 0), init=False)
-    headers: NDArray[int64] = field(init=False)
+    headers: NDArray[int64] = field(
+        default_factory=lambda: np.zeros((0, 0), dtype=int64), init=False
+    )
     headers_offset: memoryview = field(init=False)
 
 

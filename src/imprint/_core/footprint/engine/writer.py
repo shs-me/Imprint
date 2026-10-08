@@ -46,30 +46,22 @@ class Writer(Base, ABC):
     updater: JitFootprintUpdate = field(init=False)
 
     @override
+    def __post_init__(self) -> None:
+        Base.__post_init__(self)
+
+        self.__meta_data = np.zeros(shape=(2, BHM_ConstantCount), dtype=float64)
+        self.updater = JitFootprintUpdate(
+            meta_data=self.__meta_data, storage=self.storage
+        )
+
+    @override
     def reset(self) -> None:
         Base.reset(self)
 
         self.counter_ticks = 0
 
     @override
-    def child_init_array(self, nPrice: int64) -> None:
-        """Initialize metadata tracking arrays and JIT update engines.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Fixed-point reference price integer of the active session.
-        """
-        if not (self.re_init & c.RIF_idy):
-            self.__meta_data = np.zeros(
-                shape=(2, BHM_ConstantCount), dtype=float64
-            )
-            self.updater = JitFootprintUpdate(
-                meta_data=self.__meta_data, storage=self.storage
-            )
-
-    @override
-    def child_init_idx(self, nPrice: int64, timestamp: int64) -> None:
+    def init_idx(self, nPrice: int64, timestamp: int64) -> None:
         """Reset internal metadata workspace upon index system re-initialization.
 
         Parameters
@@ -79,6 +71,7 @@ class Writer(Base, ABC):
         timestamp : int64
             Reset epoch timestamp in milliseconds.
         """
+        Base.init_idx(self, nPrice, timestamp)
         self.__meta_data.fill(0)
 
     @final
@@ -204,11 +197,11 @@ class JitFootprintUpdate:
 
         # Update Footprint
         footprint[idy, idx] += nQty
-        footprint[idy, _.idxVP] += nQty
-        footprint[idy, _.idxDP] += -nQty if is_sell else nQty
-        if _.with_ctrade:
+        footprint[idy, _.idxVP[0]] += nQty
+        footprint[idy, _.idxDP[0]] += -nQty if is_sell else nQty
+        if _.with_ctrade[0]:
             ctrade[idy, idx] += 1
-            ctrade[idy, _.idxVP] += 1
+            ctrade[idy, _.idxVP[0]] += 1
 
         # Update Headers
         ho: int = _.headers_offset[0]
@@ -260,7 +253,7 @@ class JitFootprintUpdate:
                 break
 
         while 0 <= prev_bar < bar:
-            _.headers[(ho + prev_bar), c.BH_Time] = prev_t = prev_t + _.tims
+            _.headers[(ho + prev_bar), c.BH_Time] = prev_t = prev_t + _.tims[0]
             _.headers[(ho + prev_bar), c.BH_Open : c.BH_Close + 1] = prev_p
             prev_bar += 1
 
@@ -299,8 +292,8 @@ class JitFootprintUpdate:
         """
         _ = self.storage
         # - - -
-        price = round(nPrice / _.price_mult, _.price_prec)
-        qty = round(nQty / _.qty_mult, _.qty_prec)
+        price = round(nPrice / _.price_mult[0], _.price_prec[0])
+        qty = round(nQty / _.qty_mult[0], _.qty_prec[0])
         self.meta_data[0, BHM_VWAP_W] += qty
         self.meta_data[0, BHM_VWAP_PW] += price * qty
         self.meta_data[0, BHM_VWAP_P2W] += (price**2) * qty
@@ -309,6 +302,10 @@ class JitFootprintUpdate:
         variance = max(0.0, ((p2w / w) - (vwap**2)))
         vwsd = np.sqrt(variance)
         upper_band, lower_band = vwap + (2.0 * vwsd), vwap - (2.0 * vwsd)
-        _.headers[bwo, c.BH_VWAP] = round(vwap * _.price_mult)
-        _.headers[bwo, c.BH_VWAP_LOWER_BAND] = round(lower_band * _.price_mult)
-        _.headers[bwo, c.BH_VWAP_UPPER_BAND] = round(upper_band * _.price_mult)
+        _.headers[bwo, c.BH_VWAP] = round(vwap * _.price_mult[0])
+        _.headers[bwo, c.BH_VWAP_LOWER_BAND] = round(
+            lower_band * _.price_mult[0]
+        )
+        _.headers[bwo, c.BH_VWAP_UPPER_BAND] = round(
+            upper_band * _.price_mult[0]
+        )

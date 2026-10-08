@@ -86,9 +86,11 @@ class Base(ABC):
                     _.wid_buf, _.rid_buf
                 ):
                     self.__final_actions()
-                    return self.manager.set_proc_sc(
-                        scs.COMPLETE, wait_main_task=False
-                    )
+                    self.manager.complete()
+                    continue
+
+                if task & scs.RESET:
+                    self.reset()
 
             if _.wid_buf[0] == _.rid_buf[0]:
                 self.alarm_clock()
@@ -123,7 +125,7 @@ class Base(ABC):
 
     def reset(self) -> None:
         self.at_rid, self.at_wid = 0, 0
-        self.engine.post_init()
+        self.engine.reset()
 
     @final
     def __complete(self, wid: memoryview, rid: memoryview) -> bool:

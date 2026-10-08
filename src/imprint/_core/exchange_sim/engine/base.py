@@ -68,18 +68,10 @@ class Base(MatchingEngine):
         )
 
     @override
-    def post_init(self) -> None:
-        MatchingEngine.post_init(self)
-
-        self._engine.makerNcommission = self.makerNcommission
-        self._engine.takerNcommission = self.takerNcommission
-        self._engine.timeframe = self.timeframe
-        self._engine.equity_history = self.equity_history
-
-    @override
     def reset(self) -> None:
-        Base.reset(self)
+        MatchingEngine.reset(self)
 
+        self._engine.equity_history = self.equity_history
         self.trade_read_time[0] = 0
 
     def final_action(self) -> None:
@@ -114,9 +106,9 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
     ("uds_data_header_buf", types.MemoryView(nb.int64, 1, "C")),
     ("uds_wid_buf", types.MemoryView(nb.int64, 1, "C")),
     ("uds_cell_amount", nb.int64),
-    ("makerNcommission", nb.int64),
-    ("takerNcommission", nb.int64),
-    ("timeframe", nb.int64),
+    ("makerNcommission", types.MemoryView(nb.int64, 1, "C")),
+    ("takerNcommission", types.MemoryView(nb.int64, 1, "C")),
+    ("timeframe", types.MemoryView(nb.int64, 1, "C")),
     ("equity_history", types.Array(nb.int64, 2, "C")),
 ]
 
@@ -225,9 +217,9 @@ class JitExchangeEngine:
         uds_data_header_buf: memoryview,
         uds_wid_buf: memoryview,
         uds_cell_amount: int,
-        makerNcommission: int,
-        takerNcommission: int,
-        timeframe: int,
+        makerNcommission: memoryview,
+        takerNcommission: memoryview,
+        timeframe: memoryview,
         equity_history: NDArray[int64],
     ) -> None:
         self.matching_engine: JitMatchingEngine = matching_engine
@@ -245,9 +237,9 @@ class JitExchangeEngine:
         self.uds_data_header_buf: memoryview = uds_data_header_buf
         self.uds_wid_buf: memoryview = uds_wid_buf
         self.uds_cell_amount: int = uds_cell_amount
-        self.makerNcommission: int = makerNcommission
-        self.takerNcommission: int = takerNcommission
-        self.timeframe: int = timeframe
+        self.makerNcommission: memoryview = makerNcommission
+        self.takerNcommission: memoryview = takerNcommission
+        self.timeframe: memoryview = timeframe
         self.equity_history: NDArray[int64] = equity_history
 
     def start(self, timestamp: int) -> None:
@@ -327,9 +319,9 @@ class JitExchangeEngine:
         for eo_row in range(ma.eoRow[0]):
             ma.eoRow[0] -= 1
 
-            order_param = ma.executed_orders[eo_row, c.TP_order_param]
-            nPrice = ma.executed_orders[eo_row, c.TP_nPrice]
-            nQty = ma.executed_orders[eo_row, c.TP_nQty]
+            order_param: int = int(ma.executed_orders[eo_row, c.TP_order_param])
+            nPrice: int = int(ma.executed_orders[eo_row, c.TP_nPrice])
+            nQty: int = int(ma.executed_orders[eo_row, c.TP_nQty])
 
             is_buy: bool = bool(order_param & c.OF_BUY)
             is_long: bool = bool(order_param & c.OF_LONG)
@@ -339,14 +331,16 @@ class JitExchangeEngine:
 
             if bool(order_param & c.OF_FILLED):
                 rate: int = (
-                    self.makerNcommission if is_maker else self.takerNcommission
+                    self.makerNcommission[0]
+                    if is_maker
+                    else self.takerNcommission[0]
                 )
                 commission: float = (
-                    ((nPrice / pos.price_mult) * (nQty / pos.qty_mult))
+                    ((nPrice / pos.price_mult[0]) * (nQty / pos.qty_mult[0]))
                     * rate
                     / 10_000
                 )
-                nCommission: int = round(commission * pos.scale_mult)
+                nCommission: int = round(commission * pos.scale_mult[0])
                 ma.executed_orders[eo_row, c.TP_nCommission] = nCommission
 
                 if not is_open:

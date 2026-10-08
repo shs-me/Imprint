@@ -35,24 +35,29 @@ class Manager(Position, ABC):
         of the initial trading bar in milliseconds epoch time.
     """
 
-    latency: int = field(init=False)
-    timeframe: int = field(init=False)
-    bar_count: int = field(init=False)
+    latency: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    timeframe: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    bar_count: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
     equity_history: NDArray[int64] = field(init=False)
     base_timestamp: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
 
     @override
-    def post_init(self) -> None:
-        """Initialize position parameters, timeframe configurations, and preallocate equity history buffers."""
-        Position.post_init(self)
+    def init(self) -> None:
+        Position.init(self)
 
         cfgAC = self.manager.cfgAccount
-        self.latency = cfgAC.latency_ms
+        self.latency[0] = cfgAC.latency_ms
 
         cfgFP = self.manager.cfgFootprint
-        self.timeframe = int(cfgFP.timeframe)
+        self.timeframe[0] = int(cfgFP.timeframe)
 
         cfgSetup = self.manager.cfgSetup
         start_dt: datetime = datetime.fromisoformat(
@@ -61,15 +66,18 @@ class Manager(Position, ABC):
         end_dt: datetime = datetime.fromisoformat(cfgSetup.backtest_end_date)
         total_days: int = max(1, (end_dt - start_dt).days + 1)
 
-        self.bar_count = (total_days * 24 * 60 * 60 * 1000) // self.timeframe
+        self.bar_count[0] = (
+            total_days * 24 * 60 * 60 * 1000
+        ) // self.timeframe[0]
 
         self.equity_history = np.zeros(
-            (self.bar_count, EquityC + 1), dtype=int64
+            (self.bar_count[0], EquityC + 1), dtype=int64
         )
 
     @override
     def reset(self) -> None:
         Position.reset(self)
+
         self.base_timestamp[0] = 0
 
     @final
@@ -84,7 +92,7 @@ def update_equity_ohlc(
     current_equity: int,
     equity_history: NDArray[int64],
     base_timestamp: memoryview,
-    timeframe: int,
+    timeframe: memoryview,
 ) -> None:
     """Update historical equity OHLC bars given a new trade timestamp and equity value.
 
@@ -111,14 +119,14 @@ def update_equity_ohlc(
     ce, eh = current_equity, equity_history
     # - - -
     if base_timestamp[0] == 0:
-        base_timestamp[0] = trade_timestamp - (trade_timestamp % timeframe)
+        base_timestamp[0] = trade_timestamp - (trade_timestamp % timeframe[0])
 
-    bar: int = (trade_timestamp - base_timestamp[0]) // timeframe
+    bar: int = (trade_timestamp - base_timestamp[0]) // timeframe[0]
     max_bars: int = equity_history.shape[0]
 
     if 0 <= bar < max_bars:
         if equity_history[bar, EquityT] == 0:
-            bar_open_time: int = base_timestamp[0] + (bar * timeframe)
+            bar_open_time: int = base_timestamp[0] + (bar * timeframe[0])
             eh[bar, :] = bar_open_time, ce, ce, ce, ce
 
             prev_bar: int = bar - 1
@@ -133,7 +141,7 @@ def update_equity_ohlc(
 
             while 0 <= prev_bar < bar:
                 eh[prev_bar, EquityT] = base_timestamp[0] + (
-                    prev_bar * timeframe
+                    prev_bar * timeframe[0]
                 )
                 eh[prev_bar, EquityO:] = prev_eq, prev_eq, prev_eq, prev_eq
                 prev_bar += 1

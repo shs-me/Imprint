@@ -74,9 +74,14 @@ class Host(Base):
                 self._sc_sem.acquire(timeout=30)
                 self.garbage_collect()
                 self.check_process_status_code()
-                if not self.close_core:
-                    continue
-            return
+                if self.close_procs:
+                    self.kill_procs()
+                    self.close_core = True
+
+                if self.close_core:
+                    return
+            else:
+                return
 
     def garbage_collect(self) -> None:
         """Trigger garbage collection on worker processes periodically based on elapsed time."""
@@ -87,7 +92,7 @@ class Host(Base):
     def check_process_status_code(self) -> None:
         """Examine status buffers for each monitored worker and handle outstanding code changes."""
         if self._main_status[ProcsIds.streaming]:
-            self.check_data_streaming_proc()
+            self.check_streaming_proc()
             self._main_status[ProcsIds.streaming] -= 1
 
         if self._main_status[ProcsIds.engine]:
@@ -98,18 +103,14 @@ class Host(Base):
             self.check_executing_proc()
             self._main_status[ProcsIds.executing] -= 1
 
-        if self.close_procs:
-            self.kill_procs()
-            self.close_core = True
-
-    def check_data_streaming_proc(self) -> None:
+    def check_streaming_proc(self) -> None:
         """Examine streaming worker process data flags and manage pipeline data states."""
         if not self.procs.get(ProcsIds.streaming):
             return
 
         p_id, p_name, _p_task_id, sc = self.get_proc_data(ProcsIds.streaming)
 
-        self.action_for_base_sc(sc, p_id, p_name)
+        self.action_for_base_sc(sc, p_id, _p_task_id, p_name)
 
         if sc & scs.DATA_PREPARED:
             self.logger(scs.DATA_PREPARED.label, LogLevel.WARNING, p_name)
@@ -130,7 +131,7 @@ class Host(Base):
 
         p_id, p_name, _p_task_id, sc = self.get_proc_data(ProcsIds.engine)
 
-        self.action_for_base_sc(sc, p_id, p_name)
+        self.action_for_base_sc(sc, p_id, _p_task_id, p_name)
 
         if sc & scs.FP_IDX_FILLED:
             self.logger(scs.FP_IDX_FILLED.label, LogLevel.WARNING, p_name)
@@ -164,7 +165,7 @@ class Host(Base):
 
         p_id, p_name, _p_task_id, sc = self.get_proc_data(ProcsIds.executing)
 
-        self.action_for_base_sc(sc, p_id, p_name)
+        self.action_for_base_sc(sc, p_id, _p_task_id, p_name)
 
         if sc & scs.LOSS_MORE_LIMIT:
             self.logger(scs.LOSS_MORE_LIMIT.label, LogLevel.WARNING, p_name)
@@ -183,7 +184,9 @@ class Host(Base):
 
         self.proc_is_alive(p_id)
 
-    def action_for_base_sc(self, sc: int, proc_id: int, proc_name: str) -> None:
+    def action_for_base_sc(
+        self, sc: int, proc_id: int, task_id: int, proc_name: str
+    ) -> None:
         """Execute basic state resolutions and system signaling for shared status codes.
 
         Parameters
@@ -207,9 +210,20 @@ class Host(Base):
             self.close_procs = True
             self.clear_proc_sc(scs.ERROR, proc_id)
 
+        if sc & scs.EXIT:
+            self.logger(scs.EXIT.label, LogLevel.WARNING, proc_name)
+            self.procs.pop(proc_id)
+            self.clear_proc_sc(scs.EXIT, proc_id)
+
         if sc & scs.COMPLETE:
             self.logger(scs.COMPLETE.label, LogLevel.WARNING, proc_name)
-            self.procs.pop(proc_id)
+            if self._config_idx == self._count_configs:
+                self.set_task_sc_to_proc(scs.EXIT, task_id)
+            else:
+                self.general_event(False)
+                self.set_task_sc_to_proc(scs.RESET, task_id)
+                self.reset()
+
             self.clear_proc_sc(scs.COMPLETE, proc_id)
 
         if sc & scs.INVALID_DATA:
@@ -238,6 +252,17 @@ class Host(Base):
                 proc_name,
             )
             self.clear_proc_sc(scs.RING_BUFFER_LOG_STREAM_OVERFLOW, proc_id)
+
+    def reset(self) -> None:
+        states = [
+            (self._procs_status[proc_data["task_id"]] & scs.RESET)
+            for proc_data in self.procs.values()
+        ]
+        if all(states):
+            self._change_configs()
+            self._reset()
+            self.general_event(True)
+            self.logger("Reset\n", LogLevel.INFO)
 
     def get_proc_data(self, proc: int) -> tuple[int, str, int, int]:
         """Fetch status and identity details for a given process key.
@@ -325,9 +350,11 @@ class Host(Base):
                 v["proc"].terminate()
                 v["proc"].join()
 
-            self.logger(scs.EXIT.label, LogLevel.INFO, v["proc_name"])
+            self.logger(scs.TERMINATE.label, LogLevel.INFO, v["proc_name"])
 
-    def general_event(self, run: bool, task_ids: list[int]) -> None:
+    def general_event(
+        self, run: bool, task_ids: list[int] | None = None
+    ) -> None:
         """Set or clear general synchronization event across worker tasks.
 
         Parameters
@@ -338,10 +365,14 @@ class Host(Base):
             List of task IDs to apply STOP codes to if run is False.
         """
         if run:
-            self._general_event.set()
+            if not self._general_event.is_set():
+                self._general_event.set()
         else:
-            self._general_event.clear()
-            [self.set_sc(task_id, scs.STOP) for task_id in task_ids]
+            if self._general_event.is_set():
+                self._general_event.clear()
+
+            if task_ids:
+                [self.set_sc(task_id, scs.STOP) for task_id in task_ids]
 
     def get_log(self, proc_id: int) -> list[tuple[int, str]]:
         """Retrieve and decode log status message for specified process ID.

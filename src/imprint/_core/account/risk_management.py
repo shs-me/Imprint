@@ -31,12 +31,11 @@ class RiskManagement(Base, ABC):
     __sl_offset_for_order_id: int = field(default=2_000_000_000, init=False)
 
     @override
-    def post_init(self) -> None:
-        """Initialize risk thresholds, order sizing limits, and signal timers."""
-        Base.post_init(self)
+    def init(self) -> None:
+        Base.init(self)
 
         cfgAC = self.manager.cfgAccount
-        self.__min_order_size = round(cfgAC.min_order_size * self.scale_mult)
+        self.__min_order_size = round(cfgAC.min_order_size * self.scale_mult[0])
 
         cfgRM = self.manager.cfgRiskManagement
         self.__entry_qty = cfgRM.entry_qty.fixed
@@ -58,8 +57,8 @@ class RiskManagement(Base, ABC):
         """
 
         return self.nBalance[0] > (
-            self.startNbalance
-            - (self.startNbalance * self.__max_loss_balance // 10_000)
+            self.startNbalance[0]
+            - (self.startNbalance[0] * self.__max_loss_balance // 10_000)
         )
 
     @final
@@ -102,7 +101,7 @@ class RiskManagement(Base, ABC):
         """
 
         if (
-            qty := (self.leverage * self.nominalEntryNqty)
+            qty := (self.leverage[0] * self.nominalEntryNqty)
         ) > self.__min_order_size:
             return qty
 
@@ -123,8 +122,10 @@ class RiskManagement(Base, ABC):
             Target order quantity in integer fixed-point units.
         """
 
-        nominal_qty: float = nominalNqty / self.scale_mult
-        return round((nominal_qty * self.price_mult * self.qty_mult) / nPrice)
+        nominal_qty: float = nominalNqty / self.scale_mult[0]
+        return round(
+            (nominal_qty * self.price_mult[0] * self.qty_mult[0]) / nPrice
+        )
 
     @final
     def set_tp_sel_dev(self, tp: int, sl: int, order_param: int) -> None:

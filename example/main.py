@@ -68,7 +68,7 @@ if __name__ == "__main__":
                 pass_execute_signal_if_timer_ms_exepired=1000,
             ),
         ),
-        symbol="DASHUSDT",
+        symbol=["DASHUSDT"] * 10,
         with_execution=True,
     )
     imp.run_core()

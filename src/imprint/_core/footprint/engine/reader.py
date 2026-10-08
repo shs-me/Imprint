@@ -34,43 +34,34 @@ class Reader(w.Writer):
 
     analyzer: JitFootprintAnalyzer = field(init=False)
 
+    @override
+    def __post_init__(self) -> None:
+        w.Writer.__post_init__(self)
+
+        self.analyzer = JitFootprintAnalyzer(
+            storage=self.storage,
+            atr_period=self.strategy.atr_period,
+            park_period=self.strategy.park_period,
+            ma_vol_period=self.strategy.ma_volume_period,
+            ma_ats_period=self.strategy.ma_avg_trade_size_period,
+            ma_count_trade_period=self.strategy.ma_count_trade_period,
+            big_cluster_mult=round(self.strategy.big_cluster_mult * 10_000),
+        )
+
+    @override
     def reset(self) -> None:
         w.Writer.reset(self)
 
-        if hasattr(self, "analyzer"):
-            self.analyzer.atr_period = self.strategy.atr_period
-            self.analyzer.park_period = self.strategy.park_period
-            self.analyzer.ma_vol_period = self.strategy.ma_volume_period
-            self.analyzer.ma_ats_period = self.strategy.ma_avg_trade_size_period
-            self.analyzer.ma_count_trade_period = (
-                self.strategy.ma_count_trade_period
-            )
-            self.analyzer.big_cluster_mult = round(
-                self.strategy.big_cluster_mult * 10_000
-            )
-
-    @final
-    @override
-    def child_init_array(self, nPrice: int64) -> None:
-        """Initialize arrays and instantiate the internal JIT analyzer.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Total number of price levels allocated in the footprint matrix buffer. Must be strictly positive.
-        """
-        w.Writer.child_init_array(self, nPrice)
-
-        if not (self.re_init & c.RIF_idy):
-            self.analyzer = JitFootprintAnalyzer(
-                storage=self.storage,
-                atr_period=self.strategy.atr_period,
-                park_period=self.strategy.park_period,
-                ma_vol_period=self.strategy.ma_volume_period,
-                ma_ats_period=self.strategy.ma_avg_trade_size_period,
-                ma_count_trade_period=self.strategy.ma_count_trade_period,
-                big_cluster_mult=round(self.strategy.big_cluster_mult * 10_000),
-            )
+        self.analyzer.atr_period = self.strategy.atr_period
+        self.analyzer.park_period = self.strategy.park_period
+        self.analyzer.ma_vol_period = self.strategy.ma_volume_period
+        self.analyzer.ma_ats_period = self.strategy.ma_avg_trade_size_period
+        self.analyzer.ma_count_trade_period = (
+            self.strategy.ma_count_trade_period
+        )
+        self.analyzer.big_cluster_mult = round(
+            self.strategy.big_cluster_mult * 10_000
+        )
 
     @final
     def analyze_footprint(self) -> None:
@@ -238,8 +229,8 @@ class JitFootprintAnalyzer:
         lowNprice: int64 = _.headers[bwo, c.BH_Low]
         closeNprice: int64 = _.headers[bwo, c.BH_Close]
 
-        bNprice, step_tick = _.baseNprice[0], _.step_tick
-        scale, center = _.scale, _.center[0]
+        bNprice, step_tick = _.baseNprice[0], _.step_tick[0]
+        scale, center = _.scale[0], _.center[0]
 
         open_idy: int64 = (bNprice - openNprice) // scale + center
         high_idy: int64 = (bNprice - highNprice) // scale + center
@@ -256,10 +247,10 @@ class JitFootprintAnalyzer:
         _.headers[bwo, c.BH_VAH] = (center - (high_idy + vah)) * scale + bNprice
         _.headers[bwo, c.BH_VAL] = (center - (high_idy + val)) * scale + bNprice
 
-        if not _.with_state:
+        if not _.with_state[0]:
             return
 
-        idYmin, idYmax = _.idYmin[0], _.idYmax[0]
+        idYmin, idYmax, idxDP = _.idYmin[0], _.idYmax[0], _.idxDP[0]
 
         state1 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
         state2 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
@@ -278,7 +269,7 @@ class JitFootprintAnalyzer:
         fp_state[idYmin:idYmax, idXbid : idXask + 1] &= ~state3
 
         state4 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
-        fp_state[idYmin:idYmax, _.idxDP] &= ~(state4)
+        fp_state[idYmin:idYmax, idxDP] &= ~(state4)
 
         ma_vol: int64 | int = (
             _.headers[bwo - 1, c.BH_MA_VOL] if (bwo - 1) > 0 else 0
@@ -286,9 +277,9 @@ class JitFootprintAnalyzer:
         vol: int64 = int64(ma_vol * (self.big_cluster_mult / 10_000))
         for idy in range(idYmin, idYmax):
             if ma_vol:
-                fp_state[idy, _.idxDP] |= (
+                fp_state[idy, idxDP] |= (
                     c.SF_BID_DELTA_DOMINATION_FP
-                    if (fp[idy, _.idxDP] < 0)
+                    if (fp[idy, idxDP] < 0)
                     else c.SF_ASK_DELTA_DOMINATION_FP
                 )
 
@@ -355,8 +346,8 @@ class JitFootprintAnalyzer:
         highNprice: int64 = _.headers[bwo, c.BH_High]
         lowNprice: int64 = _.headers[bwo, c.BH_Low]
 
-        bNprice, idxVP = _.baseNprice[0], _.idxVP
-        scale, center = _.scale, _.center[0]
+        bNprice, idxVP = _.baseNprice[0], _.idxVP[0]
+        scale, center = _.scale[0], _.center[0]
 
         high_idy: int64 = (bNprice - highNprice) // scale + center
         low_idy: int64 = (bNprice - lowNprice) // scale + center
@@ -425,7 +416,7 @@ class JitFootprintAnalyzer:
         _.headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + bNprice
         _.headers[bwo, c.BH_VAL_FP] = (center - val) * scale + bNprice
 
-        if not _.with_state:
+        if not _.with_state[0]:
             return
 
         fp_state[poc, lidx] |= c.SF_POC_FP

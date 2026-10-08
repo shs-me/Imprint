@@ -66,7 +66,7 @@ class Footprint(Chart):
             shape=(self.con.total_bar_count, c.BH_ConstantCount), dtype=int64
         )
         self.__bars = [
-            Bar(self, idXbid) for idXbid in range(0, self.con.fp_cols, 2)
+            Bar(self, idXbid) for idXbid in range(0, self.con.fp_cols[0], 2)
         ]
 
     def __getitem__(self, idx: int | int64) -> Bar:
@@ -158,8 +158,8 @@ class VolumeProfile[T]:
 
     def _re_init_arr(self) -> None:
         """Rebind volume profile array views to updated parent footprint arrays."""
-        self.base = cast(VPArray, self._fp.base[:, self._fp.con.idxVP])
-        self.state = cast(VPArray, self._fp.state[:, self._fp.con.idxVP])
+        self.base = cast(VPArray, self._fp.base[:, self._fp.con.idxVP[0]])
+        self.state = cast(VPArray, self._fp.state[:, self._fp.con.idxVP[0]])
 
     @property
     def poc(self) -> PriceLike[T]:
@@ -198,8 +198,8 @@ class DeltaProfile[T]:
 
     def _re_init_arr(self) -> None:
         """Rebind delta profile array views to updated parent footprint arrays."""
-        self.base = cast(DPArray, self._fp.base[:, self._fp.con.idxDP])
-        self.state = cast(DPArray, self._fp.state[:, self._fp.con.idxDP])
+        self.base = cast(DPArray, self._fp.base[:, self._fp.con.idxDP[0]])
+        self.state = cast(DPArray, self._fp.state[:, self._fp.con.idxDP[0]])
 
 
 @final

@@ -46,9 +46,9 @@ class MarketDataStream:
     max_data_row: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.post_init()
+        self.init()
 
-    def post_init(self) -> None:
+    def init(self) -> None:
         self.dataz = np.load(f"{AGG_TRADES_DATA_PATH}/{self.symbol}.npz")
         self.data_path_id, self.max_data_row, self.read_row = 0, 0, 0
         self.data_paths = self.get_data_paths()
@@ -72,9 +72,11 @@ class MarketDataStream:
                     )
 
                 if task & scs.COMPLETE and self.complete():
-                    return self.manager.set_proc_sc(
-                        scs.COMPLETE, wait_main_task=False
-                    )
+                    self.manager.complete()
+                    continue
+
+                if task & scs.RESET:
+                    self.reset()
 
             if self.read_row >= self.max_data_row:
                 if self.complete():
@@ -97,7 +99,7 @@ class MarketDataStream:
                 self.read_row += 1
 
     def reset(self) -> None:
-        self.post_init()
+        self.init()
 
     def get_data_paths(self) -> list[str]:
         """Parse the manifest file and filter available daily data partitions by the backtest date range.

@@ -138,3 +138,6 @@ class ExecutionEngine(ExecutionProtocol, ABC):
         nCommission : int
             Commission charges incurred prior to or during cancellation, scaled.
         """
+
+    @override
+    def reset(self) -> None: ...

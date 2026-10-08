@@ -11,6 +11,7 @@ import imprint.configs as cfg
 from imprint._core.configs import (
     Coin,
     Configuration,
+    Footprint,
     Setup,
     SharedMemorySegments,
 )
@@ -49,7 +50,7 @@ class Base(ABC):
     """
 
     strategy: cfg.Strategy
-    symbol: str | tuple[str]
+    symbol: str | list[str]
     with_execution: bool
 
     _coins: list[Coin] = field(init=False)
@@ -78,53 +79,60 @@ class Base(ABC):
         self._configs = []
         self._kwargs = {}
 
-        symbols = self.to_list(self.symbol, "")
-        algorithms = self.to_list(self.strategy.algorithm, cfg.StrategyEngine)
-        executions = self.to_list(self.strategy.execution, cfg.ExecutionEngine)
-        footprints = self.to_list(self.strategy.footprint, cfg.Footprint())
-        risk_managements = self.to_list(
+        symbols: list[str] = self.to_list(self.symbol, "")
+        algorithms: list[type[cfg.StrategyEngine]] = self.to_list(
+            self.strategy.algorithm, cfg.StrategyEngine
+        )
+        executions: list[type[cfg.ExecutionEngine]] = self.to_list(
+            self.strategy.execution, cfg.ExecutionEngine
+        )
+        footprints: list[Footprint] = self.to_list(
+            self.strategy.footprint, cfg.Footprint()
+        )
+        risk_managements: list[cfg.RiskManagement] = self.to_list(
             self.strategy.risk_management, cfg.RiskManagement()
         )
+        for sym, algo, exec, fp, rm in zip_longest(
+            symbols,
+            algorithms,
+            executions,
+            footprints,
+            risk_managements,
+            fillvalue=None,
+        ):
+            if sym:
+                coin: Coin = (
+                    deepcopy(self._coins[-1]) if self._coins else Coin()
+                )
+                coin.symbol = sym
+                self._coins.append(coin)
+
+            if algo or exec:
+                setup: Setup = (
+                    deepcopy(self._setups[-1]) if self._setups else Setup()
+                )
+                if algo:
+                    setup.algorithm_module = algo.__module__
+                    setup.algorithm_class_name = algo.__name__
+                if exec:
+                    setup.execution_module = exec.__module__
+                    setup.execution_class_name = exec.__name__
+
+                if self.with_execution:
+                    setup.execution = True
+                else:
+                    setup.execution = False
+
+                self._setups.append(setup)
+
+            if fp:
+                self._footprints.append(fp)
+
+            if rm:
+                self._risk_managements.append(rm)
+
         try:
-            for sym, algo, exec, fp, rm in zip_longest(
-                symbols,
-                algorithms,
-                executions,
-                footprints,
-                risk_managements,
-                fillvalue=None,
-            ):
-                if sym:
-                    coin = deepcopy(self._coins[-1]) if self._coins else Coin()
-                    coin.symbol = sym
-                    self._coins.append(coin)
-
-                if algo or exec:
-                    setup = (
-                        deepcopy(self._setups[-1]) if self._setups else Setup()
-                    )
-                    if algo:
-                        setup.algorithm_module = algo.__module__
-                        setup.algorithm_class_name = algo.__name__
-                    if exec:
-                        setup.execution_module = exec.__module__
-                        setup.execution_class_name = exec.__name__
-
-                    if self.with_execution:
-                        setup.execution = True
-                    else:
-                        setup.execution = False
-
-                    self._setups.append(setup)
-
-                if fp:
-                    self._footprints.append(fp)
-
-                if rm:
-                    self._risk_managements.append(rm)
-
             self._post_init()
-
         except InitFailed as e:
             return logger.info(f"Init, failed: {e}.\n")
 

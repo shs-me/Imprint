@@ -48,7 +48,22 @@ class Node(Base):
     __wait_main_task: bool = field(default=False, init=False)
     __proc_status: memoryview = field(init=False)
     __task_status: memoryview = field(init=False)
-
+    __ignore_ps: int = field(
+        default=~(
+            scs.HAVE_LOG
+            | scs.BIG_LOG_SIZE
+            | scs.RING_BUFFER_LOG_STREAM_OVERFLOW
+            | scs.FP_RE_INIT
+            | scs.FP_IDX_FILLED
+            | scs.FP_IDY_FILLED
+            | scs.ANALYSIS_LAG_MORE_SAFE_LAG
+        ),
+        init=False,
+    )
+    __alowed_ts: int = field(
+        default=(scs.RUN | scs.STOP | scs.RESET | scs.GC_COLLECT),
+        init=False,
+    )
     __dumper: DumpException = field(
         default_factory=lambda: DumpException(), init=False
     )
@@ -75,6 +90,7 @@ class Node(Base):
             Plaintext log string to encode and transmit to the host process.
         """
         _ = self._log_stream.ring_buf
+        # - - -
         lag: int = (
             (_.wid_buf[self._proc_id] - _.rid_buf[self._proc_id])
             + _.cell_amount
@@ -106,14 +122,11 @@ class Node(Base):
         Returns
         -------
         bool
-            True if status code or task code signals are present, ignoring plain
-            non-blocking ``HAVE_LOG`` states.
+            True if status code or task code signals are present
         """
-        return (
-            (self.__proc_status[0] != 0) or (self.__task_status[0] != 0)
-        ) and (
-            (self.__proc_status[0] != scs.HAVE_LOG.value)
-            or (self.__task_status[0] != 0)
+        return (self.__task_status[0] != 0) or (
+            (self.__proc_status[0] != 0)
+            and ((self.__proc_status[0] & self.__ignore_ps) != 0)
         )
 
     def check_base_task(self) -> int:
@@ -127,15 +140,16 @@ class Node(Base):
         int
             The raw task status code bitmask value before clearing.
         """
-        if self.__task_status[0] != 0 or self.__proc_status[0] != 0:
-            if self.__wait_main_task:
-                while self.__task_status[0] == 0:
-                    time.sleep(0.001)
+        if self.__wait_main_task:
+            while self.__task_status[0] == 0:
+                time.sleep(0.001)
 
-                self.__wait_main_task = False
+            self.__wait_main_task = False
 
-            task_sc: int = self.__task_status[0]
-            return_data: int = task_sc
+        task_sc: int = self.__task_status[0]
+        return_data: int = task_sc
+
+        if task_sc & self.__alowed_ts:
             clear_task: int = 0
 
             if task_sc & scs.RUN:
@@ -145,6 +159,12 @@ class Node(Base):
                 self._general_event.wait()
                 clear_task |= scs.STOP
 
+            if task_sc & scs.RESET:
+                self._change_configs()
+                gc.collect()
+                self._general_event.wait()
+                clear_task |= scs.RESET
+
             if task_sc & scs.GC_COLLECT:
                 gc.collect()
                 clear_task |= scs.GC_COLLECT
@@ -152,10 +172,11 @@ class Node(Base):
             if clear_task:
                 self.__clear_task_sc(clear_task)
 
-            return return_data
+        return return_data
 
-        else:
-            return 0
+    def complete(self) -> None:
+        self.__clear_task_sc(scs.COMPLETE)
+        self.set_proc_sc(scs.COMPLETE, wait_main_task=True)
 
     def set_proc_sc(self, code: scs | int, wait_main_task: bool) -> None:
         """Set status code bitmask for process and signal MainManager semaphore.

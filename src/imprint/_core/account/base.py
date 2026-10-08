@@ -41,16 +41,33 @@ class Base:
 
     manager: NodeManager
 
-    price_prec: int = field(init=False)
-    qty_prec: int = field(init=False)
-    price_mult: int = field(init=False)
-    qty_mult: int = field(init=False)
+    price_prec: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    qty_prec: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    price_mult: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    qty_mult: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
-    scale_prec: int = field(init=False)
-    scale_mult: int = field(init=False)
-    leverage: int = field(init=False)
+    scale_prec: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    scale_mult: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    leverage: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+    startNbalance: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
+
     start_balance: float = field(init=False)
-    startNbalance: int = field(init=False)
 
     nBalance: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
@@ -66,27 +83,28 @@ class Base:
     )
 
     def __post_init__(self) -> None:
-        self.post_init()
+        self.init()
 
-    def post_init(self) -> None:
-        """Initialize precision parameters, balance multipliers, and shared memory buffers."""
+    def init(self) -> None:
         cfgCoin = self.manager.cfgCoin
-        self.price_prec = cfgCoin.price_prec
-        self.qty_prec = cfgCoin.qty_prec
-        self.price_mult = cfgCoin.price_mult
-        self.qty_mult = cfgCoin.qty_mult
+        self.price_prec[0] = cfgCoin.price_prec
+        self.qty_prec[0] = cfgCoin.qty_prec
+        self.price_mult[0] = cfgCoin.price_mult
+        self.qty_mult[0] = cfgCoin.qty_mult
 
         cfgAC = self.manager.cfgAccount
-        self.scale_prec = cfgAC.scale_prec
-        self.scale_mult = cfgAC.scale_mult
-        self.leverage = cfgAC.leverage
+        self.scale_prec[0] = cfgAC.scale_prec
+        self.scale_mult[0] = cfgAC.scale_mult
+        self.leverage[0] = cfgAC.leverage
         self.start_balance = cfgAC.balance
 
-        self.startNbalance = round(cfgAC.balance * self.scale_mult)
+        self.startNbalance[0] = round(cfgAC.balance * self.scale_mult[0])
+
+        self.nBalance[0] = self.startNbalance[0]
+        self.availableNbalance[0] = self.startNbalance[0]
+        self.dynamicNbalance[0] = self.startNbalance[0]
 
     def reset(self) -> None:
-        self.post_init()
-        self.nBalance[0] = self.startNbalance
+        self.init()
+
         self.lockedNbalance[0] = 0
-        self.availableNbalance[0] = self.startNbalance
-        self.dynamicNbalance[0] = self.startNbalance

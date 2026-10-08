@@ -80,6 +80,7 @@ class Position(Account, ABC):
 
     position: JitPosition = field(init=False)
 
+    @override
     def __post_init__(self) -> None:
         Account.__post_init__(self)
 
@@ -103,18 +104,6 @@ class Position(Account, ABC):
             shortUnrealizedNpnl=self.shortUnrealizedNpnl,
         )
 
-        print(self.position)
-
-    @override
-    def post_init(self) -> None:
-        Account.post_init(self)
-
-        self.position.price_mult = self.price_mult
-        self.position.qty_mult = self.qty_mult
-        self.position.scale_mult = self.scale_mult
-        self.position.leverage = self.leverage
-        self.position.nBalance = self.nBalance
-
     @override
     def reset(self) -> None:
         Account.reset(self)
@@ -127,10 +116,10 @@ class Position(Account, ABC):
 
 
 spec = [
-    ("price_mult", nb.int64),
-    ("qty_mult", nb.int64),
-    ("scale_mult", nb.int64),
-    ("leverage", nb.int64),
+    ("price_mult", types.MemoryView(nb.int64, 1, "C")),
+    ("qty_mult", types.MemoryView(nb.int64, 1, "C")),
+    ("scale_mult", types.MemoryView(nb.int64, 1, "C")),
+    ("leverage", types.MemoryView(nb.int64, 1, "C")),
     ("nBalance", types.MemoryView(nb.int64, 1, "C")),
     ("lockedNbalance", types.MemoryView(nb.int64, 1, "C")),
     ("longNqty", types.MemoryView(nb.int64, 1, "C")),
@@ -228,10 +217,10 @@ class JitPosition:
 
     def __init__(
         self,
-        price_mult: int,
-        qty_mult: int,
-        scale_mult: int,
-        leverage: int,
+        price_mult: memoryview,
+        qty_mult: memoryview,
+        scale_mult: memoryview,
+        leverage: memoryview,
         nBalance: memoryview,
         lockedNbalance: memoryview,
         longNqty: memoryview,
@@ -246,10 +235,10 @@ class JitPosition:
         longUnrealizedNpnl: memoryview,
         shortUnrealizedNpnl: memoryview,
     ) -> None:
-        self.price_mult: int = price_mult
-        self.qty_mult: int = qty_mult
-        self.scale_mult: int = scale_mult
-        self.leverage: int = leverage
+        self.price_mult: memoryview = price_mult
+        self.qty_mult: memoryview = qty_mult
+        self.scale_mult: memoryview = scale_mult
+        self.leverage: memoryview = leverage
         self.nBalance: memoryview = nBalance
         self.lockedNbalance: memoryview = lockedNbalance
         self.longNqty: memoryview = longNqty
@@ -474,10 +463,10 @@ class JitPosition:
         return to_nMargin(
             nPrice=nPrice,
             nQty=nQty,
-            leverage=self.leverage,
-            price_mult=self.price_mult,
-            qty_mult=self.qty_mult,
-            scale_mult=self.scale_mult,
+            leverage=self.leverage[0],
+            price_mult=self.price_mult[0],
+            qty_mult=self.qty_mult[0],
+            scale_mult=self.scale_mult[0],
         )
 
     def to_long_nPnl(
@@ -500,8 +489,10 @@ class JitPosition:
             Normalized PnL in currency units.
         """
         diffNprice: int | int64 = (closeNprice - entryNprice) * 1
-        pnl: float = (diffNprice / self.price_mult) * (nQty / self.qty_mult)
-        return round(pnl * self.scale_mult)
+        pnl: float = (diffNprice / self.price_mult[0]) * (
+            nQty / self.qty_mult[0]
+        )
+        return round(pnl * self.scale_mult[0])
 
     def to_short_nPnl(
         self, closeNprice: int | int64, entryNprice: int, nQty: int | int64
@@ -523,5 +514,7 @@ class JitPosition:
             Normalized PnL in currency units.
         """
         diffNprice: int | int64 = (closeNprice - entryNprice) * -1
-        pnl: float = (diffNprice / self.price_mult) * (nQty / self.qty_mult)
-        return round(pnl * self.scale_mult)
+        pnl: float = (diffNprice / self.price_mult[0]) * (
+            nQty / self.qty_mult[0]
+        )
+        return round(pnl * self.scale_mult[0])

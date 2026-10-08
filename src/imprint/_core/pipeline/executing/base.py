@@ -74,9 +74,11 @@ class Base(ABC):
 
                 if task & scs.COMPLETE and self.__complete():
                     self.__final_actions()
-                    return self.manager.set_proc_sc(
-                        scs.COMPLETE, wait_main_task=False
-                    )
+                    self.manager.complete()
+                    continue
+
+                if task & scs.RESET:
+                    self.reset()
 
             if self.__engine_complete[0] == 0:
                 self.alarm_clock(s.wid_buf, s.rid_buf, u.wid_buf, u.rid_buf)

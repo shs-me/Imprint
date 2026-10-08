@@ -5,6 +5,7 @@ from loguru import logger
 
 import imprint.configs as cfg
 from imprint._boot.base import Base, InitFailed
+from imprint._core.configs import Coin, Setup
 from imprint._core.configs import MarketDataStream as _MDS
 from imprint._core.utils.base_adapters import ApiNotFoundError
 
@@ -50,7 +51,7 @@ class Live(Base):
         self._account = cfg.Account(leverage=_.leverage)
         self._other_configs.append([self._account])
 
-        setup = self._setups[0]
+        setup: Setup = self._setups[0]
         setup.agg_trades_decoder_module = _.agg_trades_decoder.__module__
         setup.agg_trades_decoder_class_name = _.agg_trades_decoder.__name__
         setup.user_stream_decoder_module = _.user_stream_decoder.__module__
@@ -61,7 +62,7 @@ class Live(Base):
         setup.exchange_rest_class_name = _.exchange_rest.__name__
         setup.backtesting = False
 
-        coin = self._coins[0]
+        coin: Coin = self._coins[0]
         self._rest = _.exchange_rest(logger=logger, symbol=coin.symbol)
         self._rest.base_url = _.connector.base_rest_url
 

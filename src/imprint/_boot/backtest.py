@@ -7,7 +7,7 @@ from loguru import logger
 
 import imprint.configs as cfg
 from imprint._boot.base import Base, InitFailed
-from imprint._core.configs import Account
+from imprint._core.configs import Account, Coin, Setup
 from imprint._core.configs import MarketDataStream as _MDS
 from imprint._core.constant import (
     EQUITY_HISTORY_DATA_PATH,
@@ -64,18 +64,24 @@ class Backtest(Base):
         self._account = self.to_list(self.run_mode.account, Account())
         self._other_configs.append(self._account)
 
-        tick_sizes = self.to_list(self.run_mode.tick_size, "")
-        lot_sizes = self.to_list(self.run_mode.lot_size, "")
-        start_dates = self.to_list(self.run_mode.backtest_start_date, "")
-        end_dates = self.to_list(self.run_mode.backtest_end_date, "")
+        tick_sizes: list[str] = self.to_list(self.run_mode.tick_size, "")
+        lot_sizes: list[str] = self.to_list(self.run_mode.lot_size, "")
+        start_dates: list[str] = self.to_list(
+            self.run_mode.backtest_start_date, ""
+        )
+        end_dates: list[str] = self.to_list(self.run_mode.backtest_end_date, "")
 
-        idx = 0
+        coin_idx, setup_idx = 0, 0
         for ts, ls, sd, ed in zip_longest(
             tick_sizes, lot_sizes, start_dates, end_dates, fillvalue=None
         ):
             if ts or ls:
-                if not (coin := self.list_get(self._coins, idx)):
+                coin: Coin | None = self.list_get(self._coins, coin_idx)
+                if not coin:
                     coin = deepcopy(self._coins[-1])
+                    self._coins.append(coin)
+                else:
+                    coin_idx += 1
 
                 if ts:
                     coin.tick_size = ts
@@ -83,8 +89,12 @@ class Backtest(Base):
                     coin.lot_size = ls
 
             if sd or ed:
-                if not (setup := self.list_get(self._setups, idx)):
+                setup: Setup | None = self.list_get(self._setups, setup_idx)
+                if not setup:
                     setup = deepcopy(self._setups[-1])
+                    self._setups.append(setup)
+                else:
+                    setup_idx += 1
 
                 if sd:
                     setup.backtest_start_date = sd
@@ -92,7 +102,9 @@ class Backtest(Base):
                     setup.backtest_end_date = ed
 
         try:
-            downloader = DownloadAggTradesHistory(logger=logger)
+            downloader: DownloadAggTradesHistory = DownloadAggTradesHistory(
+                logger=logger
+            )
             for coin, setup in zip_longest(
                 self._coins, self._setups, fillvalue=None
             ):

@@ -164,6 +164,7 @@ class Base(ABC):
     @final
     def _change_configs(self) -> None:
         configs = self._configs[self._config_idx]
+        self._config_idx += 1
         for obj in configs:
             for attr_name, attr_type in Base.__annotations__.items():
                 if issubclass(attr_type.__class__, GenericAlias):
@@ -178,5 +179,5 @@ class Base(ABC):
             if issubclass(attr_type.__class__, GenericAlias):
                 continue
 
-            if isinstance(attr_type, SharedMemorySegments):
+            if issubclass(attr_type, SharedMemorySegments):
                 getattr(self, attr_name).reset()

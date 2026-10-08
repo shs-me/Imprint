@@ -542,7 +542,11 @@ class RingBuf:
         self.rid_buf = self.reader_id.view.cast("q")
 
     def reset(self) -> None:
-        self.wid_buf[0], self.rid_buf[0] = 0, 0
+        for idx in range(self.count_writer):
+            self.wid_buf[idx] = 0
+
+        for idx in range(self.count_reader):
+            self.rid_buf[idx] = 0
 
     def lag_not_is_safe(self) -> bool:
         """Check whether any reader lags behind the writer beyond the safe threshold.
