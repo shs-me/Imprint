@@ -78,8 +78,7 @@ class Reader(w.Writer):
             self.strategy.on_bar_update(
                 self.idYmin[0], self.idYmax[0], idx, lidx
             )
-
-            self.idYmin[0], self.idYmax[0] = self.fp.con.fp_rows[0], 0
+            self.reset_bbox()
 
         if (self.re_init & c.RIF_idx) or ((idx & ~1) > lidx):
             self.analyzer.analyze_closed_bar(self.fp.base, self.fp.state)
@@ -130,6 +129,14 @@ class Reader(w.Writer):
         Forces active bar closure routines, updates indicators, and notifies
         the algorithm state machines.
         """
+        idx, lidx = self.idx[0], self.lidx[0]
+        if not self.bbox_is_read():
+            self.analyzer.analyze_bar(self.fp.base, self.fp.state)
+            self.strategy.on_bar_update(
+                self.idYmin[0], self.idYmax[0], idx, lidx
+            )
+            self.reset_bbox()
+
         self.analyzer.analyze_closed_bar(self.fp.base, self.fp.state)
         self.strategy.on_bar_close(self.idx[0], self.lidx[0])
         self.__set_last_trade_time()

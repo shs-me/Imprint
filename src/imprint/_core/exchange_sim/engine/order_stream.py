@@ -31,19 +31,13 @@ class Order(Account, ABC):
     """
 
     executed_orders: NDArray[int64] = field(
-        default_factory=lambda: np.zeros(
-            (1000, c.TP_ConstantCount), dtype=np.int64
-        ),
-        init=False,
+        default_factory=lambda: np.zeros((0, 0), dtype=np.int64), init=False
     )
     eoRow: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
     order_book: NDArray[int64] = field(
-        default_factory=lambda: np.zeros(
-            (1000, c.OB_ConstantCount), dtype=int64
-        ),
-        init=False,
+        default_factory=lambda: np.zeros((0, 0), dtype=int64), init=False
     )
     order_id: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
@@ -53,11 +47,27 @@ class Order(Account, ABC):
     )
 
     @override
+    def init(self) -> None:
+        Account.init(self)
+
+        limit = self.manager.cfgAccount.active_order_limit
+
+        if limit != self.order_book.shape[0]:
+            self.order_book = np.zeros((limit, c.OB_ConstantCount), dtype=int64)
+        else:
+            self.order_book.fill(0)
+
+        if limit != self.executed_orders.shape[0]:
+            self.executed_orders = np.zeros(
+                (limit, c.TP_ConstantCount), dtype=int64
+            )
+        else:
+            self.executed_orders.fill(0)
+
+    @override
     def reset(self) -> None:
         Account.reset(self)
 
-        self.executed_orders.fill(0)
-        self.order_book.fill(0)
         self.eoRow[0], self.obRow[0], self.order_id[0] = 0, 0, 0
 
     @final

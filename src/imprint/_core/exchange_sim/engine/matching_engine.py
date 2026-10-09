@@ -56,6 +56,13 @@ class MatchingEngine(UserData, ABC):
         cfgAC = self.manager.cfgAccount
         self.slippage[0] = cfgAC.slippage.fixed
 
+    @override
+    def reset(self) -> None:
+        UserData.reset(self)
+
+        self.matching_engine.order_book = self.order_book
+        self.matching_engine.executed_orders = self.executed_orders
+
 
 spec = [
     ("order_book", types.Array(nb.int64, 2, "C")),

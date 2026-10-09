@@ -7,8 +7,13 @@ from loguru import logger
 
 import imprint.configs as cfg
 from imprint._boot.base import Base, InitFailed
-from imprint._core.configs import Account, Coin, Setup
-from imprint._core.configs import MarketDataStream as _MDS
+from imprint._core.configs import (
+    Account,
+    Coin,
+    MarketDataStream,
+    Percent,
+    Setup,
+)
 from imprint._core.constant import (
     EQUITY_HISTORY_DATA_PATH,
     FOOTPRINT_HEADERS_DATA_PATH,
@@ -37,69 +42,27 @@ class Backtest(Base):
 
     run_mode: cfg.Backtest
 
-    _account: list[Account] = field(init=False)
+    _coins: list[Coin] = field(init=False)
+    _accounts: list[Account] = field(init=False)
 
     @override
     def _post_init(self) -> None:
-        """Download historical aggregated trades data and initialize backtest market data stream and coin parameters.
+        self._coins = []
+        self._accounts = []
 
-        Returns
-        -------
-        bool
-            True if historical data download and initialization succeed; False if DownloadError occurs.
-
-        Raises
-        ------
-        DownloadError
-            Caught internally if historical market data retrieval fails from remote repositories.
-        """
         self._segments.append(
-            _MDS(
+            MarketDataStream(
                 data_size=32,
                 cast_to_int64=True,
                 count_reader=2 if self.with_execution else 1,
             )
         )
 
-        self._account = self.to_list(self.run_mode.account, Account())
-        self._other_configs.append(self._account)
+        self.prepare_coin_config()
+        self._other_configs.append(self._coins)
 
-        tick_sizes: list[str] = self.to_list(self.run_mode.tick_size, "")
-        lot_sizes: list[str] = self.to_list(self.run_mode.lot_size, "")
-        start_dates: list[str] = self.to_list(
-            self.run_mode.backtest_start_date, ""
-        )
-        end_dates: list[str] = self.to_list(self.run_mode.backtest_end_date, "")
-
-        coin_idx, setup_idx = 0, 0
-        for ts, ls, sd, ed in zip_longest(
-            tick_sizes, lot_sizes, start_dates, end_dates, fillvalue=None
-        ):
-            if ts or ls:
-                coin: Coin | None = self.list_get(self._coins, coin_idx)
-                if not coin:
-                    coin = deepcopy(self._coins[-1])
-                    self._coins.append(coin)
-                else:
-                    coin_idx += 1
-
-                if ts:
-                    coin.tick_size = ts
-                if ls:
-                    coin.lot_size = ls
-
-            if sd or ed:
-                setup: Setup | None = self.list_get(self._setups, setup_idx)
-                if not setup:
-                    setup = deepcopy(self._setups[-1])
-                    self._setups.append(setup)
-                else:
-                    setup_idx += 1
-
-                if sd:
-                    setup.backtest_start_date = sd
-                if ed:
-                    setup.backtest_end_date = ed
+        self.prepare_account_config()
+        self._other_configs.append(self._accounts)
 
         try:
             downloader: DownloadAggTradesHistory = DownloadAggTradesHistory(
@@ -123,11 +86,96 @@ class Backtest(Base):
         except DownloadError as e:
             raise InitFailed(f"Download agg trades data, failed: {e}") from e
 
-    def list_get[T](self, arr: list[T], index: int) -> T | None:
-        try:
-            return arr[index]
-        except IndexError:
-            return None
+    @override
+    def prepare_setup_config(self) -> None:
+        _ = self.run_mode
+        # - - -
+        Base.prepare_setup_config(self)
+
+        start_dates: list[str] = self.to_list(_.backtest_start_date)
+        end_dates: list[str] = self.to_list(_.backtest_end_date)
+
+        for idx, (st, ed) in enumerate(
+            zip_longest(start_dates, end_dates, fillvalue=None)
+        ):
+            setup: Setup | None = self.list_get(self._setups, idx)
+            if not setup:
+                setup = deepcopy(self._setups[-1])
+                self._setups.append(setup)
+
+            if isinstance(st, str):
+                setup.backtest_start_date = st
+            if isinstance(ed, str):
+                setup.backtest_end_date = ed
+
+    def prepare_coin_config(self) -> None:
+        _ = self.run_mode
+        # - - -
+        symbols = self.to_list(_.symbols)
+        tick_sizes = self.to_list(_.tick_size)
+        lot_sizes = self.to_list(_.lot_size)
+
+        for sym, ts, ls in zip_longest(
+            symbols, tick_sizes, lot_sizes, fillvalue=None
+        ):
+            coin: Coin = deepcopy(self._coins[-1]) if self._coins else Coin()
+            self._coins.append(coin)
+
+            if isinstance(sym, str):
+                coin.symbol = sym
+            if isinstance(ts, str):
+                coin.tick_size = ts
+            if isinstance(ls, str):
+                coin.lot_size = ls
+
+    def prepare_account_config(self) -> None:
+        _ = self.run_mode.account
+        # - - -
+        balances = self.to_list(_.balance)
+        leverages = self.to_list(_.leverage)
+        min_order_size = self.to_list(_.min_order_size)
+        maker_commissions = self.to_list(_.maker_commission)
+        taker_commissions = self.to_list(_.taker_commission)
+        active_order_limits = self.to_list(_.active_order_limit)
+        scale_precs = self.to_list(_.scale_prec)
+        latency_ms = self.to_list(_.latency_ms)
+        slippage = self.to_list(_.slippage)
+
+        for b, lev, mos, mc, tc, aol, scp, lm, slp in zip_longest(
+            balances,
+            leverages,
+            min_order_size,
+            maker_commissions,
+            taker_commissions,
+            active_order_limits,
+            scale_precs,
+            latency_ms,
+            slippage,
+            fillvalue=None,
+        ):
+            account = (
+                deepcopy(self._accounts[-1]) if self._accounts else Account()
+            )
+            self._accounts.append(account)
+
+            if isinstance(b, float):
+                account.balance = b
+            if isinstance(lev, int):
+                account.leverage = lev
+            if isinstance(mos, float):
+                account.min_order_size = mos
+            if isinstance(mc, Percent):
+                account.maker_commission = mc
+            if isinstance(tc, Percent):
+                account.taker_commission = tc
+            if isinstance(aol, int):
+                account.active_order_limit = aol
+            if isinstance(scp, int):
+                account.scale_prec = scp
+            if isinstance(lm, int):
+                account.latency_ms = lm
+            if isinstance(slp, Percent):
+                account.slippage = slp
 
     @error_handler()
     def run_vis(self, auto_open: bool = True) -> None:
@@ -140,7 +188,7 @@ class Backtest(Base):
         """
         if self._init_complete and self.with_execution:
             logger.info("Visualization, started.")
-            c, s, a = self._coins[-1], self._setups[-1], self._account[-1]
+            c, s, a = self._coins[-1], self._setups[-1], self._accounts[-1]
 
             Render(
                 footprint_headers_path=FOOTPRINT_HEADERS_DATA_PATH,

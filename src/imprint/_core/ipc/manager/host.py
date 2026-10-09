@@ -113,7 +113,7 @@ class Host(Base):
         self.action_for_base_sc(sc, p_id, _p_task_id, p_name)
 
         if sc & scs.DATA_PREPARED:
-            self.logger(scs.DATA_PREPARED.label, LogLevel.WARNING, p_name)
+            self.logger(scs.DATA_PREPARED.label, LogLevel.SUCCESS, p_name)
             self.set_task_sc_to_proc(scs.COMPLETE)
             self.clear_proc_sc(scs.DATA_PREPARED, p_id)
 
@@ -134,15 +134,15 @@ class Host(Base):
         self.action_for_base_sc(sc, p_id, _p_task_id, p_name)
 
         if sc & scs.FP_IDX_FILLED:
-            self.logger(scs.FP_IDX_FILLED.label, LogLevel.WARNING, p_name)
+            self.logger(scs.FP_IDX_FILLED.label, LogLevel.INFO, p_name)
             self.clear_proc_sc(scs.FP_IDX_FILLED, p_id)
 
         if sc & scs.FP_IDY_FILLED:
-            self.logger(scs.FP_IDY_FILLED.label, LogLevel.WARNING, p_name)
+            self.logger(scs.FP_IDY_FILLED.label, LogLevel.INFO, p_name)
             self.clear_proc_sc(scs.FP_IDY_FILLED, p_id)
 
         if sc & scs.FP_RE_INIT:
-            self.logger(scs.FP_RE_INIT.label, LogLevel.SUCCESS, p_name)
+            self.logger(scs.FP_RE_INIT.label, LogLevel.INFO, p_name)
             self.clear_proc_sc(scs.FP_RE_INIT, p_id)
 
         if sc & scs.BIG_GAP:
@@ -211,12 +211,12 @@ class Host(Base):
             self.clear_proc_sc(scs.ERROR, proc_id)
 
         if sc & scs.EXIT:
-            self.logger(scs.EXIT.label, LogLevel.WARNING, proc_name)
+            self.logger(scs.EXIT.label, LogLevel.SUCCESS, proc_name)
             self.procs.pop(proc_id)
             self.clear_proc_sc(scs.EXIT, proc_id)
 
         if sc & scs.COMPLETE:
-            self.logger(scs.COMPLETE.label, LogLevel.WARNING, proc_name)
+            self.logger(scs.COMPLETE.label, LogLevel.SUCCESS, proc_name)
             if self._config_idx == self._count_configs:
                 self.set_task_sc_to_proc(scs.EXIT, task_id)
             else:
@@ -262,7 +262,7 @@ class Host(Base):
             self._change_configs()
             self._reset()
             self.general_event(True)
-            self.logger("Reset\n", LogLevel.INFO)
+            self.logger("Reset\n", LogLevel.SUCCESS)
 
     def get_proc_data(self, proc: int) -> tuple[int, str, int, int]:
         """Fetch status and identity details for a given process key.
@@ -350,7 +350,7 @@ class Host(Base):
                 v["proc"].terminate()
                 v["proc"].join()
 
-            self.logger(scs.TERMINATE.label, LogLevel.INFO, v["proc_name"])
+            self.logger(scs.TERMINATE.label, LogLevel.WARNING, v["proc_name"])
 
     def general_event(
         self, run: bool, task_ids: list[int] | None = None

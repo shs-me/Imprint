@@ -1,16 +1,14 @@
 """Configuration classes and data structures for backtesting and live trading run modes."""
 
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from typing import Any, final
 
-from imprint._core.configs import (
-    Account,
-    Connector,
-    Footprint,
-    RiskManagement,
-)
+from imprint._core.configs import Connector, Footprint, Percent, RiskManagement
 from imprint._core.footprint import StrategyEngine
 from imprint._core.pipeline.executing import ExecutionEngine
+from imprint._core.settings import Timeframe
 from imprint._core.utils import (
     AggTradesDecoder,
     BalanceData,
@@ -21,7 +19,7 @@ from imprint._core.utils import (
 )
 
 __all__ = [
-    "Account",
+    "AccountBatch",
     "AggTradesDecoder",
     "Backtest",
     "BalanceData",
@@ -29,11 +27,14 @@ __all__ = [
     "ExchangeREST",
     "ExecutionEngine",
     "Footprint",
+    "FootprintBatch",
     "Live",
     "OrderData",
     "OrderEncoder",
     "RiskManagement",
+    "RiskManagementBatch",
     "Strategy",
+    "StrategyBatch",
     "StrategyEngine",
     "UserStreamDecoder",
 ]
@@ -41,79 +42,8 @@ __all__ = [
 
 @final
 @dataclass(slots=True)
-class Backtest:
-    """Configure parameters and metadata for historical backtesting runs.
-
-    Parameters
-    ----------
-    account : Account
-        Trading account configuration including starting balance, leverage, and risk parameters.
-    tick_size : str, default="0.01"
-        Minimum price movement increment (tick size) as a string representation.
-    lot_size : str, default="0.001"
-        Minimum base asset order quantity increment (lot size) as a string representation.
-    backtest_start_date : str, default="2026-01-01"
-        Backtest simulation start timestamp in ``"YYYY-MM-DD"`` format.
-    backtest_end_date : str, default="2026-01-01"
-        Backtest simulation end timestamp in ``"YYYY-MM-DD"`` format.
-
-    Attributes
-    ----------
-    account : Account
-        Trading account configuration.
-    tick_size : str
-        Minimum price movement increment.
-    lot_size : str
-        Minimum base asset order quantity increment.
-    backtest_start_date : str
-        Simulation start timestamp.
-    backtest_end_date : str
-        Simulation end timestamp.
-    """
-
-    account: Account | list[Account]
-    tick_size: str | list[str]
-    lot_size: str | list[str]
-    backtest_start_date: str | list[str]
-    backtest_end_date: str | list[str]
-
-
-@final
-@dataclass(slots=True)
 class Live:
-    """Configure exchange connectivity, decoders, encoders, and leverage for live trading sessions.
-
-    Parameters
-    ----------
-    leverage : int
-        Target account trading leverage multiplier. Must be strictly positive.
-    connector : Connector
-        Exchange WebSocket and REST connector configuration.
-    agg_trades_decoder : type[AggTradesDecoder[Any]]
-        Decoder class for parsing incoming aggregated trade websocket messages.
-    user_stream_decoder : type[UserStreamDecoder[Any, Any]]
-        Decoder class for parsing user account and order execution streams.
-    order_encoder : type[OrderEncoder[Any]]
-        Encoder class for serializing and signing outgoing order payloads.
-    exchange_rest : type[ExchangeREST]
-        REST API adapter class for querying account balances, rules, and placing REST requests.
-
-    Attributes
-    ----------
-    leverage : int
-        Target account leverage multiplier.
-    connector : Connector
-        Exchange connector configuration.
-    agg_trades_decoder : type[AggTradesDecoder[Any]]
-        Aggregated trades decoder class.
-    user_stream_decoder : type[UserStreamDecoder[Any, Any]]
-        User data stream decoder class.
-    order_encoder : type[OrderEncoder[Any]]
-        Order encoder class.
-    exchange_rest : type[ExchangeREST]
-        Exchange REST client adapter class.
-    """
-
+    symbol: str
     leverage: int
     connector: Connector
     agg_trades_decoder: type[AggTradesDecoder[Any]]
@@ -124,29 +54,76 @@ class Live:
 
 @final
 @dataclass(slots=True)
+class Backtest:
+    account: AccountBatch
+    symbols: str | list[str]
+    tick_size: str | list[str]
+    lot_size: str | list[str]
+    backtest_start_date: str | list[str]
+    backtest_end_date: str | list[str]
+
+
+@final
+@dataclass(slots=True)
+class AccountBatch:
+    leverage: int | list[int] = 20
+    balance: float | list[float] = 100.0
+    min_order_size: float | list[float] = 5.0
+    taker_commission: Percent | list[Percent] = field(
+        default_factory=lambda: Percent(0.05)
+    )
+    maker_commission: Percent | list[Percent] = field(
+        default_factory=lambda: Percent(0.02)
+    )
+    slippage: Percent | list[Percent] = field(
+        default_factory=lambda: Percent(0.05)
+    )
+    latency_ms: int | list[int] = 100
+    scale_prec: int | list[int] = 8
+    active_order_limit: int | list[int] = 1000
+
+
+@final
+@dataclass(slots=True)
 class Strategy:
-    """Configure the core algorithm, footprint chart settings, and risk management parameters.
+    algorithm: type[StrategyEngine]
+    execution: type[ExecutionEngine]
+    footprint: Footprint
+    risk_management: RiskManagement
 
-    Parameters
-    ----------
-    algorithm : type[StrategyEngine]
-        Trading strategy algorithm class derived from ``StrategyEngine``.
-    footprint : Footprint
-        Footprint chart configuration (timeframe, delta profiles, volume bins).
-    risk_management : RiskManagement
-        Risk management rules (stop loss, take profit, position sizing limits).
 
-    Attributes
-    ----------
-    algorithm : type[StrategyEngine]
-        Trading strategy algorithm class.
-    footprint : Footprint
-        Footprint chart configuration.
-    risk_management : RiskManagement
-        Risk management rules.
-    """
-
+@final
+@dataclass(slots=True)
+class StrategyBatch:
     algorithm: type[StrategyEngine] | list[type[StrategyEngine]]
     execution: type[ExecutionEngine] | list[type[ExecutionEngine]]
-    footprint: Footprint | list[Footprint]
-    risk_management: RiskManagement | list[RiskManagement]
+    footprint: FootprintBatch
+    risk_management: RiskManagementBatch
+
+
+@final
+@dataclass(slots=True)
+class FootprintBatch:
+    timeframe: Timeframe | list[Timeframe] = Timeframe.H1
+    chart_range: int | list[int] = 1
+    step_tick: int | list[int] = 1
+    state: bool | list[bool] = False
+    ctrade: bool | list[bool] = False
+
+
+@final
+@dataclass(slots=True)
+class RiskManagementBatch:
+    max_lock_balance: Percent | list[Percent] = field(
+        default_factory=lambda: Percent(10)
+    )
+    max_loss_balance: Percent | list[Percent] = field(
+        default_factory=lambda: Percent(10)
+    )
+    entry_qty: Percent | list[Percent] = field(
+        default_factory=lambda: Percent(1)
+    )
+    tp_dev: Percent | list[Percent] = field(default_factory=lambda: Percent(5))
+    sl_dev: Percent | list[Percent] = field(default_factory=lambda: Percent(5))
+    pass_signal_if_analysis_time_big: int | list[int] = 50_000
+    pass_execute_signal_if_timer_ms_exepired: int | list[int] = 1_000

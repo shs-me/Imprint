@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import final, override
 
 from imprint._core.account import Account
@@ -25,10 +25,10 @@ class ExecutionEngine(ExecutionProtocol, ABC):
         Callable handle mapped to the active agent's order transmission interface.
     """
 
-    is_backtesting: bool = field(init=False)
-    count_open_positions: memoryview = field(init=False)
-    account: Account = field(init=False)
-    send_order: SendOrderMethodSignature = field(init=False)
+    is_backtesting: bool
+    count_open_positions: memoryview
+    account: Account
+    send_order: SendOrderMethodSignature
 
     @final
     def __post_init__(self) -> None:

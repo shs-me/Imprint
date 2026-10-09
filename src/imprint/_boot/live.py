@@ -5,8 +5,7 @@ from loguru import logger
 
 import imprint.configs as cfg
 from imprint._boot.base import Base, InitFailed
-from imprint._core.configs import Coin, Setup
-from imprint._core.configs import MarketDataStream as _MDS
+from imprint._core.configs import Account, Coin, MarketDataStream, Setup
 from imprint._core.utils.base_adapters import ApiNotFoundError
 
 
@@ -27,29 +26,30 @@ class Live(Base):
 
     run_mode: cfg.Live
 
-    _account: cfg.Account = field(init=False)
+    _coin: Coin = field(init=False)
+    _account: Account = field(init=False)
+
     _rest: cfg.ExchangeREST = field(init=False)
 
     @override
     def _post_init(self) -> None:
-        """Initialize live data streams, REST connection endpoints, exchange limits, leverage, and initial account balance.
-
-        Returns
-        -------
-        bool
-            True if all exchange connection checks, tick/lot sizes, and balances are successfully verified; False otherwise.
-
-        Raises
-        ------
-        ApiNotFoundError
-            Caught internally if API or secret keys are missing from environment variables during execution mode.
-        """
         _ = self.run_mode
         # - - -
-        self._segments.append(_MDS(count_reader=1))
+        self._segments.append(MarketDataStream(count_reader=1))
+
         self._other_configs.append([_.connector])
-        self._account = cfg.Account(leverage=_.leverage)
+
+        self.prepare_coin_config()
+        self._other_configs.append([self._coin])
+
+        self.prepare_account_config()
         self._other_configs.append([self._account])
+
+    @override
+    def prepare_setup_config(self) -> None:
+        _ = self.run_mode
+        # - - -
+        Base.prepare_setup_config(self)
 
         setup: Setup = self._setups[0]
         setup.agg_trades_decoder_module = _.agg_trades_decoder.__module__
@@ -62,25 +62,32 @@ class Live(Base):
         setup.exchange_rest_class_name = _.exchange_rest.__name__
         setup.backtesting = False
 
-        coin: Coin = self._coins[0]
-        self._rest = _.exchange_rest(logger=logger, symbol=coin.symbol)
+    def prepare_coin_config(self) -> None:
+        _ = self.run_mode
+        # - - -
+        self._coin = Coin(symbol=_.symbol)
+
+        self._rest = _.exchange_rest(logger=logger, symbol=self._coin.symbol)
         self._rest.base_url = _.connector.base_rest_url
 
-        coin.tick_size = self._rest.tick_size
-        if not coin.tick_size:
+        self._coin.tick_size = self._rest.tick_size
+        if not self._coin.tick_size:
             raise InitFailed(
-                f"Init, failed. Tick size({coin.tick_size}) is not valid"
+                f"Init, failed. Tick size({self._coin.tick_size}) is not valid"
             )
         else:
-            logger.info(f"Tick size: {coin.tick_size}")
+            logger.info(f"Tick size: {self._coin.tick_size}")
 
-        coin.lot_size = self._rest.lot_size
-        if not coin.lot_size:
+        self._coin.lot_size = self._rest.lot_size
+        if not self._coin.lot_size:
             raise InitFailed(
-                f"Init, failed. Lot size({coin.lot_size}) is not valid"
+                f"Init, failed. Lot size({self._coin.lot_size}) is not valid"
             )
         else:
-            logger.info(f"Lot size: {coin.lot_size}")
+            logger.info(f"Lot size: {self._coin.lot_size}")
+
+    def prepare_account_config(self) -> None:
+        self._account = Account(leverage=self.run_mode.leverage)
 
         self._account.min_order_size = self._rest.min_order_size
         if not self._account.min_order_size:

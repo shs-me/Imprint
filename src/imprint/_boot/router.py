@@ -16,25 +16,21 @@ class Imprint:
     @overload
     def __new__(
         cls,
-        run_mode: cfg.Backtest
-        | tuple[type[cfg.Backtest], cfg.Backtest, cfg.Live],
-        strategy: cfg.Strategy,
-        symbol: str | list[str],
+        run_mode: cfg.Backtest,
+        strategy: cfg.StrategyBatch,
         with_execution: bool,
     ) -> BacktestEngine: ...
     @overload
     def __new__(
         cls,
-        run_mode: cfg.Live | tuple[type[cfg.Live], cfg.Backtest, cfg.Live],
+        run_mode: cfg.Live,
         strategy: cfg.Strategy,
-        symbol: str,
         with_execution: bool,
     ) -> LiveEngine: ...
     def __new__(
         cls,
-        run_mode: RUN_MODES | tuple[type[RUN_MODES], cfg.Backtest, cfg.Live],
-        strategy: cfg.Strategy,
-        symbol: str | list[str],
+        run_mode: cfg.Backtest | cfg.Live,
+        strategy: cfg.Strategy | cfg.StrategyBatch,
         with_execution: bool,
     ):
         """Initialize and return a concrete BacktestEngine or LiveEngine instance.
@@ -60,23 +56,18 @@ class Imprint:
 
         cls._init_logger()
 
-        if isinstance(run_mode, tuple):
-            if run_mode[0] is cfg.Backtest:
-                engine, mode = BacktestEngine, run_mode[1]
-            else:
-                engine, mode = LiveEngine, run_mode[2]
+        if isinstance(run_mode, cfg.Backtest):
+            return BacktestEngine(
+                run_mode=run_mode,
+                strategy=strategy,
+                with_execution=with_execution,
+            )
         else:
-            if isinstance(run_mode, cfg.Backtest):
-                engine, mode = BacktestEngine, run_mode
-            else:
-                engine, mode = LiveEngine, run_mode
-
-        return engine(
-            run_mode=mode,  # pyright: ignore[reportArgumentType]
-            strategy=strategy,
-            symbol=symbol,
-            with_execution=with_execution,
-        )
+            return LiveEngine(
+                run_mode=run_mode,
+                strategy=strategy,
+                with_execution=with_execution,
+            )
 
     @staticmethod
     def _init_logger() -> None:

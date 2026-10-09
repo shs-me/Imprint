@@ -1,3 +1,4 @@
+import importlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final
@@ -5,6 +6,7 @@ from typing import final
 from imprint._core import constant as c
 from imprint._core.account import Account
 from imprint._core.ipc import NodeManager, node_handler
+from imprint._core.pipeline.executing.strategy import ExecutionEngine
 from imprint._core.settings import PositionFSM
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.types import ExecutionProtocol
@@ -38,8 +40,8 @@ class Base(ABC):
     """
 
     manager: NodeManager
-    strategy: ExecutionProtocol
 
+    strategy: ExecutionProtocol = field(init=False)
     trade_read_time: memoryview = field(init=False)
     __engine_complete: memoryview = field(init=False)
     account: Account = field(init=False)
@@ -56,6 +58,27 @@ class Base(ABC):
         self.__engine_complete = cfgMetrics.engine_complete.view
 
         self.account = Account(self.manager)
+        self.init()
+
+    def init(self) -> None:
+        cfgSetup = self.manager.cfgSetup
+        c_name: str = cfgSetup.execution_class_name
+        if not hasattr(self, "strategy") or (
+            self.strategy.__class__.__name__ != c_name
+        ):
+            m_name: str = cfgSetup.execution_module
+            strategy_type: type[ExecutionEngine] = getattr(
+                importlib.import_module(m_name), c_name
+            )
+            self.strategy = strategy_type(
+                is_backtesting=cfgSetup.backtesting,
+                count_open_positions=self.count_open_positions,
+                account=self.account,
+                send_order=self.send_order,
+            )
+            self.manager.set_log(
+                f"{self.strategy.__class__.__name__} used as {ExecutionEngine.__name__}"
+            )
 
     @final
     @node_handler()
@@ -89,6 +112,7 @@ class Base(ABC):
                 self._check_user_data_buf()
 
     def reset(self) -> None:
+        self.init()
         self.readed_timestamp, self.count_open_positions[0] = 0, 0
         self.account.reset()
 

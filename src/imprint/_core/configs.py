@@ -197,10 +197,9 @@ class Account(Configuration):
     scale_prec: int = 8
     active_order_limit: int = 1000
 
-    scale_mult: int = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.scale_mult = 10**self.scale_prec
+    @property
+    def scale_mult(self) -> int:
+        return 10**self.scale_prec
 
 
 @final
@@ -315,20 +314,24 @@ class Footprint(Configuration):
     timeframe: Timeframe = Timeframe.H1
     chart_range: int = 1
     step_tick: int = 1
-    fp_rows: int = 10001
     state: bool = False
     ctrade: bool = False
 
     colVP: int = field(default=-2, init=False)
     colDP: int = field(default=-1, init=False)
-    bar_count: int = field(init=False)
-    fp_cols: int = field(init=False)
-    fp_panel_cols: int = field(init=False)
+    fp_rows: int = field(default=10001, init=False)
 
-    def __post_init__(self) -> None:
-        self.bar_count = self._get_bar_count(day=self.chart_range)
-        self.fp_cols = self.bar_count * 2
-        self.fp_panel_cols = self.fp_cols + 2
+    @property
+    def bar_count(self) -> int:
+        return self._get_bar_count(day=self.chart_range)
+
+    @property
+    def fp_cols(self) -> int:
+        return self.bar_count * 2
+
+    @property
+    def fp_panel_cols(self) -> int:
+        return self.fp_cols + 2
 
     def _get_bar_count(self, day: int) -> int:
         """Calculate total bar count for a given day range and timeframe.

@@ -1,3 +1,4 @@
+import importlib
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -6,6 +7,7 @@ from typing import final
 from imprint._core import constant as c
 from imprint._core.footprint.engine import StrategyEngine
 from imprint._core.footprint.engine.reader import FootprintEngine
+from imprint._core.footprint.engine.strategy import SyncWithExecution
 from imprint._core.ipc import NodeManager, node_handler
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.utils.base import TradesArray
@@ -43,9 +45,10 @@ class Base(ABC):
     """
 
     manager: NodeManager
-    strategy: StrategyEngine
-    engine: FootprintEngine
+    sync: SyncWithExecution
 
+    engine: FootprintEngine = field(init=False)
+    strategy: StrategyEngine = field(init=False)
     time_start_analyze: memoryview = field(init=False)
     engine_complete: memoryview = field(init=False)
 
@@ -62,7 +65,28 @@ class Base(ABC):
         self.engine_complete = cfgMetrics.engine_complete.view
 
         self.at_max_row = self.agg_trades.shape[0]
+        self.init()
+        self.engine = FootprintEngine(
+            manager=self.manager, strategy=self.strategy
+        )
         self.strategy.fp = self.engine.fp
+
+    def init(self) -> None:
+        cfgSetup = self.manager.cfgSetup
+        c_name: str = cfgSetup.algorithm_class_name
+        if not hasattr(self, "strategy") or (
+            self.strategy.__class__.__name__ != c_name
+        ):
+            m_name: str = cfgSetup.algorithm_module
+            strategy_type: type[StrategyEngine] = getattr(
+                importlib.import_module(m_name), c_name
+            )
+            self.strategy = strategy_type(
+                _sync=self.sync, is_backtest=cfgSetup.backtesting
+            )
+            self.manager.set_log(
+                f"{self.strategy.__class__.__name__} used as {StrategyEngine.__name__}"
+            )
 
     @final
     @node_handler()
@@ -124,7 +148,9 @@ class Base(ABC):
                 self.post_update()
 
     def reset(self) -> None:
+        self.init()
         self.at_rid, self.at_wid = 0, 0
+        self.strategy.fp = self.engine.fp
         self.engine.reset()
 
     @final
@@ -143,19 +169,13 @@ class Base(ABC):
         bool
             True if buffers are caught up, trade queues are empty, and bounding box is read.
         """
-        return (
-            (wid[0] == rid[0])
-            and (self.at_wid == self.at_rid)
-            and self.engine.bbox_is_read()
-        )
+        return (wid[0] == rid[0]) and (self.at_wid == self.at_rid)
 
     @final
     def __final_actions(self) -> None:
         """Execute final cleanup, metric updates, and logging upon completion."""
-        if self.manager.cfgSetup.backtesting:
-            self.engine.final_analyze()
-            self.engine.save_footprint_headers(self.engine.lidx[0])
-
+        self.engine.final_analyze()
+        self.engine.save_footprint_headers(self.engine.lidx[0])
         self.post_final_action()
         self.engine_complete[0] = 1
         self.manager.set_log(
@@ -197,9 +217,7 @@ class Base(ABC):
         bool
             True if analysis is in bounding box mode and session re-initialization is inactive.
         """
-        return (
-            (not self.strategy.tick_by_tick_analyze) and (wid[0] != rid[0])
-        ) and (self.engine.is_bbox_mode())
+        return (wid[0] != rid[0]) and self.engine.is_bbox_mode()
 
     @abstractmethod
     def post_update(self) -> None:

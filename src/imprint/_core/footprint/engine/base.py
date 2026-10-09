@@ -20,7 +20,6 @@ from imprint._core.footprint.models import Converter, Footprint
 from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.types import StrategyProtocol
-from imprint._core.utils import FPArray
 
 
 @dataclass(slots=True)
@@ -120,8 +119,6 @@ class Base(ABC):
 
     @final
     def init(self) -> None:
-        self.__init_arrays = True
-
         cfgCoin = self.manager.cfgCoin
         self.__base_fp_dump_path = (
             f"{c.FOOTPRINT_HEADERS_DATA_PATH}/{cfgCoin.symbol.upper()}"
@@ -146,8 +143,13 @@ class Base(ABC):
 
     def reset(self) -> None:
         self.init()
+        self.__init_arrays = True
         self.re_init = c.RIF_session | c.RIF_idx
-        self.idYmin[0], self.idYmax[0], self.idx[0], self.lidx[0] = 0, 0, 0, 0
+        self.reset_bbox()
+        self.idx[0], self.lidx[0] = 0, 0
+
+    def reset_bbox(self) -> None:
+        self.idYmin[0], self.idYmax[0] = self.fp.con.fp_rows[0], 0
 
     @final
     def init_session(self, nPrice: int64, timestamp: int64) -> None:
@@ -191,24 +193,26 @@ class Base(ABC):
         timestamp : int64
             Unix timestamp in microseconds for session initialization.
         """
-        self.fp.base.fill(0)
-        if self.fp.con.with_state:
-            self.fp.state.fill(0)
-        if self.fp.con.with_ctrade:
-            self.fp.ctrade.fill(0)
+        _ = self.fp
+        # - - -
+        _.base.fill(0)
+        if _.con.with_state[0]:
+            _.state.fill(0)
+        if _.con.with_ctrade[0]:
+            _.ctrade.fill(0)
 
-        if self.fp.con._first_base_timestamp:
-            new_offset = self.fp.headers_offset[0] + (self.fp.con.bar_count[0])
-            if self.fp.headers.shape[0] <= new_offset:
-                self.fp.headers_offset[0] = 0
-                self.fp.headers.fill(0)
+        if _.con._first_base_timestamp:
+            new_offset = _.headers_offset[0] + _.con.bar_count[0]
+            if _.headers.shape[0] <= new_offset:
+                _.headers_offset[0] = 0
+                _.headers.fill(0)
             else:
-                self.fp.headers_offset[0] = new_offset
+                _.headers_offset[0] = new_offset
 
-        self.idYmin[0], self.idYmax[0] = self.fp.con.fp_rows[0], 0
+        self.reset_bbox()
         self.idx[0], self.lidx[0] = 0, 0
 
-        self.fp.con.init_session(nPrice=nPrice, timestamp=timestamp)
+        _.con.init_session(nPrice=nPrice, timestamp=timestamp)
 
     def init_idy(self, nPrice: int64) -> None:
         """Re-initialize underlying data arrays based on price scaling changes.
@@ -228,42 +232,10 @@ class Base(ABC):
         nPrice : int64
             Number of price levels used to determine row counts and padding bounds.
         """
-        con = self.fp.con
-        # - - -
-        if not (self.re_init & c.RIF_idy):
-            con.fp_rows[0] = int(2 * (nPrice * 20 // 100 // con.scale[0]))
-            rows, cols = con.fp_rows[0], con.fp_panel_cols[0]
-            self.fp._re_init_arr(
-                base=FPArray(rows, cols),
-                state=(FPArray(rows, cols) if con.with_state[0] else None),
-                ctrade=(FPArray(rows, cols) if con.with_ctrade[0] else None),
-            )
-            self.idYmin[0], self.idYmax[0] = rows, 0
-
-        else:
-            need_rows: int64 = nPrice * 20 // 100 // con.scale[0]
-            con.fp_rows[0] = int(con.fp_rows[0] + need_rows)
-
-            if nPrice > con.baseNprice[0]:
-                before, after = need_rows, 0
-                con.center[0] = int(con.center[0] + need_rows)
-            else:
-                before, after = 0, need_rows
-
-            self.fp._re_init_arr(
-                base=self.fp.base.padding(int(before), int(after)),
-                state=(
-                    self.fp.state.padding(int(before), int(after))
-                    if con.with_state[0]
-                    else None
-                ),
-                ctrade=(
-                    self.fp.ctrade.padding(int(before), int(after))
-                    if con.with_ctrade[0]
-                    else None
-                ),
-            )
-            self.idYmin[0], self.idYmax[0] = con.fp_rows[0], 0
+        self.fp._re_init_arr(
+            nPrice=nPrice, padding=bool(self.re_init & c.RIF_idy)
+        )
+        self.reset_bbox()
 
     @final
     def save_footprint_headers(self, last_idx: int) -> None:

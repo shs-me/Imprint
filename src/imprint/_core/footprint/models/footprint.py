@@ -53,21 +53,13 @@ class Footprint(Chart):
     vp: VolumeProfile[Footprint] = field(init=False)
     dp: DeltaProfile[Footprint] = field(init=False)
 
-    __bars: list[Bar] = field(init=False)
+    __bars: list[Bar] = field(default_factory=list[Bar], init=False)
     __plike: PriceLike[Footprint] = field(init=False)
 
     def __post_init__(self) -> None:
         self.vp = VolumeProfile(self)
         self.dp = DeltaProfile(self)
         self.__plike = PriceLike(self.con, Qty(self))
-
-    def post_init(self) -> None:
-        self.headers = np.zeros(
-            shape=(self.con.total_bar_count, c.BH_ConstantCount), dtype=int64
-        )
-        self.__bars = [
-            Bar(self, idXbid) for idXbid in range(0, self.con.fp_cols[0], 2)
-        ]
 
     def __getitem__(self, idx: int | int64) -> Bar:
         """Select a bar by its index
@@ -84,32 +76,62 @@ class Footprint(Chart):
         """
         return self.__bars[(idx & ~1) // 2]
 
-    def _re_init_arr(  # pyright: ignore[reportUnusedFunction]
-        self, base: FPArray, state: FPArray | None, ctrade: FPArray | None
-    ) -> None:
-        """Reinitialize chart array buffers and propagate updates to volume and delta profiles.
+    def post_init(self) -> None:
+        if self.con.total_bar_count != self.headers.shape[0]:
+            self.headers = np.zeros(
+                shape=(self.con.total_bar_count, c.BH_ConstantCount),
+                dtype=int64,
+            )
+        else:
+            self.headers.fill(0)
 
-        Parameters
-        ----------
-        base : FPArray
-            New base footprint array buffer.
-        state : FPArray | None
-            New state array buffer, or None to retain existing state.
-        ctrade : FPArray | None
-            New cumulative trade array buffer, or None to retain existing ctrade.
-        """
-        self.base = base
-        if state is not None:
-            self.state = state
-        if ctrade is not None:
-            self.ctrade = ctrade
+        if (self.con.fp_cols[0] // 2) > len(self.__bars):
+            for idXbid in range(len(self.__bars) * 2, self.con.fp_cols[0], 2):
+                self.__bars.append(Bar(self, idXbid))
 
-        self.vp._re_init_arr()
-        self.dp._re_init_arr()
+        self.headers_offset[0] = 0
+
+    def _re_init_arr(self, nPrice: int64, padding: bool) -> None:  # pyright: ignore[reportUnusedFunction]
+        _ = self.con
+        # - - -
+        need_rows: int = int(nPrice * 20 // 100 // _.scale[0])
+
+        if padding:
+            _.fp_rows[0] = _.fp_rows[0] + need_rows
+
+            if nPrice > _.baseNprice[0]:
+                before, after = need_rows, 0
+                _.center[0] = _.center[0] + need_rows
+            else:
+                before, after = 0, need_rows
+
+            self.base = self.base.padding(before, after)
+            if _.with_state[0]:
+                self.state = self.state.padding(before, after)
+            if _.with_ctrade[0]:
+                self.ctrade = self.ctrade.padding(before, after)
+
+            self.vp._re_init_arr()
+            self.dp._re_init_arr()
+
+        else:
+            if (rows := (2 * need_rows)) > self.base.shape[0]:
+                _.fp_rows[0], cols = rows, _.fp_panel_cols[0]
+
+                self.base = FPArray(rows, cols)
+                if _.with_state[0]:
+                    self.state = FPArray(rows, cols)
+                if _.with_ctrade[0]:
+                    self.ctrade = FPArray(rows, cols)
+
+                self.vp._re_init_arr()
+                self.dp._re_init_arr()
+            else:
+                _.fp_rows[0] = self.base.shape[0]
 
     @property
     def last_bar(self) -> int:
-        return (self.last_idx[0] & ~1) // 2
+        return self.headers_offset[0] + ((self.last_idx[0] & ~1) // 2)
 
     @property
     def vwap(self) -> PriceLike[Footprint]:

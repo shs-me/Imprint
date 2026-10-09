@@ -51,18 +51,18 @@ class Bar:
     _fp: Chart
     idXbid: int | int64
 
-    bar_id: int | int64 = field(default=0, init=False)
-
     ind: Indicators[Bar] = field(init=False)
     vp: VolumeProfile[Bar] = field(init=False)
     dp: DeltaProfile[Bar] = field(init=False)
 
     def __post_init__(self) -> None:
-        self.bar_id = self._fp.headers_offset[0] + (self.idXbid // 2)
-
         self.ind = Indicators(self)
         self.vp = VolumeProfile(self)
         self.dp = DeltaProfile(self)
+
+    @property
+    def bar_id(self) -> int | int64:
+        return self._fp.headers_offset[0] + (self.idXbid // 2)
 
     def _get_header(self, header: int) -> int64:
         return self._fp.headers[self.bar_id, header]

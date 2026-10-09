@@ -44,7 +44,9 @@ class Manager(Position, ABC):
     bar_count: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    equity_history: NDArray[int64] = field(init=False)
+    equity_history: NDArray[int64] = field(
+        default_factory=lambda: np.zeros((0, 0), dtype=int64), init=False
+    )
     base_timestamp: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
@@ -70,9 +72,12 @@ class Manager(Position, ABC):
             total_days * 24 * 60 * 60 * 1000
         ) // self.timeframe[0]
 
-        self.equity_history = np.zeros(
-            (self.bar_count[0], EquityC + 1), dtype=int64
-        )
+        if self.bar_count[0] != self.equity_history.shape[0]:
+            self.equity_history = np.zeros(
+                (self.bar_count[0], EquityC + 1), dtype=int64
+            )
+        else:
+            self.equity_history.fill(0)
 
     @override
     def reset(self) -> None:
