@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import zip_longest
-from typing import final
+from typing import Any, TypeVar, final
 
 from loguru import logger
 
-import imprint.configs as cfg
+from imprint._boot.configs import FootprintBatch, RiskManagementBatch
+from imprint._core import constant as c
 from imprint._core.configs import (
     Configuration,
     Footprint,
@@ -16,42 +19,27 @@ from imprint._core.configs import (
     Setup,
     SharedMemorySegments,
 )
+from imprint._core.footprint import StrategyEngine
+from imprint._core.pipeline.executing import ExecutionEngine
 from imprint._core.settings import KwgsKeys, Timeframe
 from imprint._core.utils.exc_dumper import error_handler
+
+T = TypeVar("T")
 
 
 class InitFailed(Exception): ...
 
 
+class EngineNotBuilded(Exception): ...
+
+
 @dataclass(slots=True)
 class Base(ABC):
-    """Provide common initialization, logging, and core execution lifecycle for trading run modes.
-
-    Parameters
-    ----------
-    symbol : str
-        Target trading pair symbol (e.g., ``"BTCUSDT"``).
-    strategy : imprint.configs.Strategy
-        Trading strategy configuration containing algorithm, risk management, and footprint parameters.
-    execution : type[imprint.configs.ExecutionEngine]
-        Execution engine class handling order routing and position management.
-    with_execution : bool
-        Flag indicating whether live/backtest execution is enabled.
-
-    Attributes
-    ----------
-    symbol : str
-        Target trading pair symbol.
-    strategy : imprint.configs.Strategy
-        Trading strategy configuration.
-    execution : type[imprint.configs.ExecutionEngine]
-        Execution engine class.
-    with_execution : bool
-        Flag indicating if execution is enabled.
-    """
-
-    strategy: cfg.Strategy | cfg.StrategyBatch
-    with_execution: bool
+    _algorithm: type[StrategyEngine] | list[type[StrategyEngine]]
+    _execution: type[ExecutionEngine] | list[type[ExecutionEngine]]
+    _footprint: Footprint | FootprintBatch
+    _risk_management: RiskManagement | RiskManagementBatch
+    _with_execution: bool
 
     _setups: list[Setup] = field(init=False)
     _footprints: list[Footprint] = field(init=False)
@@ -67,6 +55,8 @@ class Base(ABC):
 
     @final
     def __post_init__(self) -> None:
+        self._init_logger()
+
         logger.info(f"Initialization {self.__class__.__name__} mode, started.")
 
         self._setups = []
@@ -78,9 +68,9 @@ class Base(ABC):
         self._kwargs = {}
 
         try:
-            self.prepare_setup_config()
-            self.prepare_fp_config()
-            self.prepare_rm_config()
+            self._prepare_setup_config()
+            self._prepare_fp_config()
+            self._prepare_rm_config()
             self._post_init()
 
         except InitFailed as e:
@@ -105,22 +95,56 @@ class Base(ABC):
         self._init_complete = True
         logger.info("Init, completed.\n")
 
-    def prepare_setup_config(self) -> None:
-        _ = self.strategy
-        # - - -
-        if isinstance(_, cfg.Strategy):
+    def _init_logger(self) -> None:
+
+        import imprint._boot as _iboot
+        import imprint._core as _icore
+        import imprint._vis as _ivis
+
+        logger.remove()
+        logger.add(
+            c.API_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | Imprint | {message}",
+            filter=lambda r: r["name"].startswith(_iboot.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
+        logger.add(
+            c.CORE_LOG_PATH,
+            format=(
+                "{elapsed} | {extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
+            ),
+            filter=lambda r: r["name"].startswith(_icore.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
+        logger.add(
+            c.VISUALIZATION_LOG_PATH,
+            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
+            filter=lambda r: r["name"].startswith(_ivis.__name__),  # pyright: ignore[reportOptionalMemberAccess]
+            rotation="10 MB",
+            colorize=True,
+            enqueue=True,
+        )
+
+    def _prepare_setup_config(self) -> None:
+        if not isinstance(self._algorithm, list) and not isinstance(
+            self._execution, list
+        ):
             self._setups.append(
                 Setup(
-                    algorithm_module=_.algorithm.__module__,
-                    algorithm_class_name=_.algorithm.__name__,
-                    execution_module=_.execution.__module__,
-                    execution_class_name=_.execution.__name__,
-                    execution=self.with_execution,
+                    algorithm_module=self._algorithm.__module__,
+                    algorithm_class_name=self._algorithm.__name__,
+                    execution_module=self._execution.__module__,
+                    execution_class_name=self._execution.__name__,
+                    execution=self._with_execution,
                 )
             )
         else:
-            algorithms = self.to_list(_.algorithm)
-            executions = self.to_list(_.execution)
+            algorithms = self._to_list(self._algorithm)
+            executions = self._to_list(self._execution)
 
             for algo, exec in zip_longest(
                 algorithms, executions, fillvalue=None
@@ -137,27 +161,21 @@ class Base(ABC):
                     setup.execution_module = exec.__module__
                     setup.execution_class_name = exec.__name__
 
-                setup.execution = self.with_execution
+                setup.execution = self._with_execution
 
     @final
-    def prepare_fp_config(self) -> None:
-        _ = self.strategy
+    def _prepare_fp_config(self) -> None:
+        _ = self._footprint
         # - - -
-        if isinstance(_, cfg.Strategy):
-            self._footprints.append(_.footprint)
+        if isinstance(_, Footprint):
+            self._footprints.append(_)
         else:
-            timeframes = self.to_list(_.footprint.timeframe)
-            chart_ranges = self.to_list(_.footprint.chart_range)
-            step_ticks = self.to_list(_.footprint.step_tick)
-            with_states = self.to_list(_.footprint.state)
-            with_ctrades = self.to_list(_.footprint.ctrade)
-
             for tf, cr, st, ws, wc in zip_longest(
-                timeframes,
-                chart_ranges,
-                step_ticks,
-                with_states,
-                with_ctrades,
+                _.timeframe,
+                _.chart_range,
+                _.step_tick,
+                _.state,
+                _.ctrade,
                 fillvalue=None,
             ):
                 fp: Footprint = (
@@ -179,32 +197,20 @@ class Base(ABC):
                     fp.ctrade = wc
 
     @final
-    def prepare_rm_config(self) -> None:
-        _ = self.strategy
+    def _prepare_rm_config(self) -> None:
+        _ = self._risk_management
         # - - -
-        if isinstance(_, cfg.Strategy):
-            self._risk_managements.append(_.risk_management)
+        if isinstance(_, RiskManagement):
+            self._risk_managements.append(_)
         else:
-            entry_qtys = self.to_list(_.risk_management.entry_qty)
-            max_lock_balances = self.to_list(_.risk_management.max_lock_balance)
-            max_loss_balances = self.to_list(_.risk_management.max_loss_balance)
-            tp_devs = self.to_list(_.risk_management.tp_dev)
-            sl_devs = self.to_list(_.risk_management.sl_dev)
-            signal_timers = self.to_list(
-                _.risk_management.pass_execute_signal_if_timer_ms_exepired
-            )
-            analyze_timers = self.to_list(
-                _.risk_management.pass_signal_if_analysis_time_big
-            )
-
             for eq, mkb, msb, tp, sl, st, at in zip_longest(
-                entry_qtys,
-                max_lock_balances,
-                max_loss_balances,
-                tp_devs,
-                sl_devs,
-                signal_timers,
-                analyze_timers,
+                _.entry_qty,
+                _.max_lock_balance,
+                _.max_loss_balance,
+                _.tp_dev,
+                _.sl_dev,
+                _.pass_execute_signal_if_timer_ms_exepired,
+                _.pass_signal_if_analysis_time_big,
                 fillvalue=None,
             ):
                 rm: RiskManagement = (
@@ -232,10 +238,10 @@ class Base(ABC):
     @abstractmethod
     def _post_init(self) -> None: ...
 
-    def to_list[T](self, obj: list[T] | T, /) -> list[T]:
+    def _to_list[T](self, obj: list[T] | T, /) -> list[T]:
         return list(obj) if isinstance(obj, list) else [obj]  # pyright: ignore[reportUnknownArgumentType]
 
-    def list_get[T](self, arr: list[T], index: int) -> T | None:
+    def _list_get[T](self, arr: list[T], index: int) -> T | None:
         try:
             return arr[index]
         except IndexError:
@@ -251,3 +257,21 @@ class Base(ABC):
             logger.info("Core, started.")
             run(**self._kwargs)
             logger.info("Core, closed.\n")
+
+
+@final
+class BoundFactory:
+    def __init__(
+        self,
+        config_cls: type[T],
+        builder: Any,
+        target_attr: str,
+    ) -> None:
+        self._config_cls = config_cls
+        self._builder = builder
+        self._target_attr = target_attr
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        instance = self._config_cls(*args, **kwargs)
+        setattr(self._builder, self._target_attr, instance)
+        return self._builder

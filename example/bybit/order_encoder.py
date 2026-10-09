@@ -3,7 +3,7 @@ from typing import Any, override
 
 from websockets import ClientConnection
 
-from imprint.configs import OrderEncoder
+from imprint import OrderEncoder
 
 
 @dataclass(slots=True)

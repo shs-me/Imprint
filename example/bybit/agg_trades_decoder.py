@@ -4,7 +4,7 @@ from typing import override
 
 from msgspec import Struct
 
-from imprint.configs import AggTradesDecoder
+from imprint import AggTradesDecoder
 
 
 class BybitAggTrade(Struct):

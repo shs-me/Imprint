@@ -3,8 +3,8 @@ from typing import override
 
 from numpy import int64
 
+from imprint import StrategyEngine
 from imprint import constant as c
-from imprint.configs import StrategyEngine
 
 
 @dataclass(slots=True)

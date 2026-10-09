@@ -3,7 +3,7 @@ from typing import Any, override
 
 from msgspec import Struct
 
-from imprint.configs import ExchangeREST
+from imprint._core.utils import ExchangeREST
 
 
 class BaseFilter(Struct, tag_field="filterType"): ...

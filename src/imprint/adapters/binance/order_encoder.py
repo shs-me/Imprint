@@ -4,8 +4,8 @@ from typing import override
 from msgspec import Struct
 from websockets import ClientConnection
 
+from imprint._core.utils import OrderEncoder
 from imprint.adapters.binance.rest_adapter import BinanceFuturesREST
-from imprint.configs import OrderEncoder
 
 
 class NewOrderParam(Struct):

@@ -4,7 +4,7 @@ from typing import Any, override
 
 from websockets import ClientConnection
 
-from imprint.configs import BalanceData, OrderData, UserStreamDecoder
+from imprint import BalanceData, OrderData, UserStreamDecoder
 
 
 @dataclass(slots=True)

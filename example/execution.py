@@ -2,8 +2,8 @@ import time
 from dataclasses import dataclass
 from typing import override
 
+from imprint import ExecutionEngine
 from imprint import constant as c
-from imprint.configs import ExecutionEngine
 
 
 @dataclass(slots=True)
