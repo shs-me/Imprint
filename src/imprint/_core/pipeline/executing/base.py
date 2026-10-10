@@ -115,6 +115,7 @@ class Base(ABC):
         self.init()
         self.readed_timestamp, self.count_open_positions[0] = 0, 0
         self.account.reset()
+        self.strategy.reset()
 
     @final
     def __complete(self) -> bool:

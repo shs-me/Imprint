@@ -240,21 +240,55 @@ class JitFootprintUpdate:
         """
         _ = self.storage
         # - - -
+        zero: int64 = int64(0)
         prev_bar: int64 = bar - 1
-        prev_t, prev_p = 0, 0
+        prev_p: int64 = zero
+        prev_cvd: int64 = zero
+        prev_vwap: int64 = zero
+        prev_vwap_l: int64 = zero
+        prev_vwap_u: int64 = zero
+        prev_atr: int64 = zero
+        found_prev: bool = False
 
         while prev_bar >= 0:
-            if _.headers[(ho + prev_bar), 0] == 0:
-                prev_bar -= 1
-            else:
-                prev_t = _.headers[(ho + prev_bar), c.BH_Time]
-                prev_p = _.headers[(ho + prev_bar), c.BH_Close]
+            b_idx = ho + prev_bar
+            if (
+                _.headers[b_idx, c.BH_CountTrade] > 0
+                or _.headers[b_idx, c.BH_Open] > 0
+            ):
+                prev_p = _.headers[b_idx, c.BH_Close]
+                prev_cvd = _.headers[b_idx, c.BH_CVD]
+                prev_vwap = _.headers[b_idx, c.BH_VWAP]
+                prev_vwap_l = _.headers[b_idx, c.BH_VWAP_LOWER_BAND]
+                prev_vwap_u = _.headers[b_idx, c.BH_VWAP_UPPER_BAND]
+                prev_atr = _.headers[b_idx, c.BH_ATR]
+                found_prev = True
                 prev_bar += 1
                 break
 
-        while 0 <= prev_bar < bar:
-            _.headers[(ho + prev_bar), c.BH_Time] = prev_t = prev_t + _.tims[0]
-            _.headers[(ho + prev_bar), c.BH_Open : c.BH_Close + 1] = prev_p
+            prev_bar -= 1
+
+        if not found_prev:
+            prev_bar = zero
+            prev_p = _.headers[ho + bar, c.BH_Open]
+
+        while prev_bar < bar:
+            cur_bwo: int64 = ho + prev_bar
+            _.headers[cur_bwo, c.BH_Time] = _.baseTimestamp[0] + (
+                prev_bar * _.tims[0]
+            )
+            _.headers[cur_bwo, c.BH_LastTradeTime] = _.headers[
+                cur_bwo, c.BH_Time
+            ]
+
+            _.headers[cur_bwo, c.BH_Open : c.BH_Close + 1] = prev_p
+
+            _.headers[cur_bwo, c.BH_CVD] = prev_cvd
+            _.headers[cur_bwo, c.BH_VWAP] = prev_vwap
+            _.headers[cur_bwo, c.BH_VWAP_LOWER_BAND] = prev_vwap_l
+            _.headers[cur_bwo, c.BH_VWAP_UPPER_BAND] = prev_vwap_u
+            _.headers[cur_bwo, c.BH_ATR] = prev_atr
+
             prev_bar += 1
 
     def _update_cvd(self, bar: int64, bwo: int64) -> None:

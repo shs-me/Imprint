@@ -97,14 +97,8 @@ class Dispatcher:
         self.kwg[kk.Segments.name][kk.ShmSize.name] = offset
         self.kwg[kk.MainTools.name] = [Event(), Semaphore(0)]
 
-    def shm_init(self) -> tuple[SharedMemory, memoryview] | None:
-        """Allocate a new SharedMemory block for the main process or attach to an existing segment for workers.
-
-        Returns
-        -------
-        tuple[SharedMemory, memoryview] | None
-            A tuple of the SharedMemory block and its associated memoryview block, or None.
-        """
+    def shm_init(self) -> None:
+        """Allocate a new SharedMemory block for the main process or attach to an existing segment for workers."""
         if self.is_main:
             self.shm = SharedMemory(
                 size=self.kwg[kk.Segments.name].pop(kk.ShmSize.name),
@@ -127,8 +121,7 @@ class Dispatcher:
         Returns
         -------
         HostManager | NodeManager
-            The instantiated manager object tailored to either the host's or worker's
-            operational requirements.
+            Instantiated manager object tailored to host or worker requirements.
         """
         configs = deepcopy(self.kwg[kk.Configs.name])
         segment_configs = deepcopy(self.kwg[kk.SegmentConfigs.name])

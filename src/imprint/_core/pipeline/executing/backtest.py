@@ -35,6 +35,7 @@ class Backtest(Base):
         self.account.nBalance = self.exchange_sim.nBalance
         self.account.lockedNbalance = self.exchange_sim.lockedNbalance
         self.account.availableNbalance = self.exchange_sim.availableNbalance
+        self.account.dynamicNbalance = self.exchange_sim.dynamicNbalance
 
     @override
     def reset(self) -> None:

@@ -155,6 +155,7 @@ class DownloadAggTradesHistory(BaseREST):
                 self._convert_csv_to_npy(csv_path)
 
             self.cur_date += timedelta(days=1)
+            counter = 0
 
         if downloaded_days:
             self.log(f"Downloaded days: {downloaded_days}")

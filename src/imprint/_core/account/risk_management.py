@@ -41,6 +41,10 @@ class RiskManagement(Base, ABC):
         self.__entry_qty = cfgRM.entry_qty.fixed
         self.__max_lock_balance = cfgRM.max_lock_balance.fixed
         self.__max_loss_balance = cfgRM.max_loss_balance.fixed
+        self._long_tp_dev = cfgRM.tp_dev.fixed
+        self._short_tp_dev = cfgRM.tp_dev.fixed
+        self._long_sl_dev = cfgRM.sl_dev.fixed
+        self._short_sl_dev = cfgRM.sl_dev.fixed
         self.time_for_expired_signal = (
             cfgRM.pass_execute_signal_if_timer_ms_exepired
         )

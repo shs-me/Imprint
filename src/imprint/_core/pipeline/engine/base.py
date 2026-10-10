@@ -150,6 +150,7 @@ class Base(ABC):
     def reset(self) -> None:
         self.init()
         self.at_rid, self.at_wid = 0, 0
+        self.engine.strategy = self.strategy
         self.strategy.fp = self.engine.fp
         self.engine.reset()
 

@@ -1,9 +1,4 @@
-"""Process orchestration and supervisor decorator.
-
-Provides a decorator to wrap worker process entry point functions,
-automating shared memory allocations, dispatching manager bindings, and ensuring
-correct process-level resource cleanup on exit.
-"""
+"""Provide worker process entry point supervision and IPC lifecycle management."""
 
 from collections.abc import Callable
 from functools import wraps
@@ -16,23 +11,22 @@ R = TypeVar("R")
 
 
 def supervisor(is_main: bool = False):
-    """Wrap worker process main functions with Dispatcher IPC initialization and cleanup.
+    """Wrap worker process entry point functions with IPC resource allocation and cleanup.
 
-    Manages the lifecycle of the `Dispatcher` for a process and coordinates SharedMemory block attachment or unlinking
-    at termination.
+    Manages the lifecycle of the process ``Dispatcher``, coordinates shared memory block
+    allocation or attachment, and guarantees proper resource release or unlinking
+    upon process exit.
 
     Parameters
     ----------
     is_main : bool, default=False
-        True if decorating the main orchestrator/host process entry point. If True,
-        responsible for configuration scanning, SharedMemory allocation, and
-        final segment unlinking.
+        Flag indicating whether the decorated function is the host process entry point.
+        If True, allocates and unlinks shared memory; if False, attaches to existing memory.
 
     Returns
     -------
     Callable[[Callable[P, R]], Callable[P, R | None]]
-        A wrapper decorator that injects IPC setups, executes the target function
-        via the Dispatcher, and gracefully cleans up resources.
+        Decorator that instantiates the Dispatcher and executes the target entry point.
     """
 
     def decorator(func: Callable[P, R]) -> Callable[P, R | None]:

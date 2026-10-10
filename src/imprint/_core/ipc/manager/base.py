@@ -1,9 +1,4 @@
-"""Abstract shared memory segment binding manager.
-
-This module defines the Base abstract manager which binds shared memory slices to
-specific fields in configuration objects using dataclass annotations. It maps status
-buffers, ring buffers, log streams, and multi-process events to simplify IPC.
-"""
+"""Provide abstract shared memory segment binding and IPC attribute mapping."""
 
 from abc import ABC
 from dataclasses import dataclass, field
@@ -25,13 +20,15 @@ class Base(ABC):
 
     Parameters
     ----------
+    _configs : list[list[cfg.Configuration]]
+        Matrix of configuration instances grouped per engine setup.
+    _segment_configs : list[cfg.SharedMemorySegments]
+        Sequence of shared memory IPC segment descriptors.
     _segments : dict[str, slice]
         Mappings of Configuration class names to their respective slices within
         the main shared memory block.
     _shm_buf : memoryview
         The full memoryview buffer of the system's SharedMemory.
-    _configs : list[cfg.Configuration]
-        Instantiated Configuration instances representing state structures.
     _main_tools : list[Event | Semaphore]
         Synchronization tools including signaling events and status semaphores.
 
@@ -163,6 +160,7 @@ class Base(ABC):
 
     @final
     def _change_configs(self) -> None:
+        """Advance configuration index and rebind active Configuration attributes."""
         configs = self._configs[self._config_idx]
         self._config_idx += 1
         for obj in configs:
@@ -175,6 +173,7 @@ class Base(ABC):
                     break
 
     def _reset(self) -> None:
+        """Reset all SharedMemorySegments instances bound to this manager."""
         for attr_name, attr_type in Base.__annotations__.items():
             if issubclass(attr_type.__class__, GenericAlias):
                 continue

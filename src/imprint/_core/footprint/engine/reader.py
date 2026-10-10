@@ -409,12 +409,11 @@ class JitFootprintAnalyzer:
         period = self.ma_ats_period
         bar_min = max(0, bwo - period)
         if (bar_max - bar_min) >= period:
-            _.headers[bwo, c.BH_MA_ATS] = int64(
-                (
-                    _.headers[bar_min:bar_max, c.BH_Volume]
-                    // _.headers[bar_min:bar_max, c.BH_CountTrade]
-                ).mean()
-            )
+            vols = _.headers[bar_min:bar_max, c.BH_Volume]
+            trades = _.headers[bar_min:bar_max, c.BH_CountTrade]
+            valid = trades > 0
+            if np.any(valid):
+                _.headers[bwo, c.BH_MA_ATS] = int64((vols // trades).mean())
 
         # Update POC + VA
         poc: intp = np.argmax(fp[:, idxVP])

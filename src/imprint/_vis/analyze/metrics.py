@@ -201,6 +201,9 @@ def calculate_streaks(trades_close: list[CloseTrades]) -> tuple[int, int]:
             cur_losses += 1
             cur_wins = 0
             max_losses = max(max_losses, cur_losses)
+        else:
+            cur_losses = cur_wins = 0
+
     return max_wins, max_losses
 
 
