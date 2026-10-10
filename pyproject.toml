@@ -53,6 +53,7 @@ dev = [
 
 plot = [
     "plotly==7.0.0",
+    "streamlit==1.65.0"
 ]
 
 all = [
@@ -89,8 +90,14 @@ venvPath = "."
 venv = ".venv"
 
 indexing = false
+exclude = [
+    ".venv",
+    "**/__pycache__",
+    "build",
+    "dist"
+]
 ignore = [
-    "**/__pycache__"
+    ".venv"
 ]
 
 reportAny = false

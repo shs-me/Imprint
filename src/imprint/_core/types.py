@@ -273,3 +273,20 @@ class ProcsData(TypedDict):
     proc_name: str
     task_id: int
     proc: Process
+
+
+class RunData(TypedDict):
+    id: int
+    symbol: str
+    start_date: str
+    end_date: str
+    timeframe: int
+    timeframe_name: str
+    leverage: int
+    price_mult: int
+    qty_mult: int
+    scale_mult: int
+    start_balance: float
+    end_balance: float
+    net_profit: float
+    count_trade_close: int

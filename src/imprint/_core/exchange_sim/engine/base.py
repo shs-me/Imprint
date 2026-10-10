@@ -65,6 +65,7 @@ class Base(MatchingEngine):
             takerNcommission=self.takerNcommission,
             timeframe=self.timeframe,
             equity_history=self.equity_history,
+            count_trade_close=self.count_trade_close,
         )
 
     @override
@@ -76,8 +77,9 @@ class Base(MatchingEngine):
 
     def final_action(self) -> None:
         """Dump equity history and save orders history to persistent storage."""
-        self.dump_equity_history()
+        self.save_equity_history()
         self.save_orders_history()
+        self.save_manifest()
 
     def start(self, timestamp: int) -> None:
         """Start simulation processing up to the specified target timestamp.
@@ -110,6 +112,7 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
     ("takerNcommission", types.MemoryView(nb.int64, 1, "C")),
     ("timeframe", types.MemoryView(nb.int64, 1, "C")),
     ("equity_history", types.Array(nb.int64, 2, "C")),
+    ("count_trade_close", types.MemoryView(nb.int64, 1, "C")),
 ]
 
 
@@ -221,6 +224,7 @@ class JitExchangeEngine:
         takerNcommission: memoryview,
         timeframe: memoryview,
         equity_history: NDArray[int64],
+        count_trade_close: memoryview,
     ) -> None:
         self.matching_engine: JitMatchingEngine = matching_engine
         self.position: JitPosition = position
@@ -241,6 +245,7 @@ class JitExchangeEngine:
         self.takerNcommission: memoryview = takerNcommission
         self.timeframe: memoryview = timeframe
         self.equity_history: NDArray[int64] = equity_history
+        self.count_trade_close: memoryview = count_trade_close
 
     def start(self, timestamp: int) -> None:
         """Advance simulation state by consuming market data ring buffer ticks up to the target timestamp.
@@ -344,6 +349,7 @@ class JitExchangeEngine:
                 ma.executed_orders[eo_row, c.TP_nCommission] = nCommission
 
                 if not is_open:
+                    self.count_trade_close[0] += 1
                     if is_long:
                         ma.executed_orders[eo_row, c.TP_nMAE] = pos.long_mae[0]
                         ma.executed_orders[eo_row, c.TP_nMFE] = pos.long_mfe[0]

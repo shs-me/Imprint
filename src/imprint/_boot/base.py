@@ -1,3 +1,5 @@
+"""Provide abstract base engine orchestration and builder binding utilities."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,7 +12,6 @@ from typing import Any, TypeVar, final
 from loguru import logger
 
 from imprint._boot.configs import FootprintBatch, RiskManagementBatch
-from imprint._core import constant as c
 from imprint._core.configs import (
     Configuration,
     Footprint,
@@ -27,14 +28,51 @@ from imprint._core.utils.exc_dumper import error_handler
 T = TypeVar("T")
 
 
-class InitFailed(Exception): ...
+class InitFailed(Exception):
+    """Raised when engine initialization fails."""
 
 
-class EngineNotBuilded(Exception): ...
+class EngineNotBuilded(Exception):
+    """Raised when attempting to access an engine before build() is called."""
 
 
 @dataclass(slots=True)
 class Base(ABC):
+    """Provide common initialization, configuration mapping, and lifecycle management for trading engines.
+
+    Parameters
+    ----------
+    _algorithm : type[StrategyEngine] | list[type[StrategyEngine]]
+        Strategy algorithm class or sequence of classes.
+    _execution : type[ExecutionEngine] | list[type[ExecutionEngine]]
+        Execution engine class or sequence of classes.
+    _footprint : Footprint | FootprintBatch
+        Footprint configuration or batch specification.
+    _risk_management : RiskManagement | RiskManagementBatch
+        Risk management configuration or batch specification.
+    _with_execution : bool
+        Whether to enable live order execution and management.
+
+    Attributes
+    ----------
+    _setups : list[Setup]
+        Compiled sequence of strategy execution setups.
+    _footprints : list[Footprint]
+        Compiled sequence of footprint configurations.
+    _risk_managements : list[RiskManagement]
+        Compiled sequence of risk management configurations.
+    _other_configs : list[Sequence[Configuration]]
+        Additional auxiliary configuration sequences.
+    _segments : list[SharedMemorySegments]
+        Shared memory IPC segment descriptors.
+    _configs : list[list[Configuration]]
+        Aggregated configuration matrices grouped per engine instance.
+    _kwargs : dict[str, list[list[Configuration]] | SharedMemorySegments]
+        Keyword arguments payload passed to the core execution process.
+    _init_complete : bool
+        Flag indicating whether initialization completed successfully.
+    """
+
     _algorithm: type[StrategyEngine] | list[type[StrategyEngine]]
     _execution: type[ExecutionEngine] | list[type[ExecutionEngine]]
     _footprint: Footprint | FootprintBatch
@@ -55,8 +93,7 @@ class Base(ABC):
 
     @final
     def __post_init__(self) -> None:
-        self._init_logger()
-
+        """Initialize engine configurations, build setup lists, and prepare shared memory payloads."""
         logger.info(f"Initialization {self.__class__.__name__} mode, started.")
 
         self._setups = []
@@ -95,41 +132,8 @@ class Base(ABC):
         self._init_complete = True
         logger.info("Init, completed.\n")
 
-    def _init_logger(self) -> None:
-
-        import imprint._boot as _iboot
-        import imprint._core as _icore
-        import imprint._vis as _ivis
-
-        logger.remove()
-        logger.add(
-            c.API_LOG_PATH,
-            format="{time:YY:MM:DD-HH:mm:ss} | {level} | Imprint | {message}",
-            filter=lambda r: r["name"].startswith(_iboot.__name__),  # pyright: ignore[reportOptionalMemberAccess]
-            rotation="10 MB",
-            colorize=True,
-            enqueue=True,
-        )
-        logger.add(
-            c.CORE_LOG_PATH,
-            format=(
-                "{elapsed} | {extra[time]} | {extra[level]} | {extra[proc_name]} | {message}"
-            ),
-            filter=lambda r: r["name"].startswith(_icore.__name__),  # pyright: ignore[reportOptionalMemberAccess]
-            rotation="10 MB",
-            colorize=True,
-            enqueue=True,
-        )
-        logger.add(
-            c.VISUALIZATION_LOG_PATH,
-            format="{time:YY:MM:DD-HH:mm:ss} | {level} | {message}",
-            filter=lambda r: r["name"].startswith(_ivis.__name__),  # pyright: ignore[reportOptionalMemberAccess]
-            rotation="10 MB",
-            colorize=True,
-            enqueue=True,
-        )
-
     def _prepare_setup_config(self) -> None:
+        """Construct setup configurations for strategy algorithms and execution engines."""
         if not isinstance(self._algorithm, list) and not isinstance(
             self._execution, list
         ):
@@ -165,6 +169,7 @@ class Base(ABC):
 
     @final
     def _prepare_fp_config(self) -> None:
+        """Construct footprint configurations from singleton or batch specifications."""
         _ = self._footprint
         # - - -
         if isinstance(_, Footprint):
@@ -198,6 +203,7 @@ class Base(ABC):
 
     @final
     def _prepare_rm_config(self) -> None:
+        """Construct risk management configurations from singleton or batch specifications."""
         _ = self._risk_management
         # - - -
         if isinstance(_, RiskManagement):
@@ -236,12 +242,39 @@ class Base(ABC):
                     rm.pass_signal_if_analysis_time_big = at
 
     @abstractmethod
-    def _post_init(self) -> None: ...
+    def _post_init(self) -> None:
+        """Perform subclass-specific post-initialization tasks and resource allocations."""
 
     def _to_list[T](self, obj: list[T] | T, /) -> list[T]:
+        """Convert a single element or sequence into a list.
+
+        Parameters
+        ----------
+        obj : list[T] | T
+            Item or list of items to convert.
+
+        Returns
+        -------
+        list[T]
+            Standard Python list containing the items.
+        """
         return list(obj) if isinstance(obj, list) else [obj]  # pyright: ignore[reportUnknownArgumentType]
 
     def _list_get[T](self, arr: list[T], index: int) -> T | None:
+        """Safely retrieve an element from a list by index.
+
+        Parameters
+        ----------
+        arr : list[T]
+            Target list to index into.
+        index : int
+            Index position to access.
+
+        Returns
+        -------
+        T | None
+            Element at the specified index, or None if index is out of bounds.
+        """
         try:
             return arr[index]
         except IndexError:
@@ -261,17 +294,44 @@ class Base(ABC):
 
 @final
 class BoundFactory:
+    """Bind configuration instantiation directly to a parent builder instance."""
+
     def __init__(
         self,
         config_cls: type[T],
         builder: Any,
         target_attr: str,
     ) -> None:
+        """Initialize bound factory with configuration class, builder reference, and target attribute.
+
+        Parameters
+        ----------
+        config_cls : type[T]
+            The configuration dataclass type to instantiate.
+        builder : Any
+            The parent builder instance holding the configuration attribute.
+        target_attr : str
+            The attribute name on the builder to store the instantiated configuration.
+        """
         self._config_cls = config_cls
         self._builder = builder
         self._target_attr = target_attr
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Instantiate the configuration class, assign it to the builder, and return the builder.
+
+        Parameters
+        ----------
+        *args : Any
+            Positional arguments passed to the configuration class constructor.
+        **kwargs : Any
+            Keyword arguments passed to the configuration class constructor.
+
+        Returns
+        -------
+        Any
+            The parent builder instance for method chaining.
+        """
         instance = self._config_cls(*args, **kwargs)
         setattr(self._builder, self._target_attr, instance)
         return self._builder

@@ -23,7 +23,6 @@ from imprint._vis.analyze.metrics import (
     calculate_static_drawdown,
     calculate_streaks,
     calculate_tp_sl_info,
-    calculate_turnover,
     calculate_win_rate,
 )
 from imprint._vis.analyze.orders_history import analyze_orders_history
@@ -112,6 +111,7 @@ class Stats:
         self.all_pnls = result[2]
         self.end_balance = result[3] / self.scale_mult
         self.sum_commission = result[4]
+        self.turnover = result[5]
 
         result = calculate_sharpe_and_sortino_ratio(
             self.eq_close, self.timeframe
@@ -182,8 +182,6 @@ class Stats:
         self.kelly_pct = calculate_kelly_criterion(
             self.win_rate, self.payoff_ratio
         )
-        self.turnover = calculate_turnover(self.trades_close)
-
         (
             self.long_count,
             self.long_wr,

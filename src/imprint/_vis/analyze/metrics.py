@@ -261,7 +261,3 @@ def calculate_kelly_criterion(
     w = win_rate_pct / 100.0
     k = w - ((1.0 - w) / payoff_ratio)
     return float(k * 100.0)
-
-
-def calculate_turnover(trades_close: list[CloseTrades]) -> float:
-    return sum(tc["price"] * abs(tc["pnl_pct"]) for tc in trades_close)

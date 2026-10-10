@@ -1,3 +1,5 @@
+"""Provide backtest engine orchestration, historical data downloading, and builder interfaces."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -13,6 +15,7 @@ from imprint._boot.configs import (
     FootprintBatch,
     RiskManagementBatch,
 )
+from imprint._core import constant as c
 from imprint._core.configs import (
     Account,
     Coin,
@@ -20,21 +23,40 @@ from imprint._core.configs import (
     Percent,
     Setup,
 )
-from imprint._core.constant import (
-    EQUITY_HISTORY_DATA_PATH,
-    FOOTPRINT_HEADERS_DATA_PATH,
-    ORDERS_HISTORY_DATA_PATH,
-)
 from imprint._core.footprint import StrategyEngine
 from imprint._core.pipeline.executing import ExecutionEngine
 from imprint._core.utils import DownloadAggTradesHistory
 from imprint._core.utils.agg_trades_history_downloader import DownloadError
 from imprint._core.utils.exc_dumper import error_handler
-from imprint._vis.main import Render
 
 
 @dataclass(slots=True)
 class Backtest(Base):
+    """Manage backtest simulation setup, historical trade downloads, and visualization serving.
+
+    Parameters
+    ----------
+    _symbol : list[str]
+        Sequence of trading symbols for backtesting.
+    _tick_size : list[str]
+        Sequence of asset price tick sizes.
+    _lot_size : list[str]
+        Sequence of asset order quantity lot sizes.
+    _start_date : list[str]
+        Sequence of backtest start date strings in ``YYYY-MM-DD`` format.
+    _end_date : list[str]
+        Sequence of backtest end date strings in ``YYYY-MM-DD`` format.
+    _account : AccountBatch
+        Account batch configuration parameters.
+
+    Attributes
+    ----------
+    _coins : list[Coin]
+        Compiled sequence of coin configurations.
+    _accounts : list[Account]
+        Compiled sequence of account simulation configurations.
+    """
+
     _symbol: list[str]
     _tick_size: list[str]
     _lot_size: list[str]
@@ -47,6 +69,7 @@ class Backtest(Base):
 
     @override
     def _post_init(self) -> None:
+        """Initialize shared memory, prepare coin/account configurations, and download historical trade data."""
         self._coins = []
         self._accounts = []
 
@@ -88,6 +111,7 @@ class Backtest(Base):
 
     @override
     def _prepare_setup_config(self) -> None:
+        """Construct setup configurations with historical start and end date boundaries."""
         Base._prepare_setup_config(self)
 
         for idx, (st, ed) in enumerate(
@@ -104,6 +128,7 @@ class Backtest(Base):
                 setup.backtest_end_date = ed
 
     def _prepare_coin_config(self) -> None:
+        """Construct coin metadata configurations for target backtest symbols."""
         for sym, ts, ls in zip_longest(
             self._symbol, self._tick_size, self._lot_size, fillvalue=None
         ):
@@ -118,6 +143,7 @@ class Backtest(Base):
                 coin.lot_size = ls
 
     def _prepare_account_config(self) -> None:
+        """Construct account state configurations from account batch parameter sequences."""
         _ = self._account
         # - - -
         for b, lev, mos, mc, tc, aol, scp, lm, slp in zip_longest(
@@ -157,34 +183,77 @@ class Backtest(Base):
                 account.slippage = slp
 
     @error_handler()
-    def run_vis(self, auto_open: bool = True) -> None:
-        """Render interactive HTML charts and analytical visualizations from backtest simulation outputs.
+    def run_vis(
+        self, auto_open: bool = False, port_file: str = "streamlit.port"
+    ) -> None:
+        """Launch and manage the Streamlit visualization dashboard process in the background.
 
         Parameters
         ----------
-        auto_open : bool, default=True
-            Whether to automatically open the generated visualization HTML file in the default web browser.
+        auto_open : bool, default=False
+            Whether to automatically open the Streamlit URL in the default web browser.
+        port_file : str, default="streamlit.port"
+            Filename for storing the port under the run directory.
         """
         if self._init_complete and self._with_execution:
-            logger.info("Visualization, started.")
-            c, s, a = self._coins[-1], self._setups[-1], self._accounts[-1]
+            import os
+            import socket
+            import subprocess
+            import webbrowser
 
-            Render(
-                footprint_headers_path=FOOTPRINT_HEADERS_DATA_PATH,
-                symbol=c.symbol,
-                start_date_str=s.backtest_start_date,
-                end_date_str=s.backtest_end_date,
-                equity_history_path=EQUITY_HISTORY_DATA_PATH,
-                orders_history_path=ORDERS_HISTORY_DATA_PATH,
-                start_balance=a.balance,
-                price_mult=c.price_mult,
-                qty_mult=c.qty_mult,
-                scale_mult=a.scale_mult,
-                leverage=a.leverage,
-                timeframe=self._footprints[-1].timeframe,
-                auto_open=auto_open,
+            os.makedirs(c.RUNS_DIR, exist_ok=True)
+            port_file = f"{c.RUNS_DIR}/{port_file}"
+
+            def is_port_in_use(p: int) -> bool:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    return s.connect_ex(("127.0.0.1", p)) == 0
+
+            if os.path.exists(port_file):
+                with open(port_file, "r") as f:
+                    port: int = int(f.read().strip())
+
+                server_running: bool = is_port_in_use(port)
+                if server_running:
+                    if auto_open:
+                        webbrowser.open(f"http://localhost:{port}")
+
+                    return logger.info("Streamlit server is already running.")
+
+            import sys
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+
+            cmd: list[str] = [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                "src/imprint/_vis/main.py",
+                "--server.headless=true",
+                f"--server.port={port}",
+            ]
+
+            process = subprocess.Popen(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
-            logger.info("Visualization, closed.\n")
+
+            import time
+
+            for _ in range(20):
+                if is_port_in_use(port):
+                    break
+
+                time.sleep(0.2)
+
+            with open(port_file, "w") as f:
+                f.write(str(port))
+
+            webbrowser.open(f"http://localhost:{port}")
+            logger.info(
+                f"Streamlit server started in background (PID: {process.pid}, port: {port})."
+            )
 
 
 @final
@@ -196,6 +265,39 @@ class BacktestEngine(Backtest):  # pyright: ignore[reportUninitializedInstanceVa
 @final
 @dataclass(slots=True)
 class BacktestBuilder:
+    """Fluent builder for configuring and instantiating multi-symbol backtest engines.
+
+    Parameters
+    ----------
+    symbols : list[str]
+        List of target trading symbols.
+    start_date : list[str]
+        List of backtest start dates in ``YYYY-MM-DD`` format.
+    end_date : list[str]
+        List of backtest end dates in ``YYYY-MM-DD`` format.
+    tick_size : list[str]
+        List of asset price tick sizes.
+    lot_size : list[str]
+        List of asset order quantity lot sizes.
+    with_execution : bool
+        Whether to enable simulated order execution.
+
+    Attributes
+    ----------
+    _account : AccountBatch
+        Configured account parameter batch.
+    _footprint : FootprintBatch
+        Configured footprint parameter batch.
+    _risk_management : RiskManagementBatch
+        Configured risk management parameter batch.
+    _algorithm : list[type[StrategyEngine]]
+        Configured strategy algorithm classes.
+    _execution : list[type[ExecutionEngine]]
+        Configured execution engine classes.
+    _engine : BacktestEngine | None
+        Instantiated backtest engine, or None if not yet built.
+    """
+
     symbols: list[str]
     start_date: list[str]
     end_date: list[str]
@@ -218,14 +320,35 @@ class BacktestBuilder:
 
     @property
     def account(self) -> type[AccountBatch]:
+        """Bind and configure account parameters for backtesting.
+
+        Returns
+        -------
+        BoundFactory
+            Factory interface for setting account batch attributes.
+        """
         return BoundFactory(AccountBatch, self, "_account")  # pyright: ignore[ reportReturnType]
 
     @property
     def footprint(self) -> type[FootprintBatch]:
+        """Bind and configure footprint chart aggregation parameters.
+
+        Returns
+        -------
+        BoundFactory
+            Factory interface for setting footprint batch attributes.
+        """
         return BoundFactory(FootprintBatch, self, "_footprint")  # pyright: ignore[ reportReturnType]
 
     @property
     def risk_management(self) -> type[RiskManagementBatch]:
+        """Bind and configure risk management and execution timeout parameters.
+
+        Returns
+        -------
+        BoundFactory
+            Factory interface for setting risk management batch attributes.
+        """
         return BoundFactory(RiskManagementBatch, self, "_risk_management")  # pyright: ignore[ reportReturnType]
 
     def strategy(
@@ -233,11 +356,32 @@ class BacktestBuilder:
         algorithm: list[type[StrategyEngine]],
         execution: list[type[ExecutionEngine]],
     ) -> BacktestBuilder:
+        """Assign strategy algorithms and execution engines to the backtest builder.
+
+        Parameters
+        ----------
+        algorithm : list[type[StrategyEngine]]
+            Sequence of strategy engine algorithm classes.
+        execution : list[type[ExecutionEngine]]
+            Sequence of execution engine classes.
+
+        Returns
+        -------
+        BacktestBuilder
+            The builder instance for method chaining.
+        """
         self._algorithm = algorithm
         self._execution = execution
         return self
 
     def build(self) -> None:
+        """Construct and initialize the backtest engine instance from accumulated configurations.
+
+        Raises
+        ------
+        InitFailed
+            If historical data download or configuration validation fails.
+        """
         if self._engine is None:
             self._engine = BacktestEngine(
                 _algorithm=self._algorithm,
@@ -255,6 +399,18 @@ class BacktestBuilder:
 
     @property
     def engine(self) -> BacktestEngine:
+        """Retrieve the built backtest engine instance.
+
+        Returns
+        -------
+        BacktestEngine
+            Configured backtest engine instance.
+
+        Raises
+        ------
+        EngineNotBuilded
+            If build() has not been called prior to accessing the engine.
+        """
         if self._engine is not None:
             return self._engine
         else:

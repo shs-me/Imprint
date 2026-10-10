@@ -15,7 +15,15 @@ def analyze_orders_history(
     qty_mult: int,
     scale_mult: int,
     orders: NDArray[int64],
-) -> tuple[list[CloseTrades], list[OpenTrades], list[float], int, float]:
+) -> tuple[list[CloseTrades], list[OpenTrades], list[float], int, float, float]:
+    price_mult_: memoryview = memoryview(bytearray(8)).cast("q")
+    qty_mult_: memoryview = memoryview(bytearray(8)).cast("q")
+    scale_mult_: memoryview = memoryview(bytearray(8)).cast("q")
+    leverage_: memoryview = memoryview(bytearray(8)).cast("q")
+
+    price_mult_[0], qty_mult_[0] = price_mult, qty_mult
+    scale_mult_[0], leverage_[0] = scale_mult, leverage
+
     nBalance: memoryview = memoryview(bytearray(8)).cast("q")
     lockedNbalance: memoryview = memoryview(bytearray(8)).cast("q")
     longNqty: memoryview = memoryview(bytearray(8)).cast("q")
@@ -28,10 +36,10 @@ def analyze_orders_history(
     short_mfe: memoryview = memoryview(bytearray(8)).cast("q")
 
     pos = JitPosition(
-        price_mult=price_mult,
-        qty_mult=qty_mult,
-        scale_mult=scale_mult,
-        leverage=leverage,
+        price_mult=price_mult_,
+        qty_mult=qty_mult_,
+        scale_mult=scale_mult_,
+        leverage=leverage_,
         nBalance=nBalance,
         lockedNbalance=lockedNbalance,
         longNqty=longNqty,
@@ -52,6 +60,7 @@ def analyze_orders_history(
     all_pnls: list[float] = []
 
     sum_commission: float = 0
+    turnover: float = 0
 
     nBalance[0] = round(start_balance * scale_mult)
     ohRow: int = orders.shape[0]
@@ -78,6 +87,8 @@ def analyze_orders_history(
             dt: datetime = datetime.fromtimestamp(timestamp / 1000, tz=UTC)
             price: float = nPrice / price_mult
             qty: float = nQty / qty_mult
+            turnover += price * qty
+
             if is_open:
                 pos.update_position(
                     nPrice, nQty, is_long, is_open, is_maker, nCommission
@@ -137,4 +148,11 @@ def analyze_orders_history(
                     }
                 )
 
-    return trades_close, trades_open, all_pnls, nBalance[0], sum_commission
+    return (
+        trades_close,
+        trades_open,
+        all_pnls,
+        nBalance[0],
+        sum_commission,
+        turnover,
+    )

@@ -140,6 +140,7 @@ def plot_equity_and_chart(stats: Stats) -> Figure:
         }
 
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
+        height=800,
         autosize=True,
         margin={"l": 45, "r": 45, "t": 32, "b": 22},
         yaxis=make_left_axis(

@@ -1,3 +1,5 @@
+import json
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final, override
@@ -9,6 +11,7 @@ from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.account.base import Base
+from imprint._core.types import RunData
 
 
 @dataclass(slots=True)
@@ -49,6 +52,9 @@ class Account(Base, ABC):
     )
     oh_rows: int = field(default=10_000, init=False)
     oh_cols: int = field(default=c.TP_ConstantCount, init=False)
+    count_trade_close: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
     @override
     def init(self) -> None:
@@ -63,7 +69,7 @@ class Account(Base, ABC):
         Base.reset(self)
 
         self.orders_history.fill(0)
-        self.ohWid[0] = 0
+        self.ohWid[0], self.count_trade_close[0] = 0, 0
 
     @final
     def lock_balance(self, nPrice: int, nQty: int, order_param: int) -> None:
@@ -164,10 +170,52 @@ class Account(Base, ABC):
     @final
     def save_orders_history(self) -> None:
         """Flush active non-zero order history logs to disk via NumPy binary format."""
-        np.save(
-            c.ORDERS_HISTORY_DATA_PATH,
-            self.orders_history[: self.ohWid[0], :],
-        )
+        idx = self.manager._config_idx - 1
+        os.makedirs(c.RUNS_DIR, exist_ok=True)
+        orders_path = f"{c.RUNS_DIR}/orders_{idx}.npy"
+        np.save(orders_path, self.orders_history[: self.ohWid[0], :])
+
+    def save_manifest(self) -> None:
+        idx = self.manager._config_idx - 1
+        if idx == 0:
+            manifest: list[RunData] = []
+        else:
+            try:
+                with open(c.MANIFEST_PATH, "r", encoding="utf-8") as f:
+                    manifest = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                manifest = []
+
+        cfgCoin = self.manager.cfgCoin
+        cfgSetup = self.manager.cfgSetup
+        cfgFP = self.manager.cfgFootprint
+        run_meta: RunData = {
+            "id": idx,
+            "symbol": cfgCoin.symbol,
+            "start_date": cfgSetup.backtest_start_date,
+            "end_date": cfgSetup.backtest_end_date,
+            "timeframe": cfgFP.timeframe,
+            "timeframe_name": cfgFP.timeframe.name,
+            "leverage": self.leverage[0],
+            "price_mult": self.price_mult[0],
+            "qty_mult": self.qty_mult[0],
+            "scale_mult": self.scale_mult[0],
+            "start_balance": self.start_balance,
+            "end_balance": round(self.nBalance[0] / self.scale_mult[0], 2),
+            "net_profit": round(
+                (self.nBalance[0] / self.scale_mult[0]) - self.start_balance,
+                2,
+            ),
+            "count_trade_close": self.count_trade_close[0],
+        }
+
+        if idx < len(manifest):
+            manifest[idx] = run_meta
+        else:
+            manifest.append(run_meta)
+
+        with open(c.MANIFEST_PATH, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=4)
 
 
 @njit(cache=True)

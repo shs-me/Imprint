@@ -33,7 +33,7 @@ def backtest():
         tick_size=["0.01"],
         lot_size=["0.001"],
         start_date=["2026-01-01"],
-        end_date=["2026-01-01", "2026-01-07"],
+        end_date=["2026-01-01"],
         with_execution=True,
     )
     imp.account(
@@ -50,14 +50,22 @@ def backtest():
     imp.risk_management(
         max_lock_balance=[pct(10.0)],
         max_loss_balance=[pct(10.0)],
-        entry_qty=[pct(0.5), pct(0.5), pct(1)],
-        tp_dev=[pct(1.0)],
-        sl_dev=[pct(1.0)],
+        entry_qty=[pct(0.5)],
+        tp_dev=[
+            pct(1.0),
+            pct(2.0),
+            pct(4.0),
+        ],
+        sl_dev=[
+            pct(2.0),
+            pct(1.7),
+            pct(3.7),
+        ],
         pass_signal_if_analysis_time_big=[50_000],
         pass_execute_signal_if_timer_ms_exepired=[1000],
     )
     imp.footprint(
-        timeframe=[tf.M1, tf.M5],
+        timeframe=[tf.M1],
         step_tick=[5],
         state=[True],
         ctrade=[True],
@@ -67,7 +75,7 @@ def backtest():
         execution=[HedgeExecution],
     )
     imp.build()
-    imp.engine.run_core()
+    imp.engine.run_vis(auto_open=False)
 
 
 if __name__ == "__main__":

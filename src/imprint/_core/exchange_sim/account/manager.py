@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -86,9 +87,12 @@ class Manager(Position, ABC):
         self.base_timestamp[0] = 0
 
     @final
-    def dump_equity_history(self) -> None:
+    def save_equity_history(self) -> None:
         """Serialize and persist the accumulated equity history array to disk."""
-        np.save(c.EQUITY_HISTORY_DATA_PATH, self.equity_history)
+        idx = self.manager._config_idx - 1
+        os.makedirs(c.RUNS_DIR, exist_ok=True)
+        eq_path = f"{c.RUNS_DIR}/equity_{idx}.npy"
+        np.save(eq_path, self.equity_history)
 
 
 @njit(cache=True)
