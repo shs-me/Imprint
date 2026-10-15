@@ -7,7 +7,7 @@ from types import GenericAlias
 from typing import final
 
 import imprint._core.configs as cfg
-from imprint._core.configs import RingBuf, Segment, SharedMemorySegments
+from imprint._core.configs import MemoryLayout
 
 
 @dataclass(slots=True)
@@ -22,7 +22,7 @@ class Base(ABC):
     ----------
     _configs : list[list[cfg.Configuration]]
         Matrix of configuration instances grouped per engine setup.
-    _segment_configs : list[cfg.SharedMemorySegments]
+    _segment_configs : list[cfg.MemoryLayout]
         Sequence of shared memory IPC segment descriptors.
     _segments : dict[str, slice]
         Mappings of Configuration class names to their respective slices within
@@ -71,7 +71,7 @@ class Base(ABC):
     """
 
     _configs: list[list[cfg.Configuration]]
-    _segment_configs: list[cfg.SharedMemorySegments]
+    _segment_configs: list[cfg.MemoryLayout]
     _segments: dict[str, slice]
     _shm_buf: memoryview
     _main_tools: list[Event | Semaphore]
@@ -119,9 +119,9 @@ class Base(ABC):
 
         configs = self._configs[self._config_idx]
         self._config_idx += 1
-        objs: list[
-            cfg.Configuration | cfg.SharedMemorySegments | Event | Semaphore
-        ] = configs + self._segment_configs + self._main_tools
+        objs: list[cfg.Configuration | cfg.MemoryLayout | Event | Semaphore] = (
+            configs + self._segment_configs + self._main_tools
+        )
         for obj in objs:
             for attr_name, attr_type in Base.__annotations__.items():
                 if issubclass(attr_type.__class__, GenericAlias):
@@ -129,34 +129,22 @@ class Base(ABC):
 
                 if isinstance(obj, attr_type):
                     setattr(self, attr_name, obj)
-                    if isinstance(obj, cfg.SharedMemorySegments):
+                    if isinstance(obj, cfg.MemoryLayout):
                         self.__bind_shm_segments(obj)
                     break
 
     @final
-    def __bind_shm_segments(self, cfg: cfg.SharedMemorySegments) -> None:
+    def __bind_shm_segments(self, cfg: cfg.MemoryLayout) -> None:
         """Bind memoryview sub-slices to segment structures in a configuration.
 
         Parameters
         ----------
-        cfg : cfg.SharedMemorySegments
+        cfg : cfg.MemoryLayout
             Segment configurations to associate with target memory slices.
         """
         buf: memoryview = self._shm_buf[self._segments[cfg.__class__.__name__]]
-        for attr_name in cfg.__slots__:
-            attr_val = getattr(cfg, attr_name)
-            if isinstance(attr_val, Segment):
-                attr_val.view = buf[slice(*attr_val.offset)]
-            elif isinstance(attr_val, RingBuf):
-                for ring_attr_name in attr_val.__slots__:
-                    if hasattr(attr_val, ring_attr_name):
-                        ring_attr_val = getattr(attr_val, ring_attr_name)
-                        if isinstance(ring_attr_val, Segment):
-                            ring_attr_val.view = buf[
-                                slice(*ring_attr_val.offset)
-                            ]
-
-                attr_val.post_init()
+        cfg.bind_memory(buf)
+        cfg.post_init_rings()
 
     @final
     def _change_configs(self) -> None:
@@ -173,10 +161,10 @@ class Base(ABC):
                     break
 
     def _reset(self) -> None:
-        """Reset all SharedMemorySegments instances bound to this manager."""
+        """Reset all MemoryLayout instances bound to this manager."""
         for attr_name, attr_type in Base.__annotations__.items():
             if issubclass(attr_type.__class__, GenericAlias):
                 continue
 
-            if issubclass(attr_type, SharedMemorySegments):
+            if issubclass(attr_type, MemoryLayout):
                 getattr(self, attr_name).reset()

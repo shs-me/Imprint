@@ -40,7 +40,7 @@ def get_need_headers_range(
     start_ts: int = round(start_date.timestamp() * 1000)
     end_ts: int = round((end_date + timedelta(days=1)).timestamp() * 1000)
 
-    times: NDArray[int64] = headers[:, c.BH_Time]
+    times: NDArray[int64] = headers[:, c.BH_OpenTime]
 
     idx_start: np.intp = np.searchsorted(times, start_ts, side="left")
     idx_end: np.intp = np.searchsorted(times, end_ts, side="right")
@@ -54,6 +54,6 @@ def get_ohlc(headers: NDArray[np.int64], price_mult: int) -> OHLC:
         "high": headers[:, c.BH_High] / price_mult,
         "low": headers[:, c.BH_Low] / price_mult,
         "close": headers[:, c.BH_Close] / price_mult,
-        "time": headers[:, c.BH_Time].astype("datetime64[ms]"),
+        "time": headers[:, c.BH_OpenTime].astype("datetime64[ms]"),
     }
     return ohlc

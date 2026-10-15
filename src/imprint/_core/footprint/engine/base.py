@@ -13,13 +13,13 @@ from numba.experimental import (
     jitclass,  # pyright: ignore[reportUnknownVariableType, reportPrivateImportUsage]
 )
 from numpy import int64
-from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.footprint.models import Converter, Footprint
 from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.types import StrategyProtocol
+from imprint._core.utils.base import FPHeadersArray
 
 
 @dataclass(slots=True)
@@ -417,7 +417,7 @@ class JitStorage:
 
     def __init__(
         self,
-        headers: NDArray[int64],
+        headers: FPHeadersArray,
         headers_offset: memoryview,
         idYmin: memoryview,
         idYmax: memoryview,
@@ -440,7 +440,7 @@ class JitStorage:
         with_state: memoryview,
         with_ctrade: memoryview,
     ) -> None:
-        self.headers: NDArray[int64] = headers
+        self.headers: FPHeadersArray = headers
         self.headers_offset: memoryview = headers_offset
         self.idYmin: memoryview = idYmin
         self.idYmax: memoryview = idYmax

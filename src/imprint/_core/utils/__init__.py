@@ -1,7 +1,7 @@
 from imprint._core.utils.agg_trades_history_downloader import (
     DownloadAggTradesHistory,
 )
-from imprint._core.utils.base import FPArray, IndexGenerator, VarArray
+from imprint._core.utils.base import FPArray, IndexGenerator
 from imprint._core.utils.base_adapters import (
     AggTradesDecoder,
     BalanceData,
@@ -25,6 +25,5 @@ __all__ = [
     "OrderData",
     "OrderEncoder",
     "UserStreamDecoder",
-    "VarArray",
     "error_handler",
 ]

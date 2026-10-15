@@ -122,6 +122,9 @@ class Reader(w.Writer):
         if time := self.fp[self.idx[0]].ind.last_trade_time:
             self.trade_read_time[0] = int(time)
 
+        if self.save_trade_time:
+            self.trade_time[0] = 0
+
     @final
     def final_analyze(self) -> None:
         """Run terminal analyses on the current active bar upon session termination.
@@ -413,7 +416,9 @@ class JitFootprintAnalyzer:
             trades = _.headers[bar_min:bar_max, c.BH_CountTrade]
             valid = trades > 0
             if np.any(valid):
-                _.headers[bwo, c.BH_MA_ATS] = int64((vols // trades).mean())
+                _.headers[bwo, c.BH_MA_ATS] = int64(
+                    (vols[valid] // trades[valid]).mean()
+                )
 
         # Update POC + VA
         poc: intp = np.argmax(fp[:, idxVP])

@@ -1,19 +1,10 @@
-"""Enumerations, flags, and structural constant definitions."""
+"""Enumerations for indexing, keys, and project flags"""
 
-from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, auto, verify
-
-
-@verify(CONTINUOUS, UNIQUE)
-class ProcsIds(IntEnum):
-    """Process identifiers for the system architecture."""
-
-    streaming = 0
-    engine = auto()
-    executing = auto()
+from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, StrEnum, auto, verify
 
 
-class KwgsKeys(IntEnum):
-    """Key identifiers for inter-process parameter dictionaries."""
+class KwgsKeys(StrEnum):
+    """String keys for the main process dictionary"""
 
     Configs = auto()
     SegmentConfigs = auto()
@@ -23,84 +14,8 @@ class KwgsKeys(IntEnum):
     ShmSize = auto()
 
 
-@verify(CONTINUOUS, UNIQUE)
-class LogLevel(IntEnum):
-    """Severity levels for system logging and diagnostics."""
-
-    INFO = 0
-    SUCCESS = auto()
-    WARNING = auto()
-    ERROR = auto()
-    CRITICAL = auto()
-
-
-class StatusCodes(IntEnum):
-    """Process status codes and bitmask enumeration.
-
-    64-bit status code flags representing process lifecycle states, pipeline
-    warnings, and errors.
-    """
-
-    label: str  # pyright: ignore[reportUninitializedInstanceVariable]
-
-    def __new__(cls, sc_label: str):
-        """Dynamically construct single-bit bitmask flag integer for each status enum entry.
-
-        Parameters
-        ----------
-        sc_label : str
-            Human-readable description corresponding to the status flag.
-
-        Returns
-        -------
-        StatusCodes
-            Instantiated enum member with an auto-assigned bitmask integer value.
-
-        Raises
-        ------
-        ValueError
-            If the number of enum members reaches or exceeds 64, overflowing the
-            64-bit integer limit.
-        """
-
-        if len(cls.__members__) >= 64:
-            raise ValueError("StatusCodes >= 64, but type: int64")
-
-        value = 1 << len(cls.__members__)
-        obj = int.__new__(cls, value)
-        obj._value_ = value
-        obj.label = sc_label
-        return obj
-
-    # General
-    RUN = "Running"
-    STOP = "Stopping"
-    EXIT = "Exit"
-    TERMINATE = "Terminate"
-    RESET = "Reset"
-    COMPLETE = "Complete"
-    ERROR = "ERROR more info in 'exc_dump'"
-    GC_COLLECT = "Collect garbage"
-    HAVE_LOG = "Have log"
-    BIG_LOG_SIZE = "Log size too big"
-    RING_BUFFER_LOG_STREAM_OVERFLOW = "LogStream buffer overflow"
-    INVALID_DATA = "Invalid data"
-    DECODE_ERROR = "Decode error, more info in exc dump"
-    ENCODE_ERROR = "Encode error, more info in exc dump"
-    FP_IDY_FILLED = "(FP rows < ID-Y) or (ID-Y <= 0), re-init fp ..."
-    FP_IDX_FILLED = "FP cols < ID-X, re-init fp ..."
-    FP_RE_INIT = "FP re-initialized"
-    ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
-    BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"
-    BIG_GAP = "Big Gap, gap > buffer capacity"
-    DATA_PREPARED = "Trades data, prepared"
-    LOSS_MORE_LIMIT = "Balance >= max loss limit"
-    QTY_LESS_LIMIT = "Nominal qty <= min order size"
-    ORDER_LIMIT = "Active Orders > order limit"
-
-
 class Timeframe(IntEnum):
-    """Bar aggregation time intervals in milliseconds."""
+    """Timeframes in milliseconds"""
 
     S30 = 30 * 1000
     M1 = 1 * 60 * 1000
@@ -111,8 +26,29 @@ class Timeframe(IntEnum):
 
 
 @verify(CONTINUOUS, UNIQUE)
+class ProcsIds(IntEnum):
+    """Process indices"""
+
+    streaming = 0
+    engine = auto()
+    executing = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
+class LogLevel(IntEnum):
+    """Logging level indices for inter-process communication"""
+
+    INFO = 0
+    DEBUG = auto()
+    SUCCESS = auto()
+    WARNING = auto()
+    ERROR = auto()
+    CRITICAL = auto()
+
+
+@verify(CONTINUOUS, UNIQUE)
 class OrderBook(IntEnum):
-    """Index mapping for internal order book array columns."""
+    """Indices of pending order parameters"""
 
     timestamp = 0
     orderParam = auto()
@@ -124,7 +60,7 @@ class OrderBook(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class EquityHeaders(IntEnum):
-    """Index mapping for equity candlestick array columns."""
+    """Indices of headers storing balance change history"""
 
     Timestamp = 0
     Open = auto()
@@ -136,7 +72,7 @@ class EquityHeaders(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class TradeParam(IntEnum):
-    """Index mapping for trade execution record array columns."""
+    """Indices of executed order parameters"""
 
     nPrice = 0
     nQty = auto()
@@ -154,7 +90,7 @@ class TradeParam(IntEnum):
 
 @verify(CONTINUOUS, UNIQUE)
 class BarHeaders(IntEnum):
-    """Index mapping for Bar Header array columns."""
+    """Indices for footprint indicators and metrics stored in each bar"""
 
     # Footprint Writer
     Open = 0
@@ -185,8 +121,48 @@ class BarHeaders(IntEnum):
     ConstantCount = auto()
 
 
+class StatusCodes(IntFlag):
+    """Process and task status flags with string descriptions"""
+
+    label: str  # pyright: ignore[reportUninitializedInstanceVariable]
+
+    def __new__(cls, sc_label: str):
+        """Override flag creation to attach a flag documentation label"""
+
+        value = 1 << len(cls.__members__)
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        obj.label = sc_label
+        return obj
+
+    RUN = "Run"
+    STOP = "Stop"
+    EXIT = "Exit"
+    TERMINATE = "Terminate"
+    RESET = "Reset and Stop"
+    COMPLETE = "Complete"
+    ERROR = "ERROR more info in 'exc_dump'"
+    GC_COLLECT = "Collect garbage"
+    HAVE_LOG = "Have log"
+    BIG_LOG_SIZE = "Log size too big"
+    RING_BUFFER_LOG_STREAM_OVERFLOW = "LogStream buffer overflow"
+    INVALID_DATA = "Invalid data"
+    DECODE_ERROR = "Decode error, more info in exc dump"
+    ENCODE_ERROR = "Encode error, more info in exc dump"
+    FP_IDY_FILLED = "(FP rows < ID-Y) or (ID-Y <= 0), re-init fp ..."
+    FP_IDX_FILLED = "FP cols < ID-X, re-init fp ..."
+    FP_RE_INIT = "FP re-initialized"
+    ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
+    BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"
+    BIG_GAP = "Big Gap, gap > buffer capacity"
+    DATA_PREPARED = "Trades data, prepared"
+    LOSS_MORE_LIMIT = "Balance >= max loss limit"
+    QTY_LESS_LIMIT = "Nominal qty <= min order size"
+    ORDER_LIMIT = "Active Orders > order limit"
+
+
 class StateFlags(IntFlag):
-    """Bitmask flags marking Footprint, Bar, Indicator, and Auction market states."""
+    """State flags for specific footprint matrix clusters"""
 
     # Footprint States
     # Footprint: RealTime
@@ -211,8 +187,6 @@ class StateFlags(IntFlag):
     # Bar: Context
     UNFINISHED_AUCTION = auto()
     FINISHED_AUCTION = auto()
-    ABSORPTION = auto()
-    EXHAUSTION = auto()
     # Bid/Ask States
     DELTA_DOMINATION = auto()
     ZERO_PRINT = auto()
@@ -222,7 +196,7 @@ class StateFlags(IntFlag):
 
 
 class OrderFlag(IntFlag):
-    """Bitmask flags specifying order side, type, status, and position parameters."""
+    """Order parameter state flags"""
 
     # Position Side
     LONG = auto()
@@ -234,7 +208,6 @@ class OrderFlag(IntFlag):
     LIMIT = auto()
     MARKET = auto()
     MARKET_TRIGGER = auto()
-    LIMIT_TRIGGER = auto()
     # Status
     NEW = auto()
     CANCEL = auto()
@@ -243,7 +216,7 @@ class OrderFlag(IntFlag):
 
 
 class ReInitFlag(IntFlag):
-    """Bitmask flags specifying re-initialization scopes for pipeline state."""
+    """Initialization state flags for footprint engine sessions"""
 
     session = auto()
     idx = auto()
@@ -251,7 +224,8 @@ class ReInitFlag(IntFlag):
 
 
 class PositionFSM(IntFlag):
-    """Finite state machine bitmask flags for trading position lifecycle states."""
+    """Position finite state machine flags.
+    Serve as the single source of truth for the account along with the balance"""
 
     PENDING = auto()
     OPEN = auto()

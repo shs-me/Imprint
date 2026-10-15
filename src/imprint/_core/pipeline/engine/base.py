@@ -30,8 +30,6 @@ class Base(ABC):
         Inter-process communication and configuration manager for the engine node.
     algorithm : StrategyEngine
         Active strategy container holding the footprint engine and synchronization state.
-    time_start_analyze : memoryview
-        Shared memory view storing the timestamp when analysis starts, cast as 64-bit integer (`q`).
     engine_complete : memoryview
         Shared memory view indicating engine completion status flag.
     agg_trades : TradesArray
@@ -49,7 +47,6 @@ class Base(ABC):
 
     engine: FootprintEngine = field(init=False)
     strategy: StrategyEngine = field(init=False)
-    time_start_analyze: memoryview = field(init=False)
     engine_complete: memoryview = field(init=False)
 
     agg_trades: TradesArray = field(
@@ -61,7 +58,6 @@ class Base(ABC):
 
     def __post_init__(self) -> None:
         cfgMetrics = self.manager.cfgMetrics
-        self.time_start_analyze = cfgMetrics.time_start_reading.view.cast("q")
         self.engine_complete = cfgMetrics.engine_complete.view
 
         self.at_max_row = self.agg_trades.shape[0]
@@ -70,6 +66,7 @@ class Base(ABC):
             manager=self.manager, strategy=self.strategy
         )
         self.strategy.fp = self.engine.fp
+        self.sync.trade_time = self.engine.trade_time
 
     def init(self) -> None:
         cfgSetup = self.manager.cfgSetup
@@ -89,7 +86,7 @@ class Base(ABC):
             )
 
     @final
-    @node_handler()
+    @node_handler
     def run(self) -> None:
         """Run the main processing loop for market data ticks and analysis.
 
@@ -133,8 +130,6 @@ class Base(ABC):
 
                 if self.is_bbox_mode(_.wid_buf, _.rid_buf):
                     continue
-
-                self.time_start_analyze[0] = time.perf_counter_ns()
 
                 self.engine.analyze_footprint()
 

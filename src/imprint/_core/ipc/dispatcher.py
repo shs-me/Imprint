@@ -15,9 +15,10 @@ from types import FunctionType
 from typing import Any
 
 from imprint._core import configs
-from imprint._core.configs import SharedMemorySegments
+from imprint._core.configs import MemoryLayout
 from imprint._core.ipc.manager import HostManager, NodeManager
 from imprint._core.settings import KwgsKeys as kk
+from imprint._core.utils import error_handler
 
 
 @dataclass(slots=True)
@@ -48,11 +49,12 @@ class Dispatcher:
     is_main: bool
     kwg: dict[str, Any]
 
-    shm: SharedMemory = field(init=False)
+    shm: SharedMemory | None = field(default=None, init=False)
     shm_buf: memoryview = field(init=False)
 
+    @error_handler
     def run_client(self, func: FunctionType) -> None:
-        """Initialize shared memory resources and execute target function with an assigned manager.
+        """Execute target function with an assigned manager.
 
         Parameters
         ----------
@@ -60,58 +62,49 @@ class Dispatcher:
             The main function of the worker process or orchestrator to run.
             Receives the instantiated manager (HostManager or NodeManager) as a keyword argument.
         """
-        if self.is_main:
-            self.shm_segments_init()
-
-        self.shm_init()
-
         manager = self.manager_init()
         gc.collect()
         gc.disable()
         func(manager=manager, **self.kwg)
-        gc.collect()
-        gc.enable()
 
     def shm_segments_init(self) -> None:
         """Scan configuration classes, calculate shared memory offsets, and create IPC synchronization tools.
 
         Inspects the `configs` module for subclasses of `Configuration` and
-        `SharedMemorySegments`. Computes cumulative size requirements to derive memory slice
+        `MemoryLayout`. Computes cumulative size requirements to derive memory slice
         offsets, updates keyword arguments, and initializes inter-process synchronization
         objects (Event, Semaphore).
         """
         offset: int = 0
-        self.kwg[kk.SegmentConfigs.name], self.kwg[kk.Segments.name] = [], {}
+        self.kwg[kk.SegmentConfigs], self.kwg[kk.Segments] = [], {}
         for name, obj in inspect.getmembers(configs, inspect.isclass):
-            if issubclass(obj, SharedMemorySegments) and (
-                obj is not SharedMemorySegments
-            ):
-                c_obj: SharedMemorySegments = (
+            if issubclass(obj, MemoryLayout) and (obj is not MemoryLayout):
+                c_obj: MemoryLayout = (
                     self.kwg.pop(name) if name in self.kwg else obj()
                 )
-                self.kwg[kk.SegmentConfigs.name].append(c_obj)
-                self.kwg[kk.Segments.name][name] = slice(
-                    offset, (offset := (offset + c_obj.shm_size))
+                self.kwg[kk.SegmentConfigs].append(c_obj)
+                self.kwg[kk.Segments][name] = slice(
+                    offset, (offset := (offset + c_obj.size))
                 )
 
-        self.kwg[kk.Segments.name][kk.ShmSize.name] = offset
-        self.kwg[kk.MainTools.name] = [Event(), Semaphore(0)]
+        self.kwg[kk.Segments][kk.ShmSize] = offset
+        self.kwg[kk.MainTools] = [Event(), Semaphore(0)]
 
     def shm_init(self) -> None:
         """Allocate a new SharedMemory block for the main process or attach to an existing segment for workers."""
         if self.is_main:
             self.shm = SharedMemory(
-                size=self.kwg[kk.Segments.name].pop(kk.ShmSize.name),
+                size=self.kwg[kk.Segments].pop(kk.ShmSize),
                 create=True,
             )
             if self.shm.buf is not None:
                 self.shm_buf = self.shm.buf
                 self.shm_buf[:] = b"\x00" * self.shm.size
 
-            self.kwg[kk.ShmName.name] = self.shm.name
+            self.kwg[kk.ShmName] = self.shm.name
 
         else:
-            self.shm = SharedMemory(name=self.kwg.pop(kk.ShmName.name))
+            self.shm = SharedMemory(name=self.kwg.pop(kk.ShmName))
             if self.shm.buf is not None:
                 self.shm_buf = self.shm.buf
 
@@ -123,16 +116,16 @@ class Dispatcher:
         HostManager | NodeManager
             Instantiated manager object tailored to host or worker requirements.
         """
-        configs = deepcopy(self.kwg[kk.Configs.name])
-        segment_configs = deepcopy(self.kwg[kk.SegmentConfigs.name])
-        segments = deepcopy(self.kwg[kk.Segments.name])
+        configs = deepcopy(self.kwg[kk.Configs])
+        segment_configs = deepcopy(self.kwg[kk.SegmentConfigs])
+        segments = deepcopy(self.kwg[kk.Segments])
         if self.is_main:
             manager = HostManager(
                 _configs=configs,
                 _segment_configs=segment_configs,
                 _segments=segments,
                 _shm_buf=self.shm_buf,
-                _main_tools=self.kwg[kk.MainTools.name],
+                _main_tools=self.kwg[kk.MainTools],
             )
         else:
             manager = NodeManager(
@@ -140,7 +133,7 @@ class Dispatcher:
                 _segment_configs=segment_configs,
                 _segments=segments,
                 _shm_buf=self.shm_buf,
-                _main_tools=self.kwg[kk.MainTools.name],
+                _main_tools=self.kwg[kk.MainTools],
                 _proc_id=self.kwg["proc_id"],
                 _task_id=self.kwg["task_id"],
             )

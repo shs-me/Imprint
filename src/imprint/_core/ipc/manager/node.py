@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import ParamSpec, TypeVar, override
+from typing import override
 
 from imprint._core.ipc.manager.base import Base
 from imprint._core.settings import StatusCodes as scs
@@ -50,7 +50,8 @@ class Node(Base):
     __task_status: memoryview = field(init=False)
     __ignore_ps: int = field(
         default=~(
-            scs.HAVE_LOG
+            scs.RUN
+            | scs.HAVE_LOG
             | scs.BIG_LOG_SIZE
             | scs.RING_BUFFER_LOG_STREAM_OVERFLOW
             | scs.FP_RE_INIT
@@ -156,13 +157,17 @@ class Node(Base):
                 clear_task |= scs.RUN
 
             if task_sc & scs.STOP:
+                self.set_proc_sc(scs.STOP, wait_main_task=False)
                 self._general_event.wait()
+                self.set_proc_sc(scs.RUN, wait_main_task=False)
                 clear_task |= scs.STOP
 
             if task_sc & scs.RESET:
                 self._change_configs()
                 gc.collect()
+                self.set_proc_sc(scs.RESET, wait_main_task=False)
                 self._general_event.wait()
+                self.set_proc_sc(scs.RUN, wait_main_task=False)
                 clear_task |= scs.RESET
 
             if task_sc & scs.GC_COLLECT:
@@ -217,29 +222,22 @@ class Node(Base):
             self.set_proc_sc(scs.ERROR, wait_main_task=set_status_error)
 
 
-P = ParamSpec("P")
-R = TypeVar("R")
-
-
-def node_handler() -> Callable[[Callable[P, R]], Callable[P, R | None]]:
+def node_handler[**P, R](func: Callable[P, R]) -> Callable[P, R | None]:
     """Catch exceptions inside Node tasks and dump traceback details automatically.
 
     Returns
     -------
-    Callable[[Callable[P, R]], Callable[P, R | None]]
+    Callable[P, R | None]
         The wrapped callable processing errors inside workers safely.
     """
 
-    def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
-        @wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
-            try:
-                return func(*args, **kwargs)
-            except Exception:
-                manager: Node | None = getattr(args[0], "manager", None)
-                if manager:
-                    manager.dump_exc(set_status_error=True)
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            manager: Node | None = getattr(args[0], "manager", None)
+            if manager:
+                manager.dump_exc(set_status_error=True)
 
-        return wrapper
-
-    return decorator
+    return wrapper

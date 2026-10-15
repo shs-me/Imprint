@@ -9,71 +9,37 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
+import imprint._core.constant as c
+
 
 @final
 @dataclass(slots=True)
 class IndexGenerator:
-    """Generate monotonically increasing integer indices starting from zero.
-
-    Attributes
-    ----------
-    val : int
-        Current internal counter value.
-    """
+    """Generate monotonically increasing integer indices starting from zero."""
 
     val: int = field(default=0, init=False)
 
     def __call__(self) -> int:
-        """Increment and return the next sequential integer index.
-
-        Returns
-        -------
-        int
-            The current index value before incrementing.
-        """
+        """Increment and return the next sequential integer index."""
         v = self.val
         self.val += 1
         return v
 
 
 class FPArray(np.ndarray):
-    """Fixed-point 2D NumPy ndarray base class for scaled integer arithmetic.
-
-    Parameters
-    ----------
-    rows : int | int64
-        Number of rows in the 2D array. Must be non-negative.
-    cols : int | int64
-        Number of columns in the 2D array. Must be non-negative.
-    """
+    """Fixed-point 2D NumPy ndarray base class for scaled integer arithmetic."""
 
     def __new__(cls, rows: int | int64, cols: int | int64) -> Self:
-        """Allocate and initialize a zero-filled int64 fixed-point array."""
         obj = super().__new__(cls, shape=(rows, cols), dtype=int64)
         obj.fill(0)
         return obj
 
     @override
     def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        """Finalize array state during view casting and slicing operations."""
         if obj is None:
             return
 
     def padding(self, before: int, after: int) -> FPArray:
-        """Pad rows before and after with zeros along the first axis.
-
-        Parameters
-        ----------
-        before : int
-            Number of zero rows to prepend. Must be non-negative.
-        after : int
-            Number of zero rows to append. Must be non-negative.
-
-        Returns
-        -------
-        FPArray
-            A new padded fixed-point array view.
-        """
         return np.pad(self, pad_width=((before, after), (0, 0))).view(FPArray)
 
 
@@ -106,42 +72,10 @@ class DPArray(ColArray):
 
 
 @final
-class VarArray(np.ndarray):
-    """1D fixed-point array specialized for variable or parameter storage.
-
-    Parameters
-    ----------
-    count_vars : int | int64
-        Number of variables/elements. Must be non-negative.
-    """
-
-    def __new__(cls, count_vars: int | int64) -> VarArray:
-        """Allocate and initialize a zero-filled 1D int64 variable array."""
-        obj = super().__new__(cls, shape=(count_vars,), dtype=int64)
-        obj.fill(0)
-        return obj
-
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        """Finalize array state during view casting and slicing operations."""
-        if obj is None:
-            return
-
-
-@final
 class TradesArray(np.ndarray):
-    """2D fixed-point array specialized for trade records with power-of-two row capacity allocation.
+    """2D fixed-point array specialized for trade records with power-of-two row capacity allocation."""
 
-    Parameters
-    ----------
-    rows : int
-        Initial row capacity requirement. Rounded up to the next power of two.
-    cols : int
-        Number of attribute columns per trade record.
-    """
-
-    def __new__(cls, rows: int, cols: int) -> TradesArray:
-        """Allocate and initialize a zero-filled int64 trades array sized to the nearest power of two."""
+    def __new__(cls, rows: int, cols: int) -> Self:
         power_two = 1 << (rows).bit_length()
         obj = super().__new__(cls, shape=(power_two, cols), dtype=int64)
         obj.fill(0)
@@ -149,6 +83,85 @@ class TradesArray(np.ndarray):
 
     @override
     def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        """Finalize array state during view casting and slicing operations."""
+        if obj is None:
+            return
+
+
+@final
+class FPHeadersArray(np.ndarray):
+    def __new__(cls, rows: int) -> Self:
+        obj = super().__new__(
+            cls, shape=(rows, c.BH_ConstantCount), dtype=int64
+        )
+        obj.fill(0)
+        return obj
+
+    @override
+    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
+        if obj is None:
+            return
+
+
+@final
+class OrdersHistoryArray(np.ndarray):
+    def __new__(cls, rows: int) -> Self:
+        obj = super().__new__(
+            cls, shape=(rows, c.TP_ConstantCount), dtype=int64
+        )
+        obj.fill(0)
+        return obj
+
+    @override
+    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
+        if obj is None:
+            return
+
+    def padding(self, after: int) -> OrdersHistoryArray:
+        return np.pad(self, pad_width=((0, after), (0, 0))).view(
+            OrdersHistoryArray
+        )
+
+
+@final
+class EquityHistoryArray(np.ndarray):
+    def __new__(cls, rows: int) -> Self:
+        obj = super().__new__(
+            cls, shape=(rows, c.EH_ConstantCount), dtype=int64
+        )
+        obj.fill(0)
+        return obj
+
+    @override
+    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
+        if obj is None:
+            return
+
+
+@final
+class OrderBookArray(np.ndarray):
+    def __new__(cls, rows: int) -> Self:
+        obj = super().__new__(
+            cls, shape=(rows, c.OB_ConstantCount), dtype=int64
+        )
+        obj.fill(0)
+        return obj
+
+    @override
+    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
+        if obj is None:
+            return
+
+
+@final
+class ExecutedOrdersArray(np.ndarray):
+    def __new__(cls, rows: int) -> Self:
+        obj = super().__new__(
+            cls, shape=(rows * 2, c.TP_ConstantCount), dtype=int64
+        )
+        obj.fill(0)
+        return obj
+
+    @override
+    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
         if obj is None:
             return

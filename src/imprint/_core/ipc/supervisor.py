@@ -1,5 +1,6 @@
 """Provide worker process entry point supervision and IPC lifecycle management."""
 
+import gc
 from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, TypeVar
@@ -32,18 +33,27 @@ def supervisor(is_main: bool = False):
     def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
         @wraps(wrapped=func)
         def wrapper(*_args: P.args, **kwargs: P.kwargs) -> R | None:
-            @error_handler()
+            @error_handler
             def run() -> None:
                 from imprint._core.ipc.dispatcher import Dispatcher
 
                 dp: Dispatcher = Dispatcher(is_main=is_main, kwg=kwargs)
 
-                dp.run_client(func)
-
-                dp.shm_buf.release()
-                dp.shm.close()
                 if is_main:
-                    dp.shm.unlink()
+                    dp.shm_segments_init()
+
+                dp.shm_init()
+
+                try:
+                    dp.run_client(func)
+                finally:
+                    gc.enable()
+                    gc.collect()
+                    if dp.shm:
+                        dp.shm_buf.release()
+                        dp.shm.close()
+                        if is_main:
+                            dp.shm.unlink()
 
             run()
 

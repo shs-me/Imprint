@@ -1,4 +1,4 @@
-"""System-wide file paths, endpoints, and aliased bitmask constants."""
+"""System paths, web links, and enumeration values duplicated as constants"""
 
 from imprint._core.settings import (
     BarHeaders,
@@ -12,17 +12,6 @@ from imprint._core.settings import (
 
 # - - URL'S - -
 # Derivatives Trading (USDS Futures)
-# Production URL
-REST_API_PROD_URL = "https://fapi.binance.com"
-WS_API_PROD_URL = "wss://ws-fapi.binance.com/ws-fapi/v1"
-WS_STREAMS_PROD_URL = "wss://fstream.binance.com/aggTrades@DASHUSDT"
-# Demo URL
-REST_API_DEMO_URL = "https://demo-fapi.binance.com"
-# Testnet URL
-REST_API_TESTNET_URL = "https://testnet.binancefuture.com"
-WS_API_TESTNET_URL = "wss://testnet.binancefuture.com/ws-fapi/v1"
-WS_STREAMS_TESTNET_URL = "wss://fstream.binancefuture.com"
-# Other
 BASE_UM_AGGTRADES_DAILY_URL = (
     "https://data.binance.vision/data/futures/um/daily/aggTrades"
 )
@@ -41,8 +30,7 @@ FOOTPRINT_HEADERS_DATA_PATH = f"{DATA_PATH}/footprint_headers"
 REPORT_DATA_PATH = f"{DATA_PATH}/report.html"
 DIRS_LIST = [DATA_PATH, LOGS_PATH]
 
-# - - CORE - -
-# BarHeader
+# - - Copy Enums & Flags - -
 BH_Open: int = int(BarHeaders.Open)
 BH_High: int = int(BarHeaders.High)
 BH_Low: int = int(BarHeaders.Low)
@@ -53,7 +41,7 @@ BH_CVD: int = int(BarHeaders.CVD)
 BH_VWAP: int = int(BarHeaders.VWAP)
 BH_VWAP_UPPER_BAND: int = int(BarHeaders.VWAP_UPPER_BAND)
 BH_VWAP_LOWER_BAND: int = int(BarHeaders.VWAP_LOWER_BAND)
-BH_Time: int = int(BarHeaders.OpenTime)
+BH_OpenTime: int = int(BarHeaders.OpenTime)
 BH_LastTradeTime: int = int(BarHeaders.LastTradeTime)
 BH_CountTrade: int = int(BarHeaders.CountTrade)
 BH_ATR: int = int(BarHeaders.ATR)
@@ -69,7 +57,33 @@ BH_VAH_FP: int = int(BarHeaders.VAH_FP)
 BH_VAL_FP: int = int(BarHeaders.VAL_FP)
 BH_ConstantCount: int = int(BarHeaders.ConstantCount)
 
-# StateFlag
+OB_timestamp: int = int(OrderBook.timestamp)
+OB_orderParam: int = int(OrderBook.orderParam)
+OB_clientOrderID: int = int(OrderBook.clientOrderID)
+OB_nPrice: int = int(OrderBook.nPrice)
+OB_nQty: int = int(OrderBook.nQty)
+OB_ConstantCount: int = int(OrderBook.ConstantCount)
+
+EH_Timestamp: int = int(EquityHeaders.Timestamp)
+EH_Open: int = int(EquityHeaders.Open)
+EH_High: int = int(EquityHeaders.High)
+EH_Low: int = int(EquityHeaders.Low)
+EH_Close: int = int(EquityHeaders.Close)
+EH_ConstantCount: int = int(EquityHeaders.ConstantCount)
+
+TP_nPrice: int = int(TradeParam.nPrice)
+TP_nQty: int = int(TradeParam.nQty)
+TP_timestamp: int = int(TradeParam.timestamp)
+TP_order_param: int = int(TradeParam.order_param)
+TP_order_id: int = int(TradeParam.order_id)
+TP_client_order_id: int = int(TradeParam.client_order_id)
+TP_nCommission: int = int(TradeParam.nCommission)
+TP_nMAE: int = int(TradeParam.nMAE)
+TP_nMFE: int = int(TradeParam.nMFE)
+TP_planned_tp: int = int(TradeParam.planned_tp)
+TP_planned_sl: int = int(TradeParam.planned_sl)
+TP_ConstantCount: int = int(TradeParam.ConstantCount)
+
 SF_BID_DELTA_DOMINATION_FP: int = int(StateFlags.BID_DELTA_DOMINATION_FP)
 SF_ASK_DELTA_DOMINATION_FP: int = int(StateFlags.ASK_DELTA_DOMINATION_FP)
 SF_VWAP_FP: int = int(StateFlags.VWAP_FP)
@@ -87,44 +101,11 @@ SF_VAL_BAR: int = int(StateFlags.VAL_BAR)
 SF_VAH_BAR: int = int(StateFlags.VAH_BAR)
 SF_UNFINISHED_AUCTION: int = int(StateFlags.UNFINISHED_AUCTION)
 SF_FINISHED_AUCTION: int = int(StateFlags.FINISHED_AUCTION)
-SF_ABSORPTION: int = int(StateFlags.ABSORPTION)
-SF_EXHAUSTION: int = int(StateFlags.EXHAUSTION)
 SF_DELTA_DOMINATION: int = int(StateFlags.DELTA_DOMINATION)
 SF_ZERO_PRINT: int = int(StateFlags.ZERO_PRINT)
 SF_IMBALANCE: int = int(StateFlags.IMBALANCE)
 SF_BIG_CLUSTER: int = int(StateFlags.BIG_CLUSTER)
 
-# OrderBook
-OB_timestamp: int = int(OrderBook.timestamp)
-OB_orderParam: int = int(OrderBook.orderParam)
-OB_clientOrderID: int = int(OrderBook.clientOrderID)
-OB_nPrice: int = int(OrderBook.nPrice)
-OB_nQty: int = int(OrderBook.nQty)
-OB_ConstantCount: int = int(OrderBook.ConstantCount)
-
-# Equity Header
-EH_Timestamp: int = int(EquityHeaders.Timestamp)
-EH_Open: int = int(EquityHeaders.Open)
-EH_High: int = int(EquityHeaders.High)
-EH_Low: int = int(EquityHeaders.Low)
-EH_Close: int = int(EquityHeaders.Close)
-EH_ConstantCount: int = int(EquityHeaders.ConstantCount)
-
-# Trade Param
-TP_nPrice: int = int(TradeParam.nPrice)
-TP_nQty: int = int(TradeParam.nQty)
-TP_timestamp: int = int(TradeParam.timestamp)
-TP_order_param: int = int(TradeParam.order_param)
-TP_order_id: int = int(TradeParam.order_id)
-TP_client_order_id: int = int(TradeParam.client_order_id)
-TP_nCommission: int = int(TradeParam.nCommission)
-TP_nMAE: int = int(TradeParam.nMAE)
-TP_nMFE: int = int(TradeParam.nMFE)
-TP_planned_tp: int = int(TradeParam.planned_tp)
-TP_planned_sl: int = int(TradeParam.planned_sl)
-TP_ConstantCount: int = int(TradeParam.ConstantCount)
-
-# OrderFlag
 OF_LONG: int = int(OrderFlag.LONG)
 OF_SHORT: int = int(OrderFlag.SHORT)
 OF_BUY: int = int(OrderFlag.BUY)
@@ -132,16 +113,13 @@ OF_SELL: int = int(OrderFlag.SELL)
 OF_LIMIT: int = int(OrderFlag.LIMIT)
 OF_MARKET: int = int(OrderFlag.MARKET)
 OF_MARKET_TRIGGER: int = int(OrderFlag.MARKET_TRIGGER)
-OF_LIMIT_TRIGGER: int = int(OrderFlag.LIMIT_TRIGGER)
 OF_NEW: int = int(OrderFlag.NEW)
 OF_CANCEL: int = int(OrderFlag.CANCEL)
 OF_FILLED: int = int(OrderFlag.FILLED)
 OF_CANCELED: int = int(OrderFlag.CANCELED)
 
-# ReInitFlag
 RIF_session: int = int(ReInitFlag.session)
 RIF_idx: int = int(ReInitFlag.idx)
 RIF_idy: int = int(ReInitFlag.idy)
 
-# Tools
 VAR_SCALE: int = 1_000_000_000

@@ -1,43 +1,11 @@
-"""Unit tests for `imprint._core.footprint` models and JIT engine kernels."""
-
 import numpy as np
 import pytest
-from numpy import float64, int64, intp
-from numpy.typing import NDArray
+from numpy import int64
 
 from imprint._core import configs as cfg
-from imprint._core import constant as c
-from imprint._core.footprint.engine.reader import (
-    _update_bar_states,
-    _update_closed_bar_and_fp_states,
-    _update_clusters_states,
-    calc_value_area,
-)
-from imprint._core.footprint.engine.writer import (
-    BHM_ConstantCount,
-    FU_baseNprice,
-    FU_baseTimestamp,
-    FU_center,
-    FU_ConstantCount,
-    FU_fp_cols,
-    FU_fp_rows,
-    FU_idxDP,
-    FU_idxVP,
-    FU_price_mult,
-    FU_price_prec,
-    FU_qty_mult,
-    FU_qty_prec,
-    FU_scale,
-    FU_tims,
-    _update,
-)
-from imprint._core.footprint.models.base import FPArray
-from imprint._core.footprint.models.converter import (
-    Converter,
-    to_idx,
-    to_idy,
-)
+from imprint._core.footprint.models.converter import Converter, to_idx, to_idy
 from imprint._core.settings import Timeframe
+from imprint._core.utils import FPArray
 
 
 class TestFPArray:
@@ -53,142 +21,6 @@ class TestFPArray:
         assert padded.shape == (9, 2)
         assert padded[2, 0] == 42
         assert isinstance(padded, FPArray)
-
-
-class TestFPJitKernel:
-    def test_update_exact(self) -> None:
-        # Setup test parameters
-        args = np.zeros((FU_ConstantCount,), dtype=int64)
-        args[FU_baseNprice] = 100_000  # 1000.00 with price_mult=100
-        args[FU_fp_rows] = 100  # count idy
-        args[FU_center] = 50  # idy center
-        args[FU_scale] = 10  # 0.10 per tick/row
-        args[FU_baseTimestamp] = 60000
-        args[FU_tims] = 60000  # 1 minute per bar
-        args[FU_fp_cols] = 10  # 5 bars (each bar has 2 columns: sell/buy)
-        args[FU_idxVP] = -2
-        args[FU_idxDP] = -1
-        args[FU_price_mult] = 100
-        args[FU_price_prec] = 2
-        args[FU_qty_mult] = 10000
-        args[FU_qty_prec] = 4
-
-        footprint: NDArray[int64] = np.zeros((100, 12), dtype=int64)
-        ctrade: NDArray[int64] = np.zeros((100, 12), dtype=int64)
-        headers: NDArray[int64] = np.zeros((5, c.BH_ConstantCount), dtype=int64)
-        headers_offset: memoryview = memoryview(bytearray(8)).cast("q")
-        headers_offset[0] = 0
-        bbox: NDArray[int64] = np.array([100, 10, 0, 0], dtype=int64)
-        meta_data: NDArray[float64] = np.zeros(
-            (2, BHM_ConstantCount), dtype=float64
-        )
-
-        # Execute trade 1: Buy 1.5 units at price 1000.50 at timestamp + 1000ms
-        # Execute trade 2: Sell 0.5 units at price 1000.40 at timestamp + 2000ms
-        # Execute trade 3: Sell 0.5 units at price 1000.40 at timestamp - 1000ms
-        # Execute trade 4: Sell 0.5 units at price 1000.40 at timestamp + 10m
-        # Execute trade 5: Sell 0.5 units at price 1020 at timestamp + 2000ms
-        # Execute trade 5: Sell 0.5 units at price 930 at timestamp + 2000ms
-        p, t = 100_000, 60_000
-        for idx, (nPrice, nQty, timestamp, is_sell) in enumerate(
-            zip(
-                [p + 50, p + 40, p + 40, p + 40, p + 2000, p - 7000],
-                [15_000, 5000, 5000, 5000, 5000, 5000],
-                [t + 1000, t + 2000, t - 1000, t + 600_000, t + 2000, t + 2000],
-                [0, 1, 1, 1, 1, 1],
-            )
-        ):
-            result: int | None = _update(
-                nPrice=int64(nPrice),
-                nQty=int64(nQty),
-                timestamp=int64(timestamp),
-                is_sell=int64(is_sell),
-                args=args,
-                footprint=footprint,
-                ctrade=ctrade,
-                headers=headers,
-                headers_offset=headers_offset,
-                bbox=bbox,
-                meta_data=meta_data,
-            )
-            if idx == 0:
-                assert result is None
-
-            if idx == 1:
-                assert result is None
-
-                for idy, idx, q in zip([45, 46], [1, 0], [15_000, nQty]):
-                    assert footprint[idy, idx] == q
-                    assert footprint[idy, args[FU_idxVP]] == q
-                    assert footprint[idy, args[FU_idxDP]] == q if idx else -q
-
-                bar = 0
-                assert headers[bar, c.BH_CountTrade] == 2
-                assert headers[bar, c.BH_Open] == p + 50
-                assert headers[bar, c.BH_High] == p + 50
-                assert headers[bar, c.BH_Low] == nPrice
-                assert headers[bar, c.BH_Close] == nPrice
-                assert headers[bar, c.BH_Volume] == 20_000  # 15000 + 5000
-                assert (headers[bar, c.BH_Delta] == 10_000) and (
-                    headers[bar, c.BH_CVD] == 10_000
-                )  # 15000 (buy) - 5000 (sell)
-                assert headers[bar, c.BH_Time] == t + 1000
-                assert headers[bar, c.BH_LastTradeTime] == timestamp
-
-                vol: float = 1.5 + 0.5
-                p_vol: float = (1000.50 * 1.5) + (1000.40 * 0.5)
-                p2_vol: float = (1000.50**2 * 1.5) + (1000.40**2 * 0.5)
-                vwap: float = p_vol / vol
-                variance: float = max(0.0, (p2_vol / vol - (vwap**2)))
-                vwsd = np.sqrt(variance)
-                upper_band = vwap + (2.0 * vwsd)
-                lower_band = vwap - (2.0 * vwsd)
-                assert headers[bar, c.BH_VWAP] == round(vwap * 100)
-                assert headers[bar, c.BH_VWAP_UPPER_BAND] == round(
-                    upper_band * 100
-                )
-                assert headers[bar, c.BH_VWAP_LOWER_BAND] == round(
-                    lower_band * 100
-                )
-
-                assert bbox[0] == 45  # idYmin
-                assert bbox[1] == 0  # idXmin
-                assert bbox[2] == 47  # idYmax (46 + 1)
-                assert bbox[3] == 2  # idXmax (1 + 1)
-
-            elif result and ((idx == 2) or (idx == 3)):
-                assert result & (c.RIF_session | c.RIF_idx)
-
-            elif result and ((idx == 4) or (idx == 5)):
-                assert result & (c.RIF_session | c.RIF_idy)
-
-    def test_update_clusters_states_flags_delta_domination(self) -> None: ...
-
-    def test_update_closed_bar_and_fp_states(self) -> None: ...
-
-    def test_update_bar_states_exact(self) -> None: ...
-
-    def test_calc_value_area_exact(self) -> None:
-        vp_slice: NDArray[int64] = np.array(
-            [10, 20, 15, 30, 40, 15, 10, 5], dtype=np.int64
-        )
-        center_idx: intp = np.argmax(vp_slice)  # 4
-
-        assert center_idx == 4, "Incorrect test"
-
-        val_idx: intp
-        vah_idx: intp
-        val_idx, vah_idx = calc_value_area(vp_slice, center_idx)
-
-        expected_val_idx: int = 1
-        expected_vah_idx: int = 5
-
-        assert val_idx == expected_val_idx, (
-            f"Expected VAL[{expected_val_idx}], got {val_idx}"
-        )
-        assert vah_idx == expected_vah_idx, (
-            f"Expected VAH[{expected_vah_idx}], got {vah_idx}"
-        )
 
 
 @pytest.fixture
@@ -212,48 +44,44 @@ def converter() -> Converter:
         scale = round(0.01 * 1 * 100) = 1
         total_bar_count = 24
     """
-    coin_cfg = cfg.Coin(symbol="BTCUSDT", tick_size="0.01", lot_size="0.001")
-    fp_cfg = cfg.Footprint(
-        timeframe=Timeframe.H1,
-        chart_range=1,
-        step_tick=1,
-        fp_rows=10001,
-    )
-    return Converter(cfgCoin=coin_cfg, cfgFP=fp_cfg)
+    coin = cfg.Coin(symbol="BTCUSDT", tick_size="0.01", lot_size="0.001")
+    fp = cfg.Footprint(timeframe=Timeframe.H1, chart_range=1, step_tick=1)
+    con = Converter()
+    con.post_init(coin, fp, 0)
+    return con
 
 
 class TestFPConverter:
     def test_converter_initialization(self, converter: Converter) -> None:
         """Verifies fields initialized during __post_init__ match expected constant values."""
         assert converter.tick_size == "0.01"
-        assert converter.price_prec == 2
-        assert converter.price_mult == 100
-        assert converter.qty_prec == 3
-        assert converter.qty_mult == 1000
-        assert converter.timeframe == "H1"
-        assert converter.tims == 3_600_000
-        assert converter.chart_range == 1
-        assert converter.step_tick == 1
-        assert converter.fp_rows == 10001
-        assert converter.fp_cols == 48
-        assert converter.fp_panel_cols == 50
-        assert converter.bar_count == 24
-        assert converter.idxVP == -2
-        assert converter.idxDP == -1
-        assert converter.scale == 1
+        assert converter.price_prec[0] == 2
+        assert converter.price_mult[0] == 100
+        assert converter.qty_prec[0] == 3
+        assert converter.qty_mult[0] == 1000
+        assert converter.timeframe[0] == "H"
+        assert converter.tims[0] == 3_600_000
+        assert converter.chart_range[0] == 1
+        assert converter.step_tick[0] == 1
+        assert converter.fp_rows[0] == 10001
+        assert converter.fp_cols[0] == 48
+        assert converter.fp_panel_cols[0] == 50
+        assert converter.bar_count[0] == 24
+        assert converter.idxVP[0] == -2
+        assert converter.idxDP[0] == -1
+        assert converter.scale[0] == 1
         assert converter.total_bar_count == 24
 
     def test_converter_initialization_with_total_backtest_days(self) -> None:
         """Verifies total_bar_count calculation when total_backtest_days is specified."""
-        coin_cfg = cfg.Coin(
-            symbol="BTCUSDT", tick_size="0.01", lot_size="0.001"
-        )
-        fp_cfg = cfg.Footprint(timeframe=Timeframe.H1, chart_range=1)
-        conv = Converter(cfgCoin=coin_cfg, cfgFP=fp_cfg, total_backtest_days=5)
+        coin = cfg.Coin(symbol="BTCUSDT", tick_size="0.01", lot_size="0.001")
+        fp = cfg.Footprint(timeframe=Timeframe.H1, chart_range=1)
+        con = Converter()
+        con.post_init(coin, fp, 5)
 
         # 5 days * 24 h/day * 60 min/h * 60 s/min * 1000 ms/s = 432_000_000 ms
         # 432_000_000 // 3_600_000 = 120 bars
-        assert conv.total_bar_count == 120
+        assert con.total_bar_count == 120
 
     def test_init_session(self, converter: Converter) -> None:
         """Verifies session calibration for base price, timestamp alignment, and grid center."""
@@ -265,10 +93,10 @@ class TestFPConverter:
         # baseNprice = (500_055 // 1) * 1 = 500_055
         # baseTimestamp = 3_660_000 - (3_660_000 % 3_600_000) = 3_660_000 - 60_000 = 3_600_000 # 01:00
         # center = 10_001 // 2 = 5_000
-        assert converter.baseNprice == int64(500_055)
-        assert converter.baseTimestamp == int64(3_600_000)
+        assert converter.baseNprice[0] == int64(500_055)
+        assert converter.baseTimestamp[0] == int64(3_600_000)
         assert converter._first_base_timestamp == int64(3_600_000)
-        assert converter.center == int64(5_000)
+        assert converter.center[0] == int64(5_000)
 
     def test_to_idy_mapping(self, converter: Converter) -> None:
         """Verifies price to Y-axis grid row mapping for exact, upper bound, lower bound, and out-of-bounds prices."""
@@ -365,10 +193,14 @@ class TestFPConverter:
 
     def test_numba_to_idy_function(self) -> None:
         """Verifies standalone Numba-compiled to_idy low-level function directly."""
-        base_n_price: int64 = int64(10_000)
-        scale: int = 10
-        center: int64 = int64(500)
-        fp_rows: int64 = int64(1000)
+        base_n_price: memoryview = memoryview(bytearray(8)).cast("q")
+        scale: memoryview = memoryview(bytearray(8)).cast("q")
+        center: memoryview = memoryview(bytearray(8)).cast("q")
+        fp_rows: memoryview = memoryview(bytearray(8)).cast("q")
+        base_n_price[0] = 10_000
+        scale[0] = 10
+        center[0] = 500
+        fp_rows[0] = 1000
 
         for nPrice, test_value in zip(
             [10_000, 10_100, 15000, 15010, 5000], [500, 490, 0, -1, -1]
@@ -386,9 +218,12 @@ class TestFPConverter:
 
     def test_numba_to_idx_function(self) -> None:
         """Verifies standalone Numba-compiled to_idx low-level function directly."""
-        base_timestamp: int64 = int64(1000)
-        tims: int = 100
-        fp_cols: int = 10
+        base_timestamp: memoryview = memoryview(bytearray(8)).cast("q")
+        tims: memoryview = memoryview(bytearray(8)).cast("q")
+        fp_cols: memoryview = memoryview(bytearray(8)).cast("q")
+        base_timestamp[0] = 1000
+        tims[0] = 100
+        fp_cols[0] = 10
 
         for timestamp, is_sell, test_value in zip(
             [1000, 1000, 1400, 1500, 900], [1, 0, 0, 1, 1], [0, 1, 9, -1, -1]

@@ -74,11 +74,7 @@ class Backtest(Base):
         self._accounts = []
 
         self._segments.append(
-            MarketDataStream(
-                data_size=32,
-                cast_to_int64=True,
-                count_reader=2 if self._with_execution else 1,
-            )
+            MarketDataStream(count_reader=2 if self._with_execution else 1)
         )
 
         self._prepare_coin_config()
@@ -182,7 +178,7 @@ class Backtest(Base):
             if isinstance(slp, Percent):
                 account.slippage = slp
 
-    @error_handler()
+    @error_handler
     def run_vis(
         self, auto_open: bool = False, port_file: str = "streamlit.port"
     ) -> None:

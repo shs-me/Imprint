@@ -42,6 +42,10 @@ class Writer(Base, ABC):
 
     counter_ticks: int = field(default=0, init=False)
 
+    save_trade_time: bool = field(default=False, init=False)
+    trade_time: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
     __meta_data: NDArray[float64] = field(init=False)
     updater: JitFootprintUpdate = field(init=False)
 
@@ -100,6 +104,8 @@ class Writer(Base, ABC):
             self.re_init: int = result
         else:
             self.counter_ticks += 1
+            if self.save_trade_time and not self.trade_time[0]:
+                self.trade_time[0] = int(timestamp)
 
 
 spec = [  # pyright: ignore[reportUnknownVariableType]
@@ -209,7 +215,7 @@ class JitFootprintUpdate:
         bwo: int64 = ho + bar
         if _.headers[bwo, c.BH_CountTrade] == 0:
             _.headers[bwo, c.BH_Open : c.BH_Close + 1] = nPrice
-            _.headers[bwo, c.BH_Time] = timestamp
+            _.headers[bwo, c.BH_OpenTime] = timestamp
 
             self._update_missing_bars(bar, ho)
 
@@ -274,11 +280,11 @@ class JitFootprintUpdate:
 
         while prev_bar < bar:
             cur_bwo: int64 = ho + prev_bar
-            _.headers[cur_bwo, c.BH_Time] = _.baseTimestamp[0] + (
+            _.headers[cur_bwo, c.BH_OpenTime] = _.baseTimestamp[0] + (
                 prev_bar * _.tims[0]
             )
             _.headers[cur_bwo, c.BH_LastTradeTime] = _.headers[
-                cur_bwo, c.BH_Time
+                cur_bwo, c.BH_OpenTime
             ]
 
             _.headers[cur_bwo, c.BH_Open : c.BH_Close + 1] = prev_p

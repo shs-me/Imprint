@@ -6,12 +6,11 @@ from typing import final, override
 
 import numpy as np
 from numba import njit
-from numpy import int64
-from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.account.base import Base
 from imprint._core.types import RunData
+from imprint._core.utils.base import OrdersHistoryArray
 
 
 @dataclass(slots=True)
@@ -41,11 +40,8 @@ class Account(Base, ABC):
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
 
-    orders_history: NDArray[int64] = field(
-        default_factory=lambda: np.zeros(
-            (10_000, c.TP_ConstantCount), dtype=int64
-        ),
-        init=False,
+    orders_history: OrdersHistoryArray = field(
+        default_factory=lambda: OrdersHistoryArray(10_000), init=False
     )
     ohWid: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
@@ -161,11 +157,7 @@ class Account(Base, ABC):
         oh[ohWid[0], c.TP_planned_sl] = planned_sl
         ohWid[0] += 1
         if ohWid[0] >= oh.shape[0]:
-            old_rows: int = oh.shape[0]
-            self.orders_history = np.resize(
-                oh, new_shape=((old_rows + self.oh_rows), self.oh_cols)
-            )
-            self.orders_history[old_rows:, :] = 0
+            self.orders_history = self.orders_history.padding(self.oh_rows)
 
     @final
     def save_orders_history(self) -> None:

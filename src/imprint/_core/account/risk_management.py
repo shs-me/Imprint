@@ -45,9 +45,7 @@ class RiskManagement(Base, ABC):
         self._short_tp_dev = cfgRM.tp_dev.fixed
         self._long_sl_dev = cfgRM.sl_dev.fixed
         self._short_sl_dev = cfgRM.sl_dev.fixed
-        self.time_for_expired_signal = (
-            cfgRM.pass_execute_signal_if_timer_ms_exepired
-        )
+        self.time_for_expired_signal = cfgRM.expiration_signal_time
 
     @final
     @property
@@ -132,7 +130,7 @@ class RiskManagement(Base, ABC):
         )
 
     @final
-    def set_tp_sel_dev(self, tp: int, sl: int, order_param: int) -> None:
+    def set_tp_sl_dev(self, tp: int, sl: int, order_param: int) -> None:
         """Configure take-profit and stop-loss deviation parameters for long or short positions.
 
         Parameters

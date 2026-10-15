@@ -1,11 +1,10 @@
-"""Shared memory layout and component configuration data structures.
+"""Dynamic configurations and memory layouts for the project."""
 
-This module provides configuration classes, memory segment representations, and
-inter-process communication (IPC) ring buffers used across the trading engine.
-"""
+from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import final, override
 
 from imprint._core import constant as c
@@ -14,54 +13,14 @@ from imprint._core.utils.base_adapters import BalanceData, OrderData
 
 PERCENT: int = 10_000
 
-OFFSET: int = 0
 INT64: int = 8
 FLOAT64: int = 8
 
 
 @final
 @dataclass(slots=True)
-class Segment:
-    """Represents a shared memory segment with a fixed byte size.
-
-    Parameters
-    ----------
-    size : int
-        Size of the memory segment in bytes. Must be non-negative.
-
-    Attributes
-    ----------
-    size : int
-        Size of the memory segment in bytes.
-    offset : tuple[int, int]
-        Start and end byte offsets within the parent shared memory block.
-    view : memoryview
-        Memory view buffer providing direct byte-level access.
-    """
-
-    size: int
-
-    offset: tuple[int, int] = field(default=None, init=False)  # pyright: ignore[reportAssignmentType]
-    view: memoryview = field(default=None, init=False)  # pyright: ignore[reportAssignmentType]
-
-
-@final
-@dataclass(slots=True)
 class Percent:
-    """Represents a percentage value scaled to an integer basis point representation.
-
-    Parameters
-    ----------
-    base : float
-        Percentage value (e.g., ``5.0`` for 5%).
-
-    Attributes
-    ----------
-    base : float
-        Original percentage input value.
-    fixed : int
-        Scaled integer representation using `PERCENT` (10,000) as 100%.
-    """
+    """Stores a specified percentage in fractional form along with its integer counterpart. Multiplier: 10,000."""
 
     base: float
 
@@ -73,49 +32,15 @@ class Percent:
 
 @dataclass
 class Configuration(ABC):
-    """Abstract base class for engine configuration objects."""
+    """Abstract base class for all configurations. Used as a marker for group interactions."""
 
 
 @final
 @dataclass(slots=True)
 class Setup(Configuration):
-    """Configures core engine startup parameters and component modules.
-
-    Attributes
-    ----------
-    backtesting : bool, default=True
-        Enables backtesting execution mode.
-    execution : bool, default=True
-        Enables live order execution mode.
-    backtest_start_date : str, default="2026-01-01"
-        Backtest starting date string in ``YYYY-MM-DD`` format.
-    backtest_end_date : str, default="2026-01-01"
-        Backtest ending date string in ``YYYY-MM-DD`` format.
-    algorithm_module : str, default=""
-        Python module path containing the trading algorithm.
-    algorithm_class_name : str, default=""
-        Class name of the trading algorithm.
-    execution_module : str, default=""
-        Python module path containing the execution adapter.
-    execution_class_name : str, default=""
-        Class name of the execution adapter.
-    agg_trades_decoder_module : str, default=""
-        Python module path for aggregate trades decoding.
-    agg_trades_decoder_class_name : str, default=""
-        Class name of the aggregate trades decoder.
-    user_stream_decoder_module : str, default=""
-        Python module path for user data stream decoding.
-    user_stream_decoder_class_name : str, default=""
-        Class name of the user data stream decoder.
-    order_encoder_module : str, default=""
-        Python module path for order encoding.
-    order_encoder_class_name : str, default=""
-        Class name of the order encoder.
-    exchange_rest_module : str, default=""
-        Python module path for exchange REST client.
-    exchange_rest_class_name : str, default=""
-        Class name of the exchange REST client.
-    """
+    """Engine parameter settings and module/class names for user adapters.
+    Although passing class types directly as parameters works, IPC uses dynamic lazy loading
+    based on the adapter module name and class name to prevent circular imports and serialization errors."""
 
     backtesting: bool = True
     execution: bool = True
@@ -138,19 +63,7 @@ class Setup(Configuration):
 @final
 @dataclass(slots=True)
 class Connector(Configuration):
-    """Configures network connection endpoints for REST and WebSocket streams.
-
-    Attributes
-    ----------
-    base_rest_url : str, default=""
-        Base URL for exchange REST API endpoints.
-    market_data_stream_url : str, default=""
-        WebSocket URL for real-time market data feed.
-    user_data_stream_url : str, default=""
-        WebSocket URL for user account data updates.
-    order_stream_url : str, default=""
-        WebSocket URL for order execution updates.
-    """
+    """URL endpoint settings for live mode."""
 
     base_rest_url: str = ""
     market_data_stream_url: str = ""
@@ -161,31 +74,10 @@ class Connector(Configuration):
 @final
 @dataclass(slots=True)
 class Account(Configuration):
-    """Configures account financial parameters, leverage, and execution limits.
-
-    Attributes
-    ----------
-    leverage : int, default=20
-        Trading leverage multiplier. Must be positive.
-    balance : float, default=100.0
-        Initial account balance in quote currency.
-    min_order_size : float, default=5.0
-        Minimum allowable order value in base currency.
-    taker_commission : Percent, default=Percent(0.05)
-        Taker fee percentage.
-    maker_commission : Percent, default=Percent(0.02)
-        Maker fee percentage.
-    slippage : Percent, default=Percent(0.05)
-        Simulated order execution slippage percentage.
-    latency_ms : int, default=100
-        Simulated network round-trip latency in milliseconds.
-    scale_prec : int, default=8
-        Decimal precision scaling factor exponent.
-    active_order_limit : int, default=1000
-        Maximum concurrent active orders allowed.
-    scale_mult : int
-        Calculated multiplier factor equal to ``10**scale_prec``.
-    """
+    """Mixed settings pertaining to both the account and the trading pair.
+    In live mode, only min_order_size, leverage, start balance, and scale_prec are used.
+    latency_ms is used by the exchange simulator to pseudo-simulate network latency,
+    and slippage is used for filling taker orders; both parameters are static."""
 
     leverage: int = 20
     balance: float = 100.0
@@ -205,111 +97,61 @@ class Account(Configuration):
 @final
 @dataclass(slots=True)
 class RiskManagement(Configuration):
-    """Configures risk thresholds, position sizing, and protective stop/take-profit parameters.
-
-    Attributes
-    ----------
-    max_lock_balance : Percent, default=Percent(10)
-        Maximum allowable locked balance percentage.
-    max_loss_balance : Percent, default=Percent(10)
-        Maximum allowable cumulative loss percentage before circuit breaker triggers.
-    entry_qty : Percent, default=Percent(1)
-        Position entry size as a percentage of available balance.
-    tp_dev : Percent, default=Percent(5)
-        Take-profit deviation percentage.
-    sl_dev : Percent, default=Percent(5)
-        Stop-loss deviation percentage.
-    pass_signal_if_analysis_time_big : int, default=50_000
-        Maximum allowed analysis execution time in microseconds before dropping signal.
-    pass_execute_signal_if_timer_ms_exepired : int, default=1_000
-        Maximum allowed signal execution delay in milliseconds before expiration.
-    """
+    """Account-level risk control settings. The tp/sl_dev parameters are base values;
+    custom deviations for each signal are specified upon signal submission.
+    pass_signal_time is used in live mode to skip any signals where the timestamp of the
+    first analyzed trade lags behind the current time by more than pass_signal_time.
+    expiration_signal_time is used to skip all signals in the buffer that have resided there longer than expiration_signal_time."""
 
     max_lock_balance: Percent = field(default_factory=lambda: Percent(10))
     max_loss_balance: Percent = field(default_factory=lambda: Percent(10))
     entry_qty: Percent = field(default_factory=lambda: Percent(1))
     tp_dev: Percent = field(default_factory=lambda: Percent(5))
     sl_dev: Percent = field(default_factory=lambda: Percent(5))
-    pass_signal_if_analysis_time_big: int = 50_000
-    pass_execute_signal_if_timer_ms_exepired: int = 1_000
+    pass_signal_time: int = 60_000
+    expiration_signal_time: int = 1_000
 
 
 @final
 @dataclass(slots=True)
 class Coin(Configuration):
-    """Configures trading instrument symbols, precision rules, and tick/lot sizes.
-
-    Attributes
-    ----------
-    symbol : str, default="DASHUSDT"
-        Exchange trading pair identifier.
-    tick_size : str, default="0.01"
-        Minimum price movement increment string representation.
-    lot_size : str, default="0.001"
-        Minimum order quantity increment string representation.
-    """
+    """Settings for a specific trading pair. Additionally provides properties to compute tick size and lot size precisions,
+    as well as multipliers based on them."""
 
     symbol: str = "DASHUSDT"
     tick_size: str = "0.01"
     lot_size: str = "0.001"
 
+    def _to_prec(self, val: str) -> int:
+        exp = Decimal(val).normalize().as_tuple().exponent
+        if isinstance(exp, int) and exp < 0:
+            return -exp
+        else:
+            return 0
+
     @property
     def price_prec(self) -> int:
-        """Number of decimal places for price formatting derived from ``tick_size``."""
-        return (
-            len(self.tick_size.split(sep=".")[-1])
-            if "." in self.tick_size
-            else 0
-        )
+        return self._to_prec(self.tick_size)
 
     @property
     def qty_prec(self) -> int:
-        """Number of decimal places for quantity formatting derived from ``lot_size``."""
-        return (
-            len(self.lot_size.split(sep=".")[-1]) if "." in self.lot_size else 0
-        )
+        return self._to_prec(self.lot_size)
 
     @property
     def price_mult(self) -> int:
-        """Integer scaling multiplier for price values derived from ``price_prec``."""
         return 10**self.price_prec
 
     @property
     def qty_mult(self) -> int:
-        """Integer scaling multiplier for quantity values derived from ``qty_prec``."""
         return 10**self.qty_prec
 
 
-@final
 @dataclass(slots=True)
 class Footprint(Configuration):
-    """Configures footprint chart dimensions, aggregation timeframes, and layout state.
-
-    Attributes
-    ----------
-    timeframe : Timeframe, default=Timeframe.H1
-        Candle aggregation timeframe interval.
-    chart_range : int, default=1
-        Chart time span range in days.
-    step_tick : int, default=1
-        Price step increment in ticks per footprint row.
-    fp_rows : int, default=10001
-        Total number of price rows per footprint matrix.
-    state : bool, default=False
-        Enables persistent footprint state tracking.
-    ctrade : bool, default=False
-        Enables cumulative trade delta tracking.
-    colVP : int
-        Volume profile column index offset.
-    colDP : int
-        Delta profile column index offset.
-    bar_count : int
-        Total number of chart bars calculated from timeframe and chart range.
-    fp_cols : int
-        Total number of footprint data columns.
-    fp_panel_cols : int
-        Total footprint panel columns including header/metadata columns.
-    """
+    """Footprint engine settings. The engine supports only 1 timeframe and 1 tick step.
+    By default, the matrix covers a 1-day range; chart_range controls this parameter.
+    Additional state and ctrade matrices have the same dimensions as the base matrix.
+    The state clusters store footprint flags, and ctrade stores the trade count; disabled by default."""
 
     timeframe: Timeframe = Timeframe.H1
     chart_range: int = 1
@@ -323,7 +165,8 @@ class Footprint(Configuration):
 
     @property
     def bar_count(self) -> int:
-        return self._get_bar_count(day=self.chart_range)
+        dayMs: int = max(self.chart_range, 1) * 24 * 60 * 60 * 1000
+        return max(1, dayMs // self.timeframe)
 
     @property
     def fp_cols(self) -> int:
@@ -333,132 +176,35 @@ class Footprint(Configuration):
     def fp_panel_cols(self) -> int:
         return self.fp_cols + 2
 
-    def _get_bar_count(self, day: int) -> int:
-        """Calculate total bar count for a given day range and timeframe.
-
-        Parameters
-        ----------
-        day : int
-            Duration in days. Must be positive.
-
-        Returns
-        -------
-        int
-            Total number of bars fitting within the specified duration.
-        """
-        dayMs: int = max(day, 1) * 24 * 60 * 60 * 1000
-        ivlMs: int = self.timeframe
-        return (dayMs // ivlMs) if (dayMs > ivlMs) else (ivlMs // dayMs)
-
 
 # - - - Configs For IPC - - -
-@dataclass(slots=True)
-class SharedMemorySegments(ABC):
-    """Abstract base class for shared memory segment container configurations.
-
-    Attributes
-    ----------
-    shm_size : int, default=0
-        Total allocated shared memory size in bytes, aligned to page boundaries (4096 bytes).
-    """
-
-    shm_size: int = 0
-
-    @final
-    def __post_init__(self) -> None:
-        self.child_post_init()
-        self.shm_size = ((self.__get_need_shm_size() // 4096) + 1) * 4096
-
-    def child_post_init(self) -> None:
-        """Perform subclass-specific initialization for shared memory segments."""
-
-    @abstractmethod
-    def reset(self) -> None: ...
-
-    @final
-    def __get_need_shm_size(self) -> int:
-        offset: int = 0
-        for attr_name in self.__slots__:
-            attr_obj = getattr(self, attr_name)
-            if isinstance(attr_obj, Segment):
-                attr_obj.offset = (
-                    offset,
-                    (offset := (offset + attr_obj.size)),
-                )
-            elif isinstance(attr_obj, RingBuf):
-                for ring_attr_name in attr_obj.__slots__:
-                    if hasattr(attr_obj, ring_attr_name):
-                        ring_attr_obj = getattr(attr_obj, ring_attr_name)
-                        if isinstance(ring_attr_obj, Segment):
-                            ring_attr_obj.offset = (
-                                offset,
-                                (offset := (offset + ring_attr_obj.size)),
-                            )
-
-        return offset
-
-
 @final
 @dataclass(slots=True)
-class Metrics(SharedMemorySegments):
-    """Manages shared memory segment layouts for engine performance metrics and process statuses.
+class Segment:
+    """Used for dynamic segment property mapping.
+    offset is assigned during initialization of a MemoryLayout subclass.
+    view is assigned upon manually calling MemoryLayout.bind_memory,
+    which avoids errors during process creation where subprocesses bind segments to views themselves."""
 
-    Parameters
-    ----------
-    count_procs : int, default=10
-        Total number of tracked background processes.
+    size: int
 
-    Attributes
-    ----------
-    count_procs : int
-        Total number of tracked background processes.
-    procs_status : Segment
-        Shared memory segment storing process health status flags.
-    main_status : Segment
-        Shared memory segment storing main control process status.
-    time_start_reading : Segment
-        Shared memory segment storing engine read startup timestamp.
-    trade_read_time : Segment
-        Shared memory segment storing trade message read duration.
-    engine_complete : Segment
-        Shared memory segment storing engine completion status flag.
-    """
-
-    count_procs: int = 10
-
-    procs_status: Segment = field(init=False)
-    main_status: Segment = field(init=False)
-    time_start_reading: Segment = field(init=False)
-    trade_read_time: Segment = field(init=False)
-    engine_complete: Segment = field(init=False)
-
-    @override
-    def child_post_init(self) -> None:
-        self.procs_status = Segment((self.count_procs * 2) * INT64)
-        self.main_status = Segment(self.count_procs * INT64)
-        self.time_start_reading = Segment(INT64)
-        self.trade_read_time = Segment(INT64)
-        self.engine_complete = Segment(INT64)
-
-    @override
-    def reset(self) -> None:
-        self.time_start_reading.view.cast("q")[0] = 0
-        self.trade_read_time.view.cast("q")[0] = 0
-        self.engine_complete.view.cast("q")[0] = 0
+    offset: tuple[int, int] = field(default=None, init=False)  # pyright: ignore[reportAssignmentType]
+    view: memoryview = field(default=None, init=False)  # pyright: ignore[reportAssignmentType]
 
 
-# - - Base Ring Buf For All Streams - -
 @final
 @dataclass(slots=True)
 class RingBuf:
-    """Implements a lock-free circular ring buffer over shared memory for inter-process communication.
+    """The primary mechanism for inter-process data streaming in the project.
+    Implemented as a ring buffer supporting multiple writers and readers, though configured by default for one writer and multiple readers.
+    To function, a MemoryLayout subclass must declare a class attribute with an instance of this class.
 
     Parameters
     ----------
     data_size : int, default=256
         Byte size of each individual data cell.
     cell_amount : int, default=100
-        Total number of cells in the ring buffer. Must be positive.
+        Total number of cells in the ring buffer.
     count_writer : int, default=1
         Number of concurrent writer processes.
     count_reader : int, default=1
@@ -468,18 +214,6 @@ class RingBuf:
 
     Attributes
     ----------
-    data_size : int
-        Byte size per cell.
-    cell_amount : int
-        Total capacity in cells.
-    count_writer : int
-        Number of writers.
-    count_reader : int
-        Number of readers.
-    cast_to_int64 : bool
-        Flag indicating 64-bit integer casting.
-    data_header_size : int
-        Header size in bytes per cell (default 8).
     safe_lag : int
         Maximum allowable cell lag threshold before triggering safety warnings.
     reader_id : Segment
@@ -506,7 +240,6 @@ class RingBuf:
     count_reader: int = 1
     cast_to_int64: bool = False
 
-    data_header_size: int = field(default=8, init=False)
     safe_lag: int = field(init=False)
 
     reader_id: Segment = field(init=False)
@@ -520,7 +253,7 @@ class RingBuf:
     data_header_buf: memoryview = field(init=False)
 
     def __post_init__(self) -> None:
-        self.safe_lag = int(self.cell_amount * 0.9)
+        self.safe_lag = self.cell_amount - 3
 
         self.reader_id = Segment(self.count_reader * INT64)
         self.writer_id = Segment(self.count_writer * INT64)
@@ -528,11 +261,12 @@ class RingBuf:
             self.count_writer * (self.cell_amount * self.data_size)
         )
         self.data_header = Segment(
-            self.count_writer * (self.cell_amount * self.data_header_size)
+            self.count_writer * (self.cell_amount * INT64)
         )
 
     def post_init(self) -> None:
-        """Initialize memory views and cast buffer types after shared memory attachment."""
+        """Called by managers after binding segments to shared memory.
+        Premature invocation will cause runtime or logical errors."""
         if self.cast_to_int64:
             self.data_buf = self.data.view.cast("q")
             self.data_size = self.data_size // 8
@@ -545,6 +279,7 @@ class RingBuf:
         self.rid_buf = self.reader_id.view.cast("q")
 
     def reset(self) -> None:
+        """Resets current read and write cells to 0."""
         for idx in range(self.count_writer):
             self.wid_buf[idx] = 0
 
@@ -552,13 +287,9 @@ class RingBuf:
             self.rid_buf[idx] = 0
 
     def lag_not_is_safe(self) -> bool:
-        """Check whether any reader lags behind the writer beyond the safe threshold.
-
-        Returns
-        -------
-        bool
-            True if any reader lag exceeds ``safe_lag``, otherwise False.
-        """
+        """Checks the distance between the current write cell and current read cells.
+        Used as protection against overwriting unread data.
+        Also prevents race conditions when a reader accesses a cell's data view before finishing reading the previous cell."""
         for rid in range(self.count_reader):
             if (
                 (self.wid_buf[0] - self.rid_buf[rid] + self.cell_amount)
@@ -569,68 +300,178 @@ class RingBuf:
         return False
 
     def get_cell(self) -> int:
-        """Retrieve the starting byte offset for the current writer cell.
-
-        Returns
-        -------
-        int
-            Byte offset representing the start of the current write cell.
-        """
+        """Returns the data offset for packing."""
         cell: int = self.wid_buf[0]
         return cell * self.data_size
 
     def set_cell(self, len_data: int) -> None:
-        """Advance the writer cursor and record the written data length for the current cell.
+        """Sets the length of written data and advances the write cell.
 
-        Parameters
-        ----------
-        len_data : int
-            Number of bytes or elements written in the current cell. Must be non-negative.
-        """
+        Raises
+        ------
+            if len_data exceeds cell size"""
+        if len_data > self.data_size:
+            raise ValueError(
+                f"Data length ({len_data}) exceeds cell size ({self.data_size})"
+            )
         self.data_header_buf[self.wid_buf[0]] = len_data
         new_cell = self.wid_buf[0] + 1
         self.wid_buf[0] = new_cell if new_cell < self.cell_amount else 0
 
-    def get_data(self) -> memoryview:
-        """Read data from the current reader cell and advance the reader cursor.
+    def set_data(self, raw_data: bytes | memoryview) -> None:
+        """Base method for packing data into the buffer.
+        If the buffer is cast, iteration is used."""
+        start: int = self.get_cell()
+        lrd: int = len(raw_data)
+        if self.cast_to_int64:
+            for idx, data in enumerate(raw_data):
+                self.data_buf[start + idx] = data
+        else:
+            self.data_buf[start : start + lrd] = raw_data
 
-        Returns
-        -------
-        memoryview
-            Memory view slice containing the read data payload.
-        """
-        cell: int = self.rid_buf[0]
+        self.set_cell(len_data=lrd)
+
+    def get_data(self, reader: int = 0) -> memoryview:
+        """The sole method for retrieving written data.
+        Returns a memory view of data protected by safe_lag.
+        Casted buffers support unpacking iteration:
+            >>> a, b, c = buf[slice]"""
+
+        cell: int = self.rid_buf[reader]
         lrd: int = self.data_header_buf[cell]
         start: int = cell * self.data_size
         raw_data: memoryview = self.data_buf[start : start + lrd]
         new_cell: int = cell + 1
-        self.rid_buf[0] = new_cell if new_cell < self.cell_amount else 0
+        self.rid_buf[reader] = new_cell if new_cell < self.cell_amount else 0
         return raw_data
 
-    def set_data(self, raw_data: bytes | memoryview) -> None:
-        """Write raw bytes or memory view data into the current cell and commit.
 
-        Parameters
-        ----------
-        raw_data : bytes | memoryview
-            Data payload to write into the ring buffer cell.
-        """
-        start: int = self.get_cell()
-        lrd: int = len(raw_data)
-        self.data_buf[start : start + lrd] = raw_data
-        self.set_cell(len_data=lrd)
-
-
-# - Log Stream -
 @dataclass(slots=True)
-class LogStream(SharedMemorySegments):
-    """Shared memory stream configuration for application logging.
+class MemoryLayout(ABC):
+    """Abstract base class for all memory layouts. Used for clean and safe creation of unified buffers sliced into segments with convenient access.
+    Also serves as a marker for group interactions.
+    Upon initialization, it iterates through all class and ring buffer attributes, collects segments, computes their offsets,
+    and calculates the total requested size. If alignment is enabled, the final size is rounded up to the nearest 4096-byte page.
+    Alignment is optional since the OS already manages page allocations; it is primarily for clarity so developers understand why a 128-byte layout results in a 4096-byte allocation.
+    Typically backed by shared memory, though other memory views can be used."""
+
+    size: int = 0
+    align: bool = True
+    segments: dict[str, Segment] = field(default_factory=dict)
+    rings: dict[str, RingBuf] = field(default_factory=dict)
+
+    @final
+    def __post_init__(self) -> None:
+        self.child_post_init()
+        self.__collect_segments_and_rings()
+        offset = self.__calculate_offsets()
+        self.size = ((offset + 4095) // 4096) * 4096 if self.align else offset
+
+    def child_post_init(self) -> None:
+        """Wrapper method so subclasses don't need to override __post_init__ with multiple Parent.__post_init__(self) calls.
+        Using super() in dataclass(slots=True) does not work correctly because dataclasses generate a new class."""
+
+    @final
+    def reset(self) -> None:
+        """Used by the main process before the next system run to reset shared memory to its default state.
+        Logically called only during backtesting."""
+        for _name, ring in self.rings.items():  # noqa:PERF102
+            ring.reset()
+
+        self.child_reset()
+
+    def child_reset(self) -> None: ...
+
+    @final
+    def __collect_segments_and_rings(self) -> None:
+        """Collects all Segments and RingBufs from the subclass slots, and Segments from RingBuf slots into lists.
+        Raises an error if a declared attribute is missing. Inspects top-level attributes only."""
+        for attr_name in self.__slots__:
+            attr_obj = getattr(self, attr_name)
+            if isinstance(attr_obj, Segment):
+                self.segments[attr_name] = attr_obj
+
+            elif isinstance(attr_obj, RingBuf):
+                self.rings[attr_name] = attr_obj
+                for ring_attr_name in attr_obj.__slots__:
+                    if hasattr(attr_obj, ring_attr_name):
+                        ring_attr_obj = getattr(attr_obj, ring_attr_name)
+                        if isinstance(ring_attr_obj, Segment):
+                            self.segments[f"{attr_name}_{ring_attr_name}"] = (
+                                ring_attr_obj
+                            )
+
+    @final
+    def __calculate_offsets(self) -> int:
+        """Calculates the offset for each Segment accounting for accumulated offsets, and returns the total offset at the end.
+        Attribute order is not guaranteed."""
+        offset: int = 0
+        for seg in self.segments.values():
+            seg.offset = (offset, (offset := (offset + seg.size)))
+
+        return offset
+
+    @final
+    def bind_memory(self, buf: memoryview) -> None:
+        """Binds segments to a memory view using their computed offsets."""
+        for _name, seg in self.segments.items():  # noqa:PERF102
+            seg.view = buf[slice(*seg.offset)]
+
+    @final
+    def post_init_rings(self) -> None:
+        """Performs post-initialization logic for ring buffers which typically require memory-bound segments."""
+        for _name, ring in self.rings.items():  # noqa:PERF102
+            ring.post_init()
+
+
+@final
+@dataclass(slots=True)
+class Metrics(MemoryLayout):
+    """Container for flags/metrics used for inter-process synchronization.
 
     Attributes
     ----------
-    ring_buf : RingBuf
-        Circular ring buffer configured for log messages.
+    procs_status : Segment
+        Process status flags.
+    main_status : Segment
+        Process invocation counters. After updating procs_status, a process increments its invocation counter.
+        If a process counter is positive, the main process checks the process and decrements the counter.
+    trade_read_time : Segment
+        Timestamp of the last analyzed trade. Used by the simulator to catch up the footprint engine when reading the trade stream.
+    engine_complete : Segment
+        Set when all trades in the buffer have been read and analyzed.
     """
+
+    count_procs: int = 10
+
+    procs_status: Segment = field(init=False)
+    main_status: Segment = field(init=False)
+    trade_read_time: Segment = field(
+        default_factory=lambda: Segment(INT64), init=False
+    )
+    engine_complete: Segment = field(
+        default_factory=lambda: Segment(INT64), init=False
+    )
+
+    @override
+    def child_post_init(self) -> None:
+        self.procs_status = Segment((self.count_procs * 2) * INT64)
+        self.main_status = Segment(self.count_procs * INT64)
+
+    @override
+    def child_reset(self) -> None:
+        """Resets inter-process synchronization flags."""
+        self.trade_read_time.view.cast("q")[0] = 0
+        self.engine_complete.view.cast("q")[0] = 0
+
+
+@dataclass(slots=True)
+class LogStream(MemoryLayout):
+    """Ring buffer for transmitting process logs to the main process.
+    Provides high-speed logging including process log timestamps for precise debugging.
+    If the main process cannot keep up with log processing, worker processes skip new logs
+    and notify the main process via status codes (an alternative logging mechanism utilizing static logs, primarily used for IPC coordination).
+    Identical across all modes."""
 
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
@@ -639,21 +480,10 @@ class LogStream(SharedMemorySegments):
         init=False,
     )
 
-    @override
-    def reset(self) -> None:
-        self.ring_buf.reset()
 
-
-# - Signal Stream -
 @dataclass(slots=True)
-class SignalStream(SharedMemorySegments):
-    """Shared memory stream configuration for trading signal transmission.
-
-    Attributes
-    ----------
-    ring_buf : RingBuf
-        Circular ring buffer configured for 64-bit integer signal parameters.
-    """
+class SignalStream(MemoryLayout):
+    """Ring buffer for transmitting position open/close signals. Identical across all modes."""
 
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
@@ -661,10 +491,6 @@ class SignalStream(SharedMemorySegments):
         ),
         init=False,
     )
-
-    @override
-    def reset(self) -> None:
-        self.ring_buf.reset()
 
     def set_data(
         self,
@@ -675,23 +501,6 @@ class SignalStream(SharedMemorySegments):
         tp_dev: int,
         sl_dev: int,
     ) -> None:
-        """Write a trading signal data record into the signal ring buffer.
-
-        Parameters
-        ----------
-        signal_id : int
-            Unique identifier of the trading signal.
-        nPrice : int
-            Scaled integer execution price.
-        timestamp : int
-            Signal generation UNIX timestamp in milliseconds.
-        order_param : int
-            Encoded order parameter bitmask or flag.
-        tp_dev : int
-            Take-profit deviation parameter.
-        sl_dev : int
-            Stop-loss deviation parameter.
-        """
         start: int = self.ring_buf.get_cell()
         self.ring_buf.data_buf[start] = signal_id
         self.ring_buf.data_buf[start + 1] = nPrice
@@ -702,16 +511,11 @@ class SignalStream(SharedMemorySegments):
         self.ring_buf.set_cell(len_data=6)
 
 
-# - User Data Stream -
 @dataclass(slots=True)
-class UserDataStream(SharedMemorySegments):
-    """Shared memory stream configuration for user account balances and order updates.
-
-    Attributes
-    ----------
-    ring_buf : RingBuf
-        Circular ring buffer configured for user data records.
-    """
+class UserDataStream(MemoryLayout):
+    """Ring buffer for transmitting account data (executed orders and changed balances).
+    In live mode, a custom packing method is used for structures containing exchange-decoded data from adapters.
+    In backtest mode, standard scalar iteration packing is used."""
 
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
@@ -722,18 +526,7 @@ class UserDataStream(SharedMemorySegments):
         init=False,
     )
 
-    @override
-    def reset(self) -> None:
-        self.ring_buf.reset()
-
     def set_data_in_live(self, data: OrderData | BalanceData) -> None:
-        """Write live order or balance update data into the user data ring buffer.
-
-        Parameters
-        ----------
-        data : OrderData | BalanceData
-            Adapter data structure containing either order execution details or account balance information.
-        """
         start: int = self.ring_buf.get_cell()
         if isinstance(data, OrderData):
             self.ring_buf.data_buf[start + c.TP_timestamp] = data.timestamp
@@ -754,16 +547,9 @@ class UserDataStream(SharedMemorySegments):
         self.ring_buf.set_cell(len_data=lrd)
 
 
-# - Order Stream -
 @dataclass(slots=True)
-class OrderStream(SharedMemorySegments):
-    """Shared memory stream configuration for outbound order requests.
-
-    Attributes
-    ----------
-    ring_buf : RingBuf
-        Circular ring buffer configured for order request records.
-    """
+class OrderStream(MemoryLayout):
+    """Ring buffer for transmitting orders for execution. Identical across all modes."""
 
     ring_buf: RingBuf = field(
         default_factory=lambda: RingBuf(
@@ -771,10 +557,6 @@ class OrderStream(SharedMemorySegments):
         ),
         init=False,
     )
-
-    @override
-    def reset(self) -> None:
-        self.ring_buf.reset()
 
     def set_data(
         self,
@@ -784,21 +566,7 @@ class OrderStream(SharedMemorySegments):
         nPrice: int,
         nQty: int,
     ) -> None:
-        """Write an outbound order request record into the order ring buffer.
-
-        Parameters
-        ----------
-        timestamp : int
-            Order request UNIX timestamp in milliseconds.
-        order_param : int
-            Encoded order parameter flags (e.g., side, type).
-        client_order_id : int
-            Unique client-assigned order identifier.
-        nPrice : int
-            Scaled integer order limit price.
-        nQty : int
-            Scaled integer order quantity.
-        """
+        """Packs order parameters for execution instead of using the standard ring buffer packing method."""
         start: int = self.ring_buf.get_cell()
         self.ring_buf.data_buf[start] = timestamp
         self.ring_buf.data_buf[start + 1] = order_param
@@ -808,47 +576,26 @@ class OrderStream(SharedMemorySegments):
         self.ring_buf.set_cell(len_data=5)
 
 
-# - Market Data Stream -
 @dataclass(slots=True)
-class MarketDataStream(SharedMemorySegments):
-    """Shared memory stream configuration for real-time market trades and ticker data.
+class MarketDataStream(MemoryLayout):
+    """Ring buffer for transmitting trade data,
+    read by the engine and the exchange simulator (during backtesting when order execution is enabled).
+    In live mode, raw undecoded bytes are transmitted.
+    In backtest mode, data is pre-decoded and converted to integer format.
+    Default settings are configured for backtesting with 2 readers."""
 
-    Parameters
-    ----------
-    data_size : int, default=256
-        Byte size of each market data cell.
-    count_reader : int, default=2
-        Number of concurrent reader processes.
-    cast_to_int64 : bool, default=False
-        If True, casts data memory buffer view to 64-bit signed integers.
-
-    Attributes
-    ----------
-    data_size : int
-        Byte size per cell.
-    count_reader : int
-        Number of readers.
-    cast_to_int64 : bool
-        Flag indicating 64-bit integer casting.
-    ring_buf : RingBuf
-        Circular ring buffer configured for market data records.
-    """
-
-    data_size: int = 256
+    data_size: int = 32
+    cell_amount: int = 100_000
     count_reader: int = 2
-    cast_to_int64: bool = False
+    cast_to_int64: bool = True
 
     ring_buf: RingBuf = field(init=False)
-
-    @override
-    def reset(self) -> None:
-        self.ring_buf.reset()
 
     @override
     def child_post_init(self) -> None:
         self.ring_buf = RingBuf(
             data_size=self.data_size,
-            cell_amount=10_000,
+            cell_amount=self.cell_amount,
             count_reader=self.count_reader,
             cast_to_int64=self.cast_to_int64,
         )
@@ -856,19 +603,8 @@ class MarketDataStream(SharedMemorySegments):
     def set_data_in_backtest(
         self, nPrice: int, nQty: int, timestamp: int, is_sell: int
     ) -> None:
-        """Write a backtest trade tick record into the market data ring buffer.
-
-        Parameters
-        ----------
-        nPrice : int
-            Scaled integer trade execution price.
-        nQty : int
-            Scaled integer trade execution quantity.
-        timestamp : int
-            Trade execution UNIX timestamp in milliseconds.
-        is_sell : int
-            Flag indicating whether trade is a sell (1 for sell, 0 for buy).
-        """
+        """Packs pre-prepared trade data into the buffer.
+        Used exclusively during backtesting."""
         start: int = self.ring_buf.get_cell()
         self.ring_buf.data_buf[start] = nPrice
         self.ring_buf.data_buf[start + 1] = nQty
@@ -878,20 +614,9 @@ class MarketDataStream(SharedMemorySegments):
 
 
 @dataclass(slots=True)
-class MarketDataGapStream(SharedMemorySegments):
-    """Shared memory stream configuration for tracking market data sequence gaps.
-
-    Attributes
-    ----------
-    gap_first_id : Segment
-        Shared memory segment storing the starting trade ID of a detected gap.
-    gap_last_id : Segment
-        Shared memory segment storing the ending trade ID of a detected gap.
-    have_gap : Segment
-        Shared memory segment storing a flag indicating gap presence.
-    ring_buf : RingBuf
-        Circular ring buffer configured for gap data records.
-    """
+class MarketDataGapStream(MemoryLayout):
+    """Ring buffer for transmitting downloaded aggregated trade packages to the engine
+    and handling trade download requests from the engine. Used exclusively in live mode."""
 
     gap_first_id: Segment = field(
         default_factory=lambda: Segment(INT64), init=False
@@ -906,7 +631,3 @@ class MarketDataGapStream(SharedMemorySegments):
         default_factory=lambda: RingBuf(data_size=256 * 1000, cell_amount=6),
         init=False,
     )
-
-    @override
-    def reset(self) -> None:
-        self.ring_buf.reset()

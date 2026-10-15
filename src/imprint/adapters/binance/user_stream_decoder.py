@@ -117,7 +117,10 @@ class BinanceUserStreamDecoder(
             elif data.X in ("CANCELED", "EXPIRED", "REJECTED"):
                 order_param |= c.OF_CANCELED
 
-            client_order_id = int(data.c.split("_")[1])
+            if data.c.startswith("im_"):
+                client_order_id = int(data.c.split("_")[1])
+            else:
+                client_order_id = 0
 
             self.order_data.timestamp = data.T or event.E
             self.order_data.order_param = order_param

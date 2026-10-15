@@ -58,11 +58,11 @@ class MainAgent:
         and hands control over to the IPC host manager main loop.
         """
 
-        self.manager.logger("Init started.", LogLevel.INFO)
+        self.manager.logger("Init started.", LogLevel.DEBUG)
         try:
             self.check_dirs()
             if self.run_procs():
-                self.manager.logger("Init completed", LogLevel.INFO)
+                self.manager.logger("Init completed", LogLevel.DEBUG)
 
                 self.manager.run(procs=self.procs)
 
@@ -103,7 +103,6 @@ class MainAgent:
 
             self.run_proc(proc_func, kwargs)
 
-        self.manager.general_event(True, task_ids)
         return True
 
     def get_procs_funcs(self) -> list[tuple[FunctionType, int]]:

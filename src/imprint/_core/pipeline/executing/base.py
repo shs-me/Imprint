@@ -81,7 +81,7 @@ class Base(ABC):
             )
 
     @final
-    @node_handler()
+    @node_handler
     def run(self) -> None:
         """Execute the main processing loop handling tasks, signals, and user data."""
         u = self.manager.cfgUserDataStream.ring_buf

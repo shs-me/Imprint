@@ -22,9 +22,6 @@ class SyncWithExecution(ABC):
     ----------
     manager : NodeManager
         Shared IPC node manager controlling process topology and IPC configurations.
-    time_start_reading : memoryview
-        Read-only 64-bit integer buffer view tracking the starting read time
-        in nanoseconds.
     safe_lag : int
         Maximum permitted processing lag threshold in microseconds before a signal
         is dropped.
@@ -36,14 +33,9 @@ class SyncWithExecution(ABC):
 
     manager: NodeManager
 
-    time_start_reading: memoryview = field(init=False)
+    trade_time: memoryview = field(init=False)
     _signal_id: int = field(default=0, init=False)
     _count_send_signal: int = field(default=0, init=False)
-
-    @final
-    def __post_init__(self) -> None:
-        cfgMetrics = self.manager.cfgMetrics
-        self.time_start_reading = cfgMetrics.time_start_reading.view.cast("q")
 
     def post_init(self) -> None:
         self._signal_id, self._count_send_signal = 0, 0
@@ -61,7 +53,7 @@ class SyncWithExecution(ABC):
     @final
     @property
     def safe_lag(self) -> int:
-        return self.manager.cfgRiskManagement.pass_signal_if_analysis_time_big
+        return self.manager.cfgRiskManagement.pass_signal_time
 
     @final
     @property
@@ -162,9 +154,7 @@ class SyncWithExecution(ABC):
             True if elapsed analysis lag is strictly below ``safe_lag`` microseconds,
             False otherwise.
         """
-        lag: int = (
-            time.perf_counter_ns() - self.time_start_reading[0]
-        ) // 1_000
+        lag: int = round(time.time() * 1000) - self.trade_time[0]
         return lag < self.safe_lag
 
 

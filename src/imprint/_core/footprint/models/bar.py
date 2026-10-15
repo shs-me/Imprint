@@ -1,52 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, final, override
+from typing import ClassVar, Literal, Self, cast, final, overload
 
 import numpy as np
-from numpy import float64, int64
+from numpy import bool_, float64, int64
 
 from imprint._core import constant as c
-from imprint._core.footprint.models.base import Chart, PriceLike, QtyLike
+from imprint._core.footprint.models.base import Chart
+from imprint._core.footprint.models.converter import Converter
 from imprint._core.utils import FPArray
 from imprint._core.utils.base import DPArray, VPArray
 
-PARK_FACTOR: int = 1.0 / (4.0 * np.log(2.0))
+PARK_FACTOR: float64 = 1.0 / (4.0 * np.log(2.0))
 
 
 @final
 @dataclass(slots=True)
 class Bar:
-    """Represents a single bar and its associated indicators, volume profile, and delta profile.
-
-    Parameters
-    ----------
-    _fp : Chart
-        Parent chart instance containing header data and array buffers.
-    idXbid : int | int64
-        Raw bar index identifier.
-
-    Attributes
-    ----------
-    _fp : Chart
-        Parent chart instance containing header data and array buffers.
-    idXbid : int | int64
-        Even-aligned index pointing to the bid column.
-    bar_id : int | int64
-        Calculated header row ID for the bar.
-    ind : Indicators[Bar]
-        Indicator metrics interface for the active bar.
-    vp : VolumeProfile[Bar]
-        Volume profile analytics interface for the active bar.
-    dp : DeltaProfile[Bar]
-        Delta profile analytics interface for the active bar.
-    base : FPArray, read-only
-        Sliced base array view restricted to the price range and columns of the active bar.
-    state : FPArray, read-only
-        Sliced state array view restricted to the price range and columns of the active bar.
-    ctrade : FPArray, read-only
-        Sliced cumulative trade array view restricted to the price range and columns of the active bar.
-    """
+    """Represent a single bar and its associated indicators, volume profile, and delta profile."""
 
     _fp: Chart
     idXbid: int | int64
@@ -67,6 +39,10 @@ class Bar:
     def _get_header(self, header: int) -> int64:
         return self._fp.headers[self.bar_id, header]
 
+    @property
+    def is_empty(self) -> bool_:
+        return self._get_header(c.BH_CountTrade) == 0
+
     def __view_bar(self, arr: FPArray) -> FPArray:
         idYmin, idYmax = self.ind.high.id, self.ind.low.id
         return arr[idYmin : idYmax + 1, self.idXbid : self.idXbid + 2]
@@ -84,142 +60,155 @@ class Bar:
         return self.__view_bar(self._fp.ctrade)
 
 
+@dataclass(slots=True)
+class BarLike:
+    _bar: Bar
+    _plike_cache: dict[int, PriceLike] = field(default_factory=dict, init=False)
+
+
 @final
 @dataclass(slots=True)
-class Indicators[T]:
-    """Exposes technical indicators and statistical metrics for the active bar.
-
-    Parameters
-    ----------
-    _bar : Bar
-        Parent bar instance.
-
-    Attributes
-    ----------
-    open : PriceLike[T], read-only
-        Bar opening price.
-    high : PriceLike[T], read-only
-        Bar high price.
-    low : PriceLike[T], read-only
-        Bar low price.
-    close : PriceLike[T], read-only
-        Bar closing price.
-    open_time : int64, read-only
-        Bar opening timestamp in milliseconds or microseconds.
-    last_trade_time : int64, read-only
-        Timestamp of the last trade in the bar.
-    volume : int64, read-only
-        Total traded volume in the bar.
-    ma_volume : int64, read-only
-        Moving average of bar volume.
-    trade_count : int64, read-only
-        Total number of trades executed in the bar.
-    ma_trade_count : int64, read-only
-        Moving average of trade counts.
-    avg_trade_size : int64, read-only
-        Average trade size computed as volume divided by trade count.
-    ma_avg_trade_size : int64, read-only
-        Moving average of average trade sizes.
-    delta : int64, read-only
-        Net delta (ask volume minus bid volume) for the bar.
-    delta_ratio : float, read-only
-        Ratio of net delta to total volume.
-    cvd : int64, read-only
-        Cumulative volume delta.
-    range : int64, read-only
-        Price range between high and low.
-    range_percent : float64, read-only
-        Percentage price range relative to low price.
-    change : int64, read-only
-        Price change between close and open.
-    change_percent : float64, read-only
-        Percentage price change relative to open price.
-    atr : int64, read-only
-        Average True Range.
-    atr_percent : float64, read-only
-        ATR percentage relative to close price.
-    parkinson_percent : float64, read-only
-        Parkinson volatility percentage estimate.
-    fp_vwap : PriceLike[T], read-only
-        Footprint Volume-Weighted Average Price.
-    fp_vwap_up_band : PriceLike[T], read-only
-        Footprint upper VWAP band.
-    fp_vwap_low_band : PriceLike[T], read-only
-        Footprint lower VWAP band.
-    fp_poc : PriceLike[T], read-only
-        Footprint Point of Control.
-    fp_vah : PriceLike[T], read-only
-        Footprint Value Area High.
-    fp_val : PriceLike[T], read-only
-        Footprint Value Area Low.
-    """
+class PriceLike:
+    """Wrap price level identifiers to provide chained access to associated quantity metrics."""
 
     _bar: Bar
 
-    __plike: PriceLike[T] = field(init=False)
+    _con: Converter = field(init=False)
+    _qlike: QtyLike = field(init=False)
+
+    n: int64 = field(default=int64(0), init=False)
 
     def __post_init__(self) -> None:
-        self.__plike = PriceLike(self._bar._fp.con, Qty(self._bar))
+        self._con = self._bar._fp.con
+        self._qlike = QtyLike(self._bar)
+
+    def __getitem__(self, nPrice: int64) -> Self:
+        self.n = nPrice
+        return self
 
     @property
-    def open(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_Open)]
+    def id(self) -> int64:
+        return cast(int64, self._con.to_idy(self.n))
 
     @property
-    def high(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_High)]
+    def qty(self) -> QtyLike:
+        return self._qlike[self.id]
 
-    @property
-    def low(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_Low)]
 
-    @property
-    def close(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_Close)]
+@final
+@dataclass(slots=True)
+class QtyLike:
+    """Provide volume, delta, bid, and ask quantities at specific price level indices for a bar."""
 
-    @property
-    def open_time(self) -> int64:
-        return self._bar._get_header(header=c.BH_Time)
+    _bar: Bar
 
-    @property
-    def last_trade_time(self) -> int64:
-        return self._bar._get_header(header=c.BH_LastTradeTime)
+    _idy: int64 = field(default=int64(0), init=False)
 
-    @property
-    def volume(self) -> int64:
-        return self._bar._get_header(c.BH_Volume)
+    def __getitem__(self, idy: int64) -> Self:
+        self._idy = idy
+        return self
 
-    @property
-    def ma_volume(self) -> int64:
-        return self._bar._get_header(c.BH_MA_VOL)
+    def volume(self, side: Literal[0, 1]) -> int64:
+        return self._bar._fp.base[self._idy, side + self._bar.idXbid]
 
-    @property
-    def trade_count(self) -> int64:
-        return self._bar._get_header(c.BH_CountTrade)
+    def delta(self, local: bool = True) -> int64:
+        if local:
+            return self.ask(local) - self.bid(local)
+        else:
+            _ = self._bar._fp
+            return _.base[self._idy, _.con.idxDP[0]]
 
-    @property
-    def ma_trade_count(self) -> int64:
-        return self._bar._get_header(c.BH_MA_COUNT_TRADE)
+    def sum(self, local: bool = True) -> int64:
+        if local:
+            return self.bid(local) + self.ask(local)
+        else:
+            _ = self._bar._fp
+            return _.base[self._idy, _.con.idxVP[0]]
+
+    def bid(self, local: bool = True) -> int64:
+        if local:
+            return self._bar._fp.base[self._idy, self._bar.idXbid]
+        else:
+            return (self.sum(local) - self.delta(local)) // 2
+
+    def ask(self, local: bool = True) -> int64:
+        if local:
+            return self._bar._fp.base[self._idy, self._bar.idXbid + 1]
+        else:
+            return (self.sum(local) + self.delta(local)) // 2
+
+
+class Headers[Tval]:
+    def __init__(self, idx: int, valtype: type[Tval]) -> None:
+        self.idx: int = idx
+        self.is_price: bool = valtype is PriceLike
+
+    @overload
+    def __get__(self, instance: None, owner: type[BarLike]) -> Self: ...
+    @overload
+    def __get__(self, instance: BarLike, owner: type[BarLike]) -> Tval: ...
+    def __get__(  # pyright: ignore[reportInconsistentOverload]
+        self,
+        instance: BarLike | None,
+        owner: type[BarLike],
+    ):
+        if instance is None:
+            return self
+
+        value = instance._bar._get_header(self.idx)
+        if self.is_price:
+            plike = instance._plike_cache.get(self.idx)
+            if plike is None:
+                instance._plike_cache[self.idx] = plike = PriceLike(
+                    instance._bar
+                )
+
+            return plike[value]
+        else:
+            return value
+
+
+@final
+@dataclass(slots=True)
+class Indicators[T](BarLike):
+    """Exposes technical indicators and statistical metrics for the active bar."""
+
+    open: ClassVar[Headers[PriceLike]] = Headers(c.BH_Open, PriceLike)
+    high: ClassVar[Headers[PriceLike]] = Headers(c.BH_High, PriceLike)
+    low: ClassVar[Headers[PriceLike]] = Headers(c.BH_Low, PriceLike)
+    close: ClassVar[Headers[PriceLike]] = Headers(c.BH_Close, PriceLike)
+    fp_poc: ClassVar[Headers[PriceLike]] = Headers(c.BH_POC_FP, PriceLike)
+    fp_vah: ClassVar[Headers[PriceLike]] = Headers(c.BH_VAH_FP, PriceLike)
+    fp_val: ClassVar[Headers[PriceLike]] = Headers(c.BH_VAL_FP, PriceLike)
+    fp_vwap: ClassVar[Headers[PriceLike]] = Headers(c.BH_VWAP, PriceLike)
+    fp_vwap_up_band: ClassVar[Headers[PriceLike]] = Headers(
+        c.BH_VWAP_UPPER_BAND, PriceLike
+    )
+    fp_vwap_low_band: ClassVar[Headers[PriceLike]] = Headers(
+        c.BH_VWAP_LOWER_BAND, PriceLike
+    )
+    open_time: ClassVar[Headers[int64]] = Headers(c.BH_OpenTime, int64)
+    last_trade_time: ClassVar[Headers[int64]] = Headers(
+        c.BH_LastTradeTime, int64
+    )
+    volume: ClassVar[Headers[int64]] = Headers(c.BH_Volume, int64)
+    ma_volume: ClassVar[Headers[int64]] = Headers(c.BH_MA_VOL, int64)
+    trade_count: ClassVar[Headers[int64]] = Headers(c.BH_CountTrade, int64)
+    ma_trade_count: ClassVar[Headers[int64]] = Headers(
+        c.BH_MA_COUNT_TRADE, int64
+    )
+    ma_avg_trade_size: ClassVar[Headers[int64]] = Headers(c.BH_MA_ATS, int64)
+    delta: ClassVar[Headers[int64]] = Headers(c.BH_Delta, int64)
+    cvd: ClassVar[Headers[int64]] = Headers(c.BH_CVD, int64)
+    atr: ClassVar[Headers[int64]] = Headers(c.BH_ATR, int64)
 
     @property
     def avg_trade_size(self) -> int64:
         return self.volume // self.trade_count
 
     @property
-    def ma_avg_trade_size(self) -> int64:
-        return self._bar._get_header(c.BH_MA_ATS)
-
-    @property
-    def delta(self) -> int64:
-        return self._bar._get_header(c.BH_Delta)
-
-    @property
     def delta_ratio(self) -> float:
         return self.delta / self.volume
-
-    @property
-    def cvd(self) -> int64:
-        return self._bar._get_header(c.BH_CVD)
 
     @property
     def range(self) -> int64:
@@ -238,10 +227,6 @@ class Indicators[T]:
         return self.close.n / self.open.n - 1
 
     @property
-    def atr(self) -> int64:
-        return self._bar._get_header(c.BH_ATR)
-
-    @property
     def atr_percent(self) -> float64:
         close = self.close.n
         return ((self.atr + close) / close) - 1
@@ -252,160 +237,32 @@ class Indicators[T]:
             (self._bar._get_header(c.BH_PARK) / c.VAR_SCALE) * PARK_FACTOR
         )
 
-    @property
-    def fp_vwap(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_VWAP)]
-
-    @property
-    def fp_vwap_up_band(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_VWAP_UPPER_BAND)]
-
-    @property
-    def fp_vwap_low_band(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_VWAP_LOWER_BAND)]
-
-    @property
-    def fp_poc(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_POC_FP)]
-
-    @property
-    def fp_vah(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_VAH_FP)]
-
-    @property
-    def fp_val(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_VAL_FP)]
-
 
 @final
 @dataclass(slots=True)
-class VolumeProfile[T]:
-    """Computes volume profile aggregates for the active bar.
-
-    Parameters
-    ----------
-    _bar : Bar
-        Parent bar instance.
-
-    Attributes
-    ----------
-    base : VPArray, read-only
-        Aggregated volume profile array combining bid and ask columns for the bar.
-    poc : PriceLike[T], read-only
-        Point of Control (POC) price level with the highest volume in the bar.
-    vah : PriceLike[T], read-only
-        Value Area High (VAH) price level for the bar.
-    val : PriceLike[T], read-only
-        Value Area Low (VAL) price level for the bar.
-    """
+class VolumeProfile[T](BarLike):
+    """Compute volume profile aggregates for the active bar."""
 
     _bar: Bar
 
-    __plike: PriceLike[T] = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.__plike = PriceLike(self._bar._fp.con, Qty(self._bar))
+    poc: ClassVar[Headers[PriceLike]] = Headers(c.BH_POC, PriceLike)
+    vah: ClassVar[Headers[PriceLike]] = Headers(c.BH_VAH, PriceLike)
+    val: ClassVar[Headers[PriceLike]] = Headers(c.BH_VAL, PriceLike)
 
     @property
     def base(self) -> VPArray:
         bar = self._bar.base
         return bar[:, 0] + bar[:, 1]  # pyright: ignore[reportReturnType]
 
-    @property
-    def poc(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_POC)]
-
-    @property
-    def vah(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_VAH)]
-
-    @property
-    def val(self) -> PriceLike[T]:
-        return self.__plike[self._bar._get_header(c.BH_VAL)]
-
 
 @final
 @dataclass(slots=True)
-class DeltaProfile[T]:
-    """Computes delta profile aggregates (bid-ask difference) for the active bar.
-
-    Parameters
-    ----------
-    _bar : Bar
-        Parent bar instance.
-
-    Attributes
-    ----------
-    base : DPArray, read-only
-        Aggregated delta profile array (bid minus ask volume) for the bar.
-    """
+class DeltaProfile[T](BarLike):
+    """Compute delta profile aggregates (bid-ask difference) for the active bar."""
 
     _bar: Bar
 
     @property
     def base(self) -> DPArray:
         bar = self._bar.base
-        return bar[:, 0] - bar[:, 1]  # pyright: ignore[reportReturnType]
-
-
-@final
-@dataclass(slots=True)
-class Qty[T](QtyLike[T]):
-    """Provides volume, delta, bid, and ask quantities at specific price level indices for a bar.
-
-    Parameters
-    ----------
-    _bar : Bar
-        Parent bar instance.
-
-    Attributes
-    ----------
-    volume : int64, read-only
-        Traded volume at the configured price index and bar side.
-    delta : int64, read-only
-        Net delta (bid minus ask volume) at the configured price index.
-    sum : int64, read-only
-        Total volume (bid plus ask volume) at the configured price index.
-    bid : int64, read-only
-        Bid volume at the configured price index.
-    ask : int64, read-only
-        Ask volume at the configured price index.
-    """
-
-    _bar: Bar
-
-    @override
-    def __getitem__(self, idy: int64) -> Qty[T]:
-        """Configure the target price level index for bar quantity queries.
-
-        Parameters
-        ----------
-        idy : int64
-            Price level index coordinate.
-
-        Returns
-        -------
-        Qty[T]
-            The current instance configured with the specified index.
-        """
-        self._idy = idy
-        return self
-
-    def volume(self, side: Literal[0, 1]) -> int64:
-        return self._bar._fp.base[self._idy, side]
-
-    @property
-    def delta(self) -> int64:
-        return self.bid - self.ask
-
-    @property
-    def sum(self) -> int64:
-        return self.bid + self.ask
-
-    @property
-    def bid(self) -> int64:
-        return self._bar._fp.base[self._idy, self._bar.idXbid]
-
-    @property
-    def ask(self) -> int64:
-        return self._bar._fp.base[self._idy, self._bar.idXbid + 1]
+        return bar[:, 1] - bar[:, 0]  # pyright: ignore[reportReturnType]

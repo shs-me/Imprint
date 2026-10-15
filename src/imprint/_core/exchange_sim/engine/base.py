@@ -8,8 +8,6 @@ from numba import types  # pyright: ignore[reportPrivateImportUsage]
 from numba.experimental import (
     jitclass,  # pyright: ignore[reportUnknownVariableType, reportPrivateImportUsage]
 )
-from numpy import int64
-from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.exchange_sim.account.manager import update_equity_ohlc
@@ -19,6 +17,7 @@ from imprint._core.exchange_sim.engine.matching_engine import (
     MatchingEngine,
 )
 from imprint._core.exchange_sim.engine.user_data_stream import set_user_data
+from imprint._core.utils.base import EquityHistoryArray
 
 EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
 
@@ -223,7 +222,7 @@ class JitExchangeEngine:
         makerNcommission: memoryview,
         takerNcommission: memoryview,
         timeframe: memoryview,
-        equity_history: NDArray[int64],
+        equity_history: EquityHistoryArray,
         count_trade_close: memoryview,
     ) -> None:
         self.matching_engine: JitMatchingEngine = matching_engine
@@ -244,7 +243,7 @@ class JitExchangeEngine:
         self.makerNcommission: memoryview = makerNcommission
         self.takerNcommission: memoryview = takerNcommission
         self.timeframe: memoryview = timeframe
-        self.equity_history: NDArray[int64] = equity_history
+        self.equity_history: EquityHistoryArray = equity_history
         self.count_trade_close: memoryview = count_trade_close
 
     def start(self, timestamp: int) -> None:

@@ -1,207 +1,262 @@
-"""Unit tests for imprint._core.configs module verifying exact memory layouts and logic."""
+import inspect
+from collections import deque
+from dataclasses import dataclass, field
 
-from typing import Any
+import pytest
+from numpy import random
 
 from imprint._core import configs as cfg
 from imprint._core.settings import Timeframe
 
 
-def test_percent_calculation() -> None:
-    """Verify manual fixed-point percent calculation."""
-    percent = cfg.Percent(0.05)
-    # Manual calculation: round(0.05 / 100 * 10000) = round(5.0) = 5
-    expected_fixed: int = 5
-    assert percent.fixed == expected_fixed, (
-        f"Expected percent fixed value {expected_fixed}, got {percent.fixed}"
+class TestConfigurationPostInitAction:
+    @pytest.mark.parametrize(
+        "pct", [0.0, 0.01, 0.05, 1.0, 10.0, 50.5, 100.0, 1e-4]
+    )
+    def test_percent_calculation(self, pct: float) -> None:
+        """Verify manual fixed-point percent calculation across fractional, integer, and edge-case values."""
+        expected_fixed = round(pct / 100 * cfg.PERCENT)
+        percent = cfg.Percent(pct)
+        assert percent.fixed == expected_fixed, (
+            f"Expected percent fixed value {expected_fixed} for {pct}%, got {percent.fixed}"
+        )
+
+    def test_account_scale_mult(self) -> None:
+        """Verify Account scale multiplier initialization."""
+        account = cfg.Account(scale_prec=8)
+        expected_mult: int = 10**8
+        assert account.scale_mult == expected_mult, (
+            f"Expected scale multiplier {expected_mult}, got {account.scale_mult}"
+        )
+
+    @pytest.mark.parametrize(
+        ("tick_size", "lot_size", "exp_price_prec", "exp_qty_prec"),
+        [
+            ("0.01", "0.001", 2, 3),
+            ("1e-8", "1e-4", 8, 4),
+            ("0.00000001", "0.0001", 8, 4),
+            ("1", "1", 0, 0),
+            ("100", "1000", 0, 0),
+            ("1e+2", "1e+3", 0, 0),
+            ("0.1", "10", 1, 0),
+            ("1e-5", "1", 5, 0),
+        ],
+    )
+    def test_coin_precisions_and_multipliers(
+        self,
+        tick_size: str,
+        lot_size: str,
+        exp_price_prec: int,
+        exp_qty_prec: int,
+    ) -> None:
+        """Verify Coin precision parsing and derived multiplier calculations across fractions, integers, and scientific notations."""
+        coin = cfg.Coin(
+            symbol="TESTUSDT", tick_size=tick_size, lot_size=lot_size
+        )
+
+        assert coin.price_prec == exp_price_prec, (
+            f"Expected price_prec {exp_price_prec} for tick_size '{tick_size}', got {coin.price_prec}"
+        )
+        assert coin.qty_prec == exp_qty_prec, (
+            f"Expected qty_prec {exp_qty_prec} for lot_size '{lot_size}', got {coin.qty_prec}"
+        )
+        assert coin.price_mult == 10**exp_price_prec, (
+            f"Expected price_mult {10**exp_price_prec}, got {coin.price_mult}"
+        )
+        assert coin.qty_mult == 10**exp_qty_prec, (
+            f"Expected qty_mult {10**exp_qty_prec}, got {coin.qty_mult}"
+        )
+
+    def test_footprint_bar_count_and_columns(self) -> None:
+        """Verify Footprint bar count and panel column calculations."""
+        fp = cfg.Footprint(timeframe=Timeframe.H1, chart_range=1)
+
+        exp_bar_count: int = 24
+        exp_fp_cols: int = 48
+        exp_fp_panel_cols: int = 50
+
+        assert fp.bar_count == exp_bar_count, (
+            f"Expected bar_count {exp_bar_count}, got {fp.bar_count}"
+        )
+        assert fp.fp_cols == exp_fp_cols, (
+            f"Expected fp_cols {exp_fp_cols}, got {fp.fp_cols}"
+        )
+        assert fp.fp_panel_cols == exp_fp_panel_cols, (
+            f"Expected fp_panel_cols {exp_fp_panel_cols}, got {fp.fp_panel_cols}"
+        )
+
+
+@pytest.mark.parametrize(
+    "shm_cls",
+    [
+        cls
+        for _, cls in inspect.getmembers(cfg, inspect.isclass)
+        if issubclass(cls, cfg.MemoryLayout) and cls is not cfg.MemoryLayout
+    ],
+)
+def test_memory_layouts_invariants(
+    shm_cls: type[cfg.MemoryLayout],
+) -> None:
+    """
+    Verify memory layout and shared memory segment invariants:
+    - Layout size is strictly positive.
+    - Layout size is page-aligned (multiple of 4096) when alignment is enabled (`align=True`), or matches exact total segment offset when disabled (`align=False`).
+    - Layout contains at least one segment, and all defined layout slots corresponding to Segment or RingBuf instances are present in their respective collections (`segments`, `rings`).
+    - Segments are contiguous without memory gaps, meaning each segment's start offset matches the previous segment's end offset.
+    - Each segment's end bound equals its start offset plus its size.
+    - Total contiguous segment size does not exceed the layout size (and equals layout size when `align=False`).
+    - Bound memory views match respective segment sizes.
+    """
+    layout: cfg.MemoryLayout = shm_cls(align=True)
+
+    assert layout.size > 0, (
+        f"{shm_cls}: Layout size must be strictly positive, got {layout.size}"
+    )
+    assert layout.size % 4096 == 0, (
+        f"{shm_cls}: Layout size must be page-aligned (multiple of 4096), got {layout.size}"
+    )
+
+    assert len(layout.segments) > 0, f"{shm_cls}: Layout contains no segments"
+
+    for name in layout.__slots__:
+        seg_names = str(layout.segments.keys())
+        rings_names = str(layout.rings.keys())
+        obj = getattr(layout, name)
+        if isinstance(obj, cfg.Segment):
+            assert name in seg_names, (
+                f"{shm_cls}: Segment slot '{name}' not found in layout.segments"
+            )
+
+        elif isinstance(obj, cfg.RingBuf):
+            assert name in rings_names, (
+                f"{shm_cls}: RingBuf slot '{name}' not found in layout.rings"
+            )
+            for attr_name in obj.__slots__:
+                if hasattr(obj, attr_name):
+                    attr_obj = getattr(obj, attr_name)
+                    if isinstance(attr_obj, cfg.Segment):
+                        attr_name = f"{name}_{attr_name}"
+                        assert attr_name in seg_names, (
+                            f"{shm_cls}: RingBuf Segment slot '{attr_name}' not found in layout.segments"
+                        )
+
+    current_offset: int = 0
+    for name, seg in layout.segments.items():
+        assert seg.offset is not None, f"Segment {name} has no offset assigned"
+        start, end = seg.offset
+
+        assert start == current_offset, (
+            f"Memory gap before {name}: expected {current_offset}, got {start}"
+        )
+        assert end == start + seg.size, (
+            f"Incorrect slice size for {name}: size={seg.size}, but end-start={end - start}"
+        )
+        current_offset = end
+
+    assert current_offset <= layout.size, (
+        f"{shm_cls}: Total contiguous segment size ({current_offset}) exceeds layout size ({layout.size})"
+    )
+
+    buf: memoryview = memoryview(bytearray(layout.size))
+    layout.bind_memory(buf)
+    for name, seg in layout.segments.items():
+        assert seg.view is not None, f"Segment {name} is not bound to a buffer"
+        assert seg.view.nbytes == seg.size, (
+            f"Incorrect buffer size for {name}: size={seg.size}, but view={seg.view.nbytes}."
+        )
+
+    layout = shm_cls(align=False)
+    assert current_offset == layout.size, (
+        f"{shm_cls}: Unaligned layout size ({layout.size}) does not match total segment offset ({current_offset})"
     )
 
 
-def test_account_scale_mult() -> None:
-    """Verify Account scale multiplier initialization."""
-    account = cfg.Account(scale_prec=8)
-    # Manual calculation: 10 ** 8 = 100000000
-    expected_mult: int = 100_000_000
-    assert account.scale_mult == expected_mult, (
-        f"Expected scale multiplier {expected_mult}, got {account.scale_mult}"
-    )
+def test_ring_buf_invariants() -> None:
+    """
+    Verify ring buffer invariants:
+    - Ring buffer data set/get roundtrips correctly.
+    - Exceeding `data_size` raises a `ValueError` during data assignment (`set_data`).
+    - Lag safety checks correctly detect and handle reader/writer pointer divergence/overflow conditions.
+    - Ring indices and cell pointers (`wid_buf`, `rid_buf`) reset correctly to zero upon calling `reset()`.
+    """
 
+    @dataclass(slots=True)
+    class RingLayout(cfg.MemoryLayout):
+        ring_raw: cfg.RingBuf = field(
+            default_factory=lambda: cfg.RingBuf(
+                data_size=24, cell_amount=10, count_writer=2, count_reader=2
+            )
+        )
+        ring_casted: cfg.RingBuf = field(
+            default_factory=lambda: cfg.RingBuf(
+                data_size=24,
+                cell_amount=10,
+                count_writer=2,
+                count_reader=2,
+                cast_to_int64=True,
+            )
+        )
 
-def test_coin_precisions_and_multipliers() -> None:
-    """Verify Coin precision parsing and derived multiplier calculations."""
-    coin = cfg.Coin(symbol="BTCUSDT", tick_size="0.01", lot_size="0.001")
+    def check_read_data(ring: cfg.RingBuf, reader: int, payload: bytes) -> None:
+        read_data = ring.get_data(reader)
+        assert bytes(read_data) == payload, (
+            f"expected {payload}, got {bytes(read_data)}, reader {reader}, cell {ring.rid_buf[0]}"
+        )
+        if ring.cast_to_int64:
+            try:
+                _a, _b, _c = read_data
+            except ValueError:
+                raise AssertionError(
+                    "variable unpacking failed for casted buffer."
+                )
 
-    # Manual calculations:
-    # "0.01".split(".")[-1] -> "01" -> length 2 -> mult 10**2 = 100
-    # "0.001".split(".")[-1] -> "001" -> length 3 -> mult 10**3 = 1000
-    assert coin.price_prec == 2, f"Expected price_prec 2, got {coin.price_prec}"
-    assert coin.qty_prec == 3, f"Expected qty_prec 3, got {coin.qty_prec}"
-    assert coin.price_mult == 100, (
-        f"Expected price_mult 100, got {coin.price_mult}"
-    )
-    assert coin.qty_mult == 1000, f"Expected qty_mult 1000, got {coin.qty_mult}"
+    layout = RingLayout()
+    layout.bind_memory(memoryview(bytearray(layout.size)))
+    layout.post_init_rings()
+    rng = random.default_rng()
+    test_data = rng.integers(2**63, size=(30, 3))
 
+    for name, ring in layout.rings.items():
+        with pytest.raises(ValueError):
+            ring.set_data(bytes(ring.data_size + 1))
 
-def test_footprint_bar_count_and_columns() -> None:
-    """Verify Footprint bar count and panel column calculations."""
-    fp = cfg.Footprint(timeframe=Timeframe.H1, chart_range=1)
+        exp_data: deque[memoryview] = deque()
+        for _ in range(ring.cell_amount * 3):
+            payload: memoryview = rng.choice(test_data).data
+            if not ring.cast_to_int64:
+                payload = payload.cast("B")
 
-    # Manual calculations:
-    # dayMs = 1 * 24 * 60 * 60 * 1000 = 86,400,000
-    # ivlMs = Timeframe.H1 = 3,600,000
-    # bar_count = 86_400_000 // 3_600_000 = 24
-    # fp_cols = 24 * 2 = 48
-    # fp_panel_cols = 48 + 2 = 50
-    expected_bar_count: int = 24
-    expected_fp_cols: int = 48
-    expected_fp_panel_cols: int = 50
+            if ring.lag_not_is_safe() is False:
+                ring.set_data(payload)
+                check_read_data(ring, 0, bytes(payload))
+                assert ring.wid_buf[0] != ring.rid_buf[1], (
+                    f"Ring {name}: expected safety check trigger"
+                )
+                exp_data.append(payload)
+            else:
+                while exp_data:
+                    payload = exp_data.popleft()
+                    check_read_data(ring, 1, bytes(payload))
 
-    assert fp.bar_count == expected_bar_count, (
-        f"Expected bar_count {expected_bar_count}, got {fp.bar_count}"
-    )
-    assert fp.fp_cols == expected_fp_cols, (
-        f"Expected fp_cols {expected_fp_cols}, got {fp.fp_cols}"
-    )
-    assert fp.fp_panel_cols == expected_fp_panel_cols, (
-        f"Expected fp_panel_cols {expected_fp_panel_cols}, got {fp.fp_panel_cols}"
-    )
+                assert ring.lag_not_is_safe() is False, (
+                    f"Ring {name}: expected pass"
+                )
 
+        ring.reset()
+        for _ in range(2):
+            if _ == 0:
+                ring.reset()
+            else:
+                layout.reset()
 
-def test_metrics_shared_memory_layout() -> None:
-    """Verify Metrics segment size, offsets, and page-aligned total shared memory size."""
-    metrics = cfg.Metrics(count_procs=10)
-
-    # Manual calculations:
-    # count_procs = 10, INT64 = 8, UBYTE = 1
-    # procs_status size: (10 * 2) * 8 = 160 -> offset: (0, 160)
-    # main_status size: 10 * 8 = 80        -> offset: (160, 240)
-    # time_start_reading size: 8           -> offset: (240, 248)
-    # trade_read_time size: 8              -> offset: (248, 256)
-    # engine_complete size: 1               -> offset: (256, 257)
-    # Unaligned total raw size = 257
-    # Page alignment formula: ((257 // 4096) + 1) * 4096 = 4096
-
-    assert metrics.procs_status.size == 160
-    assert metrics.procs_status.offset == (0, 160)
-
-    assert metrics.main_status.size == 80
-    assert metrics.main_status.offset == (160, 240)
-
-    assert metrics.time_start_reading.size == 8
-    assert metrics.time_start_reading.offset == (240, 248)
-
-    assert metrics.trade_read_time.size == 8
-    assert metrics.trade_read_time.offset == (248, 256)
-
-    assert metrics.engine_complete.size == 1
-    assert metrics.engine_complete.offset == (256, 257)
-
-    assert metrics.shm_size == 4096, (
-        f"Expected shm_size 4096, got {metrics.shm_size}"
-    )
-
-
-def test_market_data_stream_shared_memory_layout() -> None:
-    """Verify MarketDataStream inner RingBuf offsets and page alignment."""
-    md_stream = cfg.MarketDataStream()
-    ring_buf = md_stream.ring_buf
-
-    # Default parameters for MarketDataStream:
-    # data_size = 256, data_header_size = 1, cell_amount = 10000
-    # count_reader = 2, count_writer = 1, INT64 = 8
-    # safe_lag = int(10000 * 0.9) = 9000
-    #
-    # Segments & Sizes:
-    # reader_id size: 2 * 8 = 16                       -> offset: (0, 16)
-    # writer_id size: 1 * 8 = 8                        -> offset: (16, 24)
-    # data size: 1 * (10000 * 256) = 2,560,000         -> offset: (24, 2560024)
-    # data_header size: 1 * (10000 * 1) = 10,000       -> offset: (2560024, 2570024)
-    #
-    # Raw needed size = 2,570,024
-    # Page alignment: ((2570024 // 4096) + 1) * 4096 = 628 * 4096 = 2,572,288
-
-    assert ring_buf.safe_lag == 9000
-    assert ring_buf.reader_id.offset == (0, 16)
-    assert ring_buf.writer_id.offset == (16, 24)
-    assert ring_buf.data.offset == (24, 2_560_024)
-    assert ring_buf.data_header.offset == (2_560_024, 2_570_024)
-
-    expected_shm_size: int = 2_572_288
-    assert md_stream.shm_size == expected_shm_size, (
-        f"Expected shm_size {expected_shm_size}, got {md_stream.shm_size}"
-    )
-
-
-def test_ring_buf_read_write_operations() -> None:
-    """Verify RingBuf read, write, memoryview binding, and safe lag detection."""
-    ring_buf = cfg.RingBuf(
-        data_size=32,
-        data_header_size=1,
-        cell_amount=10,
-        count_writer=1,
-        count_reader=1,
-        cast_to_int64=True,
-    )
-
-    # Allocate mock backing buffer based on segment total size
-    # Layout sizes: reader_id (8), writer_id (8), data (320), data_header (10) -> total 346
-    total_buf_size: int = (
-        ring_buf.reader_id.size
-        + ring_buf.writer_id.size
-        + ring_buf.data.size
-        + ring_buf.data_header.size
-    )
-    raw_buffer = bytearray(total_buf_size)
-    shm_view = memoryview(raw_buffer)
-
-    # Bind slices manually as Base manager does
-    ring_buf.reader_id.view = shm_view[0:8]
-    ring_buf.writer_id.view = shm_view[8:16]
-    ring_buf.data.view = shm_view[16:336]
-    ring_buf.data_header.view = shm_view[336:346]
-
-    ring_buf.post_init()
-
-    # Manual expectations after post_init:
-    # cast_to_int64 is True -> data_size = 32 // 8 = 4 (measured in int64 elements)
-    assert ring_buf.data_size == 4, (
-        f"Expected data_size 4, got {ring_buf.data_size}"
-    )
-
-    # Initially writer_id=0, reader_id=0 -> lag = (0 - 0 + 10) % 10 = 0 (safe_lag = 9)
-    assert not ring_buf.lag_not_is_safe()
-
-    # Write integer data: 100 with args 200, 300
-    ring_buf.set_cell(3)
-    # Manual checks after 1 write:
-    # wid_buf[0] incremented to 1
-    # data_header_buf[0] length set to 1 + 2 = 3
-    assert ring_buf.wid_buf[0] == 1
-    assert ring_buf.data_header_buf[0] == 3
-
-    # Simulate reader lag beyond safe_lag threshold (safe_lag = 9)
-    # Set wid=9, rid=0 -> lag = (9 - 0 + 10) % 10 = 9 -> 9 > 9 is False
-    # Set wid=0, rid=0 -> lag = (0 - 0 + 10) % 10 = 0
-    # Set wid=9, rid=0 with 1 more write advances wid to 0 -> lag = (0 - 0 + 10) % 10 = 0
-    # Directly mock wid_buf to test boundary condition > safe_lag
-    # Directly mock wid_buf and rid_buf to test boundary condition > safe_lag
-    ring_buf.safe_lag = 8
-    ring_buf.wid_buf[0] = 9
-    ring_buf.rid_buf[0] = 0
-    # Lag calculation: (9 - 0 + 10) % 10 = 9 -> 9 > 8 is True
-    assert ring_buf.lag_not_is_safe(), "Expected lag_not_is_safe to be True"
-
-    # Reset positions for read verification
-    ring_buf.wid_buf[0] = 1
-    ring_buf.rid_buf[0] = 0
-
-    # Retrieve data
-    retrieved_view = ring_buf.get_data()
-    retrieved_list: list[Any] = list(retrieved_view)
-
-    # Manual checks after read:
-    # rid_buf[0] incremented to 1
-    # retrieved integers match [100, 200, 300]
-    assert ring_buf.rid_buf[0] == 1
-    assert retrieved_list == [0, 0, 0], (
-        f"Expected [0, 0, 0], got {retrieved_list}"
-    )
+            for wid, rid in zip(
+                range(ring.count_writer), range(ring.count_reader)
+            ):
+                assert ring.wid_buf[wid] == 0, (
+                    f"Ring {name}: writer cell pointer not reset"
+                )
+                assert ring.rid_buf[rid] == 0, (
+                    f"Ring {name}: reader cell pointer not reset"
+                )
+                ring.wid_buf[wid] = 1
+                ring.rid_buf[rid] = 1

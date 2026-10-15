@@ -1,5 +1,3 @@
-"""Unit tests for `imprint._core.main.MainAgent`."""
-
 from multiprocessing.synchronize import Event, Semaphore
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -21,8 +19,6 @@ def mock_host_manager() -> MagicMock:
 class TestMainAgent:
     def test_initialization(self, mock_host_manager: MagicMock) -> None:
         agent = MainAgent(manager=mock_host_manager, base_kwargs={"foo": "bar"})
-        assert agent.is_backtesting is True
-        assert agent.with_execution is True
         assert isinstance(agent.wss_sem, Semaphore)
         assert isinstance(agent.engine_event, Event)
         assert isinstance(agent.execution_event, Event)
@@ -107,5 +103,5 @@ class TestMainAgent:
 
         assert success is True
         # Called general_event(False) then general_event(True)
-        assert mock_host_manager.general_event.call_count == 2
+        assert mock_host_manager.general_event.call_count == 1
         assert mock_process_cls.call_count == 3  # 3 processes created

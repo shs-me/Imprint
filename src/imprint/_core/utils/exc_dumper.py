@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import wraps
 from types import TracebackType
-from typing import Any, ParamSpec, TypeVar, cast, final, override
+from typing import Any, cast, final, override
 
 from imprint._core import constant as c
 from imprint._core.types import DumpMSG
@@ -191,28 +191,21 @@ class DumpException:
         return repr(val)
 
 
-P = ParamSpec("P")
-R = TypeVar("R")
-
-
-def error_handler() -> Callable[[Callable[P, R]], Callable[P, R | None]]:
+def error_handler[**P, R](func: Callable[P, R]) -> Callable[P, R | None]:
     """Catch unhandled exceptions in decorated functions, dump exception context, and return None.
 
     Returns
     -------
-    Callable[[Callable[P, R]], Callable[P, R | None]]
+    Callable[P, R | None]
         Decorator function wrapping target callables with an exception-handling try/except block.
     """
 
-    def decorator(func: Callable[P, R]) -> Callable[P, R | None]:
-        @wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
-            dumper: DumpException = DumpException()
-            try:
-                return func(*args, **kwargs)
-            except Exception:
-                dumper.dump_exception()
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
+        dumper: DumpException = DumpException()
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            dumper.dump_exception()
 
-        return wrapper
-
-    return decorator
+    return wrapper

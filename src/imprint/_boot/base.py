@@ -15,10 +15,10 @@ from imprint._boot.configs import FootprintBatch, RiskManagementBatch
 from imprint._core.configs import (
     Configuration,
     Footprint,
+    MemoryLayout,
     Percent,
     RiskManagement,
     Setup,
-    SharedMemorySegments,
 )
 from imprint._core.footprint import StrategyEngine
 from imprint._core.pipeline.executing import ExecutionEngine
@@ -63,11 +63,11 @@ class Base(ABC):
         Compiled sequence of risk management configurations.
     _other_configs : list[Sequence[Configuration]]
         Additional auxiliary configuration sequences.
-    _segments : list[SharedMemorySegments]
+    _segments : list[MemoryLayout]
         Shared memory IPC segment descriptors.
     _configs : list[list[Configuration]]
         Aggregated configuration matrices grouped per engine instance.
-    _kwargs : dict[str, list[list[Configuration]] | SharedMemorySegments]
+    _kwargs : dict[str, list[list[Configuration]] | MemoryLayout]
         Keyword arguments payload passed to the core execution process.
     _init_complete : bool
         Flag indicating whether initialization completed successfully.
@@ -84,10 +84,10 @@ class Base(ABC):
     _risk_managements: list[RiskManagement] = field(init=False)
     _other_configs: list[Sequence[Configuration]] = field(init=False)
 
-    _segments: list[SharedMemorySegments] = field(init=False)
+    _segments: list[MemoryLayout] = field(init=False)
     _configs: list[list[Configuration]] = field(init=False)
-    _kwargs: dict[str, list[list[Configuration]] | SharedMemorySegments] = (
-        field(init=False)
+    _kwargs: dict[str, list[list[Configuration]] | MemoryLayout] = field(
+        init=False
     )
     _init_complete: bool = field(init=False)
 
@@ -124,7 +124,7 @@ class Base(ABC):
                 [config for config in configs if config is not None]
             )
 
-        self._kwargs[KwgsKeys.Configs.name] = self._configs
+        self._kwargs[KwgsKeys.Configs] = self._configs
 
         for obj in self._segments:
             self._kwargs[obj.__class__.__name__] = obj
@@ -215,8 +215,8 @@ class Base(ABC):
                 _.max_loss_balance,
                 _.tp_dev,
                 _.sl_dev,
-                _.pass_execute_signal_if_timer_ms_exepired,
-                _.pass_signal_if_analysis_time_big,
+                _.expiration_signal_time,
+                _.pass_signal_time,
                 fillvalue=None,
             ):
                 rm: RiskManagement = (
@@ -237,9 +237,9 @@ class Base(ABC):
                 if isinstance(sl, Percent):
                     rm.sl_dev = sl
                 if isinstance(st, int):
-                    rm.pass_execute_signal_if_timer_ms_exepired = st
+                    rm.expiration_signal_time = st
                 if isinstance(at, int):
-                    rm.pass_signal_if_analysis_time_big = at
+                    rm.pass_signal_time = at
 
     @abstractmethod
     def _post_init(self) -> None:
@@ -281,7 +281,7 @@ class Base(ABC):
             return None
 
     @final
-    @error_handler()
+    @error_handler
     def run_core(self) -> None:
         """Execute the core trading engine lifecycle if initialization completed successfully."""
         if self._init_complete:

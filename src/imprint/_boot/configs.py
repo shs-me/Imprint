@@ -134,9 +134,9 @@ class RiskManagementBatch:
         Sequence of take-profit price deviation percentages.
     sl_dev : list[Percent], default=[Percent(5.0)]
         Sequence of stop-loss price deviation percentages.
-    pass_signal_if_analysis_time_big : list[int], default=[50000]
+    pass_signal_time : list[int], default=[50000]
         Sequence of execution thresholds in microseconds; bypasses signal if analysis duration exceeds limit.
-    pass_execute_signal_if_timer_ms_exepired : list[int], default=[1000]
+    expiration_signal_time : list[int], default=[1000]
         Sequence of timeout thresholds in milliseconds; drops execution signal if timer expires.
     """
 
@@ -149,9 +149,5 @@ class RiskManagementBatch:
     entry_qty: list[Percent] = field(default_factory=lambda: [Percent(1.0)])
     tp_dev: list[Percent] = field(default_factory=lambda: [Percent(5.0)])
     sl_dev: list[Percent] = field(default_factory=lambda: [Percent(5.0)])
-    pass_signal_if_analysis_time_big: list[int] = field(
-        default_factory=lambda: [50_000]
-    )
-    pass_execute_signal_if_timer_ms_exepired: list[int] = field(
-        default_factory=lambda: [1000]
-    )
+    pass_signal_time: list[int] = field(default_factory=lambda: [50_000])
+    expiration_signal_time: list[int] = field(default_factory=lambda: [1000])

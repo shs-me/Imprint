@@ -61,7 +61,14 @@ class Live(Base):
     @override
     def _post_init(self) -> None:
         """Initialize shared memory, prepare coin specifications, and configure live account state."""
-        self._segments.append(MarketDataStream(count_reader=1))
+        self._segments.append(
+            MarketDataStream(
+                data_size=256,
+                cell_amount=10_000,
+                count_reader=1,
+                cast_to_int64=False,
+            )
+        )
 
         self._other_configs.append([self._connector])
 

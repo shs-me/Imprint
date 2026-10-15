@@ -7,12 +7,10 @@ from typing import final, override
 import numpy as np
 from numba import njit
 from numpy import int64
-from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.exchange_sim.account.position import Position
-
-EquityT, EquityO, EquityH, EquityL, EquityC = 0, 1, 2, 3, 4
+from imprint._core.utils.base import EquityHistoryArray
 
 
 @dataclass(slots=True)
@@ -45,8 +43,8 @@ class Manager(Position, ABC):
     bar_count: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    equity_history: NDArray[int64] = field(
-        default_factory=lambda: np.zeros((0, 0), dtype=int64), init=False
+    equity_history: EquityHistoryArray = field(
+        default_factory=lambda: EquityHistoryArray(0), init=False
     )
     base_timestamp: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
@@ -74,9 +72,7 @@ class Manager(Position, ABC):
         ) // self.timeframe[0]
 
         if self.bar_count[0] != self.equity_history.shape[0]:
-            self.equity_history = np.zeros(
-                (self.bar_count[0], EquityC + 1), dtype=int64
-            )
+            self.equity_history = EquityHistoryArray(self.bar_count[0])
         else:
             self.equity_history.fill(0)
 
@@ -99,7 +95,7 @@ class Manager(Position, ABC):
 def update_equity_ohlc(
     trade_timestamp: int,
     current_equity: int,
-    equity_history: NDArray[int64],
+    equity_history: EquityHistoryArray,
     base_timestamp: memoryview,
     timeframe: memoryview,
 ) -> None:
@@ -134,31 +130,31 @@ def update_equity_ohlc(
     max_bars: int = equity_history.shape[0]
 
     if 0 <= bar < max_bars:
-        if equity_history[bar, EquityT] == 0:
+        if equity_history[bar, c.EH_Timestamp] == 0:
             bar_open_time: int = base_timestamp[0] + (bar * timeframe[0])
             eh[bar, :] = bar_open_time, ce, ce, ce, ce
 
             prev_bar: int = bar - 1
-            prev_eq: int = ce
+            prev_eq: int64 = int64(ce)
             while prev_bar >= 0:
                 if equity_history[prev_bar, 0] == 0:
                     prev_bar -= 1
                 else:
-                    prev_eq = equity_history[prev_bar, EquityC]
+                    prev_eq = equity_history[prev_bar, c.EH_Close]
                     prev_bar += 1
                     break
 
             while 0 <= prev_bar < bar:
-                eh[prev_bar, EquityT] = base_timestamp[0] + (
+                eh[prev_bar, c.EH_Timestamp] = base_timestamp[0] + (
                     prev_bar * timeframe[0]
                 )
-                eh[prev_bar, EquityO:] = prev_eq, prev_eq, prev_eq, prev_eq
+                eh[prev_bar, c.EH_Open :] = prev_eq, prev_eq, prev_eq, prev_eq
                 prev_bar += 1
         else:
-            equity_history[bar, EquityH] = max(
-                equity_history[bar, EquityH], current_equity
+            equity_history[bar, c.EH_High] = max(
+                equity_history[bar, c.EH_High], current_equity
             )
-            equity_history[bar, EquityL] = min(
-                equity_history[bar, EquityL], current_equity
+            equity_history[bar, c.EH_Low] = min(
+                equity_history[bar, c.EH_Low], current_equity
             )
-            equity_history[bar, EquityC] = current_equity
+            equity_history[bar, c.EH_Close] = current_equity

@@ -2,14 +2,12 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import final, override
 
-import numpy as np
 from numba import njit
-from numpy import int64
-from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.exchange_sim.account import Account
 from imprint._core.settings import StatusCodes as scs
+from imprint._core.utils.base import ExecutedOrdersArray, OrderBookArray
 
 
 @dataclass(slots=True)
@@ -30,14 +28,14 @@ class Order(Account, ABC):
         Current write head / row cursor within ``order_book``.
     """
 
-    executed_orders: NDArray[int64] = field(
-        default_factory=lambda: np.zeros((0, 0), dtype=np.int64), init=False
+    executed_orders: ExecutedOrdersArray = field(
+        default_factory=lambda: ExecutedOrdersArray(0), init=False
     )
     eoRow: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    order_book: NDArray[int64] = field(
-        default_factory=lambda: np.zeros((0, 0), dtype=int64), init=False
+    order_book: OrderBookArray = field(
+        default_factory=lambda: OrderBookArray(0), init=False
     )
     order_id: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
@@ -53,14 +51,12 @@ class Order(Account, ABC):
         limit = self.manager.cfgAccount.active_order_limit
 
         if limit != self.order_book.shape[0]:
-            self.order_book = np.zeros((limit, c.OB_ConstantCount), dtype=int64)
+            self.order_book = OrderBookArray(limit)
         else:
             self.order_book.fill(0)
 
         if limit != self.executed_orders.shape[0]:
-            self.executed_orders = np.zeros(
-                (limit, c.TP_ConstantCount), dtype=int64
-            )
+            self.executed_orders = ExecutedOrdersArray(limit)
         else:
             self.executed_orders.fill(0)
 
@@ -112,7 +108,7 @@ class Order(Account, ABC):
 
 
 @njit(cache=True)
-def compact_order_book(obRow: memoryview, ob: NDArray[int64]) -> None:
+def compact_order_book(obRow: memoryview, ob: OrderBookArray) -> None:
     """Compact the order book in-place by removing canceled or filled orders.
 
     Parameters

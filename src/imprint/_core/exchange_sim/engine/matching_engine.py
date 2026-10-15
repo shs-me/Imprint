@@ -12,11 +12,11 @@ from numba.experimental import (
     jitclass,  # pyright: ignore[reportUnknownVariableType, reportPrivateImportUsage]
 )
 from numpy import int64
-from numpy.typing import NDArray
 
 from imprint._core import constant as c
 from imprint._core.exchange_sim.engine.order_stream import compact_order_book
 from imprint._core.exchange_sim.engine.user_data_stream import UserData
+from imprint._core.utils.base import ExecutedOrdersArray, OrderBookArray
 
 
 @dataclass(slots=True)
@@ -111,17 +111,17 @@ class JitMatchingEngine:
 
     def __init__(
         self,
-        order_book: NDArray[int64],
+        order_book: OrderBookArray,
         order_id_buf: memoryview,
         obRow: memoryview,
-        executed_orders: NDArray[int64],
+        executed_orders: ExecutedOrdersArray,
         eoRow: memoryview,
         slippage: memoryview,
     ) -> None:
-        self.order_book: NDArray[int64] = order_book
+        self.order_book: OrderBookArray = order_book
         self.order_id_buf: memoryview = order_id_buf
         self.obRow: memoryview = obRow
-        self.executed_orders: NDArray[int64] = executed_orders
+        self.executed_orders: ExecutedOrdersArray = executed_orders
         self.eoRow: memoryview = eoRow
         self.slippage: memoryview = slippage
 
@@ -145,9 +145,9 @@ class JitMatchingEngine:
         """
         client_in_priority: bool = False
         for row in range(self.obRow[0]):
-            order_timestamp: int = self.order_book[row, c.OB_timestamp]
-            order_param: int = self.order_book[row, c.OB_orderParam]
-            client_order_id: int = self.order_book[row, c.OB_clientOrderID]
+            order_timestamp: int64 = self.order_book[row, c.OB_timestamp]
+            order_param: int64 = self.order_book[row, c.OB_orderParam]
+            order_client_id: int64 = self.order_book[row, c.OB_clientOrderID]
 
             executed: bool = False
             if (trade_timestamp >= order_timestamp) and (
@@ -158,9 +158,9 @@ class JitMatchingEngine:
                         trade_nPrice=trade_nPrice,
                         order_nPrice=self.order_book[row, c.OB_nPrice],
                         order_param=order_param,
-                        nQty=self.order_book[row, c.OB_nQty],
+                        order_nQty=self.order_book[row, c.OB_nQty],
                         order_id=self.order_id_buf[0],
-                        client_order_id=client_order_id,
+                        order_client_id=order_client_id,
                     )
                 )
                 or (
@@ -168,7 +168,7 @@ class JitMatchingEngine:
                     and self._processing_cancel_order(
                         trade_timestamp=trade_timestamp,
                         order_id=self.order_id_buf[0],
-                        client_order_id=client_order_id,
+                        order_client_id=order_client_id,
                     )
                 )
             ):
@@ -191,11 +191,11 @@ class JitMatchingEngine:
         self,
         trade_timestamp: int,
         trade_nPrice: int,
-        order_nPrice: int,
-        order_param: int,
-        nQty: int,
+        order_nPrice: int64,
+        order_param: int64,
+        order_nQty: int64,
         order_id: int,
-        client_order_id: int,
+        order_client_id: int64,
     ) -> bool:
         """Evaluate and execute new market, limit, or stop trigger orders.
 
@@ -250,10 +250,10 @@ class JitMatchingEngine:
         self.executed_orders[self.eoRow[0], c.TP_order_param] = order_param
         self.executed_orders[self.eoRow[0], c.TP_order_id] = order_id
         self.executed_orders[self.eoRow[0], c.TP_client_order_id] = (
-            client_order_id
+            order_client_id
         )
         self.executed_orders[self.eoRow[0], c.TP_nPrice] = nPrice
-        self.executed_orders[self.eoRow[0], c.TP_nQty] = nQty
+        self.executed_orders[self.eoRow[0], c.TP_nQty] = order_nQty
         self.executed_orders[self.eoRow[0], c.TP_nCommission] = 0
         self.executed_orders[self.eoRow[0], c.TP_nMAE] = 0
         self.executed_orders[self.eoRow[0], c.TP_nMFE] = 0
@@ -279,7 +279,7 @@ class JitMatchingEngine:
         return nPrice + (slipageTicks if is_buy else -slipageTicks)
 
     def _processing_cancel_order(
-        self, trade_timestamp: int, order_id: int, client_order_id: int
+        self, trade_timestamp: int, order_id: int, order_client_id: int64
     ) -> bool:
         """Cancel an existing active order matching the client order ID and log cancellation.
 
@@ -298,10 +298,10 @@ class JitMatchingEngine:
             True if the order was found and canceled, otherwise False.
         """
         for row in range(self.obRow[0]):
-            if self.order_book[row, c.OB_clientOrderID] == client_order_id:
-                order_param: int = self.order_book[row, c.OB_orderParam]
-                nPrice: int = self.order_book[row, c.OB_nPrice]
-                nQty: int = self.order_book[row, c.OB_nQty]
+            if self.order_book[row, c.OB_clientOrderID] == order_client_id:
+                order_param: int64 = self.order_book[row, c.OB_orderParam]
+                nPrice: int64 = self.order_book[row, c.OB_nPrice]
+                nQty: int64 = self.order_book[row, c.OB_nQty]
 
                 order_param &= ~(c.OF_NEW)
                 order_param |= c.OF_CANCELED
@@ -316,7 +316,7 @@ class JitMatchingEngine:
                 )
                 self.executed_orders[self.eoRow[0], c.TP_order_id] = order_id
                 self.executed_orders[self.eoRow[0], c.TP_client_order_id] = (
-                    client_order_id
+                    order_client_id
                 )
                 self.executed_orders[self.eoRow[0], c.TP_nPrice] = nPrice
                 self.executed_orders[self.eoRow[0], c.TP_nQty] = nQty

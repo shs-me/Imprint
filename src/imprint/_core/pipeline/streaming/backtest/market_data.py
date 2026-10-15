@@ -58,7 +58,7 @@ class MarketDataStream:
     def symbol(self) -> str:
         return self.manager.cfgCoin.symbol
 
-    @node_handler()
+    @node_handler
     def run(self) -> None:
         """Execute the streaming loop, dispatching historical trades sequentially to the backtest buffer."""
         _ = self.manager.cfgMarketDataStream
@@ -88,7 +88,7 @@ class MarketDataStream:
                     self.change_data()
             else:
                 while _.ring_buf.lag_not_is_safe():
-                    time.sleep(0.001)
+                    time.sleep(0.01)
 
                 _.set_data_in_backtest(
                     nPrice=self.data[self.read_row, 0],

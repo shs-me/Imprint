@@ -123,6 +123,7 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
 
         self.mask = self.at_max_row - 1
         self.filled = np.zeros(self.at_max_row, dtype=np.bool_)
+        self.engine.save_trade_time = True
 
     @override
     def alarm_clock(self) -> None:

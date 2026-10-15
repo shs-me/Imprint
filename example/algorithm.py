@@ -28,6 +28,9 @@ class IntraDay(StrategyEngine):
             return
 
         bar = self.fp[idx]
+        if bar.is_empty:
+            return
+
         idy = idYmin - bar.ind.high.id
 
         bid, ask = bar.base[idy, :]
