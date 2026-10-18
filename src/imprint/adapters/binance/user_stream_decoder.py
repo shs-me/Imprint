@@ -7,7 +7,7 @@ from typing import override
 from msgspec import Raw, Struct
 from websockets import ClientConnection
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.utils.base_adapters import (
     BalanceData,
     OrderData,

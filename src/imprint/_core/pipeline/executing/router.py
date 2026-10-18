@@ -13,24 +13,14 @@ class ExecutingRouter:
     """Abstract router managing backtest and live execution agents.
 
     Routes execution events and states between a pipeline's node manager and the
-    appropriate underlying backtest or live execution agent.
-
-    Parameters
-    ----------
-    manager : NodeManager
-        Process manager controlling the execution setup, configuration, and pipeline nodes.
-    execution_event : multiprocessing.synchronize.Event
-        Synchronization event signaling live execution state changes.
-    wss_sem : multiprocessing.synchronize.Semaphore
-        Semaphore regulating concurrent WebSockets connections and rate limits.
-    """
+    appropriate underlying backtest or live execution agent."""
 
     manager: NodeManager
     execution_event: Event
     wss_sem: Semaphore
 
     def run(self) -> None:
-        is_backtesting = self.manager.cfgSetup.backtesting
+        is_backtesting = self.manager.cfgSetup.is_backtesting
 
         if is_backtesting:
             agent = BacktestAgent(manager=self.manager)

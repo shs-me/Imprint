@@ -5,7 +5,7 @@ import numpy as np
 from numpy import int64
 from numpy.typing import NDArray
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._vis.settings import OHLC
 
 

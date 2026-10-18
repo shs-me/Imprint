@@ -1,7 +1,7 @@
 from numpy import datetime64, float64, int64
 from numpy.typing import NDArray
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 
 
 def analyze_equity_history(

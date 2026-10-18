@@ -17,7 +17,7 @@ class UserData(Order, ABC):
     ----------
     uds_data_buf : memoryview
         Shared memory buffer storing serialized user data items.
-    uds_data_size : int
+    uds_cell_size : int
         Capacity of each slot in the user data ring buffer in bytes.
     uds_data_header_buf : memoryview
         Header buffer tracking payload lengths per cell slot.
@@ -28,7 +28,7 @@ class UserData(Order, ABC):
     """
 
     uds_data_buf: memoryview = field(init=False)
-    uds_data_size: int = field(init=False)
+    uds_cell_size: int = field(init=False)
     uds_data_header_buf: memoryview = field(init=False)
     uds_wid_buf: memoryview = field(init=False)
     uds_cell_amount: int = field(init=False)
@@ -37,9 +37,9 @@ class UserData(Order, ABC):
     def __post_init__(self) -> None:
         Order.__post_init__(self)
 
-        uds = self.manager.cfgUserDataStream.ring_buf
+        uds = self.manager.mlUserDataStream.ring_buf
         self.uds_data_buf = uds.data_buf
-        self.uds_data_size = uds.data_size
+        self.uds_cell_size = uds.cell_size
         self.uds_data_header_buf = uds.data_header_buf
         self.uds_wid_buf = uds.wid_buf
         self.uds_cell_amount = uds.cell_amount

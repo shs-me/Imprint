@@ -39,6 +39,10 @@ jobs:
         run: |
           ruff check .
 
+      - name: Run basedpyright
+        run: |
+          basedpyright
+
       - name: Run test
         run: |
           pytest

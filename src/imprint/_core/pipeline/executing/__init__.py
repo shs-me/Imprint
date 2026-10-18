@@ -1,7 +1,7 @@
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
-from imprint._core.ipc import NodeManager, supervisor
+from imprint._core.ipc import NodeManager, dispatcher
 from imprint._core.pipeline.executing.router import ExecutingRouter
 from imprint._core.pipeline.executing.strategy import ExecutionEngine
 
@@ -11,7 +11,7 @@ __all__ = [
 ]
 
 
-@supervisor()
+@dispatcher()
 def run_executing(
     execution_event: Event, wss_sem: Semaphore, **kwargs: Any
 ) -> None:

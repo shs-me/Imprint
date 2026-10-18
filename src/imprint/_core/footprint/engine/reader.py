@@ -12,8 +12,8 @@ from numba.experimental import (
 from numpy import int64, intp
 from numpy.typing import NDArray
 
+import imprint._core.constant as c
 import imprint._core.footprint.engine.writer as w
-from imprint._core import constant as c
 from imprint._core.footprint.engine.base import JitStorage
 from imprint._core.utils import FPArray
 
@@ -90,27 +90,14 @@ class Reader(w.Writer):
 
     @final
     def bbox_is_read(self) -> bool:
-        """Check if the active footprint's bounding box has been fully evaluated.
-
-        Returns
-        -------
-        bool
-            True if the bounding box represents a fully evaluated state, False otherwise.
-        """
+        """Check if the active footprint's bounding box has been fully evaluated."""
         return (self.idYmin[0] == self.fp.con.fp_rows[0]) and (
             self.idYmax[0] == 0
         )
 
     @final
     def is_bbox_mode(self) -> bool:
-        """Determine if the engine is operating in bounding-box block update mode.
-
-        Returns
-        -------
-        bool
-            True if tick-by-tick real-time analysis is disabled and no re-initialization
-            session or bar bounds are requested.
-        """
+        """Determine if the engine is operating in bounding-box block update mode."""
         return (
             (not self.strategy.tick_by_tick_analyze)
             and (not (self.re_init & c.RIF_session))
@@ -158,42 +145,7 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
 
 @jitclass(spec)  # pyright: ignore[reportCallIssue, reportUntypedClassDecorator]
 class JitFootprintAnalyzer:
-    """Numba JIT-compiled engine responsible for numerical footprint analysis.
-
-    Parameters
-    ----------
-    storage : JitStorage
-        Underlying memory buffer and header repository storing raw and analyzed state.
-    atr_period : int
-        Lookback window for Average True Range calculation.
-    park_period : int
-        Lookback window for Parkinson volatility computation.
-    ma_vol_period : int
-        Moving average period for volume smoothing.
-    ma_ats_period : int
-        Moving average period for average trade size smoothing.
-    ma_count_trade_period : int
-        Moving average period for trade count smoothing.
-    big_cluster_mult : int
-        Multiplicative threshold factor scaled by 10,000 for detecting big clusters.
-
-    Attributes
-    ----------
-    storage : JitStorage
-        Underlying memory buffer and header repository storing raw and analyzed state.
-    atr_period : int
-        Lookback window for Average True Range calculation.
-    park_period : int
-        Lookback window for Parkinson volatility computation.
-    ma_vol_period : int
-        Moving average period for volume smoothing.
-    ma_ats_period : int
-        Moving average period for average trade size smoothing.
-    ma_count_trade_period : int
-        Moving average period for trade count smoothing.
-    big_cluster_mult : int
-        Multiplicative threshold factor scaled by 10,000 for detecting big clusters.
-    """
+    """Numba JIT-compiled engine responsible for numerical footprint analysis."""
 
     def __init__(
         self,
@@ -214,15 +166,7 @@ class JitFootprintAnalyzer:
         self.big_cluster_mult: int = big_cluster_mult
 
     def analyze_bar(self, fp: FPArray, fp_state: FPArray) -> None:
-        """Update microstructural states, OHLC flags, imbalance, and bar Value Area.
-
-        Parameters
-        ----------
-        fp : FPArray
-            2D footprint base array of shape ``(N, M)`` representing volume profile matrix.
-        fp_state : FPArray
-            2D footprint state bitmask array of shape ``(N, M)`` for tracking features and flags.
-        """
+        """Update microstructural states, OHLC flags, imbalance, and bar Value Area."""
         _ = self.storage
         # - - -
         lidx: int = _.lidx[0]
@@ -333,15 +277,7 @@ class JitFootprintAnalyzer:
         """Calculate indicator states and footprint flags upon bar closure.
 
         Computes ATR, Parkinson Volatility, VWAP bands, Point of Control (POC),
-        Value Area (VAH/VAL), and auction state flags on bar close.
-
-        Parameters
-        ----------
-        fp : FPArray
-            2D array of shape ``(N, M)`` storing base footprint volume profile matrix.
-        fp_state : FPArray
-            2D array of shape ``(N, M)`` storing footprint bitmask flags.
-        """
+        Value Area (VAH/VAL), and auction state flags on bar close."""
         _ = self.storage
         # - - -
         lidx: int = _.lidx[0]

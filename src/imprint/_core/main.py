@@ -10,7 +10,7 @@ from types import FunctionType
 from typing import Any
 
 from imprint._core.constant import DIRS_LIST
-from imprint._core.ipc import HostManager, supervisor
+from imprint._core.ipc import HostManager, dispatcher
 from imprint._core.pipeline import run_engine, run_executing, run_streaming
 from imprint._core.settings import LogLevel, ProcsIds
 from imprint._core.types import ProcsData
@@ -18,30 +18,7 @@ from imprint._core.types import ProcsData
 
 @dataclass(slots=True)
 class MainAgent:
-    """Process coordinator responsible for instantiating IPC tools and launching daemon processes.
-
-    Parameters
-    ----------
-    manager : HostManager
-        Active IPC host manager providing logging, state coordination, and configuration.
-    base_kwargs : dict[str, Any]
-        Base keyword arguments passed to all spawned child worker processes.
-
-    Attributes
-    ----------
-    manager : HostManager
-        Active IPC host manager.
-    base_kwargs : dict[str, Any]
-        Base keyword arguments shared across processes.
-    procs : dict[int, ProcsData]
-        Mapping of process identifiers to process metadata and instances.
-    wss_sem : multiprocessing.synchronize.Semaphore
-        Semaphore controlling WebSocket synchronization flow.
-    engine_event : multiprocessing.synchronize.Event
-        Event flag signaling engine state changes or synchronization boundaries.
-    execution_event : multiprocessing.synchronize.Event
-        Event flag signaling execution state transitions.
-    """
+    """Process coordinator responsible for instantiating IPC tools and launching daemon processes."""
 
     manager: HostManager
     base_kwargs: dict[str, Any]
@@ -78,13 +55,7 @@ class MainAgent:
             os.makedirs(dir, exist_ok=True)
 
     def run_procs(self) -> bool:
-        """Spawn configured worker processes and apply initial execution flags.
-
-        Returns
-        -------
-        bool
-            True if all worker processes successfully spawned and initialized; False otherwise.
-        """
+        """Spawn configured worker processes and apply initial execution flags."""
 
         procs_data: list[tuple[FunctionType, int]] = self.get_procs_funcs()
         procs_funcs: list[FunctionType] = [f for f, _ in procs_data]
@@ -106,17 +77,11 @@ class MainAgent:
         return True
 
     def get_procs_funcs(self) -> list[tuple[FunctionType, int]]:
-        """Retrieve the mapping of worker target functions and their corresponding process IDs.
-
-        Returns
-        -------
-        list[tuple[FunctionType, int]]
-            Collection of tuples containing the target callable and its process identifier.
-        """
+        """Retrieve the mapping of worker target functions and their corresponding process IDs."""
         funcs: list[tuple[FunctionType, int]] = []
         funcs.append((run_streaming, ProcsIds.streaming))
         funcs.append((run_engine, ProcsIds.engine))
-        if self.manager.cfgSetup.execution:
+        if self.manager.cfgSetup.with_execution:
             funcs.append((run_executing, ProcsIds.executing))
 
         return funcs
@@ -125,15 +90,6 @@ class MainAgent:
         self, func: FunctionType, proc_id: int, task_id: int
     ) -> dict[str, Any] | None:
         """Inspect target function signature and construct the keyword argument dictionary.
-
-        Parameters
-        ----------
-        func : FunctionType
-            Target worker function to inspect.
-        proc_id : int
-            Unique process identifier from ProcsIds.
-        task_id : int
-            Assigned task identifier associated with the process.
 
         Returns
         -------
@@ -167,15 +123,7 @@ class MainAgent:
         return kwargs
 
     def run_proc(self, func: FunctionType, kwargs: dict[str, Any]) -> None:
-        """Spawn a daemon multiprocessing Process for the given worker function and arguments.
-
-        Parameters
-        ----------
-        func : FunctionType
-            Target worker function executed as the process entry point.
-        kwargs : dict[str, Any]
-            Keyword arguments passed to the worker target function.
-        """
+        """Spawn a daemon multiprocessing Process for the given worker function and arguments."""
         name: str = self.procs[kwargs["proc_id"]]["proc_name"]
         proc: Process = Process(
             target=func,
@@ -190,7 +138,7 @@ class MainAgent:
         )
 
 
-@supervisor(is_main=True)
+@dispatcher(is_main=True)
 def run(**kwargs: Any) -> None:
     """Supervisor-wrapped entry point for spawning the core multiprocessing architecture.
 

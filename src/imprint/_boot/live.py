@@ -3,25 +3,47 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import final, override
+from typing import Any, final, override
 
 from loguru import logger
 
+import imprint._core.configs as cfg
+import imprint.adapters.binance as bn
 from imprint._boot.base import Base, BoundFactory, EngineNotBuilded, InitFailed
-from imprint._boot.configs import Adapters
-from imprint._core.configs import (
-    Account,
-    Coin,
-    Connector,
-    Footprint,
-    MarketDataStream,
-    RiskManagement,
-    Setup,
-)
 from imprint._core.footprint import StrategyEngine
+from imprint._core.ipc.memory_layouts import MarketDataStream
 from imprint._core.pipeline.executing import ExecutionEngine
-from imprint._core.utils import ExchangeREST
+from imprint._core.utils import (
+    AggTradesDecoder,
+    ExchangeREST,
+    OrderEncoder,
+    UserStreamDecoder,
+)
 from imprint._core.utils.base_adapters import ApiNotFoundError
+
+
+@final
+class Adapters(cfg.ValidatedStruct):
+    """Configure protocol adapters and execution behavior for live connectivity.
+
+    Parameters
+    ----------
+    exchange_rest : type[ExchangeREST], default=BinanceFuturesREST
+        REST API client adapter class for exchange interactions.
+    agg_trades_decoder : type[AggTradesDecoder[Any]], default=BinanceAggTradesDecoder
+        Decoder class for aggregate trade WebSocket/REST feeds.
+    user_stream_decoder : type[UserStreamDecoder[Any, Any]], default=BinanceUserStreamDecoder
+        Decoder class for user data streams (balance and orders).
+    order_encoder : type[OrderEncoder[Any]], default=BinanceOrderEncoder
+        Encoder class for translating trade orders to exchange payloads.
+    """
+
+    exchange_rest: type[ExchangeREST] = bn.BinanceFuturesREST
+    agg_trades_decoder: type[AggTradesDecoder[Any]] = bn.BinanceAggTradesDecoder
+    user_stream_decoder: type[UserStreamDecoder[Any, Any]] = (
+        bn.BinanceUserStreamDecoder
+    )
+    order_encoder: type[OrderEncoder[Any]] = bn.BinanceOrderEncoder
 
 
 @dataclass(slots=True)
@@ -52,18 +74,18 @@ class Live(Base):
     _symbol: str
     _leverage: int
     _adapters: Adapters
-    _connector: Connector
+    _connector: cfg.Connector
 
-    _coin: Coin = field(init=False)
-    _account: Account = field(init=False)
+    _coin: cfg.Coin = field(init=False)
+    _account: cfg.Account = field(init=False)
     _rest: ExchangeREST = field(init=False)
 
     @override
     def _post_init(self) -> None:
         """Initialize shared memory, prepare coin specifications, and configure live account state."""
-        self._segments.append(
+        self._memory_layouts.append(
             MarketDataStream(
-                data_size=256,
+                cell_size=256,
                 cell_amount=10_000,
                 count_reader=1,
                 cast_to_int64=False,
@@ -85,7 +107,7 @@ class Live(Base):
         # - - -
         Base._prepare_setup_config(self)
 
-        setup: Setup = self._setups[0]
+        setup: cfg.Setup = self._setups[0]
         setup.agg_trades_decoder_module = _.agg_trades_decoder.__module__
         setup.agg_trades_decoder_class_name = _.agg_trades_decoder.__name__
         setup.user_stream_decoder_module = _.user_stream_decoder.__module__
@@ -94,11 +116,11 @@ class Live(Base):
         setup.order_encoder_class_name = _.order_encoder.__name__
         setup.exchange_rest_module = _.exchange_rest.__module__
         setup.exchange_rest_class_name = _.exchange_rest.__name__
-        setup.backtesting = False
+        setup.is_backtesting = False
 
     def _prepare_coin_config(self) -> None:
         """Fetch and validate tick size and lot size market metadata from exchange REST API."""
-        self._coin = Coin(symbol=self._symbol)
+        self._coin = cfg.Coin(symbol=self._symbol)
 
         self._rest = self._adapters.exchange_rest(
             logger=logger, symbol=self._coin.symbol
@@ -123,7 +145,7 @@ class Live(Base):
 
     def _prepare_account_config(self) -> None:
         """Validate minimum order size, configure exchange leverage, and fetch remote account balance."""
-        self._account = Account(leverage=self._leverage)
+        self._account = cfg.Account(leverage=self._leverage)
 
         self._account.min_order_size = self._rest.min_order_size
         if not self._account.min_order_size:
@@ -160,48 +182,22 @@ class LiveEngine(Live):  # pyright: ignore[reportUninitializedInstanceVariable]
 @final
 @dataclass(slots=True)
 class LiveBuilder:
-    """Fluent builder for configuring and instantiating live trading engines.
-
-    Parameters
-    ----------
-    symbol : str
-        Target trading symbol.
-    leverage : int
-        Account leverage multiplier.
-    with_execution : bool
-        Whether to enable live order execution and remote balance fetching.
-
-    Attributes
-    ----------
-    _adapters : Adapters
-        Configured protocol adapters.
-    _connector : Connector
-        Configured network connector.
-    _footprint : Footprint
-        Configured footprint parameters.
-    _risk_management : RiskManagement
-        Configured risk management rules.
-    _algorithm : type[StrategyEngine]
-        Configured strategy algorithm class.
-    _execution : type[ExecutionEngine]
-        Configured execution engine class.
-    _engine : LiveEngine | None
-        Instantiated live engine, or None if not yet built.
-    """
+    """Fluent builder for configuring and instantiating live trading engines."""
 
     symbol: str
     leverage: int
     with_execution: bool
+    pass_debug_logs: bool
 
     _adapters: Adapters = field(default_factory=lambda: Adapters(), init=False)
-    _connector: Connector = field(
-        default_factory=lambda: Connector(), init=False
+    _connector: cfg.Connector = field(
+        default_factory=lambda: cfg.Connector(), init=False
     )
-    _footprint: Footprint = field(
-        default_factory=lambda: Footprint(), init=False
+    _footprint: cfg.Footprint = field(
+        default_factory=lambda: cfg.Footprint(), init=False
     )
-    _risk_management: RiskManagement = field(
-        default_factory=lambda: RiskManagement(), init=False
+    _risk_management: cfg.RiskManagement = field(
+        default_factory=lambda: cfg.RiskManagement(), init=False
     )
     _algorithm: type[StrategyEngine] = field(init=False)
     _execution: type[ExecutionEngine] = field(init=False)
@@ -219,7 +215,7 @@ class LiveBuilder:
         return BoundFactory(Adapters, self, "_adapters")  # pyright: ignore[ reportReturnType]
 
     @property
-    def connector(self) -> type[Connector]:
+    def connector(self) -> type[cfg.Connector]:
         """Bind and configure exchange network endpoints and URLs.
 
         Returns
@@ -227,10 +223,10 @@ class LiveBuilder:
         BoundFactory
             Factory interface for setting connector attributes.
         """
-        return BoundFactory(Connector, self, "_connector")  # pyright: ignore[ reportReturnType]
+        return BoundFactory(cfg.Connector, self, "_connector")  # pyright: ignore[ reportReturnType]
 
     @property
-    def footprint(self) -> type[Footprint]:
+    def footprint(self) -> type[cfg.Footprint]:
         """Bind and configure live footprint aggregation parameters.
 
         Returns
@@ -238,10 +234,10 @@ class LiveBuilder:
         BoundFactory
             Factory interface for setting footprint attributes.
         """
-        return BoundFactory(Footprint, self, "_footprint")  # pyright: ignore[ reportReturnType]
+        return BoundFactory(cfg.Footprint, self, "_footprint")  # pyright: ignore[ reportReturnType]
 
     @property
-    def risk_management(self) -> type[RiskManagement]:
+    def risk_management(self) -> type[cfg.RiskManagement]:
         """Bind and configure live risk management limits and execution timeouts.
 
         Returns
@@ -249,25 +245,12 @@ class LiveBuilder:
         BoundFactory
             Factory interface for setting risk management attributes.
         """
-        return BoundFactory(RiskManagement, self, "_risk_management")  # pyright: ignore[ reportReturnType]
+        return BoundFactory(cfg.RiskManagement, self, "_risk_management")  # pyright: ignore[ reportReturnType]
 
     def strategy(
         self, algorithm: type[StrategyEngine], execution: type[ExecutionEngine]
     ) -> LiveBuilder:
-        """Assign the strategy algorithm and execution engine to the live builder.
-
-        Parameters
-        ----------
-        algorithm : type[StrategyEngine]
-            Strategy engine algorithm class.
-        execution : type[ExecutionEngine]
-            Execution engine class.
-
-        Returns
-        -------
-        LiveBuilder
-            The builder instance for method chaining.
-        """
+        """Assign the strategy algorithm and execution engine to the live builder."""
         self._algorithm = algorithm
         self._execution = execution
         return self
@@ -280,6 +263,7 @@ class LiveBuilder:
             _footprint=self._footprint,
             _risk_management=self._risk_management,
             _with_execution=self.with_execution,
+            _pass_debug_logs=self.pass_debug_logs,
             _symbol=self.symbol,
             _leverage=self.leverage,
             _adapters=self._adapters,
@@ -289,11 +273,6 @@ class LiveBuilder:
     @property
     def engine(self) -> LiveEngine:
         """Retrieve the built live engine instance.
-
-        Returns
-        -------
-        LiveEngine
-            Configured live engine instance.
 
         Raises
         ------

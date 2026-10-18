@@ -30,7 +30,7 @@ class StreamingRouter:
     execution_event: Event
 
     def run(self) -> None:
-        if self.manager.cfgSetup.backtesting:
+        if self.manager.cfgSetup.is_backtesting:
             from imprint._core.pipeline.streaming.backtest import BacktestAgent
 
             agent = BacktestAgent(manager=self.manager)

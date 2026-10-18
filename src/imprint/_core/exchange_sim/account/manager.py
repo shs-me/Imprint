@@ -8,7 +8,7 @@ import numpy as np
 from numba import njit
 from numpy import int64
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.exchange_sim.account.position import Position
 from imprint._core.utils.base import EquityHistoryArray
 

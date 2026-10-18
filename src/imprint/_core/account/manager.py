@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import override
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.account.risk_management import RiskManagement
 from imprint._core.settings import PositionFSM
 

@@ -5,7 +5,12 @@ from imprint import pct, tf
 
 
 def live():
-    imp = imprint.live(symbol="DASHUSDT", leverage=20, with_execution=True)
+    imp = imprint.live(
+        symbol="DASHUSDT",
+        leverage=20,
+        with_execution=True,
+        pass_debug_logs=False,
+    )
     imp.connector(
         base_rest_url="https://demo-fapi.binance.com",
         market_data_stream_url="wss://demo-fstream.binance.com/market/ws/dashusdt@aggTrade",
@@ -33,8 +38,9 @@ def backtest():
         tick_size=["0.01"],
         lot_size=["0.001"],
         start_date=["2026-01-01"],
-        end_date=["2026-01-01", "2026-01-01", "2026-01-07", "2026-01-07"],
+        end_date=["2026-01-01", "2026-01-07"],
         with_execution=True,
+        pass_debug_logs=False,
     )
     imp.account(
         leverage=[50],
@@ -57,7 +63,7 @@ def backtest():
         expiration_signal_time=[1000],
     )
     imp.footprint(
-        timeframe=[tf.M1],
+        timeframe=[tf.M5],
         step_tick=[5],
         state=[True],
         ctrade=[True],

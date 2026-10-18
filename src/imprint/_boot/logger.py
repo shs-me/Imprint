@@ -4,8 +4,8 @@ from loguru import logger
 
 import imprint._boot as _iboot
 import imprint._core as _icore
+import imprint._core.constant as c
 import imprint._vis as _ivis
-from imprint._core import constant as c
 
 logger.remove()
 logger.add(

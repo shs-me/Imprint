@@ -17,7 +17,7 @@ class EngineRouter:
     sync: SyncWithExecution = field(init=False)
 
     def __post_init__(self) -> None:
-        self.is_backtest = self.manager.cfgSetup.backtesting
+        self.is_backtest = self.manager.cfgSetup.is_backtesting
         if self.is_backtest:
             from imprint._core.pipeline.engine.backtest import SyncViaSpinLock
 

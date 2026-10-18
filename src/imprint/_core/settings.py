@@ -7,7 +7,7 @@ class KwgsKeys(StrEnum):
     """String keys for the main process dictionary"""
 
     Configs = auto()
-    SegmentConfigs = auto()
+    MemoryLayouts = auto()
     Segments = auto()
     MainTools = auto()
     ShmName = auto()

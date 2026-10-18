@@ -4,7 +4,7 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import final, override
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.account.base import Base
 
 

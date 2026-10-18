@@ -1,13 +1,14 @@
 import time
 from dataclasses import dataclass
-from typing import override
+from typing import final, override
 
 from imprint._core.footprint import SyncWithExecution
 from imprint._core.pipeline.engine.base import Base
 
 
+@final
 @dataclass(slots=True)
-class SyncViaSpinLock(SyncWithExecution):
+class SyncViaSpinLock(SyncWithExecution):  # pyright: ignore[reportUninitializedInstanceVariable]
     """Synchronization mechanism via a spin lock for backtesting execution."""
 
     @override
@@ -15,8 +16,9 @@ class SyncViaSpinLock(SyncWithExecution):
         """Synchronize strategy state with execution without blocking."""
 
 
+@final
 @dataclass(slots=True)
-class Backtest(Base):
+class Backtest(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
     """Backtesting execution engine processing historical market data ticks."""
 
     @override
@@ -26,13 +28,7 @@ class Backtest(Base):
 
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
-        """Copy raw trade data into the aggregated trades buffer and advance the write index.
-
-        Parameters
-        ----------
-        raw_data : memoryview
-            Raw binary trade payload from the data stream ring buffer.
-        """
+        """Copy raw trade data into the aggregated trades buffer and advance the write index."""
         self.agg_trades[self.at_wid, :] = raw_data[:]
         self.at_wid: int = (
             self.at_wid + 1 if (self.at_wid + 1) < self.at_max_row else 0

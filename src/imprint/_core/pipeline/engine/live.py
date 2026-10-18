@@ -7,27 +7,17 @@ from typing import final, override
 import numpy as np
 from numpy.typing import NDArray
 
-from imprint._core.configs import RingBuf
 from imprint._core.footprint import SyncWithExecution
+from imprint._core.ipc.memory_layouts import RingBuf
 from imprint._core.pipeline.engine.base import Base
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.utils import AggTradesDecoder
 
 
+@final
 @dataclass(slots=True)
-class SyncViaEvent(SyncWithExecution):
-    """Synchronization mechanism via multiprocessing Event for live execution.
-
-    Parameters
-    ----------
-    execution_event : Event
-        Multiprocessing event flag signaling execution coordination.
-
-    Attributes
-    ----------
-    execution_event : Event
-        Multiprocessing event flag signaling execution coordination.
-    """
+class SyncViaEvent(SyncWithExecution):  # pyright: ignore[reportUninitializedInstanceVariable]
+    """Synchronization mechanism via multiprocessing Event for live execution."""
 
     execution_event: Event
 
@@ -41,46 +31,7 @@ class SyncViaEvent(SyncWithExecution):
 @final
 @dataclass(slots=True)
 class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
-    """Live execution engine processing real-time market data streams and handling gaps.
-
-    Parameters
-    ----------
-    manager : NodeManager
-        Inter-process communication and configuration manager for the engine node.
-    algorithm : StrategyEngine
-        Active strategy container holding the footprint engine and synchronization state.
-    engine_event : Event
-        Multiprocessing event signaling engine state updates.
-
-    Attributes
-    ----------
-    engine_event : Event
-        Multiprocessing event signaling engine state updates.
-    decoder : AggTradesDecoder[None]
-        Decoder instance for parsing raw aggregated trades payloads.
-    gap_stream : RingBuf
-        Ring buffer for receiving gap data streams.
-    have_gap : memoryview
-        Shared memory view indicating whether a data gap is active.
-    gap_first_id : memoryview
-        Shared memory view storing the starting identifier of a data gap.
-    gap_last_id : memoryview
-        Shared memory view storing the ending identifier of a data gap.
-    head_id : int
-        Current head trade identifier in sequence tracking.
-    mid_id : int
-        Intermediate trade identifier bridging trade sequences.
-    tail_id : int
-        Current tail trade identifier in sequence tracking.
-    filled : ndarray of shape (N,)
-        Boolean array tracking processed trade rows in the buffer.
-    mask : int
-        Bitmask computed from maximum row count for fast modulo indexing.
-    pass_lag : int
-        Counter for consecutive analysis lag occurrences.
-    pass_lag_limit : int, default=2
-        Threshold limit for consecutive lagged iterations before triggering status code.
-    """
+    """Live execution engine processing real-time market data streams and handling gaps."""
 
     engine_event: Event
 
@@ -102,7 +53,6 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
 
     @override
     def __post_init__(self) -> None:
-        """Initialize decoders, gap stream buffers, and tracking masks."""
         Base.__post_init__(self)
 
         m_name: str = self.manager.cfgSetup.agg_trades_decoder_module
@@ -115,7 +65,7 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
         )
         self.decoder = decoder_type()
 
-        mdgs = self.manager.cfgMarketDataGapStream
+        mdgs = self.manager.mlMarketDataGapStream
         self.gap_stream = mdgs.ring_buf
         self.have_gap = mdgs.have_gap.view
         self.gap_first_id = mdgs.gap_first_id.view.cast("q")
@@ -134,13 +84,7 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
 
     @override
     def set_trade_data(self, raw_data: memoryview) -> None:
-        """Decode raw trade data, process trade sequence, and check gap streams.
-
-        Parameters
-        ----------
-        raw_data : memoryview
-            Raw binary trade payload from the data stream ring buffer.
-        """
+        """Decode raw trade data, process trade sequence, and check gap streams."""
         self.check_gap_stream()
         trades = self.decoder.decode(raw_data[:])
         self.processing_trades(trades)

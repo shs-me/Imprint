@@ -1,13 +1,13 @@
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
-from imprint._core.ipc import NodeManager, supervisor
+from imprint._core.ipc import NodeManager, dispatcher
 from imprint._core.pipeline.streaming.router import StreamingRouter
 
 __all__ = ["run_streaming"]
 
 
-@supervisor()
+@dispatcher()
 def run_streaming(
     engine_event: Event,
     wss_sem: Semaphore,

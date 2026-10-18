@@ -9,21 +9,11 @@ from typing import final, override
 
 from loguru import logger
 
+import imprint._core.configs as cfg
+import imprint._core.constant as c
 from imprint._boot.base import Base, BoundFactory, EngineNotBuilded, InitFailed
-from imprint._boot.configs import (
-    AccountBatch,
-    FootprintBatch,
-    RiskManagementBatch,
-)
-from imprint._core import constant as c
-from imprint._core.configs import (
-    Account,
-    Coin,
-    MarketDataStream,
-    Percent,
-    Setup,
-)
 from imprint._core.footprint import StrategyEngine
+from imprint._core.ipc.memory_layouts import MarketDataStream
 from imprint._core.pipeline.executing import ExecutionEngine
 from imprint._core.utils import DownloadAggTradesHistory
 from imprint._core.utils.agg_trades_history_downloader import DownloadError
@@ -62,10 +52,10 @@ class Backtest(Base):
     _lot_size: list[str]
     _start_date: list[str]
     _end_date: list[str]
-    _account: AccountBatch
+    _account: cfg.AccountBatch
 
-    _coins: list[Coin] = field(init=False)
-    _accounts: list[Account] = field(init=False)
+    _coins: list[cfg.Coin] = field(init=False)
+    _accounts: list[cfg.Account] = field(init=False)
 
     @override
     def _post_init(self) -> None:
@@ -73,7 +63,7 @@ class Backtest(Base):
         self._coins = []
         self._accounts = []
 
-        self._segments.append(
+        self._memory_layouts.append(
             MarketDataStream(count_reader=2 if self._with_execution else 1)
         )
 
@@ -113,7 +103,7 @@ class Backtest(Base):
         for idx, (st, ed) in enumerate(
             zip_longest(self._start_date, self._end_date, fillvalue=None)
         ):
-            setup: Setup | None = self._list_get(self._setups, idx)
+            setup: cfg.Setup | None = self._list_get(self._setups, idx)
             if not setup:
                 setup = deepcopy(self._setups[-1])
                 self._setups.append(setup)
@@ -128,7 +118,9 @@ class Backtest(Base):
         for sym, ts, ls in zip_longest(
             self._symbol, self._tick_size, self._lot_size, fillvalue=None
         ):
-            coin: Coin = deepcopy(self._coins[-1]) if self._coins else Coin()
+            coin: cfg.Coin = (
+                deepcopy(self._coins[-1]) if self._coins else cfg.Coin()
+            )
             self._coins.append(coin)
 
             if isinstance(sym, str):
@@ -154,8 +146,10 @@ class Backtest(Base):
             _.slippage,
             fillvalue=None,
         ):
-            account = (
-                deepcopy(self._accounts[-1]) if self._accounts else Account()
+            account: cfg.Account = (
+                deepcopy(self._accounts[-1])
+                if self._accounts
+                else cfg.Account()
             )
             self._accounts.append(account)
 
@@ -165,9 +159,9 @@ class Backtest(Base):
                 account.leverage = lev
             if isinstance(mos, float):
                 account.min_order_size = mos
-            if isinstance(mc, Percent):
+            if isinstance(mc, cfg.Percent):
                 account.maker_commission = mc
-            if isinstance(tc, Percent):
+            if isinstance(tc, cfg.Percent):
                 account.taker_commission = tc
             if isinstance(aol, int):
                 account.active_order_limit = aol
@@ -175,7 +169,7 @@ class Backtest(Base):
                 account.scale_prec = scp
             if isinstance(lm, int):
                 account.latency_ms = lm
-            if isinstance(slp, Percent):
+            if isinstance(slp, cfg.Percent):
                 account.slippage = slp
 
     @error_handler
@@ -261,38 +255,7 @@ class BacktestEngine(Backtest):  # pyright: ignore[reportUninitializedInstanceVa
 @final
 @dataclass(slots=True)
 class BacktestBuilder:
-    """Fluent builder for configuring and instantiating multi-symbol backtest engines.
-
-    Parameters
-    ----------
-    symbols : list[str]
-        List of target trading symbols.
-    start_date : list[str]
-        List of backtest start dates in ``YYYY-MM-DD`` format.
-    end_date : list[str]
-        List of backtest end dates in ``YYYY-MM-DD`` format.
-    tick_size : list[str]
-        List of asset price tick sizes.
-    lot_size : list[str]
-        List of asset order quantity lot sizes.
-    with_execution : bool
-        Whether to enable simulated order execution.
-
-    Attributes
-    ----------
-    _account : AccountBatch
-        Configured account parameter batch.
-    _footprint : FootprintBatch
-        Configured footprint parameter batch.
-    _risk_management : RiskManagementBatch
-        Configured risk management parameter batch.
-    _algorithm : list[type[StrategyEngine]]
-        Configured strategy algorithm classes.
-    _execution : list[type[ExecutionEngine]]
-        Configured execution engine classes.
-    _engine : BacktestEngine | None
-        Instantiated backtest engine, or None if not yet built.
-    """
+    """Fluent builder for configuring and instantiating multi-symbol backtest engines."""
 
     symbols: list[str]
     start_date: list[str]
@@ -300,22 +263,23 @@ class BacktestBuilder:
     tick_size: list[str]
     lot_size: list[str]
     with_execution: bool
+    pass_debug_logs: bool
 
-    _account: AccountBatch = field(
-        default_factory=lambda: AccountBatch(), init=False
+    _account: cfg.AccountBatch = field(
+        default_factory=lambda: cfg.AccountBatch(), init=False
     )
-    _footprint: FootprintBatch = field(
-        default_factory=lambda: FootprintBatch(), init=False
+    _footprint: cfg.FootprintBatch = field(
+        default_factory=lambda: cfg.FootprintBatch(), init=False
     )
-    _risk_management: RiskManagementBatch = field(
-        default_factory=lambda: RiskManagementBatch(), init=False
+    _risk_management: cfg.RiskManagementBatch = field(
+        default_factory=lambda: cfg.RiskManagementBatch(), init=False
     )
     _algorithm: list[type[StrategyEngine]] = field(init=False)
     _execution: list[type[ExecutionEngine]] = field(init=False)
     _engine: BacktestEngine | None = field(default=None, init=False)
 
     @property
-    def account(self) -> type[AccountBatch]:
+    def account(self) -> type[cfg.AccountBatch]:
         """Bind and configure account parameters for backtesting.
 
         Returns
@@ -323,10 +287,10 @@ class BacktestBuilder:
         BoundFactory
             Factory interface for setting account batch attributes.
         """
-        return BoundFactory(AccountBatch, self, "_account")  # pyright: ignore[ reportReturnType]
+        return BoundFactory(cfg.AccountBatch, self, "_account")  # pyright: ignore[ reportReturnType]
 
     @property
-    def footprint(self) -> type[FootprintBatch]:
+    def footprint(self) -> type[cfg.FootprintBatch]:
         """Bind and configure footprint chart aggregation parameters.
 
         Returns
@@ -334,10 +298,10 @@ class BacktestBuilder:
         BoundFactory
             Factory interface for setting footprint batch attributes.
         """
-        return BoundFactory(FootprintBatch, self, "_footprint")  # pyright: ignore[ reportReturnType]
+        return BoundFactory(cfg.FootprintBatch, self, "_footprint")  # pyright: ignore[ reportReturnType]
 
     @property
-    def risk_management(self) -> type[RiskManagementBatch]:
+    def risk_management(self) -> type[cfg.RiskManagementBatch]:
         """Bind and configure risk management and execution timeout parameters.
 
         Returns
@@ -345,27 +309,14 @@ class BacktestBuilder:
         BoundFactory
             Factory interface for setting risk management batch attributes.
         """
-        return BoundFactory(RiskManagementBatch, self, "_risk_management")  # pyright: ignore[ reportReturnType]
+        return BoundFactory(cfg.RiskManagementBatch, self, "_risk_management")  # pyright: ignore[ reportReturnType]
 
     def strategy(
         self,
         algorithm: list[type[StrategyEngine]],
         execution: list[type[ExecutionEngine]],
     ) -> BacktestBuilder:
-        """Assign strategy algorithms and execution engines to the backtest builder.
-
-        Parameters
-        ----------
-        algorithm : list[type[StrategyEngine]]
-            Sequence of strategy engine algorithm classes.
-        execution : list[type[ExecutionEngine]]
-            Sequence of execution engine classes.
-
-        Returns
-        -------
-        BacktestBuilder
-            The builder instance for method chaining.
-        """
+        """Assign strategy algorithms and execution engines to the backtest builder."""
         self._algorithm = algorithm
         self._execution = execution
         return self
@@ -385,6 +336,7 @@ class BacktestBuilder:
                 _footprint=self._footprint,
                 _risk_management=self._risk_management,
                 _with_execution=self.with_execution,
+                _pass_debug_logs=self.pass_debug_logs,
                 _symbol=self.symbols,
                 _tick_size=self.tick_size,
                 _lot_size=self.lot_size,
@@ -396,11 +348,6 @@ class BacktestBuilder:
     @property
     def engine(self) -> BacktestEngine:
         """Retrieve the built backtest engine instance.
-
-        Returns
-        -------
-        BacktestEngine
-            Configured backtest engine instance.
 
         Raises
         ------

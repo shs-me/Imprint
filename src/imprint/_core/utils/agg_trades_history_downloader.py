@@ -9,7 +9,7 @@ import numpy as np
 from numpy import int64, void
 from numpy.typing import NDArray
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.utils.base_rest import BaseREST, RestError
 
 
@@ -20,19 +20,6 @@ class DownloadError(Exception):
 @dataclass(slots=True)
 class DownloadAggTradesHistory(BaseREST):
     """Download historical Binance aggregated trades ZIP archives and store as compressed `.npz` arrays.
-
-    Parameters
-    ----------
-    symbol : str
-        Trading pair symbol in uppercase (e.g., ``"BTCUSDT"``).
-    start_date_str : str
-        Start date in ISO 8601 format (``"YYYY-MM-DD"``).
-    end_date_str : str
-        End date in ISO 8601 format (``"YYYY-MM-DD"``).
-    price_mult : int
-        Scaling factor multiplier applied to floating-point prices to store as integer representation.
-    qty_mult : int
-        Scaling factor multiplier applied to floating-point quantities to store as integer representation.
 
     Attributes
     ----------
@@ -160,9 +147,7 @@ class DownloadAggTradesHistory(BaseREST):
         if downloaded_days:
             self.log(f"Downloaded days: {downloaded_days}")
 
-    def _init_session(
-        self,
-    ) -> None:
+    def _init_session(self) -> None:
         self.base_url: str = f"{c.BASE_UM_AGGTRADES_DAILY_URL}/{self.symbol}"
 
         self.start_date = date.fromisoformat(self.start_date_str)
@@ -180,15 +165,7 @@ class DownloadAggTradesHistory(BaseREST):
         os.makedirs(self.data_dir, exist_ok=True)
 
     def _extract_zip(self, zip_path: str, target_csv: str) -> None:
-        """Extract the first archived CSV file from a ZIP bundle and remove the ZIP archive.
-
-        Parameters
-        ----------
-        zip_path : str
-            Filesystem path to the downloaded ZIP archive.
-        target_csv : str
-            Filesystem destination path for the extracted CSV file.
-        """
+        """Extract the first archived CSV file from a ZIP bundle and remove the ZIP archive."""
         with zipfile.ZipFile(zip_path, "r") as z:
             extracted_name = z.namelist()[0]
             z.extract(extracted_name, self.data_dir)
@@ -198,13 +175,7 @@ class DownloadAggTradesHistory(BaseREST):
             os.remove(zip_path)
 
     def _convert_csv_to_npy(self, csv_path: str) -> None:
-        """Parse raw CSV trade records, apply scaling factors, and append to the compressed `.npz` store.
-
-        Parameters
-        ----------
-        csv_path : str
-            Filesystem path to the extracted CSV trades file.
-        """
+        """Parse raw CSV trade records, apply scaling factors, and append to the compressed `.npz` store."""
         arr: NDArray[void] = np.genfromtxt(
             csv_path,
             usecols=(1, 2, 5, 6),

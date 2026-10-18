@@ -11,16 +11,9 @@ from typing import Any, TypeVar, final
 
 from loguru import logger
 
-from imprint._boot.configs import FootprintBatch, RiskManagementBatch
-from imprint._core.configs import (
-    Configuration,
-    Footprint,
-    MemoryLayout,
-    Percent,
-    RiskManagement,
-    Setup,
-)
+import imprint._core.configs as cfg
 from imprint._core.footprint import StrategyEngine
+from imprint._core.ipc.memory_layouts import MemoryLayout
 from imprint._core.pipeline.executing import ExecutionEngine
 from imprint._core.settings import KwgsKeys, Timeframe
 from imprint._core.utils.exc_dumper import error_handler
@@ -75,18 +68,19 @@ class Base(ABC):
 
     _algorithm: type[StrategyEngine] | list[type[StrategyEngine]]
     _execution: type[ExecutionEngine] | list[type[ExecutionEngine]]
-    _footprint: Footprint | FootprintBatch
-    _risk_management: RiskManagement | RiskManagementBatch
+    _footprint: cfg.Footprint | cfg.FootprintBatch
+    _risk_management: cfg.RiskManagement | cfg.RiskManagementBatch
     _with_execution: bool
+    _pass_debug_logs: bool
 
-    _setups: list[Setup] = field(init=False)
-    _footprints: list[Footprint] = field(init=False)
-    _risk_managements: list[RiskManagement] = field(init=False)
-    _other_configs: list[Sequence[Configuration]] = field(init=False)
+    _setups: list[cfg.Setup] = field(init=False)
+    _footprints: list[cfg.Footprint] = field(init=False)
+    _risk_managements: list[cfg.RiskManagement] = field(init=False)
+    _other_configs: list[Sequence[cfg.Configuration]] = field(init=False)
 
-    _segments: list[MemoryLayout] = field(init=False)
-    _configs: list[list[Configuration]] = field(init=False)
-    _kwargs: dict[str, list[list[Configuration]] | MemoryLayout] = field(
+    _memory_layouts: list[MemoryLayout] = field(init=False)
+    _configs: list[list[cfg.Configuration]] = field(init=False)
+    _kwargs: dict[str, list[list[cfg.Configuration]] | MemoryLayout] = field(
         init=False
     )
     _init_complete: bool = field(init=False)
@@ -100,7 +94,7 @@ class Base(ABC):
         self._footprints = []
         self._risk_managements = []
         self._other_configs = []
-        self._segments = []
+        self._memory_layouts = []
         self._configs = []
         self._kwargs = {}
 
@@ -126,7 +120,7 @@ class Base(ABC):
 
         self._kwargs[KwgsKeys.Configs] = self._configs
 
-        for obj in self._segments:
+        for obj in self._memory_layouts:
             self._kwargs[obj.__class__.__name__] = obj
 
         self._init_complete = True
@@ -138,12 +132,13 @@ class Base(ABC):
             self._execution, list
         ):
             self._setups.append(
-                Setup(
+                cfg.Setup(
                     algorithm_module=self._algorithm.__module__,
                     algorithm_class_name=self._algorithm.__name__,
                     execution_module=self._execution.__module__,
                     execution_class_name=self._execution.__name__,
-                    execution=self._with_execution,
+                    with_execution=self._with_execution,
+                    pass_debug_logs=self._pass_debug_logs,
                 )
             )
         else:
@@ -153,8 +148,8 @@ class Base(ABC):
             for algo, exec in zip_longest(
                 algorithms, executions, fillvalue=None
             ):
-                setup: Setup = (
-                    deepcopy(self._setups[-1]) if self._setups else Setup()
+                setup: cfg.Setup = (
+                    deepcopy(self._setups[-1]) if self._setups else cfg.Setup()
                 )
                 self._setups.append(setup)
 
@@ -165,14 +160,15 @@ class Base(ABC):
                     setup.execution_module = exec.__module__
                     setup.execution_class_name = exec.__name__
 
-                setup.execution = self._with_execution
+                setup.with_execution = self._with_execution
+                setup.pass_debug_logs = self._pass_debug_logs
 
     @final
     def _prepare_fp_config(self) -> None:
         """Construct footprint configurations from singleton or batch specifications."""
         _ = self._footprint
         # - - -
-        if isinstance(_, Footprint):
+        if isinstance(_, cfg.Footprint):
             self._footprints.append(_)
         else:
             for tf, cr, st, ws, wc in zip_longest(
@@ -183,10 +179,10 @@ class Base(ABC):
                 _.ctrade,
                 fillvalue=None,
             ):
-                fp: Footprint = (
+                fp: cfg.Footprint = (
                     deepcopy(self._footprints[-1])
                     if self._footprints
-                    else Footprint()
+                    else cfg.Footprint()
                 )
                 self._footprints.append(fp)
 
@@ -206,7 +202,7 @@ class Base(ABC):
         """Construct risk management configurations from singleton or batch specifications."""
         _ = self._risk_management
         # - - -
-        if isinstance(_, RiskManagement):
+        if isinstance(_, cfg.RiskManagement):
             self._risk_managements.append(_)
         else:
             for eq, mkb, msb, tp, sl, st, at in zip_longest(
@@ -219,22 +215,22 @@ class Base(ABC):
                 _.pass_signal_time,
                 fillvalue=None,
             ):
-                rm: RiskManagement = (
+                rm: cfg.RiskManagement = (
                     deepcopy(self._risk_managements[-1])
                     if self._risk_managements
-                    else RiskManagement()
+                    else cfg.RiskManagement()
                 )
                 self._risk_managements.append(rm)
 
-                if isinstance(eq, Percent):
+                if isinstance(eq, cfg.Percent):
                     rm.entry_qty = eq
-                if isinstance(mkb, Percent):
+                if isinstance(mkb, cfg.Percent):
                     rm.max_lock_balance = mkb
-                if isinstance(msb, Percent):
+                if isinstance(msb, cfg.Percent):
                     rm.max_loss_balance = msb
-                if isinstance(tp, Percent):
+                if isinstance(tp, cfg.Percent):
                     rm.tp_dev = tp
-                if isinstance(sl, Percent):
+                if isinstance(sl, cfg.Percent):
                     rm.sl_dev = sl
                 if isinstance(st, int):
                     rm.expiration_signal_time = st
@@ -246,29 +242,11 @@ class Base(ABC):
         """Perform subclass-specific post-initialization tasks and resource allocations."""
 
     def _to_list[T](self, obj: list[T] | T, /) -> list[T]:
-        """Convert a single element or sequence into a list.
-
-        Parameters
-        ----------
-        obj : list[T] | T
-            Item or list of items to convert.
-
-        Returns
-        -------
-        list[T]
-            Standard Python list containing the items.
-        """
+        """Convert a single element or sequence into a list."""
         return list(obj) if isinstance(obj, list) else [obj]  # pyright: ignore[reportUnknownArgumentType]
 
     def _list_get[T](self, arr: list[T], index: int) -> T | None:
         """Safely retrieve an element from a list by index.
-
-        Parameters
-        ----------
-        arr : list[T]
-            Target list to index into.
-        index : int
-            Index position to access.
 
         Returns
         -------

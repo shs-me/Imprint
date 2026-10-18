@@ -11,7 +11,7 @@ from numpy.lib.npyio import NpzFile
 from numpy.typing import NDArray
 
 from imprint._core.constant import AGG_TRADES_DATA_PATH
-from imprint._core.ipc import NodeManager, node_handler
+from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
 
 
@@ -58,14 +58,13 @@ class MarketDataStream:
     def symbol(self) -> str:
         return self.manager.cfgCoin.symbol
 
-    @node_handler
     def run(self) -> None:
         """Execute the streaming loop, dispatching historical trades sequentially to the backtest buffer."""
-        _ = self.manager.cfgMarketDataStream
+        _ = self.manager.mlMarketDataStream
         # - - -
         while True:
-            if self.manager.have_status():
-                task: int = self.manager.check_base_task()
+            task: int | None = self.manager.get_task_sc()
+            if task:
                 if task & scs.EXIT:
                     return self.manager.set_proc_sc(
                         scs.EXIT, wait_main_task=False
@@ -142,11 +141,5 @@ class MarketDataStream:
         self.read_row = 0
 
     def complete(self) -> bool:
-        """Determine whether all scheduled data partitions have been fully processed.
-
-        Returns
-        -------
-        bool
-            True if all date paths have been consumed, otherwise False.
-        """
+        """Determine whether all scheduled data partitions have been fully processed."""
         return self.data_path_id >= len(self.data_paths)

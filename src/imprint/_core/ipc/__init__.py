@@ -1,9 +1,4 @@
-from imprint._core.ipc.manager import HostManager, NodeManager, node_handler
-from imprint._core.ipc.supervisor import supervisor
+from imprint._core.ipc.dispatcher import dispatcher
+from imprint._core.ipc.manager import HostManager, NodeManager
 
-__all__ = [
-    "HostManager",
-    "NodeManager",
-    "node_handler",
-    "supervisor",
-]
+__all__ = ["HostManager", "NodeManager", "dispatcher"]

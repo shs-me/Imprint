@@ -6,7 +6,7 @@ from typing import ClassVar, Literal, Self, cast, final, overload
 import numpy as np
 from numpy import bool_, float64, int64
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.footprint.models.base import Chart
 from imprint._core.footprint.models.converter import Converter
 from imprint._core.utils import FPArray

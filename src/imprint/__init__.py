@@ -38,14 +38,14 @@ pct : Percent
     Scaled percentage datatype helper.
 tf : Timeframe
     Supported bar aggregation timeframes (e.g. M1, H1).
-constant
+c (constant)
     System-wide path, bitmask, and bit-flag constant definitions.
 """
 
-import imprint._boot.logger  # noqa: F401 # pyright: ignore[reportUnusedImport]
+import imprint._boot.logger  # pyright: ignore[reportUnusedImport] # noqa: F401
+import imprint._core.constant as c
 from imprint._boot.backtest import BacktestBuilder as _BBuilder
 from imprint._boot.live import LiveBuilder as _LBuilder
-from imprint._core import constant
 from imprint._core.configs import Percent as pct
 from imprint._core.footprint import StrategyEngine
 from imprint._core.pipeline.executing import ExecutionEngine
@@ -69,7 +69,7 @@ __all__ = [
     "StrategyEngine",
     "UserStreamDecoder",
     "backtest",
-    "constant",
+    "c",
     "live",
     "pct",
     "tf",

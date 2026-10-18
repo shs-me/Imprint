@@ -7,7 +7,7 @@ from typing import final, override
 import numpy as np
 from numba import njit
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.account.base import Base
 from imprint._core.types import RunData
 from imprint._core.utils.base import OrdersHistoryArray

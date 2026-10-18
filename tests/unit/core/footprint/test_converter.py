@@ -1,26 +1,9 @@
-import numpy as np
 import pytest
 from numpy import int64
 
-from imprint._core import configs as cfg
+import imprint._core.configs as cfg
 from imprint._core.footprint.models.converter import Converter, to_idx, to_idy
 from imprint._core.settings import Timeframe
-from imprint._core.utils import FPArray
-
-
-class TestFPArray:
-    def test_initialization_and_zero_fill(self) -> None:
-        arr: FPArray = FPArray(rows=10, cols=5)
-        assert arr.shape == (10, 5)
-        assert np.all(arr == 0)
-
-    def test_padding_adds_rows_correctly(self) -> None:
-        arr: FPArray = FPArray(rows=4, cols=2)
-        arr[0, 0] = 42
-        padded: FPArray = arr.padding(before=2, after=3)
-        assert padded.shape == (9, 2)
-        assert padded[2, 0] == 42
-        assert isinstance(padded, FPArray)
 
 
 @pytest.fixture

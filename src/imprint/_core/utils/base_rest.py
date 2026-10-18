@@ -28,28 +28,7 @@ class RestTimeoutError(RestError):
 
 
 class RestResponseError(RestError):
-    """Raised on HTTP error status codes (4xx, 5xx).
-
-    Parameters
-    ----------
-    status_code : int
-        HTTP response status code returned by the server.
-    message : str
-        Human-readable error explanation.
-    response_body : bytes
-        Raw raw byte content returned in the error response body.
-    headers : httpx.Headers
-        Response headers associated with the error.
-
-    Attributes
-    ----------
-    status_code : int
-        HTTP response status code returned by the server.
-    response_body : bytes
-        Raw byte content returned in the error response body.
-    headers : httpx.Headers
-        Response headers associated with the error.
-    """
+    """Raised on HTTP error status codes (4xx, 5xx)."""
 
     def __init__(
         self,
@@ -70,30 +49,7 @@ class RestDecodeError(RestError):
 
 @dataclass(slots=True)
 class BaseREST(ABC):
-    """Base synchronous and asynchronous REST client utilizing httpx and msgspec.
-
-    Parameters
-    ----------
-    logger : LoggerProtocol | SetLogMethodSignature
-        Configured logger instance or logging callback function.
-
-    Attributes
-    ----------
-    logger : LoggerProtocol | SetLogMethodSignature
-        Configured logger instance or logging callback function.
-    base_url : str
-        Base URL endpoint for all outbound requests. Must be defined by subclasses.
-    headers : dict[str, str]
-        Default HTTP headers included in every request.
-    connect_timeout : float | None, default=10.0
-        Maximum duration in seconds to wait for socket connection establishment.
-    read_timeout : float | None, default=10.0
-        Maximum duration in seconds to wait for socket read operations.
-    write_timeout : float | None, default=10.0
-        Maximum duration in seconds to wait for socket write operations.
-    pool_timeout : float | None, default=10.0
-        Maximum duration in seconds to wait for an available connection from the pool.
-    """
+    """Base synchronous and asynchronous REST client utilizing httpx and msgspec."""
 
     logger: LoggerProtocol | SetLogMethodSignature
 
@@ -124,15 +80,7 @@ class BaseREST(ABC):
     def log(
         self, msg: str, level: Literal["INFO", "WARNING", "ERROR"] = "INFO"
     ) -> None:
-        """Emit a log message via the configured logger or callback function.
-
-        Parameters
-        ----------
-        msg : str
-            Log message content to record.
-        level : {'INFO', 'WARNING', 'ERROR'}, default='INFO'
-            Severity level of the log record.
-        """
+        """Emit a log message via the configured logger or callback function."""
         if callable(self.logger):
             self.logger(f"{level} | {msg}")
         else:
@@ -145,18 +93,7 @@ class BaseREST(ABC):
 
     @final
     def format_bytes(self, size: float) -> str:
-        """Format a raw byte size into a human-readable string with appropriate units.
-
-        Parameters
-        ----------
-        size : float
-            Raw size value in bytes. Must be non-negative.
-
-        Returns
-        -------
-        str
-            Formatted string representation with appropriate unit suffix (B, KB, MB, GB, TB).
-        """
+        """Format a raw byte size into a human-readable string with appropriate units."""
         i: int = 0
         while size >= 1024 and i < (len(self.__units) - 1):
             size, i = size / 1024, i + 1
@@ -242,15 +179,10 @@ class BaseREST(ABC):
             self.__async_client = None
 
     # - Context manager support -
+
     @final
     def __enter__(self) -> Self:
-        """Enter the synchronous context manager.
-
-        Returns
-        -------
-        Self
-            The REST client instance.
-        """
+        """Enter the synchronous context manager."""
         return self
 
     @final
@@ -260,13 +192,7 @@ class BaseREST(ABC):
 
     @final
     async def __aenter__(self) -> Self:
-        """Enter the asynchronous context manager.
-
-        Returns
-        -------
-        Self
-            The REST client instance.
-        """
+        """Enter the asynchronous context manager."""
         return self
 
     @final
@@ -283,22 +209,7 @@ class BaseREST(ABC):
         content: bytes | None,
         headers: dict[str, str] | None,
     ) -> tuple[bytes | None, dict[str, str] | None]:
-        """Prepare request body payload and merge custom headers.
-
-        Parameters
-        ----------
-        json_body : Any | None
-            JSON-serializable payload object, string, or bytes.
-        content : bytes | None
-            Raw binary payload bytes.
-        headers : dict[str, str] | None
-            Request-specific header overrides.
-
-        Returns
-        -------
-        tuple[bytes | None, dict[str, str] | None]
-            Encoded request payload bytes and merged header dictionary.
-        """
+        """Prepare request body payload and merge custom headers."""
         merged_headers: dict[str, str] = {**self.headers, **(headers or {})}
 
         if json_body is not None:
@@ -329,13 +240,6 @@ class BaseREST(ABC):
         self, raw_content: bytes, response_type: type[T] | None
     ):
         """Decode response bytes using msgspec with optional schema enforcement.
-
-        Parameters
-        ----------
-        raw_content : bytes
-            Raw response body bytes received from the server.
-        response_type : type[T] | None
-            Target msgspec decodable type structure. If None, decodes into generic Python primitives.
 
         Returns
         -------
@@ -370,20 +274,6 @@ class BaseREST(ABC):
         self, method: str, endpoint: str, is_async: bool = False
     ) -> Generator[None]:
         """Translate httpx exceptions into RestError subtypes within a context manager.
-
-        Parameters
-        ----------
-        method : str
-            HTTP request method (e.g., 'GET', 'POST').
-        endpoint : str
-            Target URL path or endpoint.
-        is_async : bool, default=False
-            Flag indicating whether the operation is asynchronous.
-
-        Yields
-        ------
-        None
-            Yields control to the guarded request execution block.
 
         Raises
         ------
@@ -465,25 +355,6 @@ class BaseREST(ABC):
     ):
         """Execute a synchronous HTTP request and return the decoded msgspec object.
 
-        Parameters
-        ----------
-        method : str
-            HTTP request verb (e.g., 'GET', 'POST', 'PUT', 'DELETE').
-        endpoint : str
-            Relative or absolute target URL endpoint.
-        response_type : type[T] | None, default=None
-            Target msgspec decoding schema class. If None, returns raw decoded JSON primitives.
-        params : dict[str, Any] | None, default=None
-            Query parameters to append to the request URL.
-        json_body : Any | None, default=None
-            Payload object to serialize as JSON.
-        content : bytes | None, default=None
-            Raw binary request body bytes.
-        headers : dict[str, str] | None, default=None
-            Additional request-specific header overrides.
-        timeout : float | None, default=None
-            Per-request timeout override in seconds.
-
         Returns
         -------
         T | Any
@@ -556,25 +427,6 @@ class BaseREST(ABC):
         timeout: float | None = None,
     ):
         """Execute an asynchronous HTTP request and return the decoded msgspec object.
-
-        Parameters
-        ----------
-        method : str
-            HTTP request verb (e.g., 'GET', 'POST', 'PUT', 'DELETE').
-        endpoint : str
-            Relative or absolute target URL endpoint.
-        response_type : type[T] | None, default=None
-            Target msgspec decoding schema class. If None, returns raw decoded JSON primitives.
-        params : dict[str, Any] | None, default=None
-            Query parameters to append to the request URL.
-        json_body : Any | None, default=None
-            Payload object to serialize as JSON.
-        content : bytes | None, default=None
-            Raw binary request body bytes.
-        headers : dict[str, str] | None, default=None
-            Additional request-specific header overrides.
-        timeout : float | None, default=None
-            Per-request timeout override in seconds.
 
         Returns
         -------

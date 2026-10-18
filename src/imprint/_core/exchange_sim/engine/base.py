@@ -9,7 +9,7 @@ from numba.experimental import (
     jitclass,  # pyright: ignore[reportUnknownVariableType, reportPrivateImportUsage]
 )
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.exchange_sim.account.manager import update_equity_ohlc
 from imprint._core.exchange_sim.account.position import JitPosition
 from imprint._core.exchange_sim.engine.matching_engine import (
@@ -43,7 +43,7 @@ class Base(MatchingEngine):
     def __post_init__(self) -> None:
         MatchingEngine.__post_init__(self)
 
-        mds = self.manager.cfgMarketDataStream.ring_buf
+        mds = self.manager.mlMarketDataStream.ring_buf
         self._engine = JitExchangeEngine(
             matching_engine=self.matching_engine,
             position=self.position,
@@ -51,11 +51,11 @@ class Base(MatchingEngine):
             dynamicNbalance=self.dynamicNbalance,
             trade_read_time=self.trade_read_time,
             base_timestamp=self.base_timestamp,
-            mds_data_size=mds.data_size,
+            mds_cell_size=mds.cell_size,
             mds_data_buf=mds.data_buf,
             mds_rid_buf=mds.rid_buf,
             mds_cell_amount=mds.cell_amount,
-            uds_data_size=self.uds_data_size,
+            uds_cell_size=self.uds_cell_size,
             uds_data_buf=self.uds_data_buf,
             uds_data_header_buf=self.uds_data_header_buf,
             uds_wid_buf=self.uds_wid_buf,
@@ -98,11 +98,11 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
     ("dynamicNbalance", types.MemoryView(nb.int64, 1, "C")),
     ("trade_read_time", types.MemoryView(nb.int64, 1, "C")),
     ("base_timestamp", types.MemoryView(nb.int64, 1, "C")),
-    ("mds_data_size", nb.int64),
+    ("mds_cell_size", nb.int64),
     ("mds_data_buf", types.MemoryView(nb.int64, 1, "C")),
     ("mds_rid_buf", types.MemoryView(nb.int64, 1, "C")),
     ("mds_cell_amount", nb.int64),
-    ("uds_data_size", nb.int64),
+    ("uds_cell_size", nb.int64),
     ("uds_data_buf", types.MemoryView(nb.int64, 1, "C")),
     ("uds_data_header_buf", types.MemoryView(nb.int64, 1, "C")),
     ("uds_wid_buf", types.MemoryView(nb.int64, 1, "C")),
@@ -117,90 +117,7 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
 
 @jitclass(spec)  # pyright: ignore[reportCallIssue, reportUntypedClassDecorator]
 class JitExchangeEngine:
-    """Numba-accelerated exchange simulation engine processing market data feeds and order matching.
-
-    Parameters
-    ----------
-    matching_engine : JitMatchingEngine
-        JIT-compiled order book matching engine.
-    position : JitPosition
-        JIT-compiled account position tracker.
-    availableNbalance : memoryview
-        Single-element memoryview of integer available normalized balance.
-    dynamicNbalance : memoryview
-        Single-element memoryview of integer dynamic/total normalized balance.
-    trade_read_time : memoryview
-        Single-element memoryview storing the last processed trade timestamp.
-    base_timestamp : memoryview
-        Single-element memoryview containing the simulation epoch base timestamp.
-    mds_data_size : int
-        Size of each market data cell in the buffer.
-    mds_data_buf : memoryview
-        Ring buffer storage for market data.
-    mds_rid_buf : memoryview
-        Ring buffer read pointer and index control state.
-    mds_cell_amount : int
-        Total cell capacity of the market data ring buffer.
-    uds_data_size : int
-        Size of each user data record.
-    uds_data_buf : memoryview
-        User data storage buffer.
-    uds_data_header_buf : memoryview
-        User data stream header buffer.
-    uds_wid_buf : memoryview
-        User data write pointer buffer.
-    uds_cell_amount : int
-        Total cell capacity of the user data stream buffer.
-    makerNcommission : int
-        Scaled integer fee rate applied to maker orders.
-    takerNcommission : int
-        Scaled integer fee rate applied to taker orders.
-    timeframe : int
-        Candle timeframe duration in milliseconds.
-    equity_history : ndarray of shape (N, 5)
-        Historical equity OHLCV array structured with `[Timestamp, Open, High, Low, Close]`.
-
-    Attributes
-    ----------
-    matching_engine : JitMatchingEngine
-        JIT-compiled order book matching engine.
-    position : JitPosition
-        JIT-compiled account position tracker.
-    availableNbalance : memoryview
-        Single-element memoryview of integer available normalized balance.
-    dynamicNbalance : memoryview
-        Single-element memoryview of integer dynamic/total normalized balance.
-    trade_read_time : memoryview
-        Single-element memoryview storing the last processed trade timestamp.
-    base_timestamp : memoryview
-        Single-element memoryview containing the simulation epoch base timestamp.
-    mds_data_size : int
-        Size of each market data cell in the buffer.
-    mds_data_buf : memoryview
-        Ring buffer storage for market data.
-    mds_rid_buf : memoryview
-        Ring buffer read pointer and index control state.
-    mds_cell_amount : int
-        Total cell capacity of the market data ring buffer.
-    uds_data_size : int
-        Size of each user data record.
-    uds_data_buf : memoryview
-        User data storage buffer.
-    uds_data_header_buf : memoryview
-        User data stream header buffer.
-    uds_wid_buf : memoryview
-        User data write pointer buffer.
-    uds_cell_amount : int
-        Total cell capacity of the user data stream buffer.
-    makerNcommission : int
-        Scaled integer fee rate applied to maker orders.
-    takerNcommission : int
-        Scaled integer fee rate applied to taker orders.
-    timeframe : int
-        Candle timeframe duration in milliseconds.
-    equity_history : ndarray of shape (N, 5)
-        Historical equity OHLCV array structured with `[Timestamp, Open, High, Low, Close]`.
-    """
+    """Numba-accelerated exchange simulation engine processing market data feeds and order matching."""
 
     def __init__(
         self,
@@ -210,11 +127,11 @@ class JitExchangeEngine:
         dynamicNbalance: memoryview,
         trade_read_time: memoryview,
         base_timestamp: memoryview,
-        mds_data_size: int,
+        mds_cell_size: int,
         mds_data_buf: memoryview,
         mds_rid_buf: memoryview,
         mds_cell_amount: int,
-        uds_data_size: int,
+        uds_cell_size: int,
         uds_data_buf: memoryview,
         uds_data_header_buf: memoryview,
         uds_wid_buf: memoryview,
@@ -231,11 +148,11 @@ class JitExchangeEngine:
         self.dynamicNbalance: memoryview = dynamicNbalance
         self.trade_read_time: memoryview = trade_read_time
         self.base_timestamp: memoryview = base_timestamp
-        self.mds_data_size: int = mds_data_size
+        self.mds_cell_size: int = mds_cell_size
         self.mds_data_buf: memoryview = mds_data_buf
         self.mds_rid_buf: memoryview = mds_rid_buf
         self.mds_cell_amount: int = mds_cell_amount
-        self.uds_data_size: int = uds_data_size
+        self.uds_cell_size: int = uds_cell_size
         self.uds_data_buf: memoryview = uds_data_buf
         self.uds_data_header_buf: memoryview = uds_data_header_buf
         self.uds_wid_buf: memoryview = uds_wid_buf
@@ -247,18 +164,12 @@ class JitExchangeEngine:
         self.count_trade_close: memoryview = count_trade_close
 
     def start(self, timestamp: int) -> None:
-        """Advance simulation state by consuming market data ring buffer ticks up to the target timestamp.
-
-        Parameters
-        ----------
-        timestamp : int
-            Target simulation timestamp in microseconds to advance up to.
-        """
+        """Advance simulation state by consuming market data ring buffer ticks up to the target timestamp."""
         ma = self.matching_engine
         # - - -
         while self.trade_read_time[0] != timestamp:
             cell: int = self.mds_rid_buf[1]
-            start: int = cell * self.mds_data_size
+            start: int = cell * self.mds_cell_size
 
             self.trade_read_time[0] = trade_timestamp = self.mds_data_buf[
                 start + 2
@@ -291,15 +202,7 @@ class JitExchangeEngine:
                 break
 
     def _processing_metrics(self, nPrice: int, timestamp: int) -> None:
-        """Update unrealized PnL, account balances, MAE/MFE metrics, and equity OHLC bars.
-
-        Parameters
-        ----------
-        nPrice : int
-            Normalized trade price used for marking positions to market.
-        timestamp : int
-            Current trade timestamp in microseconds.
-        """
+        """Update unrealized PnL, account balances, MAE/MFE metrics, and equity OHLC bars."""
         pos = self.position
         # - - -
         uNpnl = pos.update_unrealized_nPnl(nPrice=nPrice)
@@ -374,7 +277,7 @@ class JitExchangeEngine:
             set_user_data(
                 data=ma.executed_orders[eo_row, :],
                 uds_data_buf=self.uds_data_buf,
-                uds_data_buf_size=self.uds_data_size,
+                uds_data_buf_size=self.uds_cell_size,
                 uds_data_header_buf=self.uds_data_header_buf,
                 uds_wid_buf=self.uds_wid_buf,
                 uds_cell_amount=self.uds_cell_amount,

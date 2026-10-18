@@ -1,77 +1,29 @@
 """Provide abstract shared memory segment binding and IPC attribute mapping."""
 
 from abc import ABC
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from multiprocessing.synchronize import Event, Semaphore
+from multiprocessing.synchronize import Event, Lock, Semaphore
 from types import GenericAlias
 from typing import final
 
 import imprint._core.configs as cfg
-from imprint._core.configs import MemoryLayout
+import imprint._core.ipc.memory_layouts as ml
+from imprint._core.settings import StatusCodes
+from imprint._core.utils.exc_dumper import DumpException
 
 
 @dataclass(slots=True)
 class Base(ABC):
-    """Abstract manager binding shared memory slice references to configuration objects.
+    """Abstract base manager implementing core shared memory and IPC mechanisms.
 
-    Provides core routines to scan system configuration classes, resolve their
-    SharedMemory slice specifications, and dynamically bind sliced memoryviews
-    to Segment and RingBuf fields.
-
-    Parameters
-    ----------
-    _configs : list[list[cfg.Configuration]]
-        Matrix of configuration instances grouped per engine setup.
-    _segment_configs : list[cfg.MemoryLayout]
-        Sequence of shared memory IPC segment descriptors.
-    _segments : dict[str, slice]
-        Mappings of Configuration class names to their respective slices within
-        the main shared memory block.
-    _shm_buf : memoryview
-        The full memoryview buffer of the system's SharedMemory.
-    _main_tools : list[Event | Semaphore]
-        Synchronization tools including signaling events and status semaphores.
-
-    Attributes
-    ----------
-    cfgSetup : cfg.Setup
-        Setup parameters and environment configurations.
-    cfgAccount : cfg.Account
-        Trading account state/margin configurations.
-    cfgConnector : cfg.Connector
-        API Connection/REST endpoint configurations.
-    cfgRiskManagement : cfg.RiskManagement
-        Risk parameters and balance limits.
-    cfgCoin : cfg.Coin
-        Active asset specifications.
-    cfgFootprint : cfg.Footprint
-        Footprint chart dimension/row/column parameters.
-    cfgMetrics : cfg.Metrics
-        Process status codes and health buffers.
-    cfgMarketDataStream : cfg.MarketDataStream
-        Shared memory layouts for market data streams.
-    cfgMarketDataGapStream : cfg.MarketDataGapStream
-        Shared memory layouts for market data gap streams.
-    cfgUserDataStream : cfg.UserDataStream
-        Shared memory layouts for user data streams.
-    cfgOrderStream : cfg.OrderStream
-        Shared memory layouts for active orders.
-    cfgSignalStream : cfg.SignalStream
-        Shared memory layouts for trading signals.
-    _log_stream : cfg.LogStream
-        Ring buffer segment dedicated to IPC logging logs.
-    _sc_sem : Semaphore
-        Semaphore to signal task status/event updates.
-    _general_event : Event
-        General process synchronization event.
-    _procs_status : memoryview
-        Process-level status integer array cast to signed 64-bit integers ('q').
-    _main_status : memoryview
-        Host-level process status integer array cast to signed 64-bit integers ('q').
+    Binds configurations, memory layouts, and synchronization tools to class
+    attributes for typed and flexible data access. Any new objects requiring
+    binding must be specified in the class annotations.
     """
 
     _configs: list[list[cfg.Configuration]]
-    _segment_configs: list[cfg.MemoryLayout]
+    _memory_layouts: list[ml.MemoryLayout]
     _segments: dict[str, slice]
     _shm_buf: memoryview
     _main_tools: list[Event | Semaphore]
@@ -82,46 +34,44 @@ class Base(ABC):
     cfgRiskManagement: cfg.RiskManagement = field(init=False)
     cfgCoin: cfg.Coin = field(init=False)
     cfgFootprint: cfg.Footprint = field(init=False)
-    cfgMetrics: cfg.Metrics = field(init=False)
-    cfgMarketDataStream: cfg.MarketDataStream = field(init=False)
-    cfgMarketDataGapStream: cfg.MarketDataGapStream = field(init=False)
-    cfgUserDataStream: cfg.UserDataStream = field(init=False)
-    cfgOrderStream: cfg.OrderStream = field(init=False)
-    cfgSignalStream: cfg.SignalStream = field(init=False)
 
-    _log_stream: cfg.LogStream = field(init=False)
+    mlMetrics: ml.Metrics = field(init=False)
+    mlMarketDataStream: ml.MarketDataStream = field(init=False)
+    mlMarketDataGapStream: ml.MarketDataGapStream = field(init=False)
+    mlUserDataStream: ml.UserDataStream = field(init=False)
+    mlOrderStream: ml.OrderStream = field(init=False)
+    mlSignalStream: ml.SignalStream = field(init=False)
+    mlLogStream: ml.LogStream = field(init=False)
+
     _sc_sem: Semaphore = field(init=False)
     _general_event: Event = field(init=False)
-
-    _procs_status: memoryview = field(init=False)
-    _main_status: memoryview = field(init=False)
+    _status_lock: Lock = field(init=False)
 
     _count_configs: int = field(default=0, init=False)
     _config_idx: int = field(default=0, init=False)
+    _dumper: DumpException = field(
+        default_factory=lambda: DumpException(), init=False
+    )
+    __procs_status: memoryview = field(init=False)
 
     @final
     def __post_init__(self) -> None:
-        """Initialize configurations, synchronize attributes, and cast status buffer views."""
         self._count_configs = len(self._configs)
-        self.__init_attributes()
+        self.__bind_objs_with_attributes(self._main_tools)
+        self.__bind_objs_with_attributes(self.__get_configs())
+        self.__bind_objs_with_attributes(self._memory_layouts)
+        self.__bind_shm_with_memory_layouts()
+        self.__procs_status = self.mlMetrics.procs_status.view.cast("q")
+        self._post_init()
 
-        self._procs_status = self.cfgMetrics.procs_status.view.cast("q")
-        self._main_status = self.cfgMetrics.main_status.view.cast("q")
-
-        self.post_init()
-
-    def post_init(self) -> None:
-        """Execute subclass-specific post-initialization logic."""
+    def _post_init(self) -> None: ...
 
     @final
-    def __init_attributes(self) -> None:
-        """Identify, filter, and bind configuration components to Base attributes."""
+    def __bind_objs_with_attributes(self, objs: Sequence[object]) -> None:
+        """Bind list objects to attributes whose type matches their instance class.
 
-        configs = self._configs[self._config_idx]
-        self._config_idx += 1
-        objs: list[cfg.Configuration | cfg.MemoryLayout | Event | Semaphore] = (
-            configs + self._segment_configs + self._main_tools
-        )
+        Generic attributes are skipped.
+        """
         for obj in objs:
             for attr_name, attr_type in Base.__annotations__.items():
                 if issubclass(attr_type.__class__, GenericAlias):
@@ -129,42 +79,69 @@ class Base(ABC):
 
                 if isinstance(obj, attr_type):
                     setattr(self, attr_name, obj)
-                    if isinstance(obj, cfg.MemoryLayout):
-                        self.__bind_shm_segments(obj)
                     break
 
     @final
-    def __bind_shm_segments(self, cfg: cfg.MemoryLayout) -> None:
-        """Bind memoryview sub-slices to segment structures in a configuration.
+    def __bind_shm_with_memory_layouts(self) -> None:
+        """Bind MemoryLayout instances to shared memory segments.
 
-        Parameters
-        ----------
-        cfg : cfg.MemoryLayout
-            Segment configurations to associate with target memory slices.
+        Each layout receives a buffer of the requested size from shared memory,
+        then partitions that buffer into its own sub-segments.
         """
-        buf: memoryview = self._shm_buf[self._segments[cfg.__class__.__name__]]
-        cfg.bind_memory(buf)
-        cfg.post_init_rings()
+        for layout in self._memory_layouts:
+            buf: memoryview = self._shm_buf[
+                self._segments[layout.__class__.__name__]
+            ]
+            layout.bind_memory(buf)
+            layout.post_init_rings()
+
+    @final
+    def __get_configs(self) -> list[cfg.Configuration]:
+        """Return the next configuration sequence in order."""
+        configs = self._configs[self._config_idx]
+        self._config_idx += 1
+        return configs
+
+    @final
+    def __enter__(self) -> None: ...
+
+    @final
+    def __exit__(self, *args: object) -> None:
+        self._dumper.dump_exception()
+        self._child_exit_action()
+
+    def _child_exit_action(self) -> None: ...
 
     @final
     def _change_configs(self) -> None:
-        """Advance configuration index and rebind active Configuration attributes."""
-        configs = self._configs[self._config_idx]
-        self._config_idx += 1
-        for obj in configs:
-            for attr_name, attr_type in Base.__annotations__.items():
-                if issubclass(attr_type.__class__, GenericAlias):
-                    continue
+        """Replace attributes annotated with Configuration subclasses with the next config set."""
+        configs = self.__get_configs()
+        self.__bind_objs_with_attributes(configs)
 
-                if isinstance(obj, attr_type):
-                    setattr(self, attr_name, obj)
-                    break
-
+    @final
     def _reset(self) -> None:
-        """Reset all MemoryLayout instances bound to this manager."""
+        """Call reset on every attribute that is a MemoryLayout instance.
+
+        Used to restore shared memory segments to their default state.
+        """
         for attr_name, attr_type in Base.__annotations__.items():
             if issubclass(attr_type.__class__, GenericAlias):
                 continue
 
-            if issubclass(attr_type, MemoryLayout):
+            if issubclass(attr_type, ml.MemoryLayout):
                 getattr(self, attr_name).reset()
+
+    @final
+    def _get_sc(self, pid: int) -> int:
+        with self._status_lock:
+            return self.__procs_status[pid]
+
+    @final
+    def _set_sc(self, pid: int, code: StatusCodes | int) -> None:
+        with self._status_lock:
+            self.__procs_status[pid] |= code
+
+    @final
+    def _clear_sc(self, pid: int, code: StatusCodes | int) -> None:
+        with self._status_lock:
+            self.__procs_status[pid] &= ~(code)

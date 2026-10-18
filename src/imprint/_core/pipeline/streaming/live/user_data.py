@@ -79,7 +79,7 @@ class UserData(Base):
         ws : ClientConnection
             Active WebSocket client connection instance.
         """
-        _ = self.manager.cfgUserDataStream
+        _ = self.manager.mlUserDataStream
         # - - -
         raw_data: bytes = await ws.recv(decode=False)
         for data in self.decoder.decode(raw_data):

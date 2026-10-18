@@ -1,13 +1,13 @@
 from multiprocessing.synchronize import Event
 from typing import Any
 
-from imprint._core.ipc import NodeManager, supervisor
+from imprint._core.ipc import NodeManager, dispatcher
 from imprint._core.pipeline.engine.router import EngineRouter
 
 __all__ = ["run_engine"]
 
 
-@supervisor()
+@dispatcher()
 def run_engine(
     engine_event: Event, execution_event: Event, **kwargs: Any
 ) -> None:

@@ -138,82 +138,7 @@ spec = [
 
 @jitclass(spec)  # pyright: ignore[reportCallIssue,reportUntypedClassDecorator]
 class JitPosition:
-    """Manage JIT-compiled exchange position state, order fills, and risk metrics.
-
-    Parameters
-    ----------
-    price_mult : int
-        Multiplier used for price precision normalization.
-    qty_mult : int
-        Multiplier used for quantity precision normalization.
-    scale_mult : int
-        Multiplier used for monetary scaling.
-    leverage : int
-        Account leverage ratio.
-    nBalance : memoryview of shape (1,)
-        Normalized account balance.
-    lockedNbalance : memoryview of shape (1,)
-        Normalized margin balance locked in open positions.
-    longNqty : memoryview of shape (1,)
-        Normalized quantity of the open long position.
-    longEntryNprice : memoryview of shape (1,)
-        Normalized volume-weighted average entry price for the long position.
-    shortNqty : memoryview of shape (1,)
-        Normalized quantity of the open short position.
-    shortEntryNprice : memoryview of shape (1,)
-        Normalized volume-weighted average entry price for the short position.
-    long_mae : memoryview of shape (1,)
-        Maximum adverse excursion (MAE) for the long position in normalized currency units.
-    long_mfe : memoryview of shape (1,)
-        Maximum favorable excursion (MFE) for the long position in normalized currency units.
-    short_mae : memoryview of shape (1,)
-        Maximum adverse excursion (MAE) for the short position in normalized currency units.
-    short_mfe : memoryview of shape (1,)
-        Maximum favorable excursion (MFE) for the short position in normalized currency units.
-    unrealizedNpnl : memoryview of shape (1,)
-        Total normalized unrealized PnL across all open positions.
-    longUnrealizedNpnl : memoryview of shape (1,)
-        Normalized unrealized PnL for the long position.
-    shortUnrealizedNpnl : memoryview of shape (1,)
-        Normalized unrealized PnL for the short position.
-
-    Attributes
-    ----------
-    price_mult : int
-        Multiplier used for price precision normalization.
-    qty_mult : int
-        Multiplier used for quantity precision normalization.
-    scale_mult : int
-        Multiplier used for monetary scaling.
-    leverage : int
-        Account leverage ratio.
-    nBalance : memoryview of shape (1,)
-        Normalized account balance.
-    lockedNbalance : memoryview of shape (1,)
-        Normalized margin balance locked in open positions.
-    longNqty : memoryview of shape (1,)
-        Normalized quantity of the open long position.
-    longEntryNprice : memoryview of shape (1,)
-        Normalized volume-weighted average entry price for the long position.
-    shortNqty : memoryview of shape (1,)
-        Normalized quantity of the open short position.
-    shortEntryNprice : memoryview of shape (1,)
-        Normalized volume-weighted average entry price for the short position.
-    long_mae : memoryview of shape (1,)
-        Maximum adverse excursion (MAE) for the long position in normalized currency units.
-    long_mfe : memoryview of shape (1,)
-        Maximum favorable excursion (MFE) for the long position in normalized currency units.
-    short_mae : memoryview of shape (1,)
-        Maximum adverse excursion (MAE) for the short position in normalized currency units.
-    short_mfe : memoryview of shape (1,)
-        Maximum favorable excursion (MFE) for the short position in normalized currency units.
-    unrealizedNpnl : memoryview of shape (1,)
-        Total normalized unrealized PnL across all open positions.
-    longUnrealizedNpnl : memoryview of shape (1,)
-        Normalized unrealized PnL for the long position.
-    shortUnrealizedNpnl : memoryview of shape (1,)
-        Normalized unrealized PnL for the short position.
-    """
+    """Manage JIT-compiled exchange position state, order fills, and risk metrics."""
 
     def __init__(
         self,
@@ -262,23 +187,7 @@ class JitPosition:
         is_maker: bool,
         nCommission: int,
     ) -> None:
-        """Update position state, entry price, balance, and locked margin from an order fill.
-
-        Parameters
-        ----------
-        nPrice : int
-            Normalized fill price.
-        nQty : int
-            Normalized fill quantity.
-        is_long : bool
-            True if the fill pertains to a long position, false for short.
-        is_open : bool
-            True if opening or increasing a position, false if reducing or closing.
-        is_maker : bool
-            True if the fill is a liquidity maker (incurring zero margin lock when opening).
-        nCommission : int
-            Normalized commission deducted from balance.
-        """
+        """Update position state, entry price, balance, and locked margin from an order fill."""
         self.nBalance[0] -= nCommission
         if is_open and not is_maker:
             self.lockedNbalance[0] += self.to_nMargin(nPrice, nQty)
@@ -295,17 +204,6 @@ class JitPosition:
     def _update_long_position(
         self, nPrice: int, nQty: int, is_open: bool
     ) -> None:
-        """Update long position quantity, volume-weighted entry price, and realized PnL.
-
-        Parameters
-        ----------
-        nPrice : int
-            Normalized fill price.
-        nQty : int
-            Normalized fill quantity.
-        is_open : bool
-            True if opening or increasing the long position, false if closing.
-        """
         if is_open:
             if self.longNqty[0]:
                 self.longEntryNprice[0] = (
@@ -337,17 +235,6 @@ class JitPosition:
     def _update_short_position(
         self, nPrice: int, nQty: int, is_open: bool
     ) -> None:
-        """Update short position quantity, volume-weighted entry price, and realized PnL.
-
-        Parameters
-        ----------
-        nPrice : int
-            Normalized fill price.
-        nQty : int
-            Normalized fill quantity.
-        is_open : bool
-            True if opening or increasing the short position, false if closing.
-        """
         if is_open:
             if self.shortNqty[0]:
                 self.shortEntryNprice[0] = (
@@ -379,11 +266,6 @@ class JitPosition:
     def update_unrealized_nPnl(self, nPrice: int) -> int:
         """Calculate and update unrealized PnL for both long and short positions at current market price.
 
-        Parameters
-        ----------
-        nPrice : int
-            Current normalized market price.
-
         Returns
         -------
         int
@@ -397,13 +279,6 @@ class JitPosition:
         return self.unrealizedNpnl[0]
 
     def _update_long_unrealized_nPnl(self, nPrice: int) -> None:
-        """Calculate and update unrealized PnL for the open long position.
-
-        Parameters
-        ----------
-        nPrice : int
-            Current normalized market price.
-        """
         if self.longNqty[0]:
             self.longUnrealizedNpnl[0] = self.to_long_nPnl(
                 closeNprice=nPrice,
@@ -414,13 +289,6 @@ class JitPosition:
             self.longUnrealizedNpnl[0] = 0
 
     def _update_short_unrealized_nPnl(self, nPrice: int) -> None:
-        """Calculate and update unrealized PnL for the open short position.
-
-        Parameters
-        ----------
-        nPrice : int
-            Current normalized market price.
-        """
         if self.shortNqty[0]:
             self.shortUnrealizedNpnl[0] = self.to_short_nPnl(
                 closeNprice=nPrice,
@@ -436,30 +304,14 @@ class JitPosition:
         self._update_short_mae_and_mfe()
 
     def _update_long_mae_and_mfe(self) -> None:
-        """Update MAE and MFE tracking values for the long position."""
         self.long_mae[0] = min(self.longUnrealizedNpnl[0], self.long_mae[0])
         self.long_mfe[0] = max(self.longUnrealizedNpnl[0], self.long_mfe[0])
 
     def _update_short_mae_and_mfe(self) -> None:
-        """Update MAE and MFE tracking values for the short position."""
         self.short_mae[0] = min(self.shortUnrealizedNpnl[0], self.short_mae[0])
         self.short_mfe[0] = max(self.shortUnrealizedNpnl[0], self.short_mfe[0])
 
     def to_nMargin(self, nPrice: int, nQty: int) -> int:
-        """Compute required normalized margin for an open position or order.
-
-        Parameters
-        ----------
-        nPrice : int
-            Normalized asset price.
-        nQty : int
-            Normalized asset quantity.
-
-        Returns
-        -------
-        int
-            Rounded normalized margin requirement in integer units.
-        """
         return to_nMargin(
             nPrice=nPrice,
             nQty=nQty,
@@ -472,22 +324,6 @@ class JitPosition:
     def to_long_nPnl(
         self, closeNprice: int | int64, entryNprice: int, nQty: int | int64
     ) -> int:
-        """Calculate normalized PnL for a long position fill or closure.
-
-        Parameters
-        ----------
-        closeNprice : int | int64
-            Normalized exit or close price.
-        entryNprice : int
-            Normalized average entry price.
-        nQty : int | int64
-            Normalized quantity being closed.
-
-        Returns
-        -------
-        int
-            Normalized PnL in currency units.
-        """
         diffNprice: int | int64 = (closeNprice - entryNprice) * 1
         pnl: float = (diffNprice / self.price_mult[0]) * (
             nQty / self.qty_mult[0]
@@ -497,22 +333,6 @@ class JitPosition:
     def to_short_nPnl(
         self, closeNprice: int | int64, entryNprice: int, nQty: int | int64
     ) -> int:
-        """Calculate normalized PnL for a short position fill or closure.
-
-        Parameters
-        ----------
-        closeNprice : int | int64
-            Normalized exit or close price.
-        entryNprice : int
-            Normalized average entry price.
-        nQty : int | int64
-            Normalized quantity being closed.
-
-        Returns
-        -------
-        int
-            Normalized PnL in currency units.
-        """
         diffNprice: int | int64 = (closeNprice - entryNprice) * -1
         pnl: float = (diffNprice / self.price_mult[0]) * (
             nQty / self.qty_mult[0]

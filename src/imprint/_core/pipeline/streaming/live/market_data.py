@@ -5,7 +5,7 @@ from typing import final, override
 
 from websockets import ClientConnection
 
-from imprint._core.configs import MarketDataGapStream
+from imprint._core.ipc.memory_layouts import MarketDataGapStream
 from imprint._core.pipeline.streaming.live.base import Base
 from imprint._core.settings import StatusCodes as scs
 
@@ -52,7 +52,7 @@ class MarketData(Base):
 
     def __post_init__(self) -> None:
         """Initialize shared memory views and base configuration."""
-        self.mdgs = self.manager.cfgMarketDataGapStream
+        self.mdgs = self.manager.mlMarketDataGapStream
         self.have_gap = self.mdgs.have_gap.view
         self.first_gap_id = self.mdgs.gap_first_id.view.cast("q")
         self.last_gap_id = self.mdgs.gap_last_id.view.cast("q")
@@ -80,14 +80,14 @@ class MarketData(Base):
         RuntimeError
             Terminates process status code if raw data size exceeds the buffer limit.
         """
-        _ = self.manager.cfgMarketDataStream.ring_buf
+        _ = self.manager.mlMarketDataStream.ring_buf
         # - - -
         raw_data: bytes = await ws.recv(decode=False)
 
         while _.lag_not_is_safe():
             await asyncio.sleep(0.001)
 
-        if len(raw_data) < _.data_size:
+        if len(raw_data) < _.cell_size:
             _.set_data(raw_data)
         else:
             return self.manager.set_proc_sc(
@@ -168,7 +168,7 @@ class MarketData(Base):
         while _.lag_not_is_safe():
             await asyncio.sleep(0.001)
 
-        if len(raw_data) < _.data_size:
+        if len(raw_data) < _.cell_size:
             _.set_data(raw_data)
             if not self.engine_event.is_set():
                 self.engine_event.set()

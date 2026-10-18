@@ -6,7 +6,7 @@ import numpy as np
 import streamlit as st
 from loguru import logger
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.types import RunData
 from imprint._vis.analyze.base import Stats
 from imprint._vis.plot import (

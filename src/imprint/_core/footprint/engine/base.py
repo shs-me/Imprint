@@ -14,7 +14,7 @@ from numba.experimental import (
 )
 from numpy import int64
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.footprint.models import Converter, Footprint
 from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
@@ -26,21 +26,8 @@ from imprint._core.utils.base import FPHeadersArray
 class Base(ABC):
     """Abstract base engine managing footprint calculations, sessions, and state arrays.
 
-    Parameters
-    ----------
-    manager : NodeManager
-        Coordinator managing inter-process communication, configuration states,
-        and process status codes.
-    strategy : StrategyProtocol
-        Trading or calculation algorithm execution protocol attached to the engine.
-
     Attributes
     ----------
-    manager : NodeManager
-        Coordinator managing inter-process communication, configuration states,
-        and process status codes.
-    strategy : StrategyProtocol
-        Trading or calculation algorithm execution protocol attached to the engine.
     re_init : int
         Bitmask governing re-initialization flags (session, index, and array states).
     trade_read_time : memoryview
@@ -55,10 +42,6 @@ class Base(ABC):
         Memory view pointing to the last processed bar index as a 64-bit signed integer.
     fp : Footprint
         Core footprint data container wrapping price, volume, state, and trade arrays.
-    with_state : bool
-        Flag indicating whether state tracking is enabled in footprint configuration.
-    with_ctrade : bool
-        Flag indicating whether cumulative trade tracking is enabled in footprint configuration.
     storage : JitStorage
         JIT-compiled storage container bridging Python arrays to Numba-compiled scopes.
     """
@@ -87,8 +70,9 @@ class Base(ABC):
     storage: JitStorage = field(init=False)
 
     def __post_init__(self) -> None:
-        cfgMetrics = self.manager.cfgMetrics
-        self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
+        self.trade_read_time = self.manager.mlMetrics.trade_read_time.view.cast(
+            "q"
+        )
 
         self.fp = Footprint(Converter(), self.lidx)
         self.storage = JitStorage(
@@ -125,7 +109,7 @@ class Base(ABC):
         )
 
         cfgSetup = self.manager.cfgSetup
-        if cfgSetup.backtesting:
+        if cfgSetup.is_backtesting:
             start_dt: date = date.fromisoformat(cfgSetup.backtest_start_date)
             end_dt: date = date.fromisoformat(cfgSetup.backtest_end_date)
             total_days: int = max(1, (end_dt - start_dt).days + 1)
@@ -153,15 +137,7 @@ class Base(ABC):
 
     @final
     def init_session(self, nPrice: int64, timestamp: int64) -> None:
-        """Initialize or reset session arrays, indexes, and process status codes.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Number of price levels or normalized price bound for array sizing.
-        timestamp : int64
-            Unix timestamp in microseconds marking the beginning of the session.
-        """
+        """Initialize or reset session arrays, indexes, and process status codes."""
         if self.__init_arrays:
             self.init_array(nPrice=nPrice)
             self.__init_arrays = False
@@ -184,15 +160,7 @@ class Base(ABC):
         self.manager.set_proc_sc(scs.FP_RE_INIT, wait_main_task=False)
 
     def init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        """Reset footprint base, state, and trade arrays, and advance header offsets.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Number of price levels for index reset bounds.
-        timestamp : int64
-            Unix timestamp in microseconds for session initialization.
-        """
+        """Reset footprint base, state, and trade arrays, and advance header offsets."""
         _ = self.fp
         # - - -
         _.base.fill(0)
@@ -215,23 +183,11 @@ class Base(ABC):
         _.con.init_session(nPrice=nPrice, timestamp=timestamp)
 
     def init_idy(self, nPrice: int64) -> None:
-        """Re-initialize underlying data arrays based on price scaling changes.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Updated number of price levels.
-        """
+        """Re-initialize underlying data arrays based on price scaling changes."""
         self.init_array(nPrice=nPrice)
 
     def init_array(self, nPrice: int64) -> None:
-        """Allocate or pad footprint base, state, and cumulative trade arrays.
-
-        Parameters
-        ----------
-        nPrice : int64
-            Number of price levels used to determine row counts and padding bounds.
-        """
+        """Allocate or pad footprint base, state, and cumulative trade arrays."""
         self.fp._re_init_arr(
             nPrice=nPrice, padding=bool(self.re_init & c.RIF_idy)
         )
@@ -239,14 +195,8 @@ class Base(ABC):
 
     @final
     def save_footprint_headers(self, last_idx: int) -> None:
-        """Persist footprint headers to disk during backtesting mode.
-
-        Parameters
-        ----------
-        last_idx : int
-            Index of the final bar in the current session range.
-        """
-        if self.manager.cfgSetup.backtesting:
+        """Persist footprint headers to disk during backtesting mode."""
+        if self.manager.cfgSetup.is_backtesting:
             os.makedirs(self.__base_fp_dump_path, exist_ok=True)
 
             start_time: str = self.fp.con.to_strftime(
@@ -318,102 +268,7 @@ spec = [
 
 @jitclass(spec)  # pyright: ignore[reportCallIssue, reportUntypedClassDecorator]
 class JitStorage:
-    """JIT-compiled storage container holding shared memory views and arrays for high-performance execution.
-
-    Parameters
-    ----------
-    headers : ndarray of shape (N, M), dtype=int64
-        C-contiguous two-dimensional header records array.
-    headers_offset : memoryview
-        Memory view pointing to current header offset indices as 64-bit signed integers.
-    idYmin : memoryview
-        Memory view pointing to the minimum valid price row index.
-    idYmax : memoryview
-        Memory view pointing to the maximum valid price row index.
-    idx : memoryview
-        Memory view pointing to the current active bar index.
-    lidx : memoryview
-        Memory view pointing to the last processed bar index.
-    baseTimestamp : memoryview
-        Memory view pointing to base timestamps.
-    baseNprice : memoryview
-        Memory view pointing to base price level counts.
-    center : memoryview
-        Memory view pointing to center price row indices.
-    fp_rows : memoryview
-        Memory view pointing to total footprint row counts.
-    fp_cols : int
-        Total number of columns in the footprint panel.
-    idxVP : int
-        Volume profile column index offset.
-    idxDP : int
-        Delta profile column index offset.
-    tims : int
-        Timestamp column index offset.
-    scale : int
-        Price scaling factor.
-    step_tick : int
-        Step tick size in price units.
-    price_mult : int
-        Price multiplier for floating-point preservation.
-    price_prec : int
-        Price decimal precision digits.
-    qty_mult : int
-        Quantity multiplier for floating-point preservation.
-    qty_prec : int
-        Quantity decimal precision digits.
-    with_state : int
-        Flag bit indicating whether state tracking is active (1) or inactive (0).
-    with_ctrade : int
-        Flag bit indicating whether cumulative trade tracking is active (1) or inactive (0).
-
-    Attributes
-    ----------
-    headers : ndarray of shape (N, M), dtype=int64
-        C-contiguous two-dimensional header records array.
-    headers_offset : memoryview
-        Memory view pointing to current header offset indices as 64-bit signed integers.
-    idYmin : memoryview
-        Memory view pointing to the minimum valid price row index.
-    idYmax : memoryview
-        Memory view pointing to the maximum valid price row index.
-    idx : memoryview
-        Memory view pointing to the current active bar index.
-    lidx : memoryview
-        Memory view pointing to the last processed bar index.
-    baseTimestamp : memoryview
-        Memory view pointing to base timestamps.
-    baseNprice : memoryview
-        Memory view pointing to base price level counts.
-    center : memoryview
-        Memory view pointing to center price row indices.
-    fp_rows : memoryview
-        Memory view pointing to total footprint row counts.
-    fp_cols : int
-        Total number of columns in the footprint panel.
-    idxVP : int
-        Volume profile column index offset.
-    idxDP : int
-        Delta profile column index offset.
-    tims : int
-        Timestamp column index offset.
-    scale : int
-        Price scaling factor.
-    step_tick : int
-        Step tick size in price units.
-    price_mult : int
-        Price multiplier for floating-point preservation.
-    price_prec : int
-        Price decimal precision digits.
-    qty_mult : int
-        Quantity multiplier for floating-point preservation.
-    qty_prec : int
-        Quantity decimal precision digits.
-    with_state : int
-        Flag bit indicating whether state tracking is active (1) or inactive (0).
-    with_ctrade : int
-        Flag bit indicating whether cumulative trade tracking is active (1) or inactive (0).
-    """
+    """JIT-compiled storage container holding shared memory views and arrays for high-performance execution."""
 
     def __init__(
         self,

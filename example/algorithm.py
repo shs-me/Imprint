@@ -1,46 +1,44 @@
 from dataclasses import dataclass, field
 from typing import override
 
-from numpy import int64
+import numpy as np
 
-from imprint import StrategyEngine
-from imprint import constant as c
+from imprint import StrategyEngine, c
 
 
 @dataclass(slots=True)
 class IntraDay(StrategyEngine):
-    ma_volume_period: int = field(default=50, init=False)
-    ma_avg_trade_size_period: int = field(default=50, init=False)
-    big_cluster_mult: float = field(default=0.7, init=False)
-
-    idy_use: int | int64 = field(default=0, init=False)
-    idx_use: int | int64 = field(default=0, init=False)
+    ma_volume_period: int = field(default=21, init=False)
+    ma_avg_trade_size_period: int = field(default=21, init=False)
+    big_cluster_mult: float = field(default=0.3, init=False)
 
     @override
-    def on_bar_update(
-        self, idYmin: int, idYmax: int, idx: int, lidx: int
-    ) -> None:
-        if not ((lidx // 2) > (50)):
+    def on_bar_close(self, idx: int, lidx: int) -> None:
+        if not ((lidx // 2) > (20)):
             return
 
-        idXbid = idx & ~1
-        if (self.idx_use == idXbid) and (self.idy_use == idYmin):
-            return
-
-        bar = self.fp[idx]
+        bar = self.fp[lidx]
         if bar.is_empty:
             return
 
-        idy = idYmin - bar.ind.high.id
-
-        bid, ask = bar.base[idy, :]
-        bid_state, ask_state = bar.state[idy, :]
-        bid_ctrade, ask_ctrade = bar.ctrade[idy, :]
-
-        if ask_state & c.SF_BIG_CLUSTER:
-            self.idx_use, self.idy_use = idXbid, idYmin
-            if ask_state & c.SF_IMBALANCE and (
-                (self.fp[(idx & ~1) - 2].ind.ma_avg_trade_size * 10)
-                < (ask // ask_ctrade)
-            ):
-                self.send_signal(False, True, True, idYmin)
+        ind = bar.ind
+        atr_pct = ind.atr_percent
+        if ((atr_pct) > 0.001) and np.any(bar.state & c.SF_BIG_CLUSTER):
+            OPEN, HIGH = ind.open.n, ind.high.n
+            LOW, CLOSE = ind.low.n, ind.close.n
+            POC = bar.vp.poc.n
+            FP_POC, FP_VAH, FP_VAL = (
+                ind.fp_poc.n,
+                ind.fp_vah.n,
+                ind.fp_val.n,
+            )
+            VWAP = ind.fp_vwap.n
+            if ind.delta_ratio > 0.3 and CLOSE > POC:
+                self.send_signal(
+                    False,
+                    True,
+                    True,
+                    CLOSE,
+                    tp_dev=round(atr_pct * 10000 * 8),
+                    sl_dev=round(atr_pct * 10000 * 4),
+                )

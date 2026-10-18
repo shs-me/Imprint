@@ -1,6 +1,8 @@
 from multiprocessing import Process
 from typing import Any, Protocol, TypedDict, overload
 
+from imprint._core.settings import LogLevel
+
 
 class StrategyProtocol(Protocol):
     """Define the core algorithm execution and event callback interface.
@@ -216,40 +218,35 @@ class SendOrderMethodSignature(Protocol):
         nQty : int
             Order quantity in base units. Must be positive.
         """
-        ...
 
 
 class SetLogMethodSignature(Protocol):
     """Define callable signature for logging messages."""
 
-    def __call__(self, log: str) -> None:
-        """Record a log message string.
+    def __call__(self, msg: Any, level: LogLevel = LogLevel.INFO, /) -> None:
+        """Transmit logs to the host as a high-performance logging alternative.
 
         Parameters
         ----------
-        log : str
-            Formatted log message content to record.
+        log : Any
+            The logged object must be serializable to str.
+        level : LogLevel, default=LogLevel.INFO
+            If pass_debug_logs is enabled, all DEBUG level logs are discarded.
+
+        Notes
+        -----
+        - Each process has a fixed ring buffer size for logging.
+        - If the log size exceeds the buffer cell size, it is discarded and the
+        host is notified via BIG_LOG_SIZE.
+        - If the buffer is full and the host cannot keep up, the log is discarded
+         and the host is notified via RING_BUFFER_LOG_STREAM_OVERFLOW.
+        - Timestamps are generated locally rather than by the host, which may
+        introduce minor chronological discrepancies.
+        - Upon successful write, the host is notified via HAVE_LOG.
         """
-        ...
 
 
 class DumpMSG(TypedDict):
-    """Represent serialized debugging or error dump messages.
-
-    Attributes
-    ----------
-    timestamp : str
-        ISO-8601 formatted timestamp string representing when the dump was created.
-    type : str
-        Classification category of the dump or error event.
-    message : str
-        Primary description or payload of the error message.
-    traceback : list[str]
-        Stack trace lines captured at the point of exception or dump.
-    locals : dict[str, Any]
-        Local variable namespace and inspection state dictionary.
-    """
-
     timestamp: str
     type: str
     message: str
@@ -258,18 +255,6 @@ class DumpMSG(TypedDict):
 
 
 class ProcsData(TypedDict):
-    """Represent managed worker process state and metadata.
-
-    Attributes
-    ----------
-    proc_name : str
-        Descriptive name or label identifying the worker process.
-    task_id : int
-        Unique integer identifier associated with the task assignment.
-    proc : Process
-        Underlying multiprocessing Process instance handle.
-    """
-
     proc_name: str
     task_id: int
     proc: Process

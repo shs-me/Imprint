@@ -93,8 +93,8 @@ class Controller:
             Active asynchronous tasks corresponding to running data streams.
         """
         while True:
-            if self.manager.have_status():
-                task: int = self.manager.check_base_task()
+            task: int | None = self.manager.get_task_sc()
+            if task:
                 if task & scs.EXIT:
                     return self.manager.set_proc_sc(
                         scs.EXIT, wait_main_task=False
@@ -117,7 +117,7 @@ class Controller:
             streams: list[Task[None]] = [
                 tg.create_task(self.market_data_stream.run())
             ]
-            if self.manager.cfgSetup.execution:
+            if self.manager.cfgSetup.with_execution:
                 streams.append(tg.create_task(self.user_data_stream.run()))
                 streams.append(tg.create_task(self.order_stream.run()))
 

@@ -9,19 +9,19 @@ description = "Multiprocess order-flow trading engine for crypto futures backtes
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 authors = [
-    { name = "Sherali Safaralizoda", email = "imprint+shs06main@gmail.com" }
+    { name = "Sherali Safaralizoda", email = "shs06main@gmail.com" }
 ]
 keywords = [
     "trading-engine",
-    "order-flow",
     "footprint-chart",
+    "order-flow",
     "backtesting",
     "crypto-trading",
     "algorithmic-trading",
     "market-microstructure",
     "quantitative-finance",
-    "zero-copy-ipc",
     "shared-memory",
+    "ipc",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -35,25 +35,26 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy==2.4.6",
-    "numba==0.66.0",
-    "msgspec==0.21.1",
-    "websockets==16.1.1",
-    "httpx==0.28.1",
-    "loguru==0.7.3",
-    "python-dotenv==1.2.3"
+    "numpy==2.4",
+    "numba==0.66",
+    "msgspec==0.21",
+    "websockets==16.1",
+    "httpx==0.28",
+    "loguru==0.7",
+    "python-dotenv==1.2"
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest==9.1.1",
-    "pytest-cov==7.1.0",
-    "ruff==0.16.6",
+    "pytest==9.1",
+    "pytest-cov==7.1",
+    "ruff==0.16",
+    "basedpyright==1.40",
 ]
 
 plot = [
-    "plotly==7.0.0",
-    "streamlit==1.65.0"
+    "plotly==7.0",
+    "streamlit==1.65"
 ]
 
 all = [
@@ -83,23 +84,19 @@ ignore = [
      "BLE001"
 ]
 
-[tool.pyright]
+[tool.basedpyright]
 pythonVersion = "3.13"
-pythonPlatform = "All"
 venvPath = "."
 venv = ".venv"
 
-indexing = false
 exclude = [
-    ".venv",
+    "**/.*",
     "**/__pycache__",
     "build",
     "dist"
 ]
-ignore = [
-    ".venv"
-]
 
+typeCheckingMode = "strict"
 reportAny = false
 reportExplicitAny = false
 reportPrivateUsage = false

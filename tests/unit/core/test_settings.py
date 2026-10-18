@@ -1,7 +1,7 @@
 import inspect
 from enum import IntFlag, StrEnum
 
-from imprint._core import settings
+import imprint._core.settings as stg
 
 
 def test_settings_invariants() -> None:
@@ -13,7 +13,7 @@ def test_settings_invariants() -> None:
     - There are no gaps in the bitwise sequence of flags (dense progression of powers of 2) for `IntFlag` enums.
     - All keys and string member values in `StrEnum` classes are unique.
     """
-    for name, obj in inspect.getmembers(settings, inspect.isclass):
+    for name, obj in inspect.getmembers(stg, inspect.isclass):
         if issubclass(obj, IntFlag) and (obj is not IntFlag):
             assert min(obj) == 1, f"{name}: Initial flag is missing"
             assert max(obj).bit_length() <= 63, (

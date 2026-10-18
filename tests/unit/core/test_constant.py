@@ -1,14 +1,14 @@
-from imprint._core import constant as c
-from imprint._core import settings
+import imprint._core.constant as c
+import imprint._core.settings as stg
 
 PREFIX_MAP = {
-    "BH_": settings.BarHeaders,
-    "SF_": settings.StateFlags,
-    "OB_": settings.OrderBook,
-    "EH_": settings.EquityHeaders,
-    "TP_": settings.TradeParam,
-    "OF_": settings.OrderFlag,
-    "RIF_": settings.ReInitFlag,
+    "BH_": stg.BarHeaders,
+    "SF_": stg.StateFlags,
+    "OB_": stg.OrderBook,
+    "EH_": stg.EquityHeaders,
+    "TP_": stg.TradeParam,
+    "OF_": stg.OrderFlag,
+    "RIF_": stg.ReInitFlag,
 }
 
 

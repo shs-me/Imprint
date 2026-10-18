@@ -9,7 +9,7 @@ from functools import wraps
 from types import TracebackType
 from typing import Any, cast, final, override
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.types import DumpMSG
 
 
@@ -42,19 +42,7 @@ class DebugEncoder(json.JSONEncoder):
 @final
 @dataclass(slots=True)
 class DumpException:
-    """Capture, format, and persist active exception context and frame locals to disk.
-
-    Attributes
-    ----------
-    exc_type : type[BaseException] | None
-        Captured exception class or None if no active exception exists.
-    exc_value : BaseException | None
-        Captured exception instance or None if no active exception exists.
-    exc_tb : TracebackType | None
-        Captured traceback object or None if no active exception exists.
-    dump_msg : DumpMSG
-        Structured dictionary containing timestamp, error type, message, traceback lines, and local variables.
-    """
+    """Capture, format, and persist active exception context and frame locals to disk."""
 
     exc_type: type[BaseException] | None = field(default=None, init=False)
     exc_value: BaseException | None = field(default=None, init=False)
@@ -79,6 +67,9 @@ class DumpException:
             If writing to ``c.EXC_DUMP_PATH`` fails due to I/O or permission errors.
         """
         self._get_exc_info()
+        if self.exc_tb is None:
+            return
+
         self._create_dump_msg()
         try:
             with open(file=c.EXC_DUMP_PATH, mode="a", encoding="utf-8") as f:
@@ -192,13 +183,7 @@ class DumpException:
 
 
 def error_handler[**P, R](func: Callable[P, R]) -> Callable[P, R | None]:
-    """Catch unhandled exceptions in decorated functions, dump exception context, and return None.
-
-    Returns
-    -------
-    Callable[P, R | None]
-        Decorator function wrapping target callables with an exception-handling try/except block.
-    """
+    """Catch unhandled exceptions in decorated functions, dump exception context, and return None."""
 
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:

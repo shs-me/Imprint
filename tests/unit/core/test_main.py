@@ -12,7 +12,7 @@ from imprint._core.settings import LogLevel, ProcsIds
 @pytest.fixture
 def mock_host_manager() -> MagicMock:
     mgr = MagicMock()
-    mgr.cfgSetup = Setup(backtesting=True, execution=True)
+    mgr.cfgSetup = Setup(is_backtesting=True, with_execution=True)
     return mgr
 
 
@@ -50,7 +50,7 @@ class TestMainAgent:
         assert ids == [ProcsIds.streaming, ProcsIds.engine, ProcsIds.executing]
 
         # 2. Without execution -> 2 processes
-        mock_host_manager.cfgSetup.execution = False
+        mock_host_manager.cfgSetup.with_execution = False
         agent_no_exec = MainAgent(manager=mock_host_manager, base_kwargs={})
         funcs_no_exec = agent_no_exec.get_procs_funcs()
         assert len(funcs_no_exec) == 2

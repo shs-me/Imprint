@@ -6,48 +6,28 @@ manipulation, exception dumps, and error decorator routines tailored for worker 
 
 import gc
 import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from functools import wraps
-from typing import override
+from typing import Any, final, override
 
 from imprint._core.ipc.manager.base import Base
+from imprint._core.settings import LogLevel
 from imprint._core.settings import StatusCodes as scs
-from imprint._core.utils.exc_dumper import DumpException
 
 
 @dataclass(slots=True)
 class Node(Base):
-    """Manage individual worker process status tracking and IPC signaling.
+    """Worker process manager.
 
-    Coordinates task synchronization, error logging dumps, and sets localized status code
-    bitmask flags mapped to specific shared memory offsets.
-
-    Parameters
-    ----------
-    _proc_id : int
-        Process identifier index in the shared process status array.
-    _task_id : int
-        Task identifier index in the shared task status array.
-
-    Attributes
-    ----------
-    __wait_main_task : bool
-        Flag indicating if the worker should block waiting for a task signal.
-    __proc_status : memoryview
-        Process-level status code slice of this node.
-    __task_status : memoryview
-        Task-level status code slice of this node.
-    __dumper : DumpException
-        Context-aware exception dumper for traceback and local state serialization.
+    Responsible for communication with the main process, handling host tasks and
+    sending process tasks to the host. Writes custom logs to the ring buffer
+    for subsequent host logging. Inherits configuration and memory layout storage
+    from the base manager.
     """
 
-    _proc_id: int
-    _task_id: int
+    _pid: int
+    _tid: int
 
     __wait_main_task: bool = field(default=False, init=False)
-    __proc_status: memoryview = field(init=False)
-    __task_status: memoryview = field(init=False)
     __ignore_ps: int = field(
         default=~(
             scs.RUN
@@ -61,94 +41,98 @@ class Node(Base):
         ),
         init=False,
     )
+    """Process status codes ignored by the manager."""
+
     __alowed_ts: int = field(
-        default=(scs.RUN | scs.STOP | scs.RESET | scs.GC_COLLECT),
-        init=False,
+        default=(scs.RUN | scs.STOP | scs.RESET | scs.GC_COLLECT), init=False
     )
-    __dumper: DumpException = field(
-        default_factory=lambda: DumpException(), init=False
-    )
+    """Host tasks handled by the manager."""
 
-    @override
-    def post_init(self) -> None:
-        """Bind process task and status memory views matching worker identifier index."""
-        self.__proc_status = self._procs_status[
-            self._proc_id : self._proc_id + 1
-        ]
-        self.__task_status = self._procs_status[
-            self._task_id : self._task_id + 1
-        ]
+    def set_log(self, msg: Any, level: LogLevel = LogLevel.INFO, /) -> None:
+        """Transmit logs to the host as a high-performance logging alternative.
 
-    def set_log(self, log: str) -> None:
-        """Write a formatted process status log message to the shared memory ring buffer.
-
-        Encodes, timestamps, and inserts log entries inside the shared ring buffer,
-        raising warning codes if overflows or sizing issues occur.
-
-        Parameters
-        ----------
-        log : str
-            Plaintext log string to encode and transmit to the host process.
+        - Each process has a fixed ring buffer size for logging.
+        - The logged object must be serializable to str.
+        - If the log size exceeds the buffer cell size, it is discarded and the
+        host is notified via BIG_LOG_SIZE.
+        - If the buffer is full and the host cannot keep up, the log is discarded
+        and the host is notified via RING_BUFFER_LOG_STREAM_OVERFLOW.
+        - If pass_debug_logs is enabled, all DEBUG level logs are discarded.
+        - Timestamps are generated locally rather than by the host, which may
+        introduce minor chronological discrepancies.
+        - Upon successful write, the host is notified via HAVE_LOG.
         """
-        _ = self._log_stream.ring_buf
-        # - - -
+        if self.cfgSetup.pass_debug_logs and (level == LogLevel.DEBUG):
+            return
+
+        _ = self.mlLogStream.ring_buf
         lag: int = (
-            (_.wid_buf[self._proc_id] - _.rid_buf[self._proc_id])
-            + _.cell_amount
+            (_.wid_buf[self._pid] - _.rid_buf[self._pid]) + _.cell_amount
         ) % _.cell_amount
         if lag > _.safe_lag:
             return self.set_proc_sc(
                 scs.RING_BUFFER_LOG_STREAM_OVERFLOW, wait_main_task=False
             )
 
-        b_log = log.encode()
-
-        if (len(b_log) + 8) > _.data_size:
+        b_log: bytes = str(msg).encode()
+        if (len(b_log) + 8) > _.cell_size:
             return self.set_proc_sc(scs.BIG_LOG_SIZE, wait_main_task=False)
 
-        cell: int = _.wid_buf[self._proc_id]
-        need_cell: int = (self._proc_id * _.cell_amount) + cell
+        cell: int = _.wid_buf[self._pid]
+        need_cell: int = (self._pid * _.cell_amount) + cell
+        start: int = need_cell * _.cell_size
+
+        headers: memoryview = _.data_buf[start : (start := (start + 16))].cast(
+            "q"
+        )
+        headers[0], headers[1] = round(time.time() * 1000), level
+        _.data_buf[start : (start + len(b_log))] = b_log
         _.data_header_buf[need_cell] = len(b_log)
-        start: int = need_cell * _.data_size
-        _.data_buf[start : (start + 8)].cast("q")[0] = round(time.time() * 1000)
-        _.data_buf[(start + 8) : (start + 8) + len(b_log)] = b_log
+
         new_cell: int = cell + 1
-        _.wid_buf[self._proc_id] = new_cell if new_cell < _.cell_amount else 0
+        _.wid_buf[self._pid] = new_cell if new_cell < _.cell_amount else 0
 
         self.set_proc_sc(scs.HAVE_LOG, wait_main_task=False)
 
-    def have_status(self) -> bool:
-        """Check if any process status or task status bits are currently set.
+    def set_proc_sc(self, code: scs, wait_main_task: bool) -> None:
+        self._set_sc(self._pid, code)
+        self._sc_sem.release()
+        if not self.__wait_main_task:
+            self.__wait_main_task = wait_main_task
 
-        Returns
-        -------
-        bool
-            True if status code or task code signals are present
+    def get_task_sc(self) -> int | None:
+        """Check for unignored host or process task flags.
+
+        If host tasks are absent but process tasks are present and main task
+        waiting is enabled, waits in an infinite loop with 1ms timeouts until the
+        host assigns a task.
+        If host tasks are present, processes base tasks and returns the task flag
+        (including processed tasks). Otherwise returns None.
         """
-        return (self.__task_status[0] != 0) or (
-            (self.__proc_status[0] != 0)
-            and ((self.__proc_status[0] & self.__ignore_ps) != 0)
-        )
+        proc_sc, task_sc = self._get_sc(self._pid), self._get_sc(self._tid)
+        if (task_sc != 0) or (
+            (proc_sc != 0) and (proc_sc & self.__ignore_ps) != 0
+        ):
+            return self.__check_base_task()
 
-    def check_base_task(self) -> int:
-        """Examine, process, and clear active base task state instructions.
+    def __check_base_task(self) -> int:
+        """Return host task flags and handle base tasks:
 
-        Synchronizes task codes, wait loops, garbage collection commands, and process stops,
-        clearing the bitmasks after processing.
+        - RUN: Cleared directly.
+        - STOP: Notifies successful stop via STOP, waits on Event, notifies RUN.
+        - RESET: Updates configs, runs garbage collection, notifies RESET, waits on Event, notifies RUN.
+        - GC_COLLECT: Runs garbage collection.
 
-        Returns
-        -------
-        int
-            The raw task status code bitmask value before clearing.
+        Processed tasks are cleared from the returned task flag.
+        If main task waiting is enabled, waits in an infinite loop with 1ms timeouts until the host assigns a task.
         """
         if self.__wait_main_task:
-            while self.__task_status[0] == 0:
+            while self._get_sc(self._tid) == 0:
                 time.sleep(0.001)
 
             self.__wait_main_task = False
 
-        task_sc: int = self.__task_status[0]
-        return_data: int = task_sc
+        task_sc: int = self._get_sc(self._tid)
 
         if task_sc & self.__alowed_ts:
             clear_task: int = 0
@@ -175,69 +159,27 @@ class Node(Base):
                 clear_task |= scs.GC_COLLECT
 
             if clear_task:
-                self.__clear_task_sc(clear_task)
+                self._clear_sc(self._tid, clear_task)
 
-        return return_data
+        return task_sc
 
     def complete(self) -> None:
-        self.__clear_task_sc(scs.COMPLETE)
+        """Notify the host of successful work completion (COMPLETE)."""
+        self._clear_sc(self._tid, scs.COMPLETE)
         self.set_proc_sc(scs.COMPLETE, wait_main_task=True)
 
-    def set_proc_sc(self, code: scs | int, wait_main_task: bool) -> None:
-        """Set status code bitmask for process and signal MainManager semaphore.
+    def dump_exc(self, set_status_code_error: bool = False, /) -> None:
+        """Serialize current system exception traceback and locals to disk."""
+        self._dumper.dump_exception()
+        if set_status_code_error:
+            self.set_proc_sc(scs.ERROR, wait_main_task=set_status_code_error)
 
-        Parameters
-        ----------
-        code : StatusCodes or int
-            The status code bitmask bits to apply to the status view.
-        wait_main_task : bool
-            Whether the node should wait for the host before clearing the state.
-        """
-        self.__proc_status[0] |= code
-        self._main_status[self._proc_id] += 1
-        self._sc_sem.release()
-        if not self.__wait_main_task:
-            self.__wait_main_task = wait_main_task
-
-    def __clear_task_sc(self, code: scs | int) -> None:
-        """Clear task status code bitmask flags.
-
-        Parameters
-        ----------
-        code : StatusCodes or int
-            The status code bitmask values to strip out of the task status.
-        """
-        self.__task_status[0] &= ~(code)
-
-    def dump_exc(self, set_status_error: bool = False) -> None:
-        """Serialize current system exception traceback and locals to disk.
-
-        Parameters
-        ----------
-        set_status_error : bool, default=False
-            If True, registers an ``ERROR`` status code back to the host process.
-        """
-        self.__dumper.dump_exception()
-        if set_status_error:
-            self.set_proc_sc(scs.ERROR, wait_main_task=set_status_error)
+    @override
+    def _child_exit_action(self) -> None:
+        if self._dumper.exc_tb:
+            self.set_proc_sc(scs.ERROR, wait_main_task=True)
 
 
-def node_handler[**P, R](func: Callable[P, R]) -> Callable[P, R | None]:
-    """Catch exceptions inside Node tasks and dump traceback details automatically.
-
-    Returns
-    -------
-    Callable[P, R | None]
-        The wrapped callable processing errors inside workers safely.
-    """
-
-    @wraps(func)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
-        try:
-            return func(*args, **kwargs)
-        except Exception:
-            manager: Node | None = getattr(args[0], "manager", None)
-            if manager:
-                manager.dump_exc(set_status_error=True)
-
-    return wrapper
+@final
+@dataclass(slots=True)
+class NodeManager(Node): ...  # pyright: ignore[reportUninitializedInstanceVariable]

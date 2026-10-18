@@ -13,7 +13,7 @@ from numba.experimental import (
 )
 from numpy import int64
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.exchange_sim.engine.order_stream import compact_order_book
 from imprint._core.exchange_sim.engine.user_data_stream import UserData
 from imprint._core.utils.base import ExecutedOrdersArray, OrderBookArray
@@ -76,38 +76,7 @@ spec = [
 
 @jitclass(spec)  # pyright: ignore[reportCallIssue, reportUntypedClassDecorator]
 class JitMatchingEngine:
-    """JIT-compiled high-performance order matching engine for simulated exchange execution.
-
-    Parameters
-    ----------
-    order_book : ndarray of shape (N, M)
-        C-contiguous order book buffer containing active order records.
-    order_id_buf : memoryview of shape (1,)
-        Monotonically increasing sequence buffer for generated order IDs.
-    obRow : memoryview of shape (1,)
-        Active row count pointer for the order book.
-    executed_orders : ndarray of shape (K, P)
-        C-contiguous execution log buffer for filled or canceled orders.
-    eoRow : memoryview of shape (1,)
-        Active row count pointer for the execution log.
-    slippage : int
-        Fixed slippage in basis points applied to market orders.
-
-    Attributes
-    ----------
-    order_book : ndarray of shape (N, M)
-        C-contiguous order book buffer containing active order records.
-    order_id_buf : memoryview of shape (1,)
-        Monotonically increasing sequence buffer for generated order IDs.
-    obRow : memoryview of shape (1,)
-        Active row count pointer for the order book.
-    executed_orders : ndarray of shape (K, P)
-        C-contiguous execution log buffer for filled or canceled orders.
-    eoRow : memoryview of shape (1,)
-        Active row count pointer for the execution log.
-    slippage : int
-        Fixed slippage in basis points applied to market orders.
-    """
+    """JIT-compiled high-performance order matching engine for simulated exchange execution."""
 
     def __init__(
         self,
@@ -130,13 +99,6 @@ class JitMatchingEngine:
 
         Iterates through active order rows, evaluating execution or cancellation
         conditions against current trade timestamp and price, and compacts the book.
-
-        Parameters
-        ----------
-        trade_timestamp : int
-            Exchange timestamp of the incoming trade tick in nanoseconds or ticks.
-        trade_nPrice : int
-            Normalized price of the incoming trade tick.
 
         Returns
         -------
@@ -198,23 +160,6 @@ class JitMatchingEngine:
         order_client_id: int64,
     ) -> bool:
         """Evaluate and execute new market, limit, or stop trigger orders.
-
-        Parameters
-        ----------
-        trade_timestamp : int
-            Exchange timestamp of the trade tick.
-        trade_nPrice : int
-            Normalized price of the trade tick.
-        order_nPrice : int
-            Normalized limit price of the order.
-        order_param : int
-            Bitmask representing order type and flags.
-        nQty : int
-            Normalized order quantity.
-        order_id : int
-            Unique generated internal identifier for the execution record.
-        client_order_id : int
-            Client-assigned order identifier.
 
         Returns
         -------
@@ -282,15 +227,6 @@ class JitMatchingEngine:
         self, trade_timestamp: int, order_id: int, order_client_id: int64
     ) -> bool:
         """Cancel an existing active order matching the client order ID and log cancellation.
-
-        Parameters
-        ----------
-        trade_timestamp : int
-            Exchange timestamp when the cancellation is processed.
-        order_id : int
-            Unique generated internal identifier for the cancellation record.
-        client_order_id : int
-            Client-assigned order identifier to locate in the order book.
 
         Returns
         -------

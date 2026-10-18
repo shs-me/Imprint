@@ -4,7 +4,7 @@ from typing import final, override
 
 from numba import njit
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.exchange_sim.account import Account
 from imprint._core.settings import StatusCodes as scs
 from imprint._core.utils.base import ExecutedOrdersArray, OrderBookArray
@@ -76,7 +76,7 @@ class Order(Account, ABC):
     def __update_order_book(self) -> None:
         """Pull order data from the ring buffer and append it to the order book and execution logs."""
         timestamp, order_param, client_order_id, nPrice, nQty = (
-            self.manager.cfgOrderStream.ring_buf.get_data()
+            self.manager.mlOrderStream.ring_buf.get_data()
         )
 
         if self.obRow[0] >= self.order_book.shape[0]:

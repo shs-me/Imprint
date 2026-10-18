@@ -6,7 +6,7 @@ from typing import Any, override
 
 from websockets import ClientConnection
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.pipeline.streaming.live.base import Base
 from imprint._core.utils import OrderEncoder
 
@@ -91,7 +91,7 @@ class Order(Base):
         ws : ClientConnection
             Active WebSocket client connection instance.
         """
-        _ = self.manager.cfgOrderStream.ring_buf
+        _ = self.manager.mlOrderStream.ring_buf
         # - - -
         await self.loop.run_in_executor(None, self.wss_sem.acquire)
         if _.wid_buf[0] != _.rid_buf[0]:
@@ -106,7 +106,7 @@ class Order(Base):
         bytes
             Encoded binary or text payload representing the order request.
         """
-        _ = self.manager.cfgOrderStream.ring_buf
+        _ = self.manager.mlOrderStream.ring_buf
         # - - -
         timestamp, order_param, client_order_id, nPrice, nQty = _.get_data()
 

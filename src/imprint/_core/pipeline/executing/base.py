@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.account import Account
-from imprint._core.ipc import NodeManager, node_handler
+from imprint._core.ipc import NodeManager
 from imprint._core.pipeline.executing.strategy import ExecutionEngine
 from imprint._core.settings import PositionFSM
 from imprint._core.settings import StatusCodes as scs
@@ -14,30 +14,7 @@ from imprint._core.types import ExecutionProtocol
 
 @dataclass(slots=True)
 class Base(ABC):
-    """Executes pipeline steps, managing node signals, user data buffers, and order flows.
-
-    Parameters
-    ----------
-    manager : NodeManager
-        Manager coordinating process states, tasks, and communication streams.
-    engine : ExecutionProtocol
-        Protocol implementation handling orders, signals, and execution callbacks.
-
-    Attributes
-    ----------
-    manager : NodeManager
-        Manager coordinating process states, tasks, and communication streams.
-    executor : ExecutionProtocol
-        Protocol implementation handling orders, signals, and execution callbacks.
-    count_open_positions : memoryview
-        Memory-mapped 64-bit signed integer tracking the count of currently open positions.
-    trade_read_time : memoryview
-        Memory view pointing to trade read time metrics.
-    readed_timestamp : int
-        Timestamp of the last read operation, defaulting to 0.
-    account : Account
-        Account state and balance risk management handler.
-    """
+    """Executes pipeline steps, managing node signals, user data buffers, and order flows."""
 
     manager: NodeManager
 
@@ -52,8 +29,7 @@ class Base(ABC):
     )
 
     def __post_init__(self) -> None:
-        """Initialize pipeline streams, metrics views, and account instance."""
-        cfgMetrics = self.manager.cfgMetrics
+        cfgMetrics = self.manager.mlMetrics
         self.trade_read_time = cfgMetrics.trade_read_time.view.cast("q")
         self.__engine_complete = cfgMetrics.engine_complete.view
 
@@ -71,25 +47,25 @@ class Base(ABC):
                 importlib.import_module(m_name), c_name
             )
             self.strategy = strategy_type(
-                is_backtesting=cfgSetup.backtesting,
+                is_backtesting=cfgSetup.is_backtesting,
                 count_open_positions=self.count_open_positions,
                 account=self.account,
                 send_order=self.send_order,
+                logger=self.manager.set_log,
             )
             self.manager.set_log(
                 f"{self.strategy.__class__.__name__} used as {ExecutionEngine.__name__}"
             )
 
     @final
-    @node_handler
     def run(self) -> None:
         """Execute the main processing loop handling tasks, signals, and user data."""
-        u = self.manager.cfgUserDataStream.ring_buf
-        s = self.manager.cfgSignalStream.ring_buf
+        u = self.manager.mlUserDataStream.ring_buf
+        s = self.manager.mlSignalStream.ring_buf
         # - - -
         while True:
-            if self.manager.have_status():
-                task: int = self.manager.check_base_task()
+            task: int | None = self.manager.get_task_sc()
+            if task:
                 if task & scs.EXIT:
                     return self.manager.set_proc_sc(
                         scs.EXIT, wait_main_task=False
@@ -119,16 +95,9 @@ class Base(ABC):
 
     @final
     def __complete(self) -> bool:
-        """Check whether execution engine is complete and ring buffers are fully drained.
-
-        Returns
-        -------
-        bool
-            True if engine completion flag is set and both signal and user data
-            write/read pointers are aligned.
-        """
-        u = self.manager.cfgUserDataStream.ring_buf
-        s = self.manager.cfgSignalStream.ring_buf
+        """Check whether execution engine is complete and ring buffers are fully drained."""
+        u = self.manager.mlUserDataStream.ring_buf
+        s = self.manager.mlSignalStream.ring_buf
         # - - -
         return (
             (self.__engine_complete[0] == 1)
@@ -155,17 +124,8 @@ class Base(ABC):
     ) -> None:
         """Handle timeout or periodic alarm events using ring buffer pointers.
 
-        Parameters
-        ----------
-        WB_1 : memoryview
-            Write pointer buffer for the signal stream ring buffer.
-        RB_1 : memoryview
-            Read pointer buffer for the signal stream ring buffer.
-        WB_2 : memoryview
-            Write pointer buffer for the user data stream ring buffer.
-        RB_2 : memoryview
-            Read pointer buffer for the user data stream ring buffer.
-        """
+        WB/RB_1: SignalStream pointers
+        WB/RB_2: UserDataStream pointers"""
 
     @final
     def __check_signal_buf(
@@ -173,7 +133,7 @@ class Base(ABC):
     ) -> None:
         """Read and process incoming trading signals from the signal ring buffer."""
         signal_id, nPrice, timestamp, order_param, tp_dev, sl_dev = (
-            self.manager.cfgSignalStream.ring_buf.get_data()
+            self.manager.mlSignalStream.ring_buf.get_data()
         )
         self._check_user_data_buf()
         self.pre_execute_signal_action(timestamp)
@@ -216,31 +176,19 @@ class Base(ABC):
 
     @abstractmethod
     def pre_execute_signal_action(self, time_get_signal: int) -> None:
-        """Execute subclass-specific logic prior to signal processing.
-
-        Parameters
-        ----------
-        time_get_signal : int
-            Timestamp when the signal was received, in microseconds or milliseconds.
-        """
+        """Execute subclass-specific logic prior to signal processing."""
 
     @final
     def _check_user_data_buf(self) -> None:
         """Drain and process all available items in the user data ring buffer."""
-        _ = self.manager.cfgUserDataStream.ring_buf
+        _ = self.manager.mlUserDataStream.ring_buf
         # - - -
         while _.wid_buf[0] != _.rid_buf[0]:
             self.preppare_user_data(_.get_data())
 
     @abstractmethod
     def preppare_user_data(self, user_data_raw_buf: memoryview) -> None:
-        """Process a raw user data buffer retrieved from the ring buffer.
-
-        Parameters
-        ----------
-        user_data_raw_buf : memoryview
-            Raw byte memory view containing user data payload.
-        """
+        """Process a raw user data buffer retrieved from the ring buffer."""
 
     @final
     def on_order_update(
@@ -253,25 +201,7 @@ class Base(ABC):
         nQty: int,
         nCommission: int,
     ) -> None:
-        """Handle incoming order update events and update position FSM states.
-
-        Parameters
-        ----------
-        timestamp : int
-            Timestamp of the order update event.
-        order_param : int
-            Bitfield flags containing order parameters and status flags.
-        order_id : int
-            Unique exchange-assigned order identifier.
-        client_order_id : int
-            Unique client-assigned order identifier.
-        nPrice : int
-            Normalized order price.
-        nQty : int
-            Normalized order quantity.
-        nCommission : int
-            Normalized commission fee associated with the order.
-        """
+        """Handle incoming order update events and update position FSM states."""
         is_long: bool = bool(order_param & c.OF_LONG)
         is_buy: bool = bool(order_param & c.OF_BUY)
         is_open: bool = (is_long and is_buy) or (not is_long and not is_buy)
@@ -322,17 +252,7 @@ class Base(ABC):
     def on_balance_update(
         self, nBalance: int, lockedNbalance: int, availableNbalance: int
     ) -> None:
-        """Update account balance and locked/available balance metrics.
-
-        Parameters
-        ----------
-        nBalance : int
-            Normalized total account balance.
-        lockedNbalance : int
-            Normalized locked balance in open orders or positions.
-        availableNbalance : int
-            Normalized available balance for new trades.
-        """
+        """Update account balance and locked/available balance metrics."""
         self.account.nBalance[0] = nBalance
         self.account.lockedNbalance[0] = lockedNbalance
         self.account.availableNbalance[0] = availableNbalance
@@ -345,22 +265,8 @@ class Base(ABC):
         nPrice: int,
         nQty: int,
     ) -> None:
-        """Publish a new order instruction to the order stream.
-
-        Parameters
-        ----------
-        timestamp : int
-            Timestamp when the order request was generated.
-        order_param : int
-            Bitfield flags specifying order type, side, and characteristics.
-        client_order_id : int
-            Unique client-assigned order identifier.
-        nPrice : int
-            Normalized limit or stop price.
-        nQty : int
-            Normalized order quantity.
-        """
-        self.manager.cfgOrderStream.set_data(
+        """Publish a new order instruction to the order stream."""
+        self.manager.mlOrderStream.set_data(
             timestamp=timestamp,
             order_param=order_param,
             client_order_id=client_order_id,

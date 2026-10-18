@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from numpy import int64
 from numpy.typing import NDArray
 
-from imprint._core import constant as c
+import imprint._core.constant as c
 from imprint._core.exchange_sim.account.position import JitPosition
 from imprint._vis.settings import CloseTrades, OpenTrades
 

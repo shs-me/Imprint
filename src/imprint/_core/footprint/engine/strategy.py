@@ -3,33 +3,17 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import final, override
 
-from imprint._core import constant as c
+from numpy import int64
+
+import imprint._core.constant as c
 from imprint._core.footprint.models import Footprint
 from imprint._core.ipc import NodeManager
-from imprint._core.types import StrategyProtocol
+from imprint._core.types import SetLogMethodSignature, StrategyProtocol
 
 
 @dataclass(slots=True)
 class SyncWithExecution(ABC):
-    """Coordinates signal emission and synchronization with execution nodes.
-
-    Parameters
-    ----------
-    manager : NodeManager
-        Shared IPC node manager controlling process topology and IPC configurations.
-
-    Attributes
-    ----------
-    manager : NodeManager
-        Shared IPC node manager controlling process topology and IPC configurations.
-    safe_lag : int
-        Maximum permitted processing lag threshold in microseconds before a signal
-        is dropped.
-    base_tp_dev : int
-        Default take-profit deviation in price step increments.
-    base_sl_dev : int
-        Default stop-loss deviation in price step increments.
-    """
+    """Coordinates signal emission and synchronization with execution nodes."""
 
     manager: NodeManager
 
@@ -37,7 +21,7 @@ class SyncWithExecution(ABC):
     _signal_id: int = field(default=0, init=False)
     _count_send_signal: int = field(default=0, init=False)
 
-    def post_init(self) -> None:
+    def reset(self) -> None:
         self._signal_id, self._count_send_signal = 0, 0
 
     @final
@@ -58,20 +42,14 @@ class SyncWithExecution(ABC):
     @final
     @property
     def signal_id(self) -> int:
-        """Increment and return the next monotonically increasing signal sequence identifier.
-
-        Returns
-        -------
-        int
-            Next sequential unique signal identifier.
-        """
+        """Increment and return the next monotonically increasing signal sequence identifier."""
         self._signal_id += 1
         return self._signal_id
 
     @final
     def send_signal(
         self,
-        nPrice: int,
+        nPrice: int | int64,
         timestamp: int,
         is_long: bool,
         is_buy: bool,
@@ -85,33 +63,13 @@ class SyncWithExecution(ABC):
         Validates consumer and publisher latency constraints before serializing order
         parameters into the shared signal stream.
 
-        Parameters
-        ----------
-        nPrice : int
-            Normalized price integer corresponding to the target execution level.
-        timestamp : int
-            Epoch timestamp in milliseconds associated with the signal generation event.
-        is_long : bool
-            Target position direction flag. If True, position is long; if False, short.
-        is_buy : bool
-            Order trade side flag. If True, order side is buy; if False, sell.
-        is_market : bool
-            Execution order type flag. If True, market order; if False, limit order.
-        pass_lag : bool
-            Flag to bypass publisher analysis lag validation. If False, drops the
-            signal when processing lag exceeds ``safe_lag``.
-        tp_dev : int, default=0
-            Take-profit price deviation in steps. If 0, defaults to ``base_tp_dev``.
-        sl_dev : int, default=0
-            Stop-loss price deviation in steps. If 0, defaults to ``base_sl_dev``.
-
         Returns
         -------
         int | None
             Assigned signal identifier if published successfully, or None if dropped
             due to safe lag threshold violations.
         """
-        _ = self.manager.cfgSignalStream
+        _ = self.manager.mlSignalStream
         # - - -
         if not pass_lag and (not self.lag_is_safe()):
             return
@@ -127,7 +85,7 @@ class SyncWithExecution(ABC):
 
         _.set_data(
             signal_id=self.signal_id,
-            nPrice=nPrice,
+            nPrice=int(nPrice),
             timestamp=timestamp,
             order_param=order_param,
             tp_dev=tp_dev if tp_dev else self.base_tp_dev,
@@ -146,14 +104,7 @@ class SyncWithExecution(ABC):
         """Check whether current analysis elapsed latency is within the safe limit.
 
         Computes the delta between current wall-clock performance counter and
-        the initial cycle read time recorded in shared memory.
-
-        Returns
-        -------
-        bool
-            True if elapsed analysis lag is strictly below ``safe_lag`` microseconds,
-            False otherwise.
-        """
+        the initial cycle read time recorded in shared memory."""
         lag: int = round(time.time() * 1000) - self.trade_time[0]
         return lag < self.safe_lag
 
@@ -165,15 +116,10 @@ class StrategyEngine(StrategyProtocol, ABC):
     Subclasses implement analytical hooks for order book cluster adjustments,
     bar completions, and intra-bar updates.
 
-    Parameters
-    ----------
-    _sync : SyncWithExecution
-        Synchronization mechanism for dispatching trading signals to execution.
-    is_backtest : bool
-        Flag indicating if the engine is running in backtesting mode.
-
     Attributes
     ----------
+    is_backtest : bool
+        Flag indicating if the engine is running in backtesting mode.
     tick_by_tick_analyze : bool
         Flag indicating whether intra-bar cluster or bar updates are active.
     atr_period : int
@@ -204,6 +150,7 @@ class StrategyEngine(StrategyProtocol, ABC):
     big_cluster_mult: float = field(default=0.33, init=False)
 
     fp: Footprint = field(init=False)
+    logger: SetLogMethodSignature = field(init=False)
 
     @final
     def __post_init__(self) -> None:
@@ -212,6 +159,7 @@ class StrategyEngine(StrategyProtocol, ABC):
         else:
             self.tick_by_tick_analyze = False
 
+        self.logger = self._sync.manager.set_log
         self.post_init()
 
     def post_init(self) -> None:
@@ -245,7 +193,8 @@ class StrategyEngine(StrategyProtocol, ABC):
         is_market: bool,
         is_long: bool,
         is_buy: bool,
-        idy: int,
+        nPrice: int | int64,
+        /,
         idx: int | None = None,
         tp_dev: int = 0,
         sl_dev: int = 0,
@@ -282,7 +231,6 @@ class StrategyEngine(StrategyProtocol, ABC):
             Assigned signal identifier if successfully sent, or None if aborted
             by lag constraints.
         """
-        nPrice = int(self.fp.con.to_nPrice(idy))
         idx = idx if (idx is not None) else self.fp.last_idx[0]
         timestamp = round(
             self.fp[idx].ind.last_trade_time
@@ -302,4 +250,4 @@ class StrategyEngine(StrategyProtocol, ABC):
 
     @override
     def reset(self) -> None:
-        self._sync.post_init()
+        self._sync.reset()
