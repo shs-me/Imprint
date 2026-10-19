@@ -6,6 +6,7 @@ from numpy import int64
 from numpy.typing import NDArray
 
 import imprint._core.constant as c
+from imprint._core.utils.base import FPHeadersArray
 from imprint._vis.settings import OHLC
 
 
@@ -35,8 +36,8 @@ def get_headers_path(
 
 
 def get_need_headers_range(
-    start_date: datetime, end_date: datetime, headers: NDArray[int64]
-) -> NDArray[int64]:
+    start_date: datetime, end_date: datetime, headers: FPHeadersArray
+) -> FPHeadersArray:
     start_ts: int = round(start_date.timestamp() * 1000)
     end_ts: int = round((end_date + timedelta(days=1)).timestamp() * 1000)
 
@@ -48,7 +49,7 @@ def get_need_headers_range(
     return headers[idx_start:idx_end, :]
 
 
-def get_ohlc(headers: NDArray[np.int64], price_mult: int) -> OHLC:
+def get_ohlc(headers: FPHeadersArray, price_mult: int) -> OHLC:
     ohlc: OHLC = {
         "open": headers[:, c.BH_Open] / price_mult,
         "high": headers[:, c.BH_High] / price_mult,

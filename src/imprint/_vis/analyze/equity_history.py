@@ -1,11 +1,12 @@
-from numpy import datetime64, float64, int64
+from numpy import datetime64, float64
 from numpy.typing import NDArray
 
 import imprint._core.constant as c
+from imprint._core.utils.base import EquityHistoryArray
 
 
 def analyze_equity_history(
-    scale_mult: int, equity: NDArray[int64]
+    scale_mult: int, equity: EquityHistoryArray
 ) -> tuple[
     NDArray[datetime64],
     NDArray[float64],

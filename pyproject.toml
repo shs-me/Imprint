@@ -93,7 +93,7 @@ exclude = [
     "**/.*",
     "**/__pycache__",
     "build",
-    "dist"
+    "dist",
 ]
 
 typeCheckingMode = "strict"

@@ -173,7 +173,7 @@ class Account(Base, ABC):
             manifest: list[RunData] = []
         else:
             try:
-                with open(c.MANIFEST_PATH, "r", encoding="utf-8") as f:
+                with open(c.RUNS_MANIFEST_PATH, "r", encoding="utf-8") as f:
                     manifest = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError):
                 manifest = []
@@ -206,7 +206,7 @@ class Account(Base, ABC):
         else:
             manifest.append(run_meta)
 
-        with open(c.MANIFEST_PATH, "w", encoding="utf-8") as f:
+        with open(c.RUNS_MANIFEST_PATH, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=4)
 
 

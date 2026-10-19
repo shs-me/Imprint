@@ -155,10 +155,10 @@ def plot_info_dashboard(stats: Stats) -> Figure:
                     "align": ["left", "right", "left", "right"],
                     "font": {
                         "color": "#00E5FF",
-                        "size": 12,
+                        "size": 18,
                         "family": "'Courier New', Consolas, monospace",
                     },
-                    "height": 32,
+                    "height": 48,
                     "line_color": "#263238",
                 },
                 cells={
@@ -178,10 +178,10 @@ def plot_info_dashboard(stats: Stats) -> Figure:
                             ],
                             r_colors,
                         ],
-                        "size": 11,
+                        "size": 14,
                         "family": "'Courier New', Consolas, monospace",
                     },
-                    "height": 27,
+                    "height": 32,
                     "line_color": "#1E1E1E",
                 },
             )
@@ -189,8 +189,7 @@ def plot_info_dashboard(stats: Stats) -> Figure:
     )
 
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
-        autosize=True,
-        margin={"l": 30, "r": 30, "t": 35, "b": 25},
+        autosize=True, margin={"l": 30, "r": 30, "t": 35, "b": 25}
     )
 
     return apply_dark_theme(

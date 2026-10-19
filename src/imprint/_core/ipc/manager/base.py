@@ -133,8 +133,7 @@ class Base(ABC):
 
     @final
     def _get_sc(self, pid: int) -> int:
-        with self._status_lock:
-            return self.__procs_status[pid]
+        return self.__procs_status[pid]
 
     @final
     def _set_sc(self, pid: int, code: StatusCodes | int) -> None:

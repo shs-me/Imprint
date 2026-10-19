@@ -1,10 +1,8 @@
 from datetime import UTC, datetime
 
-from numpy import int64
-from numpy.typing import NDArray
-
 import imprint._core.constant as c
 from imprint._core.exchange_sim.account.position import JitPosition
+from imprint._core.utils.base import OrdersHistoryArray
 from imprint._vis.settings import CloseTrades, OpenTrades
 
 
@@ -14,7 +12,7 @@ def analyze_orders_history(
     price_mult: int,
     qty_mult: int,
     scale_mult: int,
-    orders: NDArray[int64],
+    orders: OrdersHistoryArray,
 ) -> tuple[list[CloseTrades], list[OpenTrades], list[float], int, float, float]:
     price_mult_: memoryview = memoryview(bytearray(8)).cast("q")
     qty_mult_: memoryview = memoryview(bytearray(8)).cast("q")
@@ -35,7 +33,7 @@ def analyze_orders_history(
     short_mae: memoryview = memoryview(bytearray(8)).cast("q")
     short_mfe: memoryview = memoryview(bytearray(8)).cast("q")
 
-    pos = JitPosition(
+    pos: JitPosition = JitPosition(
         price_mult=price_mult_,
         qty_mult=qty_mult_,
         scale_mult=scale_mult_,

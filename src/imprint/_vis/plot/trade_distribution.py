@@ -104,6 +104,7 @@ def plot_trade_distribution(stats: Stats) -> Figure:
     fig.update_layout(  # pyright: ignore[reportUnknownMemberType]
         hovermode="closest",
         showlegend=False,
+        autosize=True,
         margin={"l": 55, "r": 40, "t": 45, "b": 35},
     )
 

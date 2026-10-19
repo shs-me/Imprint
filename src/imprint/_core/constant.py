@@ -24,10 +24,10 @@ VISUALIZATION_LOG_PATH = f"{LOGS_PATH}/imprint-vis.log"
 EXC_DUMP_PATH = f"{LOGS_PATH}/exc_dump.json"
 DATA_PATH = "data"
 RUNS_DIR = f"{DATA_PATH}/runs"
-MANIFEST_PATH = f"{RUNS_DIR}/manifest.json"
+RUNS_MANIFEST_PATH = f"{RUNS_DIR}/manifest.json"
+RUNS_PLOTS_PATH = f"{RUNS_DIR}/runs_plots"
 AGG_TRADES_DATA_PATH = f"{DATA_PATH}/agg_trades"
 FOOTPRINT_HEADERS_DATA_PATH = f"{DATA_PATH}/footprint_headers"
-REPORT_DATA_PATH = f"{DATA_PATH}/report.html"
 DIRS_LIST = [DATA_PATH, LOGS_PATH]
 
 # - - Copy Enums & Flags - -

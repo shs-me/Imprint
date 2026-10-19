@@ -44,7 +44,7 @@ class Bar:
         return self._get_header(c.BH_CountTrade) == 0
 
     def __view_bar(self, arr: FPArray) -> FPArray:
-        idYmin, idYmax = self.ind.high.id, self.ind.low.id
+        idYmin, idYmax = self.ind.high.y, self.ind.low.y
         return arr[idYmin : idYmax + 1, self.idXbid : self.idXbid + 2]
 
     @property
@@ -87,12 +87,12 @@ class PriceLike:
         return self
 
     @property
-    def id(self) -> int64:
+    def y(self) -> int64:
         return cast(int64, self._con.to_idy(self.n))
 
     @property
     def qty(self) -> QtyLike:
-        return self._qlike[self.id]
+        return self._qlike[self.y]
 
 
 @final

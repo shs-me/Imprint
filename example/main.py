@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 import imprint
 from example.algorithm import IntraDay
 from example.execution import HedgeExecution
@@ -32,13 +34,30 @@ def live():
     imp.engine.run_core()
 
 
+def gen_date(
+    base_date: date | str, with_base_date: bool, step: int, count: int
+) -> list[str]:
+    if isinstance(base_date, date):
+        dates: list[str] = [base_date.isoformat()] if with_base_date else []
+        start_date: date = base_date
+    else:
+        dates = [base_date] if with_base_date else []
+        start_date = date.fromisoformat(base_date)
+
+    for _ in range(count):
+        dates.append(
+            (start_date := (start_date + timedelta(days=step))).isoformat()
+        )
+    return dates
+
+
 def backtest():
     imp = imprint.backtest(
         symbols=["DASHUSDT"],
         tick_size=["0.01"],
         lot_size=["0.001"],
-        start_date=["2026-01-01"],
-        end_date=["2026-01-01", "2026-01-07"],
+        start_date=gen_date("2026-01-01", True, 1, 14),
+        end_date=gen_date("2026-01-01", True, 1, 14),
         with_execution=True,
         pass_debug_logs=False,
     )
@@ -73,7 +92,7 @@ def backtest():
         execution=[HedgeExecution],
     )
     imp.build()
-    imp.engine.run_core()
+    imp.engine.run_vis()
 
 
 if __name__ == "__main__":

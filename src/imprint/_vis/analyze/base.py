@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 
-from numpy import datetime64, float64, int64
+from numpy import datetime64, float64
 from numpy.typing import NDArray
 
+from imprint._core.utils.base import EquityHistoryArray, OrdersHistoryArray
 from imprint._vis.analyze.equity_history import analyze_equity_history
 from imprint._vis.analyze.metrics import (
     calculate_avg_hold_time_positions,
@@ -40,8 +41,8 @@ class Stats:
     price_mult: int
     qty_mult: int
     scale_mult: int
-    equity: NDArray[int64]
-    orders: NDArray[int64]
+    equity: EquityHistoryArray
+    orders: OrdersHistoryArray
     ohlc: OHLC
 
     eq_times: NDArray[datetime64] = field(init=False)
