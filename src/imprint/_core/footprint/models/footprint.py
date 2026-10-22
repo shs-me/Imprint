@@ -113,7 +113,8 @@ class VolumeProfile[T]:
 
     def _re_init_arr(self) -> None:
         self.base = cast(VPArray, self._fp.base[:, self._fp.con.idxVP[0]])
-        self.state = cast(VPArray, self._fp.state[:, self._fp.con.idxVP[0]])
+        if self._fp.con.with_state:
+            self.state = cast(VPArray, self._fp.state[:, self._fp.con.idxVP[0]])
 
     @property
     def poc(self) -> PriceLike:
@@ -142,4 +143,5 @@ class DeltaProfile[T]:
 
     def _re_init_arr(self) -> None:
         self.base = cast(DPArray, self._fp.base[:, self._fp.con.idxDP[0]])
-        self.state = cast(DPArray, self._fp.state[:, self._fp.con.idxDP[0]])
+        if self._fp.con.with_state:
+            self.state = cast(DPArray, self._fp.state[:, self._fp.con.idxDP[0]])

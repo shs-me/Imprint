@@ -370,9 +370,6 @@ class JitFootprintAnalyzer:
         fp_state[vah, lidx] |= c.SF_VAH_FP
         fp_state[val, lidx] |= c.SF_VAL_FP
 
-        state = c.SF_UNFINISHED_AUCTION | c.SF_FINISHED_AUCTION
-        fp_state[high_idy : low_idy + 1, idxVP] &= ~(state)
-
         # Update VWAP+BB
         vwap = (bNprice - _.headers[bwo, c.BH_VWAP]) // scale + center
         vwap_bb_lower = (
@@ -390,18 +387,14 @@ class JitFootprintAnalyzer:
             fp_state[vwap_bb_lower, lidx] |= c.SF_LOWER_BAND_FP
 
         # Update Auction
-        high_finished, low_finished = (
-            fp[high_idy, lidx + 1] == 0,
-            fp[low_idy, lidx] == 0,
-        )
-        highAuction = (
+        high_finished = fp[high_idy, lidx] == 0
+        low_finished = fp[low_idy, lidx + 1] == 0
+        fp_state[high_idy, lidx] |= (
             c.SF_FINISHED_AUCTION if high_finished else c.SF_UNFINISHED_AUCTION
         )
-        lowAuction = (
+        fp_state[low_idy, lidx + 1] |= (
             c.SF_FINISHED_AUCTION if low_finished else c.SF_UNFINISHED_AUCTION
         )
-        fp_state[high_idy, idxVP] |= highAuction
-        fp_state[low_idy, idxVP] |= lowAuction
 
 
 @final

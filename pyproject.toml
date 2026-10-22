@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "imprint"
-version = "0.1.0"
-description = "Multiprocess order-flow trading engine for crypto futures backtesting and live execution"
+version = "0.2.0-alpha"
+description = "Multiprocess engine for algorithmic footprint (order-flow) strategies: backtesting & live execution"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 authors = [
@@ -19,9 +19,6 @@ keywords = [
     "crypto-trading",
     "algorithmic-trading",
     "market-microstructure",
-    "quantitative-finance",
-    "shared-memory",
-    "ipc",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -54,7 +51,8 @@ dev = [
 
 plot = [
     "plotly==7.0",
-    "streamlit==1.65"
+    "kaleido==1.5",
+    "streamlit==1.65",
 ]
 
 all = [
@@ -86,8 +84,6 @@ ignore = [
 
 [tool.basedpyright]
 pythonVersion = "3.13"
-venvPath = "."
-venv = ".venv"
 
 exclude = [
     "**/.*",

@@ -9,6 +9,10 @@ from plotly.graph_objects import (  # pyright: ignore[reportMissingTypeStubs]
 )
 from streamlit.elements.arrow import DataframeState
 
+# Initialize logging.
+import imprint._boot.logger  # noqa: F401 # pyright: ignore[reportUnusedImport]
+
+# - - -
 import imprint._core.constant as c
 from imprint._core.types import RunData
 from imprint._vis.analyze.base import Stats
@@ -31,11 +35,6 @@ st.markdown(
 if "selected_run_id" not in st.session_state:
     st.session_state.selected_run_id = None
 
-# Initialize logging
-if "logger_initialized" not in st.session_state:
-    import imprint._boot.logger  # noqa: F401 # pyright: ignore[reportUnusedImport]
-
-    st.session_state.logger_initialized = True
 
 but1, but2 = st.columns(2, gap=None)
 
@@ -165,7 +164,6 @@ def plotly_charts(stats: Stats) -> tuple[Figure, Figure, Figure]:
 def save_plots_as_image() -> None:
     import plotly.io as pio  # pyright: ignore[reportMissingTypeStubs]
 
-    logger.info(f"{pio.defaults.default_height}{pio.defaults.default_width}")
     os.makedirs(c.RUNS_PLOTS_PATH, exist_ok=True)
     figs: list[Figure] = []
     paths: list[str] = []
@@ -182,8 +180,10 @@ def save_plots_as_image() -> None:
     pio._kaleido.write_images(  # pyright: ignore[reportUnknownMemberType]
         fig=figs,
         file=paths,  # pyright: ignore[reportArgumentType]
-        width=1400,  # pyright: ignore[reportArgumentType]
-        height=720,  # pyright: ignore[reportArgumentType]
+        format="png",
+        width=1400,
+        height=720,
+        scale=2,
     )
 
 
