@@ -4,7 +4,7 @@ from typing import override
 
 from msgspec import Struct
 
-from imprint._core.utils import AggTradesDecoder
+from imprint._core.utils import TradesDecoder
 
 
 class AggTrade(Struct):
@@ -19,9 +19,9 @@ BinanceAggTrade = AggTrade | list[AggTrade]
 
 
 @dataclass(slots=True)
-class BinanceAggTradesDecoder(AggTradesDecoder[BinanceAggTrade]):
+class BinanceAggTradesDecoder(TradesDecoder[BinanceAggTrade]):
     @override
-    def decode_agg_trade(
+    def decode_trade(
         self, msg: BinanceAggTrade
     ) -> Iterator[tuple[float, float, int, int, int]]:
         if isinstance(msg, list):

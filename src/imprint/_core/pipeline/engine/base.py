@@ -24,7 +24,7 @@ class Base(ABC):
     engine_complete: memoryview = field(init=False)
 
     agg_trades: TradesArray = field(
-        default_factory=lambda: TradesArray(60_000, 4), init=False
+        default_factory=lambda: TradesArray(60_000, pow=True), init=False
     )
     at_max_row: int = field(init=False)
     at_rid: int = field(default=0, init=False)

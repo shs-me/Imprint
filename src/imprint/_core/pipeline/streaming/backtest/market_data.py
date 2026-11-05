@@ -10,7 +10,7 @@ from numpy import int64
 from numpy.lib.npyio import NpzFile
 from numpy.typing import NDArray
 
-from imprint._core.constant import AGG_TRADES_DATA_PATH
+from imprint._core.constant import TRADES_DATA_PATH
 from imprint._core.ipc import NodeManager
 from imprint._core.settings import StatusCodes as scs
 
@@ -49,7 +49,7 @@ class MarketDataStream:
         self.init()
 
     def init(self) -> None:
-        self.dataz = np.load(f"{AGG_TRADES_DATA_PATH}/{self.symbol}.npz")
+        self.dataz = np.load(f"{TRADES_DATA_PATH}/{self.symbol}.npz")
         self.data_path_id, self.max_data_row, self.read_row = 0, 0, 0
         self.data_paths = self.get_data_paths()
         self.change_data()
@@ -113,9 +113,7 @@ class MarketDataStream:
         FileNotFoundError
             If ``data_manifest_path`` does not exist on the filesystem.
         """
-        data_manifest_path = (
-            f"{AGG_TRADES_DATA_PATH}/{self.symbol}_manifest.txt"
-        )
+        data_manifest_path = f"{TRADES_DATA_PATH}/{self.symbol}_manifest.txt"
         with open(data_manifest_path) as f:
             dates_str: str = f.read()
 

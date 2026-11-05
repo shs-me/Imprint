@@ -2,18 +2,142 @@ import hashlib
 import hmac
 import os
 import time
+import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
+from io import BytesIO
 from typing import Literal, TypeVar, final, get_args, get_origin
 
+import numpy as np
 from msgspec import DecodeError
 from msgspec.json import Decoder, Encoder
+from numpy import int64
+from numpy.typing import NDArray
 from websockets import ClientConnection
 
+import imprint._core.constant as c
+from imprint._core.utils.base import TradesArray
 from imprint._core.utils.base_rest import BaseREST
 
 T = TypeVar("T")
+
+
+class TradesLoadError(Exception):
+    """Raised when historical trades load fails repeatedly."""
+
+
+@dataclass(slots=True)
+class TradesLoader(BaseREST, ABC):
+    symbol: str = field(default="", init=False)
+    price_mult: int = field(default=0, init=False)
+    qty_mult: int = field(default=0, init=False)
+    cur_date: date = field(init=False)
+    start_date: date = field(init=False)
+    end_date: date = field(init=False)
+    date_str: str = field(default="", init=False)
+    start_date_str: str = field(default="", init=False)
+    end_date_str: str = field(default="", init=False)
+    data_dir: str = field(default="", init=False)
+    data_path: str = field(default="", init=False)
+    data_manifest_path: str = field(default="", init=False)
+
+    @final
+    def __post_init__(self) -> None:
+        """Initialize REST timeouts, date bounds, and filesystem manifest paths."""
+        self.connect_timeout: float | None = 10.0
+        self.read_timeout: float | None = None
+        self.write_timeout: float | None = None
+        self.pool_timeout: float | None = None
+
+        self.data_dir = c.TRADES_DATA_PATH
+        os.makedirs(self.data_dir, exist_ok=True)
+
+    @final
+    def _download(
+        self,
+        symbol: str,
+        start_date_str: str,
+        end_date_str: str,
+        price_mult: int,
+        qty_mult: int,
+    ) -> None:
+        self.symbol = symbol
+        self.start_date_str = start_date_str
+        self.end_date_str = end_date_str
+        self.price_mult = price_mult
+        self.qty_mult = qty_mult
+
+        self.init_session()
+
+        manifest: str = self.data_manifest
+        err_counter: int = 0
+        downloaded_days: list[str] = []
+        while self.cur_date <= self.end_date:
+            self.date_str = self.cur_date.isoformat()
+            if self.date_str not in manifest:
+                if (trades := self.prepare_trades()) is not None:
+                    self._append_to_npz(trades)
+                    downloaded_days.append(
+                        f"{self.date_str}: {self.format_bytes(trades.nbytes)}"
+                    )
+                else:
+                    if (err_counter := (err_counter + 1)) >= 3:
+                        raise TradesLoadError()
+                    else:
+                        continue
+
+            self.cur_date += timedelta(days=1)
+            err_counter = 0
+
+        if downloaded_days:
+            self.log(f"Downloaded days: {downloaded_days}")
+
+    def init_session(self) -> None:
+        self.start_date = date.fromisoformat(self.start_date_str)
+        self.end_date = date.fromisoformat(self.end_date_str)
+
+        if self.end_date >= (today := datetime.now(tz=UTC).date()):
+            self.end_date = today - timedelta(days=1)
+
+        self.cur_date = self.start_date
+        data_path: list[str] = [
+            p for p in os.listdir(self.data_dir) if p == f"{self.symbol}.npz"
+        ]
+        self.data_path = f"{self.data_dir}/{data_path[0]}" if data_path else ""
+        self.data_manifest_path = f"{self.data_dir}/{self.symbol}_manifest.txt"
+
+    @property
+    def data_manifest(self) -> str:
+        """str: Content of the download tracking manifest file listing completed dates."""
+        try:
+            with open(self.data_manifest_path, mode="r") as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+
+    @data_manifest.setter
+    def data_manifest(self, new_data: str) -> None:
+        with open(self.data_manifest_path, mode="a") as f:
+            f.write(f"{new_data},")
+
+    @abstractmethod
+    def prepare_trades(self) -> TradesArray | None: ...
+
+    @final
+    def _append_to_npz(self, trades: TradesArray) -> None:
+        if self.data_path:
+            buffer = BytesIO()
+            np.save(buffer, trades)
+            with zipfile.ZipFile(self.data_path, "a") as z:
+                z.writestr(f"{self.date_str}.npy", buffer.getvalue())
+        else:
+            self.data_path = f"{self.data_dir}/{self.symbol}.npz"
+            kwd: dict[str, NDArray[int64]] = {self.date_str: trades}
+            np.savez(self.data_path, **kwd)  # pyright: ignore[reportArgumentType]
+
+        self.data_manifest = self.date_str
 
 
 class ApiNotFoundError(Exception):
@@ -239,8 +363,8 @@ class ExchangeREST(BaseREST, ABC):
 
 
 @dataclass(slots=True)
-class AggTradesDecoder[T](ABC):
-    """Decode raw aggregate trade message buffers using msgspec.
+class TradesDecoder[T](ABC):
+    """Decode raw trade message buffers using msgspec.
 
     Attributes
     ----------
@@ -254,7 +378,7 @@ class AggTradesDecoder[T](ABC):
     def __post_init__(self) -> None:
         """Initialize the message decoder from generic type annotations."""
         for base in getattr(self, "__orig_bases__", []):
-            if issubclass(get_origin(base), AggTradesDecoder):
+            if issubclass(get_origin(base), TradesDecoder):
                 args = get_args(base)
                 if args:
                     self.decoder = Decoder(type=args[0])
@@ -263,7 +387,7 @@ class AggTradesDecoder[T](ABC):
     def decode(
         self, raw_data: memoryview
     ) -> Iterator[tuple[float, float, int, int, int]] | None:
-        """Decode raw memoryview buffer into structured aggregate trades.
+        """Decode raw memoryview buffer into structured trades.
 
         Parameters
         ----------
@@ -277,15 +401,15 @@ class AggTradesDecoder[T](ABC):
         """
         try:
             msg = self.decoder.decode(raw_data)
-            return self.decode_agg_trade(msg)
+            return self.decode_trade(msg)
         except DecodeError:
             return None
 
     @abstractmethod
-    def decode_agg_trade(
+    def decode_trade(
         self, msg: T
     ) -> Iterator[tuple[float, float, int, int, int]]:
-        """Process decoded message object into standardized aggregate trade tuples.
+        """Process decoded message object into standardized trade tuples.
 
         Parameters
         ----------

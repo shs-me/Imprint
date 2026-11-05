@@ -14,13 +14,7 @@ import imprint._vis as _ivis
 
 
 def _only_from(pkg: ModuleType) -> Callable[[Any], bool]:
-    """Match records by the *file* they were emitted from, not by module name.
-
-    Streamlit executes ``_vis/main.py`` as ``__main__``, so a name-based
-    filter (``name.startswith("imprint._vis")``) silently drops every record
-    logged from the script itself. The source path is stable in both cases.
-    """
-    root: str = os.path.normcase(os.path.abspath(list(pkg.__path__)[0]))
+    root: str = os.path.normcase(os.path.abspath(pkg.__path__[0]))
 
     def _filter(record: Any) -> bool:
         path: str = os.path.normcase(os.path.abspath(record["file"].path))

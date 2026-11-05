@@ -1,5 +1,5 @@
 from multiprocessing import Process
-from typing import Any, Protocol, TypedDict, overload
+from typing import Any, Protocol, Self, TypedDict, overload
 
 from imprint._core.settings import LogLevel
 
@@ -190,6 +190,7 @@ class LoggerProtocol(Protocol):
     def error(__self, __message: str, *args: Any, **kwargs: Any) -> None: ...  # noqa: PYI063
     @overload
     def error(__self, __message: Any) -> None: ...  # noqa: PYI063
+    def bind(__self, **kwargs: Any) -> Self: ...
 
 
 class SendOrderMethodSignature(Protocol):

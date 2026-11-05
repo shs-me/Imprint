@@ -11,7 +11,7 @@ from imprint._core.footprint import SyncWithExecution
 from imprint._core.ipc.memory_layouts import RingBuf
 from imprint._core.pipeline.engine.base import Base
 from imprint._core.settings import StatusCodes as scs
-from imprint._core.utils import AggTradesDecoder
+from imprint._core.utils import TradesDecoder
 
 
 @final
@@ -35,7 +35,7 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
 
     engine_event: Event
 
-    decoder: AggTradesDecoder[None] = field(init=False)
+    decoder: TradesDecoder[None] = field(init=False)
     gap_stream: RingBuf = field(init=False)
     have_gap: memoryview = field(init=False)
     gap_first_id: memoryview = field(init=False)
@@ -57,11 +57,11 @@ class Live(Base):  # pyright: ignore[reportUninitializedInstanceVariable]
 
         m_name: str = self.manager.cfgSetup.agg_trades_decoder_module
         c_name: str = self.manager.cfgSetup.agg_trades_decoder_class_name
-        decoder_type: type[AggTradesDecoder[None]] = getattr(
+        decoder_type: type[TradesDecoder[None]] = getattr(
             importlib.import_module(m_name), c_name
         )
         self.manager.set_log(
-            f"{decoder_type.__name__} used as {AggTradesDecoder.__name__}"
+            f"{decoder_type.__name__} used as {TradesDecoder.__name__}"
         )
         self.decoder = decoder_type()
 

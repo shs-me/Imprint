@@ -9,7 +9,7 @@ from numba import njit
 from numba.experimental import (
     jitclass,  # pyright: ignore[reportUnknownVariableType, reportPrivateImportUsage]
 )
-from numpy import int64, intp
+from numpy import bool_, int64, intp
 from numpy.typing import NDArray
 
 import imprint._core.constant as c
@@ -191,6 +191,7 @@ class JitFootprintAnalyzer:
         low_idy: int64 = (bNprice - lowNprice) // scale + center
         close_idy: int64 = (bNprice - closeNprice) // scale + center
 
+        # BAR POC, VA
         vp_bar: NDArray[int64] = (
             fp[high_idy : low_idy + 1, idXbid]
             + fp[high_idy : low_idy + 1, idXask]
@@ -201,29 +202,53 @@ class JitFootprintAnalyzer:
         _.headers[bwo, c.BH_VAH] = (center - (high_idy + vah)) * scale + bNprice
         _.headers[bwo, c.BH_VAL] = (center - (high_idy + val)) * scale + bNprice
 
-        if not _.with_state[0]:
+        if not _.with_state[0]:  # Update States
             return
 
-        idYmin, idYmax, idxDP = _.idYmin[0], _.idYmax[0], _.idxDP[0]
+        clear_state: int = (
+            c.SF_OPEN
+            | c.SF_HIGH
+            | c.SF_LOW
+            | c.SF_CLOSE
+            | c.SF_POC_BAR
+            | c.SF_VAL_BAR
+            | c.SF_VAH_BAR
+            | c.SF_FINISHED_AUCTION
+            | c.SF_UNFINISHED_AUCTION
+        )
+        fp_state[high_idy : low_idy + 1, idXbid : idXask + 1] &= ~clear_state
 
-        state1 = c.SF_OPEN | c.SF_HIGH | c.SF_LOW | c.SF_CLOSE
-        state2 = c.SF_POC_BAR | c.SF_VAL_BAR | c.SF_VAH_BAR
-        fp_state[high_idy : low_idy + 1, idXbid] &= ~(state1 | state2)
-
+        # OHLC
         fp_state[open_idy, idXbid] |= c.SF_OPEN
         fp_state[high_idy, idXbid] |= c.SF_HIGH
         fp_state[low_idy, idXbid] |= c.SF_LOW
         fp_state[close_idy, idXbid] |= c.SF_CLOSE
 
+        # BAR POC, VA
         fp_state[(high_idy + poc), idXbid] |= c.SF_POC_BAR
         fp_state[(high_idy + vah), idXbid] |= c.SF_VAH_BAR
         fp_state[(high_idy + val), idXbid] |= c.SF_VAL_BAR
 
-        state3 = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
-        fp_state[idYmin:idYmax, idXbid : idXask + 1] &= ~state3
+        # Finished Auction
+        high_finished: bool_ = fp[high_idy, idXbid] == 0
+        low_finished: bool_ = fp[low_idy, idXask] == 0
+        fp_state[high_idy, idXbid] |= (
+            c.SF_FINISHED_AUCTION if high_finished else c.SF_UNFINISHED_AUCTION
+        )
+        fp_state[low_idy, idXask] |= (
+            c.SF_FINISHED_AUCTION if low_finished else c.SF_UNFINISHED_AUCTION
+        )
 
-        state4 = c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
-        fp_state[idYmin:idYmax, idxDP] &= ~(state4)
+        # IMBALANCE, DELTA DOMINATION, ZERO PRINT, BIG CLUSTER IN EVERY LEVEL
+        idYmin, idYmax, idxDP = _.idYmin[0], _.idYmax[0], _.idxDP[0]
+
+        clear_state = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
+        fp_state[idYmin:idYmax, idXbid : idXask + 1] &= ~clear_state
+
+        clear_state = (
+            c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
+        )
+        fp_state[idYmin:idYmax, idxDP] &= ~clear_state
 
         ma_vol: int64 | int = (
             _.headers[bwo - 1, c.BH_MA_VOL] if (bwo - 1) > 0 else 0
@@ -277,7 +302,7 @@ class JitFootprintAnalyzer:
         """Calculate indicator states and footprint flags upon bar closure.
 
         Computes ATR, Parkinson Volatility, VWAP bands, Point of Control (POC),
-        Value Area (VAH/VAL), and auction state flags on bar close."""
+        Value Area (VAH/VAL)."""
         _ = self.storage
         # - - -
         lidx: int = _.lidx[0]
@@ -295,8 +320,7 @@ class JitFootprintAnalyzer:
         bNprice, idxVP = _.baseNprice[0], _.idxVP[0]
         scale, center = _.scale[0], _.center[0]
 
-        high_idy: int64 = (bNprice - highNprice) // scale + center
-        low_idy: int64 = (bNprice - lowNprice) // scale + center
+        # Update Base
 
         # ATR
         if bar > 0:
@@ -315,7 +339,7 @@ class JitFootprintAnalyzer:
         else:
             _.headers[bwo, c.BH_ATR] = highNprice - lowNprice
 
-        # PARK
+        # PARKINSON
         log_ratio = np.log(highNprice / lowNprice)
         cur_var: int = round((log_ratio * log_ratio) * c.VAR_SCALE)
         if bar > 0:
@@ -326,7 +350,7 @@ class JitFootprintAnalyzer:
         else:
             _.headers[bwo, c.BH_PARK] = cur_var
 
-        bar_max = bwo
+        bar_max: int = bwo
 
         # MA Volume
         period: int = self.ma_vol_period
@@ -356,26 +380,27 @@ class JitFootprintAnalyzer:
                     (vols[valid] // trades[valid]).mean()
                 )
 
-        # Update POC + VA
+        # FP POC, VA
         poc: intp = np.argmax(fp[:, idxVP])
         vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
         _.headers[bwo, c.BH_POC_FP] = (center - poc) * scale + bNprice
         _.headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + bNprice
         _.headers[bwo, c.BH_VAL_FP] = (center - val) * scale + bNprice
 
-        if not _.with_state[0]:
+        if not _.with_state[0]:  # Update States
             return
 
+        # FP POC, VA
         fp_state[poc, lidx] |= c.SF_POC_FP
         fp_state[vah, lidx] |= c.SF_VAH_FP
         fp_state[val, lidx] |= c.SF_VAL_FP
 
-        # Update VWAP+BB
-        vwap = (bNprice - _.headers[bwo, c.BH_VWAP]) // scale + center
-        vwap_bb_lower = (
+        # VWAP, BB
+        vwap: int64 = (bNprice - _.headers[bwo, c.BH_VWAP]) // scale + center
+        vwap_bb_lower: int64 = (
             bNprice - _.headers[bwo, c.BH_VWAP_LOWER_BAND]
         ) // scale + center
-        vwap_bb_upper = (
+        vwap_bb_upper: int64 = (
             bNprice - _.headers[bwo, c.BH_VWAP_UPPER_BAND]
         ) // scale + center
 
@@ -385,16 +410,6 @@ class JitFootprintAnalyzer:
             fp_state[vwap_bb_upper, lidx] |= c.SF_UPPER_BAND_FP
         if 0 <= vwap_bb_lower < fp_state.shape[0]:
             fp_state[vwap_bb_lower, lidx] |= c.SF_LOWER_BAND_FP
-
-        # Update Auction
-        high_finished = fp[high_idy, lidx] == 0
-        low_finished = fp[low_idy, lidx + 1] == 0
-        fp_state[high_idy, lidx] |= (
-            c.SF_FINISHED_AUCTION if high_finished else c.SF_UNFINISHED_AUCTION
-        )
-        fp_state[low_idy, lidx + 1] |= (
-            c.SF_FINISHED_AUCTION if low_finished else c.SF_UNFINISHED_AUCTION
-        )
 
 
 @final

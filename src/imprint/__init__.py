@@ -25,12 +25,13 @@ Protocol & Exchange Adapters
 ----------------------------
 ExchangeREST
     Base REST API client for exchange account state and instrument specification queries.
-AggTradesDecoder
-    Decoder for aggregate trade WebSocket/REST feeds.
+TradesDecoder
+    Decoder for trade WebSocket/REST feeds.
 UserStreamDecoder
     Decoder for private user data streams (account balances and order fills).
 OrderEncoder
     Encoder for formatting outgoing order transmission payloads.
+
 
 Utilities & Type Aliases
 ------------------------
@@ -51,22 +52,26 @@ from imprint._core.footprint import StrategyEngine
 from imprint._core.pipeline.executing import ExecutionEngine
 from imprint._core.settings import Timeframe as tf
 from imprint._core.utils import (
-    AggTradesDecoder,
     BalanceData,
     ExchangeREST,
     OrderData,
     OrderEncoder,
+    TradesArray,
+    TradesDecoder,
+    TradesLoader,
     UserStreamDecoder,
 )
 
 __all__ = [
-    "AggTradesDecoder",
     "BalanceData",
     "ExchangeREST",
     "ExecutionEngine",
     "OrderData",
     "OrderEncoder",
     "StrategyEngine",
+    "TradesArray",
+    "TradesDecoder",
+    "TradesLoader",
     "UserStreamDecoder",
     "backtest",
     "c",

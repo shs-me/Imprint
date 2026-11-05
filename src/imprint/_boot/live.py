@@ -14,9 +14,9 @@ from imprint._core.footprint import StrategyEngine
 from imprint._core.ipc.memory_layouts import MarketDataStream
 from imprint._core.pipeline.executing import ExecutionEngine
 from imprint._core.utils import (
-    AggTradesDecoder,
     ExchangeREST,
     OrderEncoder,
+    TradesDecoder,
     UserStreamDecoder,
 )
 from imprint._core.utils.base_adapters import ApiNotFoundError
@@ -30,7 +30,7 @@ class Adapters(cfg.ValidatedStruct):
     ----------
     exchange_rest : type[ExchangeREST], default=BinanceFuturesREST
         REST API client adapter class for exchange interactions.
-    agg_trades_decoder : type[AggTradesDecoder[Any]], default=BinanceAggTradesDecoder
+    agg_trades_decoder : type[TradesDecoder[Any]], default=BinanceAggTradesDecoder
         Decoder class for aggregate trade WebSocket/REST feeds.
     user_stream_decoder : type[UserStreamDecoder[Any, Any]], default=BinanceUserStreamDecoder
         Decoder class for user data streams (balance and orders).
@@ -39,7 +39,7 @@ class Adapters(cfg.ValidatedStruct):
     """
 
     exchange_rest: type[ExchangeREST] = bn.BinanceFuturesREST
-    agg_trades_decoder: type[AggTradesDecoder[Any]] = bn.BinanceAggTradesDecoder
+    agg_trades_decoder: type[TradesDecoder[Any]] = bn.BinanceAggTradesDecoder
     user_stream_decoder: type[UserStreamDecoder[Any, Any]] = (
         bn.BinanceUserStreamDecoder
     )

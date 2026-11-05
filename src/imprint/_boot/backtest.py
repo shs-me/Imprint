@@ -15,9 +15,9 @@ from imprint._boot.base import Base, BoundFactory, EngineNotBuilded, InitFailed
 from imprint._core.footprint import StrategyEngine
 from imprint._core.ipc.memory_layouts import MarketDataStream
 from imprint._core.pipeline.executing import ExecutionEngine
-from imprint._core.utils import DownloadAggTradesHistory
-from imprint._core.utils.agg_trades_history_downloader import DownloadError
+from imprint._core.utils import TradesLoader, TradesLoadError
 from imprint._core.utils.exc_dumper import error_handler
+from imprint.adapters.binance import BinanceAggTradesLoader
 
 
 @dataclass(slots=True)
@@ -53,6 +53,7 @@ class Backtest(Base):
     _start_date: list[str]
     _end_date: list[str]
     _account: cfg.AccountBatch
+    _trades_loader: type[TradesLoader]
 
     _coins: list[cfg.Coin] = field(init=False)
     _accounts: list[cfg.Account] = field(init=False)
@@ -74,9 +75,7 @@ class Backtest(Base):
         self._other_configs.append(self._accounts)
 
         try:
-            downloader: DownloadAggTradesHistory = DownloadAggTradesHistory(
-                logger=logger
-            )
+            loader: TradesLoader = self._trades_loader(logger=logger)
             for coin, setup in zip_longest(
                 self._coins, self._setups, fillvalue=None
             ):
@@ -85,14 +84,14 @@ class Backtest(Base):
                 if not setup:
                     setup = self._setups[-1]
 
-                downloader.download(
+                loader._download(
                     symbol=coin.symbol,
                     start_date_str=setup.backtest_start_date,
                     end_date_str=setup.backtest_end_date,
                     price_mult=coin.price_mult,
                     qty_mult=coin.qty_mult,
                 )
-        except DownloadError as e:
+        except TradesLoadError as e:
             raise InitFailed(f"Download agg trades data, failed: {e}") from e
 
     @override
@@ -264,6 +263,7 @@ class BacktestBuilder:
     lot_size: list[str]
     with_execution: bool
     pass_debug_logs: bool
+    trades_loader: type[TradesLoader] = BinanceAggTradesLoader
 
     _account: cfg.AccountBatch = field(
         default_factory=lambda: cfg.AccountBatch(), init=False
@@ -343,6 +343,7 @@ class BacktestBuilder:
                 _start_date=self.start_date,
                 _end_date=self.end_date,
                 _account=self._account,
+                _trades_loader=self.trades_loader,
             )
 
     @property

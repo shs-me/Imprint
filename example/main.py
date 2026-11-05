@@ -56,8 +56,8 @@ def backtest():
         symbols=["DASHUSDT"],
         tick_size=["0.01"],
         lot_size=["0.001"],
-        start_date=gen_date("2026-01-01", True, 1, 14),
-        end_date=gen_date("2026-01-01", True, 1, 14),
+        start_date=gen_date("2026-10-01", True, 1, 2),
+        end_date=gen_date("2026-10-01", True, 1, 2),
         with_execution=True,
         pass_debug_logs=False,
     )
@@ -92,7 +92,7 @@ def backtest():
         execution=[HedgeExecution],
     )
     imp.build()
-    imp.engine.run_vis()
+    imp.engine.run_core()
 
 
 if __name__ == "__main__":

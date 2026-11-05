@@ -75,7 +75,7 @@ class Node(Base):
             )
 
         b_log: bytes = str(msg).encode()
-        if (len(b_log) + 8) > _.cell_size:
+        if (len(b_log) + 16) > _.cell_size:
             return self.set_proc_sc(scs.BIG_LOG_SIZE, wait_main_task=False)
 
         cell: int = _.wid_buf[self._pid]

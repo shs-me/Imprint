@@ -4,11 +4,13 @@ from abc import ABC
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Literal, Self, TypeVar, final, overload
+from datetime import UTC, datetime
+from typing import Any, Self, TypeVar, final, overload
 
 import httpx
 import msgspec
 
+from imprint._core.settings import LogLevel
 from imprint._core.types import LoggerProtocol, SetLogMethodSignature
 
 # Generic type for msgspec decoding target
@@ -77,19 +79,16 @@ class BaseREST(ABC):
     )
 
     @final
-    def log(
-        self, msg: str, level: Literal["INFO", "WARNING", "ERROR"] = "INFO"
-    ) -> None:
+    def log(self, msg: str, level: LogLevel = LogLevel.INFO) -> None:
         """Emit a log message via the configured logger or callback function."""
         if callable(self.logger):
-            self.logger(f"{level} | {msg}")
+            self.logger(msg, level)
         else:
-            if level == "INFO":
-                self.logger.info(msg)
-            elif level == "WARNING":
-                self.logger.warning(msg)
-            else:
-                self.logger.error(msg)
+            self.logger.bind(
+                time=datetime.now(tz=UTC).strftime("%H:%M:%S.%f"),
+                level=level.name,
+                proc_name="MAIN",
+            ).info(msg)
 
     @final
     def format_bytes(self, size: float) -> str:
@@ -264,7 +263,7 @@ class BaseREST(ABC):
         except (msgspec.DecodeError, msgspec.ValidationError) as exc:
             self.log(
                 f"Failed to decode response with msgspec: {exc} | Raw body: {raw_content[:200]!r}",
-                level="ERROR",
+                level=LogLevel.ERROR,
             )
             raise RestDecodeError(f"msgspec decode error: {exc}") from exc
 
@@ -292,18 +291,18 @@ class BaseREST(ABC):
             yield
         except httpx.TimeoutException as exc:
             msg: str = f"{mode} Timeout [{method_upper} {endpoint}]: {exc}"
-            self.log(msg, level="WARNING")
+            self.log(msg, LogLevel.WARNING)
             raise RestTimeoutError(msg) from exc
 
         except httpx.ConnectError as exc:
             msg = f"{mode} Connection Failed [{method_upper} {endpoint}]: {exc}"
-            self.log(msg, level="ERROR")
+            self.log(msg, LogLevel.ERROR)
             raise RestConnectionError(msg) from exc
 
         except httpx.HTTPStatusError as exc:
             msg = f"HTTP Error [{exc.response.status_code} on {method_upper} {endpoint}]"
             self.log(
-                f"{msg} | Body: {exc.response.content[:300]!r}", level="ERROR"
+                f"{msg} | Body: {exc.response.content[:300]!r}", LogLevel.ERROR
             )
             raise RestResponseError(
                 status_code=exc.response.status_code,
@@ -314,7 +313,7 @@ class BaseREST(ABC):
 
         except httpx.RequestError as exc:
             msg = f"{mode} Request Error [{method_upper} {endpoint}]: {exc}"
-            self.log(msg, level="ERROR")
+            self.log(msg, LogLevel.ERROR)
             raise RestConnectionError(msg) from exc
 
     @overload

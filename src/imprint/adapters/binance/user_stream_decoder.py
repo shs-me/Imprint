@@ -8,6 +8,7 @@ from msgspec import Raw, Struct
 from websockets import ClientConnection
 
 import imprint._core.constant as c
+from imprint._core.settings import LogLevel
 from imprint._core.utils.base_adapters import (
     BalanceData,
     OrderData,
@@ -80,7 +81,9 @@ class BinanceUserStreamDecoder(
         except asyncio.CancelledError:
             pass
         except RestResponseError as e:
-            return self.rest.log(f"Failed to keep listen key: {e}", "ERROR")
+            return self.rest.log(
+                f"Failed to keep listen key: {e}", LogLevel.ERROR
+            )
 
     @override
     async def on_connection(self, ws: ClientConnection) -> None: ...

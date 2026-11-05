@@ -4,7 +4,7 @@ from typing import override
 
 from msgspec import Struct
 
-from imprint import AggTradesDecoder
+from imprint import TradesDecoder
 
 
 class BybitAggTrade(Struct):
@@ -21,9 +21,9 @@ class BybitTradeMsg(Struct):
 
 
 @dataclass(slots=True)
-class BybitAggTradesDecoder(AggTradesDecoder[BybitTradeMsg]):
+class BybitAggTradesDecoder(TradesDecoder[BybitTradeMsg]):
     @override
-    def decode_agg_trade(
+    def decode_trade(
         self, msg: BybitTradeMsg
     ) -> Iterator[tuple[float, float, int, int, int]]:
         for t in msg.data:

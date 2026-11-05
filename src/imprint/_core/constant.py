@@ -12,7 +12,7 @@ from imprint._core.settings import (
 
 # - - URL'S - -
 # Derivatives Trading (USDS Futures)
-BASE_UM_AGGTRADES_DAILY_URL = (
+BINANCE_UM_AGGTRADES_DAILY_URL = (
     "https://data.binance.vision/data/futures/um/daily/aggTrades"
 )
 
@@ -26,7 +26,7 @@ DATA_PATH = "data"
 RUNS_DIR = f"{DATA_PATH}/runs"
 RUNS_MANIFEST_PATH = f"{RUNS_DIR}/manifest.json"
 RUNS_PLOTS_PATH = f"{RUNS_DIR}/runs_plots"
-AGG_TRADES_DATA_PATH = f"{DATA_PATH}/agg_trades"
+TRADES_DATA_PATH = f"{DATA_PATH}/trades"
 FOOTPRINT_HEADERS_DATA_PATH = f"{DATA_PATH}/footprint_headers"
 DIRS_LIST = [DATA_PATH, LOGS_PATH]
 

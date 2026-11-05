@@ -73,11 +73,14 @@ class DPArray(ColArray):
 
 @final
 class TradesArray(np.ndarray):
-    """2D fixed-point array specialized for trade records with power-of-two row capacity allocation."""
+    """2D fixed-point array specialized for trade records with optional power-of-two row capacity allocation."""
 
-    def __new__(cls, rows: int, cols: int) -> Self:
-        power_two = 1 << (rows).bit_length()
-        obj = super().__new__(cls, shape=(power_two, cols), dtype=int64)
+    def __new__(cls, rows: int, pow: bool = False) -> Self:
+        obj = super().__new__(
+            cls,
+            shape=((1 << (rows).bit_length()) if pow else rows, 4),
+            dtype=int64,
+        )
         obj.fill(0)
         return obj
 

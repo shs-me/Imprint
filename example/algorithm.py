@@ -8,13 +8,13 @@ from imprint import StrategyEngine, c
 
 @dataclass(slots=True)
 class IntraDay(StrategyEngine):
-    ma_volume_period: int = field(default=21, init=False)
+    ma_volume_period: int = field(default=10, init=False)
     ma_avg_trade_size_period: int = field(default=21, init=False)
     big_cluster_mult: float = field(default=0.1, init=False)
 
     @override
     def on_bar_close(self, idx: int, lidx: int) -> None:
-        if not ((lidx // 2) > (22)):
+        if not ((lidx // 2) > (12)):
             return
 
         bar = self.fp[lidx]
