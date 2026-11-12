@@ -7,10 +7,13 @@ import numpy as np
 from numpy import bool_, float64, int64
 
 import imprint._core.constant as c
-from imprint._core.footprint.models.base import Chart
+from imprint._core.footprint.models.base import (
+    BarArray,
+    Chart,
+    DPArray,
+    VPArray,
+)
 from imprint._core.footprint.models.converter import Converter
-from imprint._core.utils import FPArray
-from imprint._core.utils.base import DPArray, VPArray
 
 PARK_FACTOR: float64 = 1.0 / (4.0 * np.log(2.0))
 
@@ -21,7 +24,7 @@ class Bar:
     """Represent a single bar and its associated indicators, volume profile, and delta profile."""
 
     _fp: Chart
-    idXbid: int | int64
+    cur_bar: int
 
     ind: Indicators[Bar] = field(init=False)
     vp: VolumeProfile[Bar] = field(init=False)
@@ -34,7 +37,7 @@ class Bar:
 
     @property
     def bar_id(self) -> int | int64:
-        return self._fp.headers_offset[0] + (self.idXbid // 2)
+        return self._fp.headers_offset[0] + self.cur_bar
 
     def _get_header(self, header: int) -> int64:
         return self._fp.headers[self.bar_id, header]
@@ -43,21 +46,10 @@ class Bar:
     def is_empty(self) -> bool_:
         return self._get_header(c.BH_CountTrade) == 0
 
-    def __view_bar(self, arr: FPArray) -> FPArray:
+    @property
+    def base(self) -> BarArray:
         idYmin, idYmax = self.ind.high.y, self.ind.low.y
-        return arr[idYmin : idYmax + 1, self.idXbid : self.idXbid + 2]
-
-    @property
-    def base(self) -> FPArray:
-        return self.__view_bar(self._fp.base)
-
-    @property
-    def state(self) -> FPArray:
-        return self.__view_bar(self._fp.state)
-
-    @property
-    def ctrade(self) -> FPArray:
-        return self.__view_bar(self._fp.ctrade)
+        return self._fp.base[self.cur_bar, idYmin : idYmax + 1, :]
 
 
 @dataclass(slots=True)
@@ -88,7 +80,7 @@ class PriceLike:
 
     @property
     def y(self) -> int64:
-        return cast(int64, self._con.to_idy(self.n))
+        return cast(int64, self._con.to_idy(self.n, self._bar.ind.baseNprice.n))
 
     @property
     def qty(self) -> QtyLike:
@@ -109,31 +101,32 @@ class QtyLike:
         return self
 
     def volume(self, side: Literal[0, 1]) -> int64:
-        return self._bar._fp.base[self._idy, side + self._bar.idXbid]
+        _ = self._bar
+        return _._fp.base[_.cur_bar, self._idy, side]
 
     def delta(self, local: bool = True) -> int64:
         if local:
             return self.ask(local) - self.bid(local)
         else:
-            _ = self._bar._fp
-            return _.base[self._idy, _.con.idxDP[0]]
+            return self._bar._fp.profile[1, self._idy]
 
     def sum(self, local: bool = True) -> int64:
         if local:
             return self.bid(local) + self.ask(local)
         else:
-            _ = self._bar._fp
-            return _.base[self._idy, _.con.idxVP[0]]
+            return self._bar._fp.profile[0, self._idy]
 
     def bid(self, local: bool = True) -> int64:
+        _ = self._bar
         if local:
-            return self._bar._fp.base[self._idy, self._bar.idXbid]
+            return _._fp.base[_.cur_bar, self._idy, 0]
         else:
             return (self.sum(local) - self.delta(local)) // 2
 
     def ask(self, local: bool = True) -> int64:
+        _ = self._bar
         if local:
-            return self._bar._fp.base[self._idy, self._bar.idXbid + 1]
+            return _._fp.base[_.cur_bar, self._idy, 1]
         else:
             return (self.sum(local) + self.delta(local)) // 2
 
@@ -173,6 +166,9 @@ class Headers[Tval]:
 class Indicators[T](BarLike):
     """Exposes technical indicators and statistical metrics for the active bar."""
 
+    baseNprice: ClassVar[Headers[PriceLike]] = Headers(
+        c.BH_BaseNprice, PriceLike
+    )
     open: ClassVar[Headers[PriceLike]] = Headers(c.BH_Open, PriceLike)
     high: ClassVar[Headers[PriceLike]] = Headers(c.BH_High, PriceLike)
     low: ClassVar[Headers[PriceLike]] = Headers(c.BH_Low, PriceLike)
@@ -188,9 +184,7 @@ class Indicators[T](BarLike):
         c.BH_VWAP_LOWER_BAND, PriceLike
     )
     open_time: ClassVar[Headers[int64]] = Headers(c.BH_OpenTime, int64)
-    last_trade_time: ClassVar[Headers[int64]] = Headers(
-        c.BH_LastTradeTime, int64
-    )
+    close_time: ClassVar[Headers[int64]] = Headers(c.BH_CloseTime, int64)
     volume: ClassVar[Headers[int64]] = Headers(c.BH_Volume, int64)
     ma_volume: ClassVar[Headers[int64]] = Headers(c.BH_MA_VOL, int64)
     trade_count: ClassVar[Headers[int64]] = Headers(c.BH_CountTrade, int64)

@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import imprint
 from example.algorithm import IntraDay
 from example.execution import HedgeExecution
-from imprint import pct, tf
+from imprint import bar_type, pct
 
 
 def live():
@@ -20,7 +20,14 @@ def live():
         order_stream_url="wss://testnet.binancefuture.com/ws-fapi/v1",
     )
     imp.strategy(algorithm=IntraDay, execution=HedgeExecution)
-    imp.footprint(timeframe=tf.M1, step_tick=5, state=True, ctrade=True)
+    imp.footprint(
+        bar_type=bar_type.time(days=0, hours=0, minutes=5, seconds=0),
+        bar_count=256,
+        bar_height=100,
+        step_tick=5,
+        state=True,
+        ctrade=True,
+    )
     imp.risk_management(
         max_lock_balance=pct(10.0),
         max_loss_balance=pct(10.0),
@@ -56,8 +63,8 @@ def backtest():
         symbols=["DASHUSDT"],
         tick_size=["0.01"],
         lot_size=["0.001"],
-        start_date=gen_date("2026-10-01", True, 1, 2),
-        end_date=gen_date("2026-10-01", True, 1, 2),
+        start_date=gen_date("2026-01-01", True, 1, 2),
+        end_date=gen_date("2026-01-07", True, 1, 2),
         with_execution=True,
         pass_debug_logs=False,
     )
@@ -82,7 +89,9 @@ def backtest():
         expiration_signal_time=[1000],
     )
     imp.footprint(
-        timeframe=[tf.M5],
+        bar_type=[bar_type.time(days=0, hours=0, minutes=5, seconds=0)],
+        bar_count=[256],
+        bar_height=[100],
         step_tick=[5],
         state=[True],
         ctrade=[True],

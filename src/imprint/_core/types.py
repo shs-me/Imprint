@@ -21,9 +21,8 @@ class StrategyProtocol(Protocol):
         Period length for moving average trade count calculations. Must be positive.
     ma_avg_trade_size_period : int
         Period length for moving average average trade size calculations. Must be positive.
-    big_cluster_mult : float
-        Multiplier threshold for identifying significant volume clusters. Must be
-        greater than or equal to 1.0.
+    big_cluster_vol : memoryview[int]
+        Volume trigger for identifying significant volume clusters.
     """
 
     tick_by_tick_analyze: bool
@@ -32,36 +31,15 @@ class StrategyProtocol(Protocol):
     ma_volume_period: int
     ma_count_trade_period: int
     ma_avg_trade_size_period: int
-    big_cluster_mult: float
+    big_cluster_vol: memoryview
 
     def on_bar_update(
-        self, idYmin: int, idYmax: int, idx: int, lidx: int
+        self, idYmin: int, idYmax: int, bar_id: int, last_side: int
     ) -> None:
-        """Handle real-time updates within the active bar timeframe.
+        """Handle real-time updates within the active bar timeframe."""
 
-        Parameters
-        ----------
-        idYmin : int
-            Minimum price index bounding the active update region.
-        idYmax : int
-            Maximum price index bounding the active update region. Must be
-            greater than or equal to ``idYmin``.
-        idx : int
-            Current price level index.
-        lidx : int
-            Last active price level index.
-        """
-
-    def on_bar_close(self, idx: int, lidx: int) -> None:
-        """Handle completion and closure of the current time bar.
-
-        Parameters
-        ----------
-        idx : int
-            Terminal price level index at bar close.
-        lidx : int
-            Terminal last price level index at bar close.
-        """
+    def on_bar_close(self, closed_bar_id: int, last_bar_id: int) -> None:
+        """Handle completion and closure of the current time bar."""
 
     def reset(self) -> None: ...
 

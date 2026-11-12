@@ -5,7 +5,10 @@ from typing import final, override
 
 import numba as nb
 import numpy as np
-from numba import njit
+from numba import (
+    njit,
+    types,  # pyright: ignore[reportPrivateImportUsage]
+)
 from numba.experimental import (
     jitclass,  # pyright: ignore[reportUnknownVariableType, reportPrivateImportUsage]
 )
@@ -15,7 +18,6 @@ from numpy.typing import NDArray
 import imprint._core.constant as c
 import imprint._core.footprint.engine.writer as w
 from imprint._core.footprint.engine.base import JitStorage
-from imprint._core.utils import FPArray
 
 
 @dataclass(slots=True)
@@ -37,7 +39,6 @@ class Reader(w.Writer):
     @override
     def __post_init__(self) -> None:
         w.Writer.__post_init__(self)
-
         self.analyzer = JitFootprintAnalyzer(
             storage=self.storage,
             atr_period=self.strategy.atr_period,
@@ -45,7 +46,7 @@ class Reader(w.Writer):
             ma_vol_period=self.strategy.ma_volume_period,
             ma_ats_period=self.strategy.ma_avg_trade_size_period,
             ma_count_trade_period=self.strategy.ma_count_trade_period,
-            big_cluster_mult=round(self.strategy.big_cluster_mult * 10_000),
+            big_cluster_vol=self.strategy.big_cluster_vol,
         )
 
     @override
@@ -59,9 +60,7 @@ class Reader(w.Writer):
         self.analyzer.ma_count_trade_period = (
             self.strategy.ma_count_trade_period
         )
-        self.analyzer.big_cluster_mult = round(
-            self.strategy.big_cluster_mult * 10_000
-        )
+        self.analyzer.big_cluster_vol = self.strategy.big_cluster_vol
 
     @final
     def analyze_footprint(self) -> None:
@@ -70,43 +69,38 @@ class Reader(w.Writer):
         Updates the active cluster delta domination, updates OHLC/POC/VA bar levels,
         and finalizes closed bars in the underlying storage structures.
         """
-        self.re_init: int
-
-        idx, lidx = self.idx[0], self.lidx[0]
+        last_side, last_bar = self.last_side[0], self.fp.last_bar[0]
         if not self.bbox_is_read():
-            self.analyzer.analyze_bar(self.fp.base, self.fp.state)
+            self.analyzer.analyze_bar()
             self.strategy.on_bar_update(
-                self.idYmin[0], self.idYmax[0], idx, lidx
+                self.idYmin[0], self.idYmax[0], last_bar, last_side
             )
             self.reset_bbox()
 
-        if (self.re_init & c.RIF_idx) or ((idx & ~1) > lidx):
-            self.analyzer.analyze_closed_bar(self.fp.base, self.fp.state)
-            self.strategy.on_bar_close(idx, lidx)
-            if (idx & ~1) > lidx:
-                self.lidx[0] = idx & ~1
+        if self.closed_bar[0] != self.fp.last_bar[0]:
+            self.analyzer.analyze_closed_bar()
+            self.strategy.on_bar_close(last_bar, last_side)
+            self.closed_bar[0] = self.fp.last_bar[0]
 
         self.__set_last_trade_time()
 
     @final
     def bbox_is_read(self) -> bool:
         """Check if the active footprint's bounding box has been fully evaluated."""
-        return (self.idYmin[0] == self.fp.con.fp_rows[0]) and (
+        return (self.idYmin[0] == self.fp.con.bar_height[0]) and (
             self.idYmax[0] == 0
         )
 
     @final
     def is_bbox_mode(self) -> bool:
         """Determine if the engine is operating in bounding-box block update mode."""
-        return (
-            (not self.strategy.tick_by_tick_analyze)
-            and (not (self.re_init & c.RIF_session))
-            and (not ((self.idx[0] & ~1) > self.lidx[0]))
+        return (not self.strategy.tick_by_tick_analyze) and (
+            self.closed_bar[0] == self.fp.last_bar[0]
         )
 
     @final
     def __set_last_trade_time(self) -> None:
-        if time := self.fp[self.idx[0]].ind.last_trade_time:
+        if time := self.fp[self.fp.last_bar[0]].ind.close_time:
             self.trade_read_time[0] = int(time)
 
         if self.save_trade_time:
@@ -119,16 +113,16 @@ class Reader(w.Writer):
         Forces active bar closure routines, updates indicators, and notifies
         the algorithm state machines.
         """
-        idx, lidx = self.idx[0], self.lidx[0]
+        last_side, last_bar = self.last_side[0], self.fp.last_bar[0]
         if not self.bbox_is_read():
-            self.analyzer.analyze_bar(self.fp.base, self.fp.state)
+            self.analyzer.analyze_bar()
             self.strategy.on_bar_update(
-                self.idYmin[0], self.idYmax[0], idx, lidx
+                self.idYmin[0], self.idYmax[0], last_bar, last_side
             )
             self.reset_bbox()
 
-        self.analyzer.analyze_closed_bar(self.fp.base, self.fp.state)
-        self.strategy.on_bar_close(self.idx[0], self.lidx[0])
+        self.analyzer.analyze_closed_bar()
+        self.strategy.on_bar_close(last_bar, last_side)
         self.__set_last_trade_time()
 
 
@@ -139,7 +133,7 @@ spec = [  # pyright: ignore[reportUnknownVariableType]
     ("ma_vol_period", nb.int64),
     ("ma_ats_period", nb.int64),
     ("ma_count_trade_period", nb.int64),
-    ("big_cluster_mult", nb.int64),
+    ("big_cluster_vol", types.MemoryView(nb.int64, 1, "C")),
 ]
 
 
@@ -155,7 +149,7 @@ class JitFootprintAnalyzer:
         ma_vol_period: int,
         ma_ats_period: int,
         ma_count_trade_period: int,
-        big_cluster_mult: int,
+        big_cluster_vol: memoryview,
     ) -> None:
         self.storage: JitStorage = storage
         self.atr_period: int = atr_period
@@ -163,16 +157,13 @@ class JitFootprintAnalyzer:
         self.ma_vol_period: int = ma_vol_period
         self.ma_ats_period: int = ma_ats_period
         self.ma_count_trade_period: int = ma_count_trade_period
-        self.big_cluster_mult: int = big_cluster_mult
+        self.big_cluster_vol: memoryview = big_cluster_vol
 
-    def analyze_bar(self, fp: FPArray, fp_state: FPArray) -> None:
+    def analyze_bar(self) -> None:
         """Update microstructural states, OHLC flags, imbalance, and bar Value Area."""
         _ = self.storage
         # - - -
-        lidx: int = _.lidx[0]
-        idXbid: int = lidx
-        idXask: int = idXbid + 1
-        bar: int = idXbid // 2
+        bar: int = _.last_bar[0]
         bwo: int = _.headers_offset[0] + bar
 
         if _.headers[bwo, c.BH_Volume] == 0:
@@ -183,8 +174,8 @@ class JitFootprintAnalyzer:
         lowNprice: int64 = _.headers[bwo, c.BH_Low]
         closeNprice: int64 = _.headers[bwo, c.BH_Close]
 
-        bNprice, step_tick = _.baseNprice[0], _.step_tick[0]
-        scale, center = _.scale[0], _.center[0]
+        step_tick, scale, center = _.step_tick[0], _.scale[0], _.center[0]
+        bNprice = _.headers[bwo, c.BH_BaseNprice]
 
         open_idy: int64 = (bNprice - openNprice) // scale + center
         high_idy: int64 = (bNprice - highNprice) // scale + center
@@ -193,8 +184,8 @@ class JitFootprintAnalyzer:
 
         # BAR POC, VA
         vp_bar: NDArray[int64] = (
-            fp[high_idy : low_idy + 1, idXbid]
-            + fp[high_idy : low_idy + 1, idXask]
+            _.fp[bar, high_idy : low_idy + 1, 0]
+            + _.fp[bar, high_idy : low_idy + 1, 1]
         )
         poc: intp = np.argmax(vp_bar)
         vah, val = calc_value_area(vp_slice=vp_bar, center_idx=poc)
@@ -204,6 +195,8 @@ class JitFootprintAnalyzer:
 
         if not _.with_state[0]:  # Update States
             return
+
+        bid = 2
 
         clear_state: int = (
             c.SF_OPEN
@@ -216,111 +209,89 @@ class JitFootprintAnalyzer:
             | c.SF_FINISHED_AUCTION
             | c.SF_UNFINISHED_AUCTION
         )
-        fp_state[high_idy : low_idy + 1, idXbid : idXask + 1] &= ~clear_state
+        _.fp[bar, high_idy : low_idy + 1, bid : bid + 2] &= ~clear_state
 
         # OHLC
-        fp_state[open_idy, idXbid] |= c.SF_OPEN
-        fp_state[high_idy, idXbid] |= c.SF_HIGH
-        fp_state[low_idy, idXbid] |= c.SF_LOW
-        fp_state[close_idy, idXbid] |= c.SF_CLOSE
+        _.fp[bar, open_idy, bid] |= c.SF_OPEN
+        _.fp[bar, high_idy, bid] |= c.SF_HIGH
+        _.fp[bar, low_idy, bid] |= c.SF_LOW
+        _.fp[bar, close_idy, bid] |= c.SF_CLOSE
 
         # BAR POC, VA
-        fp_state[(high_idy + poc), idXbid] |= c.SF_POC_BAR
-        fp_state[(high_idy + vah), idXbid] |= c.SF_VAH_BAR
-        fp_state[(high_idy + val), idXbid] |= c.SF_VAL_BAR
+        _.fp[bar, (high_idy + poc), bid] |= c.SF_POC_BAR
+        _.fp[bar, (high_idy + vah), bid] |= c.SF_VAH_BAR
+        _.fp[bar, (high_idy + val), bid] |= c.SF_VAL_BAR
 
         # Finished Auction
-        high_finished: bool_ = fp[high_idy, idXbid] == 0
-        low_finished: bool_ = fp[low_idy, idXask] == 0
-        fp_state[high_idy, idXbid] |= (
+        high_finished: bool_ = _.fp[bar, high_idy, 0] == 0
+        low_finished: bool_ = _.fp[bar, low_idy, 1] == 0
+        _.fp[bar, high_idy, bid] |= (
             c.SF_FINISHED_AUCTION if high_finished else c.SF_UNFINISHED_AUCTION
         )
-        fp_state[low_idy, idXask] |= (
+        _.fp[bar, low_idy, bid + 1] |= (
             c.SF_FINISHED_AUCTION if low_finished else c.SF_UNFINISHED_AUCTION
         )
 
         # IMBALANCE, DELTA DOMINATION, ZERO PRINT, BIG CLUSTER IN EVERY LEVEL
-        idYmin, idYmax, idxDP = _.idYmin[0], _.idYmax[0], _.idxDP[0]
+        idYmin, idYmax = _.idYmin[0], _.idYmax[0]
 
         clear_state = c.SF_ZERO_PRINT | c.SF_DELTA_DOMINATION | c.SF_IMBALANCE
-        fp_state[idYmin:idYmax, idXbid : idXask + 1] &= ~clear_state
+        _.fp[bar, idYmin:idYmax, bid : bid + 2] &= ~clear_state
 
-        clear_state = (
-            c.SF_BID_DELTA_DOMINATION_FP | c.SF_ASK_DELTA_DOMINATION_FP
-        )
-        fp_state[idYmin:idYmax, idxDP] &= ~clear_state
-
-        ma_vol: int64 | int = (
-            _.headers[bwo - 1, c.BH_MA_VOL] if (bwo - 1) > 0 else 0
-        )
-        vol: int64 = int64(ma_vol * (self.big_cluster_mult / 10_000))
         for idy in range(idYmin, idYmax):
-            if ma_vol:
-                fp_state[idy, idxDP] |= (
-                    c.SF_BID_DELTA_DOMINATION_FP
-                    if (fp[idy, idxDP] < 0)
-                    else c.SF_ASK_DELTA_DOMINATION_FP
-                )
+            for side in range(2, 4):
+                if (not (_.fp[bar, idy, side] & c.SF_BIG_CLUSTER)) and (
+                    _.fp[bar, idy, side] >= self.big_cluster_vol[0]
+                ):
+                    _.fp[bar, idy, side] |= c.SF_BIG_CLUSTER
 
-                for idx in range(lidx, lidx + 2):
-                    if (not (fp_state[idy, idx] & c.SF_BIG_CLUSTER)) and (
-                        fp[idy, idx] > vol
-                    ):
-                        fp_state[idy, idx] |= c.SF_BIG_CLUSTER
-
-            bid_val, ask_val = fp[idy, idXbid], fp[idy, idXask]
+            bid_val, ask_val = _.fp[bar, idy, 0], _.fp[bar, idy, 1]
 
             if (ask_val > 0) and (bid_val == 0):
-                fp_state[idy, idXbid] |= c.SF_ZERO_PRINT
+                _.fp[bar, idy, bid] |= c.SF_ZERO_PRINT
 
             elif (bid_val > 0) and (ask_val == 0):
-                fp_state[idy, idXask] |= c.SF_ZERO_PRINT
+                _.fp[bar, idy, bid + 1] |= c.SF_ZERO_PRINT
 
             if bid_val > ask_val:
-                fp_state[idy, idXbid] |= c.SF_DELTA_DOMINATION
+                _.fp[bar, idy, bid] |= c.SF_DELTA_DOMINATION
 
             elif ask_val > bid_val:
-                fp_state[idy, idXask] |= c.SF_DELTA_DOMINATION
+                _.fp[bar, idy, bid + 1] |= c.SF_DELTA_DOMINATION
 
             if step_tick > 1:
                 if bid_val > (ask_val * 3):
-                    fp_state[idy, idXbid] |= c.SF_IMBALANCE
+                    _.fp[bar, idy, bid] |= c.SF_IMBALANCE
 
                 elif ask_val > (bid_val * 3):
-                    fp_state[idy, idXask] |= c.SF_IMBALANCE
+                    _.fp[bar, idy, bid + 1] |= c.SF_IMBALANCE
             else:
                 ymin, ymax = max(high_idy, idy - 1), min(low_idy, idy + 1)
-                if (idy > ymin) and (bid_val > (fp[ymin, idXask] * 3)):
-                    fp_state[idy, idXbid] |= c.SF_IMBALANCE
-                    fp_state[ymin, idXask] &= ~(c.SF_IMBALANCE)
+                if (idy > ymin) and (bid_val > (_.fp[bar, ymin, 1] * 3)):
+                    _.fp[bar, idy, bid] |= c.SF_IMBALANCE
+                    _.fp[bar, ymin, bid + 1] &= ~(c.SF_IMBALANCE)
 
-                if (idy < ymax) and (ask_val > (fp[ymax, idXbid] * 3)):
-                    fp_state[idy, idXask] |= c.SF_IMBALANCE
-                    fp_state[ymax, idXbid] &= ~(c.SF_IMBALANCE)
+                if (idy < ymax) and (ask_val > (_.fp[bar, ymax, 1] * 3)):
+                    _.fp[bar, idy, bid + 1] |= c.SF_IMBALANCE
+                    _.fp[bar, ymax, bid] &= ~(c.SF_IMBALANCE)
 
-    def analyze_closed_bar(self, fp: FPArray, fp_state: FPArray) -> None:
+    def analyze_closed_bar(self) -> None:
         """Calculate indicator states and footprint flags upon bar closure.
 
         Computes ATR, Parkinson Volatility, VWAP bands, Point of Control (POC),
         Value Area (VAH/VAL)."""
         _ = self.storage
         # - - -
-        lidx: int = _.lidx[0]
-        bar: int = (lidx & ~1) // 2
+        bar: int = _.closed_bar[0]
         bwo: int = _.headers_offset[0] + bar
 
         if _.headers[bwo, c.BH_Volume] == 0:
             return
 
-        oldBwo: int = bwo - 1
-
         highNprice: int64 = _.headers[bwo, c.BH_High]
         lowNprice: int64 = _.headers[bwo, c.BH_Low]
 
-        bNprice, idxVP = _.baseNprice[0], _.idxVP[0]
-        scale, center = _.scale[0], _.center[0]
-
-        # Update Base
+        oldBwo: int = bwo - 1
 
         # ATR
         if bar > 0:
@@ -381,35 +352,14 @@ class JitFootprintAnalyzer:
                 )
 
         # FP POC, VA
-        poc: intp = np.argmax(fp[:, idxVP])
-        vah, val = calc_value_area(vp_slice=fp[:, idxVP], center_idx=poc)
-        _.headers[bwo, c.BH_POC_FP] = (center - poc) * scale + bNprice
-        _.headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + bNprice
-        _.headers[bwo, c.BH_VAL_FP] = (center - val) * scale + bNprice
+        baseNprice = _.headers[bwo, c.BH_BaseNprice]
+        center, scale = _.center[0], _.scale[0]
 
-        if not _.with_state[0]:  # Update States
-            return
-
-        # FP POC, VA
-        fp_state[poc, lidx] |= c.SF_POC_FP
-        fp_state[vah, lidx] |= c.SF_VAH_FP
-        fp_state[val, lidx] |= c.SF_VAL_FP
-
-        # VWAP, BB
-        vwap: int64 = (bNprice - _.headers[bwo, c.BH_VWAP]) // scale + center
-        vwap_bb_lower: int64 = (
-            bNprice - _.headers[bwo, c.BH_VWAP_LOWER_BAND]
-        ) // scale + center
-        vwap_bb_upper: int64 = (
-            bNprice - _.headers[bwo, c.BH_VWAP_UPPER_BAND]
-        ) // scale + center
-
-        if 0 <= vwap < fp_state.shape[0]:
-            fp_state[vwap, lidx] |= c.SF_VWAP_FP
-        if 0 <= vwap_bb_upper < fp_state.shape[0]:
-            fp_state[vwap_bb_upper, lidx] |= c.SF_UPPER_BAND_FP
-        if 0 <= vwap_bb_lower < fp_state.shape[0]:
-            fp_state[vwap_bb_lower, lidx] |= c.SF_LOWER_BAND_FP
+        poc: intp = np.argmax(_.profile[0, :])
+        vah, val = calc_value_area(vp_slice=_.profile[0, :], center_idx=poc)
+        _.headers[bwo, c.BH_POC_FP] = (center - poc) * scale + baseNprice
+        _.headers[bwo, c.BH_VAH_FP] = (center - vah) * scale + baseNprice
+        _.headers[bwo, c.BH_VAL_FP] = (center - val) * scale + baseNprice
 
 
 @final

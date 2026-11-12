@@ -15,7 +15,7 @@ import imprint._core.configs as cfg
 from imprint._core.footprint import StrategyEngine
 from imprint._core.ipc.memory_layouts import MemoryLayout
 from imprint._core.pipeline.executing import ExecutionEngine
-from imprint._core.settings import KwgsKeys, Timeframe
+from imprint._core.settings import BarType, KwgsKeys
 from imprint._core.utils.exc_dumper import error_handler
 
 T = TypeVar("T")
@@ -171,9 +171,11 @@ class Base(ABC):
         if isinstance(_, cfg.Footprint):
             self._footprints.append(_)
         else:
-            for tf, cr, st, ws, wc in zip_longest(
-                _.timeframe,
-                _.chart_range,
+            for bt, bc, bh, ph, st, ws, wc in zip_longest(
+                _.bar_type,
+                _.bar_count,
+                _.bar_height,
+                _.profile_height,
                 _.step_tick,
                 _.state,
                 _.ctrade,
@@ -186,10 +188,14 @@ class Base(ABC):
                 )
                 self._footprints.append(fp)
 
-                if isinstance(tf, Timeframe):
-                    fp.timeframe = tf
-                if isinstance(cr, int):
-                    fp.chart_range = cr
+                if isinstance(bt, BarType):
+                    fp.bar_type = bt
+                if isinstance(bc, int):
+                    fp.bar_count = bc
+                if isinstance(bh, int):
+                    fp.bar_height = bh
+                if isinstance(ph, int):
+                    fp.profile_height = ph
                 if isinstance(st, int):
                     fp.step_tick = st
                 if isinstance(ws, bool):

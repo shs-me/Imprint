@@ -2,10 +2,10 @@
 
 from imprint._core.settings import (
     BarHeaders,
+    BarTypeFlag,
     EquityHeaders,
     OrderBook,
     OrderFlag,
-    ReInitFlag,
     StateFlags,
     TradeParam,
 )
@@ -31,6 +31,10 @@ FOOTPRINT_HEADERS_DATA_PATH = f"{DATA_PATH}/footprint_headers"
 DIRS_LIST = [DATA_PATH, LOGS_PATH]
 
 # - - Copy Enums & Flags - -
+BT_Time: int = int(BarTypeFlag.Time)
+BT_Tick: int = int(BarTypeFlag.Tick)
+
+BH_BaseNprice: int = int(BarHeaders.BaseNprice)
 BH_Open: int = int(BarHeaders.Open)
 BH_High: int = int(BarHeaders.High)
 BH_Low: int = int(BarHeaders.Low)
@@ -42,7 +46,7 @@ BH_VWAP: int = int(BarHeaders.VWAP)
 BH_VWAP_UPPER_BAND: int = int(BarHeaders.VWAP_UPPER_BAND)
 BH_VWAP_LOWER_BAND: int = int(BarHeaders.VWAP_LOWER_BAND)
 BH_OpenTime: int = int(BarHeaders.OpenTime)
-BH_LastTradeTime: int = int(BarHeaders.LastTradeTime)
+BH_CloseTime: int = int(BarHeaders.CloseTime)
 BH_CountTrade: int = int(BarHeaders.CountTrade)
 BH_ATR: int = int(BarHeaders.ATR)
 BH_MA_VOL: int = int(BarHeaders.MA_VOL)
@@ -117,9 +121,5 @@ OF_NEW: int = int(OrderFlag.NEW)
 OF_CANCEL: int = int(OrderFlag.CANCEL)
 OF_FILLED: int = int(OrderFlag.FILLED)
 OF_CANCELED: int = int(OrderFlag.CANCELED)
-
-RIF_session: int = int(ReInitFlag.session)
-RIF_idx: int = int(ReInitFlag.idx)
-RIF_idy: int = int(ReInitFlag.idy)
 
 VAR_SCALE: int = 1_000_000_000

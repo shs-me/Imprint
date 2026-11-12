@@ -1,8 +1,62 @@
 """Enumerations for indexing, keys, and project flags"""
 
+from abc import ABC
+from dataclasses import dataclass, field
+from datetime import timedelta
 from enum import CONTINUOUS, UNIQUE, IntEnum, IntFlag, StrEnum, auto, verify
+from typing import final
 
 
+@final
+class BarTypeFlag(IntFlag):
+    Time = 0
+    Tick = auto()
+
+
+@dataclass(slots=True)
+class BarType(ABC):
+    bar_type: int = field(init=False)
+    bar_close_trigger: int = field(init=False)
+
+
+@final
+@dataclass(slots=True)
+class TimeBar(BarType):
+    days: int
+    hours: int
+    minutes: int
+    seconds: int
+
+    def __post_init__(self) -> None:
+        self.bar_type = BarTypeFlag.Time
+        self.bar_close_trigger = round(
+            timedelta(
+                days=self.days,
+                hours=self.hours,
+                minutes=self.minutes,
+                seconds=self.seconds,
+            ).total_seconds()
+            * 1000
+        )
+
+
+@final
+@dataclass(slots=True)
+class TickBar(BarType):
+    count: int
+
+    def __post_init__(self) -> None:
+        self.bar_type = BarTypeFlag.Tick
+        self.bar_close_trigger = self.count
+
+
+@final
+class BarBuilder:
+    time: type[TimeBar] = TimeBar
+    tick: type[TickBar] = TickBar
+
+
+@final
 class KwgsKeys(StrEnum):
     """String keys for the main process dictionary"""
 
@@ -14,17 +68,7 @@ class KwgsKeys(StrEnum):
     ShmSize = auto()
 
 
-class Timeframe(IntEnum):
-    """Timeframes in milliseconds"""
-
-    S30 = 30 * 1000
-    M1 = 1 * 60 * 1000
-    M5 = 5 * 60 * 1000
-    M15 = 15 * 60 * 1000
-    M30 = 30 * 60 * 1000
-    H1 = 1 * 60 * 60 * 1000
-
-
+@final
 @verify(CONTINUOUS, UNIQUE)
 class ProcsIds(IntEnum):
     """Process indices"""
@@ -34,6 +78,7 @@ class ProcsIds(IntEnum):
     executing = auto()
 
 
+@final
 @verify(CONTINUOUS, UNIQUE)
 class LogLevel(IntEnum):
     """Logging level indices for inter-process communication"""
@@ -46,6 +91,7 @@ class LogLevel(IntEnum):
     CRITICAL = auto()
 
 
+@final
 @verify(CONTINUOUS, UNIQUE)
 class OrderBook(IntEnum):
     """Indices of pending order parameters"""
@@ -58,6 +104,7 @@ class OrderBook(IntEnum):
     ConstantCount = auto()
 
 
+@final
 @verify(CONTINUOUS, UNIQUE)
 class EquityHeaders(IntEnum):
     """Indices of headers storing balance change history"""
@@ -70,6 +117,7 @@ class EquityHeaders(IntEnum):
     ConstantCount = auto()
 
 
+@final
 @verify(CONTINUOUS, UNIQUE)
 class TradeParam(IntEnum):
     """Indices of executed order parameters"""
@@ -88,12 +136,13 @@ class TradeParam(IntEnum):
     ConstantCount = auto()
 
 
+@final
 @verify(CONTINUOUS, UNIQUE)
 class BarHeaders(IntEnum):
     """Indices for footprint indicators and metrics stored in each bar"""
 
-    # Footprint Writer
-    Open = 0
+    BaseNprice = 0
+    Open = auto()
     High = auto()
     Low = auto()
     Close = auto()
@@ -104,9 +153,8 @@ class BarHeaders(IntEnum):
     VWAP_UPPER_BAND = auto()
     VWAP_LOWER_BAND = auto()
     OpenTime = auto()
-    LastTradeTime = auto()
+    CloseTime = auto()
     CountTrade = auto()
-    # Footprint Reader
     ATR = auto()
     PARK = auto()
     MA_VOL = auto()
@@ -121,6 +169,7 @@ class BarHeaders(IntEnum):
     ConstantCount = auto()
 
 
+@final
 class StatusCodes(IntFlag):
     """Process and task status flags with string descriptions"""
 
@@ -149,9 +198,9 @@ class StatusCodes(IntFlag):
     INVALID_DATA = "Invalid data"
     DECODE_ERROR = "Decode error, more info in exc dump"
     ENCODE_ERROR = "Encode error, more info in exc dump"
-    FP_IDY_FILLED = "(FP rows < ID-Y) or (ID-Y <= 0), re-init fp ..."
-    FP_IDX_FILLED = "FP cols < ID-X, re-init fp ..."
-    FP_RE_INIT = "FP re-initialized"
+    PRICE_OUT_OF_BAR_BOUNDS = (
+        "Price out of bar bounds: (bar_height < ID-Y) or (ID-Y <= 0)"
+    )
     ANALYSIS_LAG_MORE_SAFE_LAG = "Analysis lag > safe lag limit"
     BIG_RAW_DATA = "Size/Len raw_data > data_cell_size_in_ring_buffer"
     BIG_GAP = "Big Gap, gap > buffer capacity"
@@ -161,6 +210,7 @@ class StatusCodes(IntFlag):
     ORDER_LIMIT = "Active Orders > order limit"
 
 
+@final
 class StateFlags(IntFlag):
     """State flags for specific footprint matrix clusters"""
 
@@ -195,6 +245,7 @@ class StateFlags(IntFlag):
     BIG_CLUSTER = auto()
 
 
+@final
 class OrderFlag(IntFlag):
     """Order parameter state flags"""
 
@@ -215,14 +266,7 @@ class OrderFlag(IntFlag):
     CANCELED = auto()
 
 
-class ReInitFlag(IntFlag):
-    """Initialization state flags for footprint engine sessions"""
-
-    session = auto()
-    idx = auto()
-    idy = auto()
-
-
+@final
 class PositionFSM(IntFlag):
     """Position finite state machine flags.
     Serve as the single source of truth for the account along with the balance"""

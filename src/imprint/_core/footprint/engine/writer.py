@@ -15,8 +15,9 @@ from numpy.typing import NDArray
 
 import imprint._core.constant as c
 from imprint._core.footprint.engine.base import Base, JitStorage
-from imprint._core.footprint.models.converter import to_idx, to_idy
-from imprint._core.utils import FPArray, IndexGenerator
+from imprint._core.footprint.models.converter import to_idy
+from imprint._core.settings import StatusCodes as scs
+from imprint._core.utils import IndexGenerator
 
 next_id = IndexGenerator()
 BHM_VWAP_W: int = next_id()
@@ -52,7 +53,6 @@ class Writer(Base, ABC):
     @override
     def __post_init__(self) -> None:
         Base.__post_init__(self)
-
         self.__meta_data = np.zeros(shape=(2, BHM_ConstantCount), dtype=float64)
         self.updater = JitFootprintUpdate(
             meta_data=self.__meta_data, storage=self.storage
@@ -61,31 +61,42 @@ class Writer(Base, ABC):
     @override
     def reset(self) -> None:
         Base.reset(self)
+        _ = self.fp
+        # - - -
+        new_bar: int = _.last_bar[0] + 1
+        if new_bar >= _.con.bar_count[0]:
+            _.last_bar[0] = 0
+            _.headers_offset[0] += _.con.bar_count[0]
+        else:
+            _.last_bar[0] = new_bar
 
         self.counter_ticks = 0
-
-    @override
-    def init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        """Reset internal metadata workspace upon index system re-initialization."""
-        Base.init_idx(self, nPrice, timestamp)
-        self.__meta_data.fill(0)
 
     @final
     def update_footprint(
         self, nPrice: int64, nQty: int64, timestamp: int64, is_sell: int64
     ) -> None:
-        """Process an incoming trade tick and update the corresponding footprint profile."""
-        if self.re_init & (c.RIF_session):
-            self.init_session(nPrice, timestamp)
-
-        if result := self.updater.update(
-            nPrice, nQty, timestamp, is_sell, self.fp.base, self.fp.ctrade
-        ):
-            self.re_init: int = result
-        else:
+        if (
+            result := self.updater.update(nPrice, nQty, timestamp, is_sell)
+        ) is None:
             self.counter_ticks += 1
             if self.save_trade_time and not self.trade_time[0]:
                 self.trade_time[0] = int(timestamp)
+        else:
+            if result == 1:
+                return self.manager.set_proc_sc(
+                    scs.PRICE_OUT_OF_BAR_BOUNDS, wait_main_task=True
+                )
+            elif result == 0:
+                self.fp.headers = self.storage.headers = (
+                    self.fp.headers.padding(10_000)
+                )
+            elif result == 2:
+                self.fp.profile = self.storage.profile = (
+                    self.fp.profile.padding(5000, 5000)
+                )
+
+            self.update_footprint(nPrice, nQty, timestamp, is_sell)
 
 
 spec = [  # pyright: ignore[reportUnknownVariableType]
@@ -105,90 +116,94 @@ class JitFootprintUpdate:
         self.storage: JitStorage = storage
 
     def update(
-        self,
-        nPrice: int64,
-        nQty: int64,
-        timestamp: int64,
-        is_sell: int64,
-        footprint: FPArray,
-        ctrade: FPArray,
+        self, nPrice: int64, nQty: int64, timestamp: int64, is_sell: int64
     ) -> int | None:
-        """Update footprint volume matrix, bar headers, VWAP statistics, and bounding boxes.
-
-        Returns
-        -------
-        int | None
-            Bitmask integer containing re-initialization flags (``RIF_*``) if the trade falls
-            outside grid boundaries, or ``None`` when the update succeeds.
-        """
+        """Update footprint volume matrix, bar headers, VWAP statistics, and bounding boxes."""
         _ = self.storage
         # - - -
-        re_init: int = 0
+        ho: int = _.headers_offset[0]
+        bt: int = _.bar_type[0]
+        btt: int = _.bar_close_trigger[0]
+        bar: int = _.last_bar[0]
+        bwo: int = ho + bar
 
-        idx: int64 = to_idx(
-            timestamp=timestamp,
-            is_sell=is_sell,
-            baseTimestamp=_.baseTimestamp,
-            tims=_.tims,
-            fp_cols=_.fp_cols,
-        )
-        if idx < 0:
-            re_init |= c.RIF_session | c.RIF_idx
-            return re_init
+        if bwo >= _.headers.shape[0]:
+            return 0
+        if (
+            bt & c.BT_Time and (timestamp - _.headers[bwo, c.BH_OpenTime]) > btt
+        ) or (bt & c.BT_Tick and (_.headers[bwo, c.BH_CountTrade] + 1) > btt):
+            _.closed_bar[0] = bar
+            new_bar: int = bar + 1
+            if new_bar >= _.bar_count[0]:
+                _.last_bar[0] = 0
+                _.headers_offset[0] += _.bar_count[0]
+            else:
+                _.last_bar[0] = new_bar
 
-        _.idx[0] = int(idx)
+            bar = _.last_bar[0]
+            bwo = ho + bar
+
+        if not _.headers[bwo, c.BH_BaseNprice]:
+            _.headers[bwo, c.BH_BaseNprice] = int(
+                (nPrice // _.scale[0]) * _.scale[0]
+            )
 
         idy: int64 = to_idy(
             nPrice=nPrice,
-            baseNprice=_.baseNprice,
+            baseNprice=_.headers[bwo, c.BH_BaseNprice],
+            bar_height=_.bar_height,
             scale=_.scale,
             center=_.center,
-            fp_rows=_.fp_rows,
         )
         if idy < 0:
-            re_init |= c.RIF_session | c.RIF_idy
-            return re_init
+            return 1
 
-        # Update Footprint
-        footprint[idy, idx] += nQty
-        footprint[idy, _.idxVP[0]] += nQty
-        footprint[idy, _.idxDP[0]] += -nQty if is_sell else nQty
-        if _.with_ctrade[0]:
-            ctrade[idy, idx] += 1
-            ctrade[idy, _.idxVP[0]] += 1
+        if 0 <= idy < _.profile.shape[1]:
+            _.profile[0, idy] += nQty
+            _.profile[1, idy] += -nQty if is_sell else nQty
+        else:
+            return 2
 
-        # Update Headers
-        ho: int = _.headers_offset[0]
-        bar: int64 = (idx & ~1) // 2
-        bwo: int64 = ho + bar
+        _.last_side[0] = side = 0 if is_sell else 1
+
         if _.headers[bwo, c.BH_CountTrade] == 0:
+            _.fp[bar] = 0
             _.headers[bwo, c.BH_Open : c.BH_Close + 1] = nPrice
-            _.headers[bwo, c.BH_OpenTime] = timestamp
+            if bt & c.BT_Time:
+                _.headers[bwo, c.BH_OpenTime] = int(
+                    timestamp - (timestamp % _.bar_close_trigger[0])
+                )
+                self._update_missing_bars(bar, ho)
+            else:
+                _.headers[bwo, c.BH_OpenTime] = timestamp
 
-            self._update_missing_bars(bar, ho)
+        _.fp[bar, idy, side] += nQty
+        if _.with_ctrade[0]:
+            _.fp[bar, idy, (4 if _.with_state[0] else 2) + side] += 1
 
         _.headers[bwo, c.BH_High] = max(nPrice, _.headers[bwo, c.BH_High])
         _.headers[bwo, c.BH_Low] = min(nPrice, _.headers[bwo, c.BH_Low])
         _.headers[bwo, c.BH_Close] = nPrice
-        _.headers[bwo, c.BH_LastTradeTime] = timestamp
+        _.headers[bwo, c.BH_CloseTime] = timestamp
 
         _.headers[bwo, c.BH_CountTrade] += 1
         _.headers[bwo, c.BH_Volume] += nQty
         _.headers[bwo, c.BH_Delta] += -nQty if is_sell else nQty
 
-        self._update_cvd(bar, bwo)
+        self._update_cvd(bwo)
         self._update_vwap_and_bands(nPrice, nQty, bwo)
 
         _.idYmin[0] = min(_.idYmin[0], int(idy))
         _.idYmax[0] = (int(idy) + 1) if (_.idYmax[0] <= idy) else _.idYmax[0]
 
-    def _update_missing_bars(self, bar: int64, ho: int) -> None:
+    def _update_missing_bars(self, bar: int, ho: int) -> None:
         """Fill values for unpopulated bar gaps between active trades."""
         _ = self.storage
         # - - -
         zero: int64 = int64(0)
-        prev_bar: int64 = bar - 1
+        prev_bar: int = bar - 1
         prev_p: int64 = zero
+        prev_time: int64 = zero
         prev_cvd: int64 = zero
         prev_vwap: int64 = zero
         prev_vwap_l: int64 = zero
@@ -203,6 +218,7 @@ class JitFootprintUpdate:
                 or _.headers[b_idx, c.BH_Open] > 0
             ):
                 prev_p = _.headers[b_idx, c.BH_Close]
+                prev_time = _.headers[b_idx, c.BH_OpenTime]
                 prev_cvd = _.headers[b_idx, c.BH_CVD]
                 prev_vwap = _.headers[b_idx, c.BH_VWAP]
                 prev_vwap_l = _.headers[b_idx, c.BH_VWAP_LOWER_BAND]
@@ -215,15 +231,15 @@ class JitFootprintUpdate:
             prev_bar -= 1
 
         if not found_prev:
-            prev_bar = zero
+            prev_bar = 0
             prev_p = _.headers[ho + bar, c.BH_Open]
 
         while prev_bar < bar:
-            cur_bwo: int64 = ho + prev_bar
-            _.headers[cur_bwo, c.BH_OpenTime] = _.baseTimestamp[0] + (
-                prev_bar * _.tims[0]
+            cur_bwo: int = ho + prev_bar
+            _.headers[cur_bwo, c.BH_OpenTime] = prev_time + (
+                prev_bar * _.bar_close_trigger[0]
             )
-            _.headers[cur_bwo, c.BH_LastTradeTime] = _.headers[
+            _.headers[cur_bwo, c.BH_CloseTime] = _.headers[
                 cur_bwo, c.BH_OpenTime
             ]
 
@@ -237,11 +253,11 @@ class JitFootprintUpdate:
 
             prev_bar += 1
 
-    def _update_cvd(self, bar: int64, bwo: int64) -> None:
+    def _update_cvd(self, bwo: int) -> None:
         """Calculate Cumulative Volume Delta (CVD) for the current bar."""
         _ = self.storage
         # - - -
-        if bar > 0:
+        if bwo > 0:
             _.headers[bwo, c.BH_CVD] = (
                 _.headers[bwo, c.BH_Delta] + _.headers[bwo - 1, c.BH_CVD]
             )
@@ -249,7 +265,7 @@ class JitFootprintUpdate:
             _.headers[bwo, c.BH_CVD] = _.headers[bwo, c.BH_Delta]
 
     def _update_vwap_and_bands(
-        self, nPrice: int64, nQty: int64, bwo: int64
+        self, nPrice: int64, nQty: int64, bwo: int
     ) -> None:
         """Update Volume Weighted Average Price (VWAP) and rolling standard deviation bands."""
         _ = self.storage

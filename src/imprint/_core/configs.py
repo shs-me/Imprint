@@ -6,7 +6,7 @@ from typing import Any, final, override
 import msgspec
 from msgspec import field
 
-from imprint._core.settings import Timeframe
+from imprint._core.settings import BarType, TimeBar
 
 PERCENT: int = 10_000
 
@@ -161,28 +161,15 @@ class Footprint(Configuration):
     Additional state and ctrade matrices have the same dimensions as the base matrix.
     The state clusters store footprint flags, and ctrade stores the trade count; disabled by default."""
 
-    timeframe: Timeframe = Timeframe.H1
-    chart_range: int = 1
+    bar_type: BarType = field(
+        default_factory=lambda: TimeBar(days=0, hours=1, minutes=0, seconds=0)
+    )
+    bar_count: int = 24
+    bar_height: int = 100
+    profile_height: int = 10_000
     step_tick: int = 1
     state: bool = False
     ctrade: bool = False
-
-    colVP: int = -2
-    colDP: int = -1
-    fp_rows: int = 10001
-
-    @property
-    def bar_count(self) -> int:
-        dayMs: int = max(self.chart_range, 1) * 24 * 60 * 60 * 1000
-        return max(1, dayMs // self.timeframe)
-
-    @property
-    def fp_cols(self) -> int:
-        return self.bar_count * 2
-
-    @property
-    def fp_panel_cols(self) -> int:
-        return self.fp_cols + 2
 
 
 # -- Configs Batch Mode --
@@ -207,8 +194,12 @@ class AccountBatch(ValidatedStruct):
 
 @final
 class FootprintBatch(ValidatedStruct):
-    timeframe: list[Timeframe] = field(default_factory=lambda: [Timeframe.H1])
-    chart_range: list[int] = field(default_factory=lambda: [1])
+    bar_type: list[BarType] = field(
+        default_factory=lambda: [TimeBar(days=0, hours=1, minutes=0, seconds=0)]
+    )
+    bar_count: list[int] = field(default_factory=lambda: [24])
+    bar_height: list[int] = field(default_factory=lambda: [100])
+    profile_height: list[int] = field(default_factory=lambda: [10_000])
     step_tick: list[int] = field(default_factory=lambda: [1])
     state: list[bool] = field(default_factory=lambda: [False])
     ctrade: list[bool] = field(default_factory=lambda: [False])

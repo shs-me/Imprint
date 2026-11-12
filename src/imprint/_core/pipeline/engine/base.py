@@ -130,7 +130,7 @@ class Base(ABC):
     def __final_actions(self) -> None:
         """Execute final cleanup, metric updates, and logging upon completion."""
         self.engine.final_analyze()
-        self.engine.save_footprint_headers(self.engine.lidx[0])
+        self.engine.save_footprint_headers()
         self.post_final_action()
         self.engine_complete[0] = 1
         self.manager.set_log(

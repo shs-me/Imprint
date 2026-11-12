@@ -108,17 +108,12 @@ class Host(Base):
 
         self.action_for_base_sc(sc, pid, tid, p_name)
 
-        if sc & scs.FP_IDX_FILLED:
-            self._clear_sc(pid, scs.FP_IDX_FILLED)
-            self.logger(scs.FP_IDX_FILLED.label, LogLevel.DEBUG, p_name)
-
-        if sc & scs.FP_IDY_FILLED:
-            self._clear_sc(pid, scs.FP_IDY_FILLED)
-            self.logger(scs.FP_IDY_FILLED.label, LogLevel.DEBUG, p_name)
-
-        if sc & scs.FP_RE_INIT:
-            self._clear_sc(pid, scs.FP_RE_INIT)
-            self.logger(scs.FP_RE_INIT.label, LogLevel.DEBUG, p_name)
+        if sc & scs.PRICE_OUT_OF_BAR_BOUNDS:
+            self._clear_sc(pid, scs.PRICE_OUT_OF_BAR_BOUNDS)
+            self.logger(
+                scs.PRICE_OUT_OF_BAR_BOUNDS.label, LogLevel.ERROR, p_name
+            )
+            self.close_procs = True
 
         if sc & scs.BIG_GAP:
             self._clear_sc(pid, scs.BIG_GAP)

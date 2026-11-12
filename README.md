@@ -57,7 +57,7 @@ cd Imprint
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 
-pip install -e ".[all]"        # Installs numba, msgspec, streamlit, plotly, pytest, ruff
+pip install -e ".[all]"        # Installs numpy, numba, msgspec, streamlit, plotly, pytest, ruff
 ```
 
 ---

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Self, final, override
+from typing import Self, final
 
 import numpy as np
 from numpy import int64
-from numpy.typing import NDArray
 
 import imprint._core.constant as c
 
@@ -26,53 +25,20 @@ class IndexGenerator:
         return v
 
 
-class FPArray(np.ndarray):
-    """Fixed-point 2D NumPy ndarray base class for scaled integer arithmetic."""
-
-    def __new__(cls, rows: int | int64, cols: int | int64) -> Self:
-        obj = super().__new__(cls, shape=(rows, cols), dtype=int64)
-        obj.fill(0)
-        return obj
-
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return
-
-    def padding(self, before: int, after: int) -> FPArray:
-        return np.pad(self, pad_width=((before, after), (0, 0))).view(FPArray)
+class T1DArray(np.ndarray): ...
 
 
-class RowArray(FPArray):
-    """Row-oriented slice view of a fixed-point array."""
+class RowArray(T1DArray): ...
 
 
-class ColArray(FPArray):
-    """Column-oriented slice view of a fixed-point array."""
+class ColArray(T1DArray): ...
+
+
+class T2DArray(T1DArray): ...
 
 
 @final
-class BidArray(ColArray):
-    """Specialized column array representing aggregated bid order levels."""
-
-
-@final
-class AskArray(ColArray):
-    """Specialized column array representing aggregated ask order levels."""
-
-
-@final
-class VPArray(ColArray):
-    """Specialized column array representing volume profile statistics."""
-
-
-@final
-class DPArray(ColArray):
-    """Specialized column array representing depth profile statistics."""
-
-
-@final
-class TradesArray(np.ndarray):
+class TradesArray(T2DArray):
     """2D fixed-point array specialized for trade records with optional power-of-two row capacity allocation."""
 
     def __new__(cls, rows: int, pow: bool = False) -> Self:
@@ -84,40 +50,15 @@ class TradesArray(np.ndarray):
         obj.fill(0)
         return obj
 
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return
-
 
 @final
-class FPHeadersArray(np.ndarray):
-    def __new__(cls, rows: int) -> Self:
-        obj = super().__new__(
-            cls, shape=(rows, c.BH_ConstantCount), dtype=int64
-        )
-        obj.fill(0)
-        return obj
-
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return
-
-
-@final
-class OrdersHistoryArray(np.ndarray):
+class OrdersHistoryArray(T2DArray):
     def __new__(cls, rows: int) -> Self:
         obj = super().__new__(
             cls, shape=(rows, c.TP_ConstantCount), dtype=int64
         )
         obj.fill(0)
         return obj
-
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return
 
     def padding(self, after: int) -> OrdersHistoryArray:
         return np.pad(self, pad_width=((0, after), (0, 0))).view(
@@ -126,7 +67,7 @@ class OrdersHistoryArray(np.ndarray):
 
 
 @final
-class EquityHistoryArray(np.ndarray):
+class EquityHistoryArray(T2DArray):
     def __new__(cls, rows: int) -> Self:
         obj = super().__new__(
             cls, shape=(rows, c.EH_ConstantCount), dtype=int64
@@ -134,14 +75,9 @@ class EquityHistoryArray(np.ndarray):
         obj.fill(0)
         return obj
 
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return
-
 
 @final
-class OrderBookArray(np.ndarray):
+class OrderBookArray(T2DArray):
     def __new__(cls, rows: int) -> Self:
         obj = super().__new__(
             cls, shape=(rows, c.OB_ConstantCount), dtype=int64
@@ -149,22 +85,12 @@ class OrderBookArray(np.ndarray):
         obj.fill(0)
         return obj
 
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return
-
 
 @final
-class ExecutedOrdersArray(np.ndarray):
+class ExecutedOrdersArray(T2DArray):
     def __new__(cls, rows: int) -> Self:
         obj = super().__new__(
             cls, shape=(rows * 2, c.TP_ConstantCount), dtype=int64
         )
         obj.fill(0)
         return obj
-
-    @override
-    def __array_finalize__(self, obj: NDArray[Any] | None, /) -> None:
-        if obj is None:
-            return

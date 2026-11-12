@@ -12,58 +12,36 @@ from numba import types  # pyright: ignore[reportPrivateImportUsage]
 from numba.experimental import (
     jitclass,  # pyright: ignore[reportUnknownVariableType, reportPrivateImportUsage]
 )
-from numpy import int64
 
 import imprint._core.constant as c
-from imprint._core.footprint.models import Converter, Footprint
+from imprint._core.footprint.models import Footprint
+from imprint._core.footprint.models.base import (
+    BarsArray,
+    BarsHeadersArray,
+    ProfileArray,
+)
 from imprint._core.ipc import NodeManager
-from imprint._core.settings import StatusCodes as scs
 from imprint._core.types import StrategyProtocol
-from imprint._core.utils.base import FPHeadersArray
 
 
 @dataclass(slots=True)
 class Base(ABC):
-    """Abstract base engine managing footprint calculations, sessions, and state arrays.
-
-    Attributes
-    ----------
-    re_init : int
-        Bitmask governing re-initialization flags (session, index, and array states).
-    trade_read_time : memoryview
-        Memory view pointing to trade read timing metrics cast to 64-bit signed integers.
-    idYmin : memoryview
-        Memory view storing the minimum valid price row index bounded as a 64-bit signed integer.
-    idYmax : memoryview
-        Memory view storing the maximum valid price row index bounded as a 64-bit signed integer.
-    idx : memoryview
-        Memory view pointing to the current active bar index as a 64-bit signed integer.
-    lidx : memoryview
-        Memory view pointing to the last processed bar index as a 64-bit signed integer.
-    fp : Footprint
-        Core footprint data container wrapping price, volume, state, and trade arrays.
-    storage : JitStorage
-        JIT-compiled storage container bridging Python arrays to Numba-compiled scopes.
-    """
-
     manager: NodeManager
     strategy: StrategyProtocol
 
     trade_read_time: memoryview = field(init=False)
     __base_fp_dump_path: str = field(init=False)
 
-    __init_arrays: bool = field(default=True, init=False)
-    re_init: int = field(default=c.RIF_session | c.RIF_idx, init=False)
     idYmin: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
     idYmax: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    idx: memoryview = field(
+    last_side: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
-    lidx: memoryview = field(
+    closed_bar: memoryview = field(
         default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
     )
     fp: Footprint = field(init=False)
@@ -73,25 +51,24 @@ class Base(ABC):
         self.trade_read_time = self.manager.mlMetrics.trade_read_time.view.cast(
             "q"
         )
-
-        self.fp = Footprint(Converter(), self.lidx)
+        self.fp = Footprint()
         self.storage = JitStorage(
+            fp=self.fp.base,
+            profile=self.fp.profile,
             headers=self.fp.headers,
             headers_offset=self.fp.headers_offset,
             idYmin=self.idYmin,
             idYmax=self.idYmax,
-            idx=self.idx,
-            lidx=self.lidx,
-            baseTimestamp=self.fp.con.baseTimestamp,
-            baseNprice=self.fp.con.baseNprice,
-            center=self.fp.con.center,
-            fp_rows=self.fp.con.fp_rows,
-            fp_cols=self.fp.con.fp_cols,
-            idxVP=self.fp.con.idxVP,
-            idxDP=self.fp.con.idxDP,
-            tims=self.fp.con.tims,
+            last_side=self.last_side,
+            last_bar=self.fp.last_bar,
+            closed_bar=self.closed_bar,
+            bar_type=self.fp.con.bar_type,
+            bar_close_trigger=self.fp.con.bar_close_trigger,
+            bar_count=self.fp.con.bar_count,
+            bar_height=self.fp.con.bar_height,
             scale=self.fp.con.scale,
             step_tick=self.fp.con.step_tick,
+            center=self.fp.con.center,
             price_mult=self.fp.con.price_mult,
             price_prec=self.fp.con.price_prec,
             qty_mult=self.fp.con.qty_mult,
@@ -108,18 +85,8 @@ class Base(ABC):
             f"{c.FOOTPRINT_HEADERS_DATA_PATH}/{cfgCoin.symbol.upper()}"
         )
 
-        cfgSetup = self.manager.cfgSetup
-        if cfgSetup.is_backtesting:
-            start_dt: date = date.fromisoformat(cfgSetup.backtest_start_date)
-            end_dt: date = date.fromisoformat(cfgSetup.backtest_end_date)
-            total_days: int = max(1, (end_dt - start_dt).days + 1)
-        else:
-            total_days = 0
-
         self.fp.con.post_init(
-            cfgCoin=self.manager.cfgCoin,
-            cfgFP=self.manager.cfgFootprint,
-            total_backtest_days=total_days,
+            cfgCoin=self.manager.cfgCoin, cfgFP=self.manager.cfgFootprint
         )
         self.fp.post_init()
         self.storage.headers = self.fp.headers
@@ -127,82 +94,26 @@ class Base(ABC):
 
     def reset(self) -> None:
         self.init()
-        self.__init_arrays = True
-        self.re_init = c.RIF_session | c.RIF_idx
         self.reset_bbox()
-        self.idx[0], self.lidx[0] = 0, 0
 
     def reset_bbox(self) -> None:
-        self.idYmin[0], self.idYmax[0] = self.fp.con.fp_rows[0], 0
+        self.idYmin[0], self.idYmax[0] = self.fp.con.bar_height[0], 0
 
     @final
-    def init_session(self, nPrice: int64, timestamp: int64) -> None:
-        """Initialize or reset session arrays, indexes, and process status codes."""
-        if self.__init_arrays:
-            self.init_array(nPrice=nPrice)
-            self.__init_arrays = False
-
-        if self.re_init & c.RIF_idx:
-            self.manager.set_proc_sc(
-                code=scs.FP_IDX_FILLED, wait_main_task=False
-            )
-            self.init_idx(nPrice, timestamp)
-            self.re_init &= ~(c.RIF_idx)
-
-        if self.re_init & c.RIF_idy:
-            self.manager.set_proc_sc(
-                code=scs.FP_IDY_FILLED, wait_main_task=False
-            )
-            self.init_idy(nPrice)
-            self.re_init &= ~(c.RIF_idy)
-
-        self.re_init &= ~(c.RIF_session)
-        self.manager.set_proc_sc(scs.FP_RE_INIT, wait_main_task=False)
-
-    def init_idx(self, nPrice: int64, timestamp: int64) -> None:
-        """Reset footprint base, state, and trade arrays, and advance header offsets."""
-        _ = self.fp
-        # - - -
-        _.base.fill(0)
-        if _.con.with_state[0]:
-            _.state.fill(0)
-        if _.con.with_ctrade[0]:
-            _.ctrade.fill(0)
-
-        if _.con._first_base_timestamp:
-            new_offset = _.headers_offset[0] + _.con.bar_count[0]
-            if _.headers.shape[0] <= new_offset:
-                _.headers_offset[0] = 0
-                _.headers.fill(0)
-            else:
-                _.headers_offset[0] = new_offset
-
-        self.reset_bbox()
-        self.idx[0], self.lidx[0] = 0, 0
-
-        _.con.init_session(nPrice=nPrice, timestamp=timestamp)
-
-    def init_idy(self, nPrice: int64) -> None:
-        """Re-initialize underlying data arrays based on price scaling changes."""
-        self.init_array(nPrice=nPrice)
-
-    def init_array(self, nPrice: int64) -> None:
-        """Allocate or pad footprint base, state, and cumulative trade arrays."""
-        self.fp._re_init_arr(
-            nPrice=nPrice, padding=bool(self.re_init & c.RIF_idy)
-        )
-        self.reset_bbox()
-
-    @final
-    def save_footprint_headers(self, last_idx: int) -> None:
+    def save_footprint_headers(self) -> None:
         """Persist footprint headers to disk during backtesting mode."""
         if self.manager.cfgSetup.is_backtesting:
             os.makedirs(self.__base_fp_dump_path, exist_ok=True)
 
             start_time: str = self.fp.con.to_strftime(
-                self.fp.con._first_base_timestamp
+                self.fp.headers[0, c.BH_OpenTime]
             )
-            end_time: str = self.fp.con.get_time(idx=last_idx, strftime=True)
+            end_time: str = self.fp.con.to_strftime(
+                self.fp.headers[
+                    self.fp.last_bar[0] + self.fp.headers_offset[0],
+                    c.BH_CloseTime,
+                ]
+            )
 
             start_date: date = date.fromisoformat(start_time)
             end_date: date = date.fromisoformat(end_time)
@@ -214,10 +125,8 @@ class Base(ABC):
             ]
             if paths:
                 for p in paths:
-                    file_timeframe, file_start_time, file_end_time = p.split(
-                        "_"
-                    )
-                    if file_timeframe == self.fp.con.timeframe:
+                    file_bar_type, file_start_time, file_end_time = p.split("_")
+                    if int(file_bar_type) == self.fp.con.bar_type[0]:
                         file_start_date: date = date.fromisoformat(
                             file_start_time
                         )
@@ -234,29 +143,34 @@ class Base(ABC):
 
             headers_save_path: str = (
                 f"{self.__base_fp_dump_path}/"
-                f"{self.fp.con.timeframe}"
+                f"{self.fp.con.bar_type[0]}"
                 f"_{start_time}_{end_time}.npy"
             )
-            np.save(headers_save_path, self.fp.headers)
+            np.save(
+                headers_save_path,
+                self.fp.headers[
+                    : self.fp.headers_offset[0] + self.fp.last_bar[0], :
+                ],
+            )
 
 
 spec = [
+    ("fp", types.Array(nb.int64, 3, "C")),
+    ("profile", types.Array(nb.int64, 2, "C")),
     ("headers", types.Array(nb.int64, 2, "C")),
     ("headers_offset", types.MemoryView(nb.int64, 1, "C")),
     ("idYmin", types.MemoryView(nb.int64, 1, "C")),
     ("idYmax", types.MemoryView(nb.int64, 1, "C")),
-    ("idx", types.MemoryView(nb.int64, 1, "C")),
-    ("lidx", types.MemoryView(nb.int64, 1, "C")),
-    ("baseTimestamp", types.MemoryView(nb.int64, 1, "C")),
-    ("baseNprice", types.MemoryView(nb.int64, 1, "C")),
-    ("center", types.MemoryView(nb.int64, 1, "C")),
-    ("fp_rows", types.MemoryView(nb.int64, 1, "C")),
-    ("fp_cols", types.MemoryView(nb.int64, 1, "C")),
-    ("idxVP", types.MemoryView(nb.int64, 1, "C")),
-    ("idxDP", types.MemoryView(nb.int64, 1, "C")),
-    ("tims", types.MemoryView(nb.int64, 1, "C")),
+    ("last_side", types.MemoryView(nb.int64, 1, "C")),
+    ("last_bar", types.MemoryView(nb.int64, 1, "C")),
+    ("closed_bar", types.MemoryView(nb.int64, 1, "C")),
+    ("bar_type", types.MemoryView(nb.int64, 1, "C")),
+    ("bar_close_trigger", types.MemoryView(nb.int64, 1, "C")),
+    ("bar_count", types.MemoryView(nb.int64, 1, "C")),
+    ("bar_height", types.MemoryView(nb.int64, 1, "C")),
     ("scale", types.MemoryView(nb.int64, 1, "C")),
     ("step_tick", types.MemoryView(nb.int64, 1, "C")),
+    ("center", types.MemoryView(nb.int64, 1, "C")),
     ("price_mult", types.MemoryView(nb.int64, 1, "C")),
     ("price_prec", types.MemoryView(nb.int64, 1, "C")),
     ("qty_mult", types.MemoryView(nb.int64, 1, "C")),
@@ -272,22 +186,22 @@ class JitStorage:
 
     def __init__(
         self,
-        headers: FPHeadersArray,
+        fp: BarsArray,
+        profile: ProfileArray,
+        headers: BarsHeadersArray,
         headers_offset: memoryview,
         idYmin: memoryview,
         idYmax: memoryview,
-        idx: memoryview,
-        lidx: memoryview,
-        baseTimestamp: memoryview,
-        baseNprice: memoryview,
-        center: memoryview,
-        fp_rows: memoryview,
-        fp_cols: memoryview,
-        idxVP: memoryview,
-        idxDP: memoryview,
-        tims: memoryview,
+        last_side: memoryview,
+        last_bar: memoryview,
+        closed_bar: memoryview,
+        bar_type: memoryview,
+        bar_close_trigger: memoryview,
+        bar_count: memoryview,
+        bar_height: memoryview,
         scale: memoryview,
         step_tick: memoryview,
+        center: memoryview,
         price_mult: memoryview,
         price_prec: memoryview,
         qty_mult: memoryview,
@@ -295,22 +209,22 @@ class JitStorage:
         with_state: memoryview,
         with_ctrade: memoryview,
     ) -> None:
-        self.headers: FPHeadersArray = headers
+        self.fp: BarsArray = fp
+        self.profile: ProfileArray = profile
+        self.headers: BarsHeadersArray = headers
         self.headers_offset: memoryview = headers_offset
         self.idYmin: memoryview = idYmin
         self.idYmax: memoryview = idYmax
-        self.idx: memoryview = idx
-        self.lidx: memoryview = lidx
-        self.baseTimestamp: memoryview = baseTimestamp
-        self.baseNprice: memoryview = baseNprice
-        self.center: memoryview = center
-        self.fp_rows: memoryview = fp_rows
-        self.fp_cols: memoryview = fp_cols
-        self.idxVP: memoryview = idxVP
-        self.idxDP: memoryview = idxDP
-        self.tims: memoryview = tims
+        self.last_side: memoryview = last_side
+        self.last_bar: memoryview = last_bar
+        self.closed_bar: memoryview = closed_bar
+        self.bar_type: memoryview = bar_type
+        self.bar_close_trigger: memoryview = bar_close_trigger
+        self.bar_count: memoryview = bar_count
+        self.bar_height: memoryview = bar_height
         self.scale: memoryview = scale
         self.step_tick: memoryview = step_tick
+        self.center: memoryview = center
         self.price_mult: memoryview = price_mult
         self.price_prec: memoryview = price_prec
         self.qty_mult: memoryview = qty_mult

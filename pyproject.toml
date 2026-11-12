@@ -90,6 +90,7 @@ exclude = [
     "**/__pycache__",
     "build",
     "dist",
+    "src/imprint/_vis",
 ]
 
 typeCheckingMode = "strict"

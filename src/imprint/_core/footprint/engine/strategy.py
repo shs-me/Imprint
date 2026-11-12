@@ -132,8 +132,8 @@ class StrategyEngine(StrategyProtocol, ABC):
         Period length for moving average trade count calculations.
     ma_avg_trade_size_period : int
         Period length for moving average average trade size calculations.
-    big_cluster_mult : float
-        Multiplier threshold for detecting anomalous volume clusters.
+    big_cluster_vol : memoryview
+        Volume for detecting anomalous volume clusters.
     fp : Footprint
         Footprint data model instance containing market microstructure matrices.
     """
@@ -147,7 +147,9 @@ class StrategyEngine(StrategyProtocol, ABC):
     ma_volume_period: int = field(default=21, init=False)
     ma_count_trade_period: int = field(default=21, init=False)
     ma_avg_trade_size_period: int = field(default=21, init=False)
-    big_cluster_mult: float = field(default=0.33, init=False)
+    big_cluster_vol: memoryview = field(
+        default_factory=lambda: memoryview(bytearray(8)).cast("q"), init=False
+    )
 
     fp: Footprint = field(init=False)
     logger: SetLogMethodSignature = field(init=False)
@@ -167,24 +169,12 @@ class StrategyEngine(StrategyProtocol, ABC):
 
     @override
     def on_bar_update(
-        self, idYmin: int, idYmax: int, idx: int, lidx: int
+        self, idYmin: int, idYmax: int, bar_id: int, last_side: int
     ) -> None:
-        """Handle real-time updates within the active bar timeframe.
-
-        Parameters
-        ----------
-        idYmin : int
-            Minimum price index bounding the active update region.
-        idYmax : int
-            Maximum price index bounding the active update region.
-        idx : int
-            Current bar index.
-        lidx : int
-            Last processed bar index.
-        """
+        """Handle real-time updates within the active bar timeframe."""
 
     @override
-    def on_bar_close(self, idx: int, lidx: int) -> None:
+    def on_bar_close(self, closed_bar_id: int, last_bar_id: int) -> None:
         """Handle completion and closure of the current time bar."""
 
     @final
@@ -195,7 +185,6 @@ class StrategyEngine(StrategyProtocol, ABC):
         is_buy: bool,
         nPrice: int | int64,
         /,
-        idx: int | None = None,
         tp_dev: int = 0,
         sl_dev: int = 0,
         pass_lag: bool = True,
@@ -215,9 +204,6 @@ class StrategyEngine(StrategyProtocol, ABC):
             Order trade side flag. If True, order side is buy; if False, sell.
         idy : int64
             Price-axis index in the footprint matrix to convert into normalized price.
-        idx : int | None, default=None
-            Bar index used to look up historical bar timestamp in backtest mode.
-            If None, defaults to the active bar index in ``last_idx[0]``.
         tp_dev : int, default=0
             Take-profit price deviation in steps. If 0, uses system default.
         sl_dev : int, default=0
@@ -231,9 +217,8 @@ class StrategyEngine(StrategyProtocol, ABC):
             Assigned signal identifier if successfully sent, or None if aborted
             by lag constraints.
         """
-        idx = idx if (idx is not None) else self.fp.last_idx[0]
         timestamp = round(
-            self.fp[idx].ind.last_trade_time
+            self.fp[self.fp.last_bar[0]].ind.close_time
             if self.is_backtest
             else time.time() * 1000
         )
